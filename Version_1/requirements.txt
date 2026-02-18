@@ -1,0 +1,19 @@
+# --- Core AI Framework ---
+langchain>=0.3.0
+langchain-ollama>=0.2.0
+langchain-core>=0.3.0
+langchain-community>=0.3.0
+
+# --- Automation & OS Interaction ---
+pyautogui>=0.9.54
+psutil>=5.9.0
+
+# --- Networking & Web ---
+requests>=2.31.0
+urllib3>=2.0.0
+
+# --- Environment & Security ---
+python-dotenv>=1.0.0
+
+# --- Type Checking & Utilities ---
+typing-extensions>=4.0.0
