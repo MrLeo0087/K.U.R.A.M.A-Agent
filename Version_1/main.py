@@ -17,8 +17,8 @@ from local_computer_tools.basic_laptop_control import basic_control
 from local_computer_tools.app_open import open_app
 
 print("Model Loading ..... ")
-# model_name = 'qwen2.5:3b'
-model_name = 'qwen2.5:1.5b'
+model_name = 'qwen2.5:3b'
+# model_name = 'qwen2.5:1.5b'
 model = ChatOllama(model=model_name, temperature=0,num_ctx=2048)
 print("Model Loaded")
 

@@ -48,7 +48,8 @@ In its current iteration, KURAMA operates as a  **Single-Turn Agent** .
 
 ## ⚠️ Limitations (V1.0)
 
-* **Stateless Execution:** This version has  **no conversational memory** . Every request is treated as a new task. It cannot remember what you said in the previous sentence.
+**Stateless Execution:** This version has  **no conversational memory** . Every request is treated as a new task. It cannot remember what you said in the previous sentence.
+
 * **Screen Specificity:** PyAutoGUI tools rely on local screen coordinates; performance may vary based on monitor resolution.
 * **Single Tasking:** Optimized for executing one tool at a time rather than complex, multi-step workflows.
 
@@ -69,7 +70,7 @@ In its current iteration, KURAMA operates as a  **Single-Turn Agent** .
    **Bash**
 
    ```
-   git clone https://github.com/your-username/kurama-v1.git
+   https://github.com/MrLeo0087/K.U.R.A.M.A-Agent.git
    ```
 2. **Environment Configuration:**
    Create a `.env` file to securely store your credentials:
@@ -95,3 +96,8 @@ In its current iteration, KURAMA operates as a  **Single-Turn Agent** .
 * *"Open Photoshop and play some Lo-Fi music on YouTube."*
 * *"What is the weather in Nepalgunj right now?"*
 * *"Send an email to [Email] regarding the project update."*
+
+# Note
+
+- **I actually build more tool [file handling ( create, delete, run, search ect), search tool  and many more]. But my laptop cannot run this all because of it limitation (RAM and PROCESSOR) ...**
+- NEXT TIME, I WILL MAKE IT MORE ADVANCE
