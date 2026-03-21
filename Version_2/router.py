@@ -4,7 +4,7 @@ from langgraph.graph import StateGraph,START,END
 from langchain_groq import ChatGroq
 from langchain_core.output_parsers import StrOutputParser
 
-from NODE.general import make_general_node
+from NODE.general import make_general_node,make_search_node
 
 
 from dotenv import load_dotenv
@@ -33,7 +33,7 @@ def final_answer_llm(state: KuramaState):
 
 node_factories = {
     'general': make_general_node,
-    # 'search': make_search_node,
+    'search': make_search_node,
     # 'create': make_create_node,
     # 'auto': make_auto_node
 }
