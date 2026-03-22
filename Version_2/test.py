@@ -1,19 +1,60 @@
-from langchain_groq import ChatGroq
-from langchain_core.messages import SystemMessage, HumanMessage
-from dotenv import load_dotenv
-import os
+import asyncio
+import aiohttp
+from pathlib import Path
 
-load_dotenv()
-GROQ_API = os.getenv("GROQ_API_KEY")
+BASE_URL = "https://image-api.satorugojo0087.workers.dev/"
 
-llm = ChatGroq(model="groq/compound-mini", api_key=GROQ_API)
-# compound-beta-mini
-# compound-beta
+async def fetch_image(session, prompt, index):
+    """Fetch a single image for a given prompt."""
+    try:
+        async with session.get(BASE_URL, params={"prompt": prompt}) as response:
+            if response.status == 200:
+                image_bytes = await response.read()
+                filename = rf"D:\My Future\Project\Gen_AI\02_K.U.R.A.M.A\Version_2\Image\image_{index}_{prompt[:20].replace(' ', '_')}.jpg"
+                Path(filename).write_bytes(image_bytes)
+                print(f"✅ [{index}] Saved: {filename}")
+                return {"index": index, "prompt": prompt, "file": filename, "success": True}
+            else:
+                text = await response.text()
+                print(f"❌ [{index}] Failed: {text}")
+                return {"index": index, "prompt": prompt, "error": text, "success": False}
 
-messages = [
-    SystemMessage(content="You are a concise assistant. Answer directly and briefly. No markdown, no headers, no step-by-step explanation. Just the answer."),
-    HumanMessage(content="What is result of barcelona match and who they play today?")
-]
+    except Exception as e:
+        print(f"❌ [{index}] Exception: {str(e)}")
+        return {"index": index, "prompt": prompt, "error": str(e), "success": False}
 
-response = llm.invoke(messages)
-print(response.content)
+
+async def generate_images(prompts: list[str]):
+    """Generate multiple images concurrently."""
+    async with aiohttp.ClientSession() as session:
+        tasks = [
+            fetch_image(session, prompt, i)
+            for i, prompt in enumerate(prompts)
+        ]
+        results = await asyncio.gather(*tasks)
+    return results
+
+
+def run(prompts: list[str]):
+    """Main entry point — call this from your code."""
+    return asyncio.run(generate_images(prompts))
+
+
+# ---- Example usage ----
+if __name__ == "__main__":
+    prompts = [
+        "a cat sitting on the moon",
+        "a futuristic city at sunset",
+        "a dragon flying over mountains",
+        "a cozy cabin in the snow",
+        "an astronaut riding a horse",
+    ]
+
+    results = run(prompts)
+
+    print("\n--- Summary ---")
+    for r in results:
+        if r["success"]:
+            print(f"✅ Prompt: '{r['prompt']}' → {r['file']}")
+        else:
+            print(f"❌ Prompt: '{r['prompt']}' → Error: {r['error']}")

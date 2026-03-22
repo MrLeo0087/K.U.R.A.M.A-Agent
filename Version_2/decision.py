@@ -24,6 +24,6 @@ decision_llm = llm.with_structured_output(DecisionLLM)
 def decision_node(query:str)->list:
     chain = decision_prompt | decision_llm 
     return chain.invoke({'user_input':query}).tasks
-
-# result = decision_node("I wanna generate image and then save it into d drive and open youtube")
-# print(result)
+if __name__ =='__main__' :
+    result = decision_node("I wanna have a picture of person having fun with it dog and other image is same dog running in water")
+    print(result)

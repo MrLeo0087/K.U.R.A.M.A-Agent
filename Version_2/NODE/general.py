@@ -32,23 +32,3 @@ def make_general_node(task):
         return {'results': {task_id: result}}
     return node
 
-search_llm = ChatGroq(model="compound-beta", api_key=GROQ_API)
-# compound-beta-mini
-# compound-beta
-def make_search_node(task):
-    def node(state: KuramaState):
-        context = ""
-        if task.depends_on:
-            for parent_id in task.depends_on:
-                parent_result = state['results'].get(parent_id, "")
-                context += f"Previous result: {parent_result}\n"
-
-        query = state['query']
-        task_content = task.content    
-        task_id = task.id              
-
-        chain = search_prompt | search_llm | StrOutputParser()
-        result = chain.invoke({'query': query, 'task': task_content,'context':context[:500]})
-        
-        return {'results': {task_id: result[:800]}}
-    return node
