@@ -1,0 +1,37 @@
+*Opening Facebook and Instagram*
+
+Facebook: https://www.facebook.com/
+Instagram: https://www.instagram.com/
+
+*Opening Notepad*
+
+Untitled - Notepad
+--------------------------------------------------------
+
+*Random topic: Quantum Entanglement*
+
+*Searching Quantum Entanglement on Google*
+
+https://www.google.com/search?q=Quantum+Entanglement
+
+*Increasing brightness by 30%
+
+*Opening Photoshop*
+
+Adobe Photoshop - New Document
+
+File > New
+--------------------------------------------------------
+
+*Generating image*
+
+Image: A stylized representation of two entangled particles, connected by a glowing thread. The background is a deep blue-purple hue, representing the mysteries of space. The particles themselves are represented as swirling, iridescent orbs, with an otherworldly glow.
+
+Image Size: 2560 x 1440 pixels
+Resolution: 300 DPI
+Color Mode: RGB
+
+File > Save As
+--------------------------------------------------------
+
+File Saved: Quantum_Entanglement.jpg
