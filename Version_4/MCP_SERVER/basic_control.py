@@ -65,7 +65,6 @@ def open_app(name: str):
         return f"Error : {e}"
     
 @mcp.tool()
-@mcp.tool()
 def close_app(name: str):
     """
     Closes a specific application if it is currently running.

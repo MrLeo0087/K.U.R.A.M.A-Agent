@@ -21,6 +21,7 @@ def is_valid_url(text):
 def website_open(destination: str):
     """
     Intelligently opens a website. 
+    - Use only if user say open some website name
     - If it's a URL (https://google.com), it opens directly.
     - If it's a name (facebook), it appends .com.
     - If it's a phrase (how to bake a cake), it searches Google.

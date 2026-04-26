@@ -66,6 +66,7 @@ can you tell me about my laptop condition currently the ram the cpu uses of my l
 
 
 TASK RULES
+-"You MUST only use the tags: 'general', 'search', 'create', or 'auto'. Do not invent new tags."
 - One action = one task. Never merge two actions into one.
   BAD : "write poem and email it" → 1 task
   GOOD: "write poem and email it" → task1: create(poem) + task2: auto(send email, depends_on:[1])

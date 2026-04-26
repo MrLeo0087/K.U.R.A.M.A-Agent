@@ -15,43 +15,55 @@ node_factories = {
     'auto': make_auto_node
 }
 
-def build_graph(tasks:list):
+def build_graph(tasks: list):
+    if not tasks:
+        print("❌ No tasks generated. Check your decision_node.")
+        return None
+
     try:
         graph = StateGraph(KuramaState)
 
+        # 1. Add Nodes
         for task in tasks:
             node_name = f"task_{task.id}"
+            if task.tag not in node_factories:
+                raise ValueError(f"Unknown tag '{task.tag}' in task {task.id}")
+            
             factory = node_factories[task.tag]
             graph.add_node(node_name, factory(task))
 
-        graph.add_node("final_answer_llm",final_answer_llm)
+        graph.add_node("final_answer_llm", final_answer_llm)
+
+        # 2. Build Dependency Set
         depend_set = set()
         for task in tasks:
             if task.depends_on:
-                for id in task.depends_on:
-                    depend_set.add(id)
+                for parent_id in task.depends_on:
+                    depend_set.add(parent_id)
 
+        # 3. Add Edges from START and between tasks
         for task in tasks:
             node_name = f"task_{task.id}"
             if not task.depends_on:
-                graph.add_edge(START,node_name)
-
+                graph.add_edge(START, node_name)
             else:
                 for parent_id in task.depends_on:
-                    graph.add_edge(f'task_{parent_id}',node_name)
+                    graph.add_edge(f'task_{parent_id}', node_name)
 
+        # 4. Connect leaf nodes to final answer
         for task in tasks:
             if task.id not in depend_set:
-                graph.add_edge(f"task_{task.id}",'final_answer_llm')
+                graph.add_edge(f"task_{task.id}", 'final_answer_llm')
 
-        graph.add_edge('final_answer_llm',END)
-
+        graph.add_edge('final_answer_llm', END)
 
         return graph.compile()
 
     except Exception as e:
-        print("Graph build failed: {e}")
-
+        # Added 'f' for f-string so you can actually see the error
+        print(f"❌ Graph build failed: {e}") 
+        return None # Explicitly return None to handle in kurama.py
+    
 if __name__ =='__main__' :
     while True:
         user_query = input("[USER]: ")

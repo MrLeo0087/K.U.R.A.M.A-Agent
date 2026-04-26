@@ -17,35 +17,47 @@ warnings.filterwarnings("ignore")
 # ── CONFIGURATION ──────────────────────────────────────────────────────────────
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
 YOUTUBE_API_KEY = os.getenv('YOUTUBE_API_KEY')
+GITHUB_USER  = os.getenv("GITHUB_USERNAME", "")
 
 BASIC_CONTROL   = r"D:\My Future\Project\Gen_AI\02_K.U.R.A.M.A\Version_4\MCP_SERVER\basic_control.py"
 SCREEN_OBSERVE  = r"D:\My Future\Project\Gen_AI\02_K.U.R.A.M.A\Version_4\MCP_SERVER\screen_observe.py"
 YOUTUBE_SERVER  = r"D:\My Future\Project\Gen_AI\02_K.U.R.A.M.A\Version_4\MCP_SERVER\youtube_server.py"
 WEBSITE_CONTROL = r"D:\My Future\Project\Gen_AI\02_K.U.R.A.M.A\Version_4\MCP_SERVER\website_control.py"
-FILE_SERVER     = r"D:\My Future\Project\Gen_AI\02_K.U.R.A.M.A\Version_4\MCP_SERVER\file_server.py"
 
-SYSTEM_PROMPT = """You are Jarvis, a system-integrated assistant. 
-ROUTING:
-1. YOUTUBE_SERVER: YouTube transcripts/data.
-2. GENERAL_SERVER: Hardware (Volume/Brightness/Stats/Apps).
-3. WEBSITE_SERVER: Web search/URLs.
-4. SCREEN_OBSERVE: Screenshots/OCR.
-5. FILE_SERVER: All disk operations (D:\\, C:\\).
 
-PATH PROTOCOL:
-- Convert to absolute Windows paths: "D drive project" -> "D:\\Project".
-- NEVER add "folder" or "file" to paths unless explicitly stated.
-- If unsure of extension or casing, call 'list_directory' first.
-- ALWAYS use 'search_nodes' for deep file searches; 'list_directory' for browsing.
+SYSTEM_PROMPT = """You are Jarvis. Execute tasks with minimal tool calls.
 
-EXAMPLES:
-- User: "Open nar in personal file" -> Call: list_directory(path="D:\\Personal File") -> then open_file_externally.
-- User: "Find main.py" -> Call: search_nodes(root="D:\\", query="main.py").
+[ROUTING]
+- YOUTUBE: Transcripts/Channel Stats/Sub-counts/Likes.
+- GENERAL: Hardware (Vol/Bright/Apps).
+- WEBSITE: Search/Open URLs (YouTube, Wiki, IG).
+- SCREEN: OCR/Screenshots.
+- FILES: Disk operations (C:/D:).
+- GITHUB: Github information
 
-OUTPUT:
-- Clean, short human response. No markdown. Max 50 words.
-- If tool fails, use output to self-correct and retry once."""
+[PATH RULES]
+- Format: D:\\Folder\\File (Single backslash).
+- Priority: Use 'search_nodes' for deep finds; 'list_directory' for browsing.
+- Exactness: Use exact user casing. Call 'list_directory' if unsure of extension.
 
+[GITHUB]
+- User/Owner: {GITHUB_USER} (Always pass to GitHub tools).
+
+[LOGIC & CLARITY]
+- 'website_open': Use to open site by name.
+- 'search_youtube': Use to find videos.
+- 'youtube' MCP: Use for specific data (subs, counts, transcripts).
+- Efficiency: Never call the same tool twice per turn. No markdown in output.
+
+[EXAMPLES]
+- "Find main.py" -> search_nodes(root="D:\\", query="main.py")
+- "Search MrBeast" -> search_youtube("MrBeast")
+- "Sub count of MrBeast" -> [youtube_server]
+- "Open nar in personal" -> list_directory("D:\\Personal") -> open_file_externally()
+
+[OUTPUT]
+- Clean, natural speech. Max 50 words. No Markdown.
+- If tool fails: Self-correct and retry once."""
 MAX_RESULT_CHARS = 800 
 
 # ── GLOBAL MCP CLIENT ──────────────────────────────────────────────────────────
@@ -73,6 +85,21 @@ mcp_client = MultiServerMCPClient({
         "command": "python",
         "args": [SCREEN_OBSERVE],
         "transport": "stdio",
+    },
+    "filesystem": {
+        "command": "npx",
+        "args": [
+            "-y",
+            "@modelcontextprotocol/server-filesystem",
+            r"D:\\",
+            r"C:\\Users\\sator\\Documents"
+        ],
+        "transport": "stdio"
+    },
+    "github": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-github"],
+        "transport": "stdio"
     }
     })
 

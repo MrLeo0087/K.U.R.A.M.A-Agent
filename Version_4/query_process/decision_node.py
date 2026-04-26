@@ -6,6 +6,8 @@ from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 from query_process.query_preprocess import decision_node
 import os
+from voice import sync_speak
+from mic import listen_controlled
 
 load_dotenv()
 
@@ -158,7 +160,9 @@ def tasks_list(query: str):
             else:
                 for q in real_questions:
                     print(f'[C.Ai]: {q}')
-                    answer = input('[C.User]: ')
+                    sync_speak(q)
+                    # answer = input('[C.User]: ')
+                    answer = listen_controlled()
                     question_history[q] = answer
 
                 user_query = merge_chain.invoke({
