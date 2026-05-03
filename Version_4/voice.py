@@ -52,14 +52,28 @@ class KuramaSpeaker:
 
 kurama = KuramaSpeaker()
 def sync_speak(text):
+    try:
+        # Check if an event loop is already running
         try:
-            # Check if an event loop is already running
             loop = asyncio.get_running_loop()
-            if loop.is_running():
-                # If running, we schedule it as a task and don't wait (Fire and forget)
-                loop.create_task(kurama.speak(text))
         except RuntimeError:
-            # If no loop is running, we start a fresh one for this task
-            asyncio.run(kurama.speak(text))
+            loop = None
 
+        if loop and loop.is_running():
+            # If a loop is running, we MUST run this as a thread-safe coroutine
+            # and wait for the result so it doesn't "stack up"
+            import threading
+            
+            def run_in_new_loop(t):
+                asyncio.run(kurama.speak(t))
+
+            thread = threading.Thread(target=run_in_new_loop, args=(text,))
+            thread.start()
+            thread.join() # This forces the code to wait until speaking is DONE
+        else:
+            # If no loop is running, standard run works fine
+            asyncio.run(kurama.speak(text))
+            
+    except Exception as e:
+        print(f"Voice Error: {e}")
 

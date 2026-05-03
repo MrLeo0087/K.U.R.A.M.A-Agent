@@ -14,9 +14,8 @@ load_dotenv()
 GROQ_KEY = os.getenv('GROQ_API_KEY')
 
 llm = ChatGroq(
-    model='qwen/qwen3-32b',
+    model='llama-3.3-70b-versatile',
     api_key=GROQ_KEY,
-    reasoning_effort='none',
     max_tokens=512
 )
 llm_2 = ChatGroq(
@@ -40,10 +39,13 @@ class Questions(BaseModel):
 DECISION_PROMPT = """Decide if the query needs more info to execute.
 
 Yes → critical info missing: app name, recipient, file, image desc, song, unclear pronoun, incomplete intent, topic or subject not clear of peom, story or code
-No  → greeting,opinion, or all info present, setting open,
+
+No  → greeting,opinion, or all info present, setting open
 
 #RULE
 - if you feel user query is not complete to execute and it need more context then yes otherwise no
+- if user ask for time then no
+- if user ask for weather then look for location. if location is given then no if not then yes
 - if user share it feeling then also analysis it. if there need to cross question then yes
 - if user ask for poem, story, code or other content generate then look for subject or topic. if missing then yes
 - if user ask for adjust volume, brightness or app, Never ask which device. it always this laptop. 
@@ -69,8 +71,11 @@ ASK when missing:
 - user feeling or thinking → what user feel ask very warmly
 
 RULE
+- if query look clear and no question then then return {{"question": ["none"]}}
 - if you feel query is complete then return none
 - generate very humble and humanize style question
+- Do not repeat user query 
+- Do not generate unnecessary query. just generate query that matter
 - if any task depend on other task then adjust question according to it.
 
 
@@ -163,6 +168,8 @@ def tasks_list(query: str):
                     sync_speak(q)
                     # answer = input('[C.User]: ')
                     answer = listen_controlled()
+                    # answer = input("[C.User]: ")
+                    print(f'[C.User]: {answer}')
                     question_history[q] = answer
 
                 user_query = merge_chain.invoke({

@@ -29,7 +29,9 @@ search — needs LIVE/CURRENT data, no PC action\
   • "what's the weather" / "latest news" / "current price of X"
   • NOT search if user says "search X on google/youtube" → that is auto
 
+
 auto — real-world ACTION on PC, browser, or external service
+- Query related to youtube (mr beast recent youtube video)
  - Time and weather (what time right now (auto) )
   - Condition of laptop and usage of ram cpu or disk space 
   • open/close any app or website
