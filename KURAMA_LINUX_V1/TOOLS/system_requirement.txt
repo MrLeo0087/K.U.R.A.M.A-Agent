@@ -1,0 +1,27 @@
+1. For brighness set : 
+# Required for screen brightness control
+sudo apt update && sudo apt install -y brightnessctl
+
+# Grant brightness control permissions (reboot after running)
+sudo usermod -aG video $USER
+
+# For permissions
+sudo chmod a+rw /sys/class/backlight/*/brightness
+
+
+2. For app open and close
+sudo apt update && sudo apt install -y wmctrl xdotool
+
+3. For media control
+sudo apt update && sudo apt install -y playerctl
+
+
+4. For system shutdown sleep control
+sudo apt update && sudo apt install -y gnome-screensaver
+
+5. For ram storage information
+sudo apt update && sudo apt install -y net-tools network-manager
+
+6. For clipboard
+sudo apt update && sudo apt install -y xclip
+sudo apt update && sudo apt install -y gnome-screenshot

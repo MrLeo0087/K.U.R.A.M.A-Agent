@@ -1,0 +1,40 @@
+# Virtual Environments
+work_venv/
+venv/
+env/
+ENV/
+.venv/
+
+# Environment Variables & Keys
+.env
+.env.local
+.env.*.local
+
+# Python Cache & Compiled Files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+test.py
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-workspace
+
+# OS Generated Files
+.DS_Store
+Thumbs.db
+
+# User Screenshot Outputs (prevents committing generated images)
+Pictures/
+*.png
+*.jpg
+*.jpeg
+
+# Logs & Temporary Files
+*.log
+*.tmp

@@ -1,0 +1,18 @@
+# LangChain Core & Groq Integration
+langchain-core>=0.2.0
+langchain-groq>=0.1.0
+
+# Environment Management
+python-dotenv>=1.0.0
+
+# System & OS Monitoring (used by system/power tools)
+psutil>=5.9.0
+
+# Audio/Media Support (if using speech or media management)
+PyAudio>=0.2.14
+gTTS>=2.5.0
+playsound>=1.2.2
+
+# Optional Utilities
+pydantic>=2.0.0
+requests>=2.31.0
