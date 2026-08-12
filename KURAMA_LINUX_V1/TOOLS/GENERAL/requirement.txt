@@ -13,6 +13,20 @@ PyAudio>=0.2.14
 gTTS>=2.5.0
 playsound>=1.2.2
 
+# Time and Weather
+requests
+geopy
+timezonefinder
+pytz
+
 # Optional Utilities
 pydantic>=2.0.0
 requests>=2.31.0
+
+# For Speech and mic
+SpeechRecognition 
+pydub
+gTTS
+pyttsx3
+pyaudio
+sounddevice

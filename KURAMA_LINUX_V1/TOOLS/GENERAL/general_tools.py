@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 from langchain_core.tools import tool
 from langchain_groq import ChatGroq
 
-from general_class import AudioController, DisplayController, WindowController, MediaController, SystemPowerController, SystemInfoController, ClipboardAndScreenshotController
+from general_class import AudioController, DisplayController, WindowController, MediaController, SystemPowerController, SystemInfoController, ClipboardAndScreenshotController, TimeAndWeatherController, WebAndSearchController
 load_dotenv()
 
 
@@ -156,7 +156,7 @@ def manage_system_info(
         return controller.get_full_status()
     return "Invalid system info task specified."
 
-@tool
+
 def manage_clipboard_and_screenshot(
     action: Literal["read_clipboard", "copy_clipboard", "take_screenshot"],
     text: str = "",
@@ -187,6 +187,62 @@ def manage_clipboard_and_screenshot(
 
     return "Invalid action specified."
 
+
+@tool
+def get_time_weather_and_location(location: str = "", mode: str = "time") -> str:
+    """
+    Get the time weather and coordinates for a target location.
+    - mode: 'time' or 'weather' or 'location'
+    - location: Target city/country. Defaults: Nepal for time , Nepalgunj for weather and location.
+    """
+    tw_controller = TimeAndWeatherController()
+    mode = mode.lower().strip()
+    if mode == "weather":
+        return tw_controller.get_weather(place=location)
+
+    elif mode == 'location':
+        return tw_controller.get_coordinates(location_name=location)
+    else:
+        return tw_controller.get_time(country_or_place=location)
+
+from pydantic import BaseModel, Field
+
+class WebSearchArgs(BaseModel):
+    action: str = Field(
+        default="google_search",
+        description="Action type: 'open_url', 'google_search', 'youtube_search', 'play_youtube', or 'wikipedia'"
+    )
+    query: str = Field(
+        default="",
+        description="The search string, URL, or video name"
+    )
+
+@tool(args_schema=WebSearchArgs)
+def manage_web_and_search(action: str = "google_search", query: str = "") -> str:
+    """
+    Unified web navigator tool. Performs web searches, opens websites, searches YouTube, plays videos, or fetches Wikipedia summaries.
+    """
+    web_controller = WebAndSearchController()
+    action = action.lower().strip() if action else "google_search"
+    query = query.strip() if query else ""
+
+    if not query:
+        return "Error: Query or URL cannot be empty."
+
+    # Intercept potential pronoun confusion (e.g. "my beast" -> "mrbeast")
+    if "beast" in query.lower() and "mr" not in query.lower():
+        query = query.replace("my beast", "MrBeast").replace("your beast", "MrBeast")
+
+    if action in ["open_url", "url", "website"]:
+        return web_controller.open_url(query)
+    elif action in ["youtube_search", "yt_search", "youtube"]:
+        return web_controller.search_youtube(query)
+    elif action in ["play_youtube", "play_video"]:
+        return web_controller.play_youtube_video(query)
+    elif action in ["wikipedia", "wiki"]:
+        return web_controller.search_wikipedia(query)
+    else:
+        return web_controller.search_google(query)
 # --- AGENT ---
 class JarvisAgent:
 
@@ -199,10 +255,12 @@ class JarvisAgent:
     "manage_power": manage_power,
     "manage_system_info": manage_system_info,
     "manage_clipboard_and_screenshot": manage_clipboard_and_screenshot,
+    'get_time_weather_and_location':get_time_weather_and_location,
+    'manage_web_and_search' : manage_web_and_search,
 }
 
         self.llm = ChatGroq(
-            model="llama-3.1-8b-instant", temperature=0.0
+            model="qwen/qwen3.6-27b", temperature=0.0
         ).bind_tools(list(self.tools_map.values()))
 
     def process_command(self, user_prompt: str):
@@ -220,24 +278,56 @@ class JarvisAgent:
                     if tool_name in self.tools_map:
                         result = self.tools_map[tool_name].invoke(args)
                         print(f"-> Result: {result}")
+                        return result
                     else:
                         print(f"-> Error: Tool '{tool_name}' not registered.")
             else:
                 print(f"LLM Response: {response.content}")
+                return response.content
         except Exception as e:
             print(f"-> Tool execution failed: {e}")
 
 
+from voice_control import VoiceController
+# from jarvis_agent import JarvisAgent  # Import your existing agent
+
 if __name__ == "__main__":
     agent = JarvisAgent()
+    voice = VoiceController()
+
+    print("==================================================")
+    print("      KURAMA / JARVIS VOICE ASSISTANT ONLINE      ")
+    print("==================================================")
+    print("Modes: Type 'v' for voice input, or type command directly.")
+    print("Type 'exit' or 'quit' to stop.\n")
 
     while True:
-        user_input = input('Enter command : ')
-        agent.process_command(user_input)
+        try:
+            mode = input("Enter command (or press Enter for Voice Mode) : ").strip()
 
+            if mode.lower() in ["exit", "quit"]:
+                voice.speak("Shutting down system. Goodbye!")
+                break
 
-    # 
-    # agent.process_command("play song")
-    agent.process_command("Reboot this laptop")
-    # agent.process_command("play next song from youtube")
-    # agent.process_command("set volume to 2")
+            # If user presses Enter or types 'v', trigger Microphone input
+            if mode == "" or mode.lower() == "v":
+                user_input = voice.listen()
+                if not user_input:
+                    print("-" * 50)
+                    continue
+            else:
+                user_input = mode
+
+            # Process command with LangChain / Groq Agent
+            response = agent.process_command(user_input)
+            print(response)
+
+            # Speak out the response if available
+            if response:
+                voice.speak(str(response))
+
+            print("-" * 50)
+
+        except KeyboardInterrupt:
+            print("\nExiting Jarvis...")
+            break   

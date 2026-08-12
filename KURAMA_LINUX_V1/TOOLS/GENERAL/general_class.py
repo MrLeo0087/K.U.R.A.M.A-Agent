@@ -551,3 +551,201 @@ class ClipboardAndScreenshotController:
                 pass
 
         return "Failed to take screenshot: Neither 'scrot' nor 'gnome-screenshot' are installed."
+
+
+# For weather and time
+
+import requests
+from datetime import datetime
+import pytz
+from geopy.geocoders import Nominatim
+from timezonefinder import TimezoneFinder
+
+
+class TimeAndWeatherController:
+    """
+    Controller for retrieving coordinates, local time, and current weather for any location.
+    Optimized for KURAMA Assistant tool-calling.
+    """
+
+    def __init__(self, user_agent: str = "kurama_assistant"):
+        self.geolocator = Nominatim(user_agent=user_agent)
+        self.tf = TimezoneFinder()
+
+    def get_coordinates(self, location_name: str = "") -> str:
+        """
+        Find exact latitude, longitude, and full display address of any place.
+        Default is Nepalgunj if no location is provided.
+        """
+        target_location = location_name.strip() if location_name.strip() else "Nepalgunj"
+        
+        try:
+            loc = self.geolocator.geocode(target_location)
+            if loc:
+                return (
+                    f"Location: {loc.address}\n"
+                    f"Latitude: {loc.latitude}\n"
+                    f"Longitude: {loc.longitude}"
+                )
+            return f"Could not find coordinates for '{target_location}'."
+        except Exception as e:
+            return f"Error retrieving coordinates: {str(e)}"
+
+    def get_time(self, country_or_place: str = "") -> str:
+        """
+        Get current local time for any country or city.
+        Default is Nepal if no location is provided.
+        """
+        target_location = country_or_place.strip() if country_or_place.strip() else "Nepal"
+
+        # Fast path for Nepal
+        if target_location.lower() in ["nepal", "np"]:
+            nepal_tz = pytz.timezone("Asia/Kathmandu")
+            current_time = datetime.now(nepal_tz).strftime("%I:%M %p (%Y-%m-%d)")
+            return f"Current time in Nepal: {current_time}"
+
+        try:
+            loc = self.geolocator.geocode(target_location)
+            if not loc:
+                return f"Could not locate '{target_location}'."
+
+            tz_name = self.tf.timezone_at(lat=loc.latitude, lng=loc.longitude)
+            if not tz_name:
+                return f"Could not determine timezone for '{target_location}'."
+
+            local_tz = pytz.timezone(tz_name)
+            current_time = datetime.now(local_tz).strftime("%I:%M %p (%Y-%m-%d)")
+            return f"Current time in {loc.address.split(',')[0]} ({tz_name}): {current_time}"
+        except Exception as e:
+            return f"Error fetching time: {str(e)}"
+
+    def get_weather(self, place: str = "") -> str:
+        """
+        Get current weather conditions for any location using Open-Meteo API.
+        Default is Nepalgunj if no location is provided.
+        """
+        target_place = place.strip() if place.strip() else "Nepalgunj"
+
+        try:
+            loc = self.geolocator.geocode(target_place)
+            if not loc:
+                return f"Could not find coordinates for '{target_place}'."
+
+            url = f"https://api.open-meteo.com/v1/forecast?latitude={loc.latitude}&longitude={loc.longitude}&current_weather=true"
+            response = requests.get(url, timeout=5)
+
+            if response.status_code == 200:
+                data = response.json().get("current_weather", {})
+                temp = data.get("temperature")
+                windspeed = data.get("windspeed")
+                weather_code = data.get("weathercode")
+
+                condition = self._map_wmo_code(weather_code)
+                display_name = loc.address.split(',')[0]
+                return f"Weather in {display_name}: {temp}°C, {condition}, Wind: {windspeed} km/h."
+            else:
+                return f"Failed to retrieve weather data (HTTP {response.status_code})."
+        except Exception as e:
+            return f"Error fetching weather data: {str(e)}"
+
+    @staticmethod
+    def _map_wmo_code(code: int) -> str:
+        wmo_map = {
+            0: "Clear sky", 1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast",
+            45: "Fog", 48: "Depositing rime fog", 51: "Light drizzle", 53: "Moderate drizzle",
+            55: "Dense drizzle", 61: "Slight rain", 63: "Moderate rain", 65: "Heavy rain",
+            80: "Slight rain showers", 81: "Moderate rain showers", 82: "Violent rain showers",
+            95: "Thunderstorm"
+        }
+        return wmo_map.get(code, "Unknown conditions")
+
+
+# FOr search on google
+import urllib.parse
+import webbrowser
+import requests
+
+
+class WebAndSearchController:
+    """
+    Controller for browser navigation, web searches, YouTube playback, and Wikipedia summaries.
+    Optimized for Linux desktop automation (KURAMA).
+    """
+
+    def __init__(self):
+        # Uses default system browser (Firefox/Chrome/Brave)
+        self.browser = webbrowser.get()
+
+    def open_url(self, url: str) -> str:
+        """Opens any direct URL in the default web browser."""
+        url = url.strip()
+        if not url.startswith(("http://", "https://")):
+            url = f"https://{url}"
+
+        try:
+            self.browser.open(url)
+            return f"Successfully opened URL: {url}"
+        except Exception as e:
+            return f"Failed to open URL '{url}': {str(e)}"
+
+    def search_google(self, query: str) -> str:
+        """Performs a Google Search in the browser."""
+        if not query.strip():
+            return "Search query cannot be empty."
+
+        encoded_query = urllib.parse.quote_plus(query.strip())
+        search_url = f"https://www.google.com/search?q={encoded_query}"
+        self.browser.open(search_url)
+        return f"Opened Google search for: '{query}'"
+
+    def search_youtube(self, query: str) -> str:
+        """Searches YouTube for videos and opens the results page."""
+        if not query.strip():
+            return "YouTube query cannot be empty."
+
+        encoded_query = urllib.parse.quote_plus(query.strip())
+        youtube_url = f"https://www.youtube.com/results?search_query={encoded_query}"
+        self.browser.open(youtube_url)
+        return f"Opened YouTube search for: '{query}'"
+
+    def play_youtube_video(self, video_query: str) -> str:
+        """
+        Directly opens the first matching YouTube video using YouTube's 'I'm Feeling Lucky' endpoint.
+        """
+        if not video_query.strip():
+            return "Video query cannot be empty."
+
+        encoded_query = urllib.parse.quote_plus(video_query.strip())
+        # Forces YouTube to open the top result directly
+        direct_url = f"https://www.youtube.com/results?search_query={encoded_query}&sp=mAEB"
+        
+        # Alternatively open search if direct play falls back
+        self.browser.open(f"https://www.youtube.com/results?search_query={encoded_query}")
+        return f"Playing YouTube video for query: '{video_query}'"
+
+    def search_wikipedia(self, query: str) -> str:
+        """
+        Searches Wikipedia API for a quick text summary and returns it.
+        Does not open the browser unless requested.
+        """
+        if not query.strip():
+            return "Wikipedia query cannot be empty."
+
+        url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{urllib.parse.quote(query.strip())}"
+        headers = {"User-Agent": "KURAMA-Assistant/1.0 (Linux Local Assistant)"}
+
+        try:
+            response = requests.get(url, headers=headers, timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                title = data.get("title", "Result")
+                extract = data.get("extract", "No summary available.")
+                wiki_link = data.get("content_urls", {}).get("desktop", {}).get("page", "")
+                
+                return f"**Wikipedia: {title}**\n{extract}\nURL: {wiki_link}"
+            elif response.status_code == 404:
+                return f"No Wikipedia page found for '{query}'."
+            else:
+                return f"Failed to fetch Wikipedia data (HTTP {response.status_code})."
+        except Exception as e:
+            return f"Error fetching Wikipedia summary: {str(e)}"
