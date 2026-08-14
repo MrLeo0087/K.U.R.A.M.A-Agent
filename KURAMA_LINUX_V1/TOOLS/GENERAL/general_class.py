@@ -798,3 +798,121 @@ class PowerController:
             return "Signing out current user..."
         except Exception as e:
             return f"Failed to sign out: {e}"
+
+
+# FIle SYSTEM
+import os
+import shutil
+from pathlib import Path
+from typing import Optional, List, Dict, Union
+from pydantic import BaseModel, Field
+from langchain_core.tools import tool
+
+
+def resolve_safe_path(target_path: str) -> Path:
+    raw_path = target_path.strip("'\"")
+    
+    # Expand ~ to actual home path (e.g., /home/leo)
+    expanded = os.path.expanduser(raw_path)
+    resolved = Path(os.path.abspath(expanded))
+    
+    user_home = Path.home() # Resolves to /home/leo
+    
+    # FIX: Redirect invalid paths like /home/hello.txt to /home/leo/hello.txt
+    if resolved.parent == Path("/home") and resolved != user_home:
+        return user_home / resolved.name
+        
+    return resolved
+
+
+import os
+from pathlib import Path
+from typing import List, Dict, Optional
+
+class FileSystemManager:
+    # Folders to ignore completely during searches
+    IGNORE_DIRS = {
+        ".git", ".venv", "venv", "env", "site-packages", "__pycache__",
+        ".local", ".cache", "$RECYCLE.BIN", "node_modules", ".pytest_cache",
+        ".tox", ".idea", ".vscode", "dist", "build", "eggs", ".eggs"
+    }
+
+    def __init__(self, base_path: str = "."):
+        self.base_dir = Path(os.path.expanduser(base_path.strip("'\""))).resolve()
+
+    def search_items(self, pattern: str, root_dir: Optional[str] = None, max_results: int = 50) -> List[Dict[str, str]]:
+        target_root = Path(os.path.expanduser(root_dir.strip("'\""))).resolve() if root_dir else self.base_dir
+        
+        if not target_root.exists():
+            return [{"error": f"Path does not exist: {target_root}"}]
+
+        matches = []
+        pattern_clean = pattern.strip().lower()
+
+        for root, dirs, files in os.walk(target_root, topdown=True, followlinks=False):
+            # 1. Prune hidden, virtual environment, and cache directories in-place
+            dirs[:] = [
+                d for d in dirs 
+                if d not in self.IGNORE_DIRS 
+                and not d.startswith(".")  # Excludes hidden folders like .local, .cache, .venv
+            ]
+
+            for file in files:
+                file_lower = file.lower()
+
+                # 2. Match logic: Exact match if search pattern has extension (e.g. main.py)
+                is_match = False
+                if "." in pattern_clean:
+                    is_match = (file_lower == pattern_clean)
+                else:
+                    is_match = (pattern_clean in file_lower)
+
+                if is_match:
+                    full_path = Path(root) / file
+                    matches.append({
+                        "name": file,
+                        "type": "file",
+                        "path": str(full_path)
+                    })
+                    if len(matches) >= max_results:
+                        return matches
+
+        return matches
+
+    def create_item(self, target_path: str, is_directory: bool = False, content: str = "") -> str:
+        clean_target = resolve_safe_path(target_path)
+
+        try:
+            if is_directory:
+                clean_target.mkdir(parents=True, exist_ok=True)
+                return f"Successfully created directory: {clean_target}"
+            else:
+                clean_target.parent.mkdir(parents=True, exist_ok=True)
+                with open(clean_target, "w", encoding="utf-8") as f:
+                    f.write(content or "")
+                return f"Successfully created file: {clean_target} ({len(content or '')} characters)"
+        except Exception as e:
+            return f"Error creating item at {clean_target}: {str(e)}"
+
+    def remove_item(self, target_path: str, recursive: bool = False) -> str:
+        # FIX: Path will now be resolved to /home/leo/hello.txt automatically!
+        clean_target = resolve_safe_path(target_path)
+
+        if not clean_target.exists():
+            return f"Error: Target path does not exist: {clean_target}"
+
+        if str(clean_target) in self.PROTECTED_PATHS or clean_target == clean_target.anchor:
+            return f"SECURITY BLOCKED: Cannot delete root/system path '{clean_target}'."
+
+        try:
+            if clean_target.is_file() or clean_target.is_symlink():
+                clean_target.unlink()
+                return f"Successfully deleted file: {clean_target}"
+            elif clean_target.is_dir():
+                if not recursive and any(clean_target.iterdir()):
+                    return f"Error: Directory '{clean_target}' is not empty. Set recursive=True to delete."
+                shutil.rmtree(clean_target)
+                return f"Successfully deleted directory: {clean_target}"
+            return f"Error: Path {clean_target} is neither file nor directory."
+        except Exception as e:
+            return f"Error deleting {clean_target}: {str(e)}"

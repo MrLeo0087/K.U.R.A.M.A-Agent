@@ -1,0 +1,5 @@
+# Auto-generated & synced by Jarvis Agent
+langchain-core==1.5.3
+langchain-groq==1.1.3
+pydantic==2.13.4
+python-dotenv==1.2.2

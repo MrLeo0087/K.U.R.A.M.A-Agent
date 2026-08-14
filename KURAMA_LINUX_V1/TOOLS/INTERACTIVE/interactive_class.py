@@ -468,4 +468,281 @@ class EnvironmentDoctor:
         print("==================================================\n")
 
 
+# For organize project in python
+import ast
+import importlib.metadata
+import os
+import shutil
+import socket
+import sys
+from pathlib import Path
+from typing import Optional
+from pydantic import BaseModel, Field
+from langchain_core.tools import tool
+
+
+class ProjectOrganizer:
+    """Consolidated engine to clean, check connectivity, sync requirements, and organize workspace structure."""
+
+    STDLIB_MODULES = set(sys.builtin_module_names) | {
+        "ast", "argparse", "asyncio", "collections", "copy", "csv", "datetime",
+        "functools", "importlib", "io", "itertools", "json", "logging", "math",
+        "multiprocessing", "os", "pathlib", "random", "re", "shutil", "socket",
+        "string", "subprocess", "sys", "threading", "time", "typing", "unittest"
+    }
+
+    PACKAGE_MAPPINGS = {
+        "bs4": "beautifulsoup4",
+        "sklearn": "scikit-learn",
+        "PIL": "pillow",
+        "cv2": "opencv-python",
+        "yaml": "pyyaml",
+        "dotenv": "python-dotenv",
+        "fitz": "pymupdf",
+        "docx": "python-docx",
+        "google.generativeai": "google-generativeai",
+        "langchain_core": "langchain-core",
+        "langchain_groq": "langchain-groq"
+    }
+
+    def __init__(self, target_path: str = "."):
+        clean_path = target_path.strip("'\"")
+        self.target_dir = Path(os.path.abspath(os.path.expanduser(clean_path)))
+
+    def clean_junk(self) -> str:
+        """Removes temporary cache directories and compiled files."""
+        if not self.target_dir.exists():
+            return f"Error: Target directory path does not exist: {self.target_dir}"
+
+        removed_dirs = 0
+        removed_files = 0
+
+        for target in self.target_dir.rglob("*"):
+            if any(p in target.parts for p in ["venv", ".venv", ".git"]):
+                continue
+
+            if target.is_dir() and target.name in ["__pycache__", ".ipynb_checkpoints", ".pytest_cache", "build", "dist", ".egg-info"]:
+                try:
+                    shutil.rmtree(target)
+                    removed_dirs += 1
+                except Exception:
+                    pass
+
+        for file_path in self.target_dir.rglob("*.pyc"):
+            if any(p in file_path.parts for p in ["venv", ".venv", ".git"]):
+                continue
+            try:
+                file_path.unlink()
+                removed_files += 1
+            except Exception:
+                pass
+
+        return f"Removed {removed_dirs} cache directories and {removed_files} .pyc files."
+
+    def check_connectivity(self, timeout_seconds: float = 2.0) -> str:
+        """Tests socket connection to Groq, OpenAI, Gemini, and GitHub endpoints."""
+        endpoints = {
+            "Groq API": ("api.groq.com", 443),
+            "OpenAI API": ("api.openai.com", 443),
+            "Google Gemini API": ("generativelanguage.googleapis.com", 443),
+            "GitHub": ("github.com", 443)
+        }
+
+        results = []
+        for name, (host, port) in endpoints.items():
+            try:
+                sock = socket.create_connection((host, port), timeout=timeout_seconds)
+                sock.close()
+                results.append(f"[OK]   {name:<20} Connected")
+            except Exception:
+                results.append(f"[FAIL] {name:<20} Unreachable")
+
+        return "\n".join(results)
+
+    def sync_requirements(self) -> str:
+        """Scans code imports, checks installed versions, and writes/updates requirements.txt."""
+        if not self.target_dir.exists():
+            return f"Error: Target directory path does not exist: {self.target_dir}"
+
+        detected_modules = set()
+        local_files = {p.stem for p in self.target_dir.rglob("*.py")}
+
+        for py_file in self.target_dir.rglob("*.py"):
+            if any(p in py_file.parts for p in ["venv", ".venv", "__pycache__", ".git"]):
+                continue
+            try:
+                with open(py_file, "r", encoding="utf-8") as f:
+                    tree = ast.parse(f.read(), filename=str(py_file))
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.Import):
+                        for alias in node.names:
+                            detected_modules.add(alias.name.split(".")[0])
+                    elif isinstance(node, ast.ImportFrom) and node.module:
+                        detected_modules.add(node.module.split(".")[0])
+            except Exception:
+                continue
+
+        external_packages = {
+            self.PACKAGE_MAPPINGS.get(m.lower(), m)
+            for m in detected_modules
+            if m not in self.STDLIB_MODULES and m not in local_files
+        }
+
+        if not external_packages:
+            return "No third-party packages detected."
+
+        package_entries = []
+        for pkg in sorted(external_packages):
+            lookup_name = self.PACKAGE_MAPPINGS.get(pkg.lower(), pkg)
+            try:
+                ver = importlib.metadata.version(lookup_name)
+                package_entries.append(f"{lookup_name}=={ver}")
+            except importlib.metadata.PackageNotFoundError:
+                package_entries.append(f"{lookup_name}")
+
+        req_file = self.target_dir / "requirements.txt"
+        existed = req_file.exists()
+
+        with open(req_file, "w", encoding="utf-8") as f:
+            f.write("# Auto-generated & synced by Jarvis Agent\n")
+            for entry in package_entries:
+                f.write(f"{entry}\n")
+
+        action = "Updated" if existed else "Created"
+        return f"{action} requirements.txt with {len(package_entries)} active packages."
+
+    def ensure_workspace_files(self) -> str:
+        """Ensures essential project files (.gitignore, .env.example) exist."""
+        if not self.target_dir.exists():
+            return f"Error: Target directory path does not exist: {self.target_dir}"
+
+        gitignore_path = self.target_dir / ".gitignore"
+        env_example_path = self.target_dir / ".env.example"
+
+        created = []
+
+        if not gitignore_path.exists():
+            with open(gitignore_path, "w", encoding="utf-8") as f:
+                f.write("__pycache__/\n*.pyc\n.env\nvenv/\n.venv/\n.ipynb_checkpoints/\nbuild/\ndist/\n")
+            created.append(".gitignore")
+
+        if not env_example_path.exists():
+            with open(env_example_path, "w", encoding="utf-8") as f:
+                f.write("# API Keys Template\nGROQ_API_KEY=your_key_here\nOPENAI_API_KEY=your_key_here\nGEMINI_API_KEY=your_key_here\n")
+            created.append(".env.example")
+
+        if created:
+            return f"Created config templates: {', '.join(created)}"
+        return "Workspace config files (.gitignore, .env.example) are present."
+
+
+# File create remove and search
+import os
+import shutil
+from pathlib import Path
+from typing import Optional, List, Dict
+
+def resolve_safe_path(target_path: str) -> Path:
+    raw_path = target_path.strip("'\"")
+    
+    # Expand tilde ~ to full home path (/home/leo)
+    expanded = os.path.expanduser(raw_path)
+    resolved = Path(os.path.abspath(expanded))
+    
+    # If LLM generates /home/file.py or /home/folder instead of /home/leo/folder
+    user_home = Path.home() # Resolves to /home/leo
+    if resolved.parent == Path("/home") and resolved != user_home:
+        # Redirect /home/main.py -> /home/leo/main.py
+        return user_home / resolved.name
+        
+    return resolved
+
+class FileSystemManager:
+    """Core engine for high-speed file search, creation, and safe deletion."""
+
+    # Protected system paths that cannot be deleted under any circumstances
+    PROTECTED_PATHS = {
+        "/", "/bin", "/boot", "/dev", "/etc", "/lib", "/lib64", 
+        "/proc", "/root", "/run", "/sbin", "/sys", "/usr", "/var", "/home",
+        "C:\\", "C:\\Windows", "C:\\Program Files", "C:\\Program Files (x86)", "C:\\Users"
+    }
+
+    def __init__(self, base_path: str = "."):
+        clean_path = base_path.strip("'\"")
+        self.base_dir = Path(os.path.abspath(os.path.expanduser(clean_path)))
+
+    def search_items(self, pattern: str, root_dir: Optional[str] = None, max_results: int = 50) -> List[Dict[str, str]]:
+        """Fast file and directory search matching patterns or keywords across the system."""
+        target_root = Path(os.path.abspath(os.path.expanduser(root_dir))) if root_dir else self.base_dir
+        
+        if not target_root.exists():
+            return [{"error": f"Path does not exist: {target_root}"}]
+
+        matches = []
+        pattern_lower = pattern.lower()
+
+        # Efficient traversal ignoring permission errors
+        for root, dirs, files in os.walk(target_root, topdown=True, followlinks=False):
+            # Skip heavy system/cache folders during search to keep speed high
+            dirs[:] = [d for d in dirs if d not in {".git", "__pycache__", "node_modules", ".venv", "venv", "$RECYCLE.BIN"}]
+
+            for item in dirs + files:
+                if pattern_lower in item.lower():
+                    full_path = Path(root) / item
+                    matches.append({
+                        "name": item,
+                        "type": "directory" if full_path.is_dir() else "file",
+                        "path": str(full_path)
+                    })
+                    if len(matches) >= max_results:
+                        return matches
+
+        return matches
+
+    def create_item(self, target_path: str, is_directory: bool = False, content: str = "") -> str:
+        clean_target = resolve_safe_path(target_path)
+
+        try:
+            if is_directory:
+                # os.makedirs equivalent in pathlib
+                clean_target.mkdir(parents=True, exist_ok=True)
+                return f"Successfully created directory: {clean_target}"
+            else:
+                clean_target.parent.mkdir(parents=True, exist_ok=True)
+                with open(clean_target, "w", encoding="utf-8") as f:
+                    f.write(content or "")
+                return f"Successfully created file: {clean_target} ({len(content or '')} characters)"
+        except Exception as e:
+            return f"Error creating item at {clean_target}: {str(e)}"
+
+    def remove_item(self, target_path: str, recursive: bool = False) -> str:
+        """Safely removes a file or directory with root-protection guardrails."""
+        clean_target = Path(os.path.abspath(os.path.expanduser(target_path.strip("'\""))))
+
+        # Guardrail Check 1: Must exist
+        if not clean_target.exists():
+            return f"Error: Target path does not exist: {clean_target}"
+
+        # Guardrail Check 2: Protect system critical paths
+        if str(clean_target) in self.PROTECTED_PATHS or clean_target == clean_target.anchor:
+            return f"SECURITY BLOCKED: Cannot delete root/system path '{clean_target}'."
+
+        try:
+            if clean_target.is_file() or clean_target.is_symlink():
+                clean_target.unlink()
+                return f"Successfully deleted file: {clean_target}"
+            elif clean_target.is_dir():
+                if not recursive and any(clean_target.iterdir()):
+                    return f"Error: Directory '{clean_target}' is not empty. Set recursive=True to delete."
+                shutil.rmtree(clean_target)
+                return f"Successfully deleted directory: {clean_target}"
+            return f"Error: Path {clean_target} is neither file nor directory."
+        except Exception as e:
+            return f"Error deleting {clean_target}: {str(e)}"
+
+
+# --------------------------------------------------
+# LANGCHAIN TOOL WRAPPER
+# --------------------------------------------------
+
 

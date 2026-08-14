@@ -1,4 +1,4 @@
-from typing import Literal, Optional
+from typing import Literal, Optional, Union
 from dotenv import load_dotenv
 from langchain_core.tools import tool
 from langchain_groq import ChatGroq
@@ -14,10 +14,36 @@ from general_class import (
     TimeAndWeatherController,
     WebAndSearchController,
     WindowController,
-    PowerController,
+    FileSystemManager,
 )
 
 load_dotenv()
+
+# SCHEMAS
+class FileSystemActionInput(BaseModel):
+    action: str = Field(
+        description="Action to perform: 'search', 'create', or 'remove'."
+    )
+    target_path: str = Field(
+        default=".",
+        description="Target path. Use '~' or '/home/leo/' for home directory."
+    )
+    pattern: Optional[str] = Field(
+        default="",
+        description="Search pattern if action='search'."
+    )
+    is_directory: Union[bool, str] = Field(
+        default=False,
+        description="MUST be 'false' when operating on a FILE. MUST be 'true' ONLY when operating on a FOLDER."
+    )
+    content: Optional[str] = Field(
+        default="",
+        description="Text content to write if creating a file."
+    )
+    recursive: Union[bool, str] = Field(
+        default=False,
+        description="Set 'true' to delete non-empty directories."
+    )
 
 
 # --- TOOLS ---
@@ -131,7 +157,7 @@ def manage_system_info(
     return "Invalid system info task specified."
 
 
-@tool  # FIXED: Added missing @tool decorator
+@tool
 def manage_clipboard_and_screenshot(
     action: Literal["read_clipboard", "copy_clipboard", "take_screenshot"],
     text: str = "",
@@ -204,33 +230,57 @@ def manage_web_and_search(
         return web_controller.play_youtube_video(query)
     elif action in ["wikipedia", "wiki"]:
         return web_controller.search_wikipedia(query)
-        
     else:
         return web_controller.search_google(query)
 
-@tool
-def manage_power(
-    action: Literal["shutdown", "restart", "sleep", "signout"],
+
+# FILE MANAGEMENT
+@tool(args_schema=FileSystemActionInput)
+def manage_files_folder(
+    action: str,
+    target_path: str = ".",
+    pattern: Optional[str] = "",
+    is_directory: Union[bool, str] = False,
+    content: Optional[str] = "",
+    recursive: Union[bool, str] = False
 ) -> str:
-    """Controls system power actions like shutdown, restart, sleep/suspend, or signout/logout.
+    """Manages file system operations: searches for files/folders, creates files or directories, and safely removes files or folders."""
+    fs = FileSystemManager(target_path)
+    action_type = action.lower().strip()
+    
+    is_dir_flag = str(is_directory).lower().strip() in ("true", "1", "yes")
+    recursive_flag = str(recursive).lower().strip() in ("true", "1", "yes")
 
-    Args:
-        action: 'shutdown' to turn off system, 'restart' to reboot, 'sleep' to suspend, or 'signout' to log out user session.
-    """
-    controller = PowerController()
+    # Smart override for common file extensions
+    file_extensions = ('.py', '.txt', '.json', '.md', '.sh', '.html', '.css', '.js', '.c', '.cpp')
+    if action_type in ("create", "remove") and any(target_path.endswith(ext) for ext in file_extensions):
+        is_dir_flag = False
 
-    if action == "shutdown":
-        return controller.shutdown()
-    elif action == "restart":
-        return controller.restart()
-    elif action == "sleep":
-        return controller.sleep()
-    elif action == "signout":
-        return controller.signout()
+    if action_type == "search":
+        if not pattern:
+            return "Error: Must supply a 'pattern' keyword to search."
+        results = fs.search_items(pattern=pattern, root_dir=target_path)
+        if not results:
+            return f"No items matching '{pattern}' found in '{target_path}'."
+        if "error" in results[0]:
+            return results[0]["error"]
+        
+        lines = [f"Found {len(results)} matching items in '{target_path}':"]
+        for item in results:
+            lines.append(f" - [{item['type'].upper()}] {item['path']}")
+        return "\n".join(lines)
 
-    return "Invalid action specified."
+    elif action_type == "create":
+        return fs.create_item(target_path=target_path, is_directory=is_dir_flag, content=content or "")
 
-# --- TOOL REGISTRY & CHROMADB VECTORSTORE ---
+    elif action_type == "remove":
+        return fs.remove_item(target_path=target_path, recursive=recursive_flag)
+
+    else:
+        return f"Error: Unknown action '{action}'. Valid actions are 'search', 'create', 'remove'."
+
+
+# --- TOOL REGISTRY ---
 ALL_TOOLS = {
     "manage_audio": manage_audio,
     "manage_brightness": manage_brightness,
@@ -241,20 +291,20 @@ ALL_TOOLS = {
     "manage_clipboard_and_screenshot": manage_clipboard_and_screenshot,
     "get_time_weather_and_location": get_time_weather_and_location,
     "manage_web_and_search": manage_web_and_search,
-    "manage_power": manage_power,
+    "manage_files_folder": manage_files_folder  # FIXED: Matched key to exact tool name
 }
+
 
 # --- AGENT ---
 class GeneralAgent:
 
     def __init__(self):
-        self.tools_map = ALL_TOOLS  # FIXED: Explicitly set tools map
+        self.tools_map = ALL_TOOLS
         self.llm = ChatGroq(model="qwen/qwen3.6-27b", temperature=0)
 
     def process_command(self, user_prompt: str):
         print(f"\nUser: '{user_prompt}'")
         try:
-
             llm_with_tools = self.llm.bind_tools(ALL_TOOLS.values())
             response = llm_with_tools.invoke(user_prompt)
 
@@ -276,7 +326,3 @@ class GeneralAgent:
                 return response.content
         except Exception as e:
             print(f"-> Execution failed: {e}")
-
-
-# if __name__ == "__main__":
-    

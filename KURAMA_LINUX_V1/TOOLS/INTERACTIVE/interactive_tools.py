@@ -1,13 +1,16 @@
 import os
 from pathlib import Path
 from pydantic import BaseModel, Field
+from typing import Optional, Union
 from langchain_core.tools import tool
 from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_groq import ChatGroq
 from dotenv import load_dotenv  
 
 # Import your custom logic
-from interactive_class import WorkspacePython, EnvironmentDoctor
+from interactive_class import (WorkspacePython, 
+                               EnvironmentDoctor,
+                               ProjectOrganizer,) 
 
 load_dotenv()
 
@@ -25,7 +28,13 @@ class WorkspaceInput(BaseModel):
 class DiagnosticsInput(BaseModel):
     path: str = Field(
         default=".", 
-        description="Directory path to diagnose. Accepts absolute paths like '/media/disk/My Future/project', relative paths, or '~'. Spaces in path are supported."
+        description="Directory path to diagnose. Accepts absolute paths like '/media/disk/My Future/project', relative paths, or '~'. Spaces in path are supported.if path not given then use ."
+    )
+
+class OrganizeProjectInput(BaseModel):
+    path: str = Field(
+        default=".",
+        description="Directory path of the project to organize, clean, sync, and check. Accepts relative, absolute paths (e.g. '/media/disk/My Future/project'), or '~'. if path not given then use ."
     )
 
 
@@ -52,32 +61,50 @@ def diagnose_workspace_environment(path: str = ".") -> str:
 
     if not os.path.exists(resolved_path):
         return f"Error: Target directory path does not exist: {resolved_path}"
+    try:
+        doc = EnvironmentDoctor(resolved_path)
+        result = doc.run_all()
+        # print('result')
+        return result
 
-    doc = EnvironmentDoctor(resolved_path)
+    except Exception as e:
+        return e
 
-    sys_res = doc.check_system_and_python()
-    tools_res = doc.check_system_tools()
-    git_res = doc.check_git_status()
-    secrets_res = doc.check_secrets_and_env()
-    deps_res = doc.check_dependencies() 
-    hygiene_res = doc.check_repo_hygiene()
 
-    lines = [
-        f"--- WORKSPACE DIAGNOSTICS: {resolved_path} ---",
-        f"[1] SYSTEM RUNTIME: Python {sys_res['python_version']} | Venv Active: {sys_res['in_venv']} | Disk Free: {sys_res['free_disk_gb']} GB",
-        f"[2] SYSTEM TOOLS  : Installed: {', '.join(tools_res['installed'])} | Missing: {', '.join(tools_res['missing']) if tools_res['missing'] else 'None'}",
-        f"[3] GIT STATUS    : Repo Init: {git_res['initialized']} | Identity: {git_res.get('user_name')} <{git_res.get('user_email')}> | Branch: {git_res.get('branch')} | Dirty Work Tree: {git_res.get('is_dirty')}",
-        f"[4] SECRETS & ENV : .env Exists: {secrets_res['env_present']} | Safe in Gitignore: {secrets_res['is_ignored']} | Keys Found: {', '.join(secrets_res['keys']) if secrets_res['keys'] else 'None'}",
-        f"[5] DEPENDENCIES  : Source: {deps_res['source']} | Installed: {len(deps_res['installed'])} | Missing: {', '.join(deps_res['missing']) if deps_res['missing'] else 'None'}",
-        f"[6] REPO HYGIENE  : Large Files (>50MB): {len(hygiene_res['large_files'])} | Cache Folders: {', '.join(hygiene_res['cache_folders']) if hygiene_res['cache_folders'] else 'None'}",
-        "--------------------------------------------------",
-        f"OVERALL STATUS     : {'ALL SYSTEMS GO' if all(passed for _, passed in doc.summary_status) else 'ACTION REQUIRED'}"
+
+@tool(args_schema=OrganizeProjectInput)
+def organize_and_sync_project(path: str = ".") -> str:
+    """Cleans and organize workspace junk, checks AI API connectivity, syncs requirements.txt with exact versions, and initializes missing project config files. It also create requirement.txt file"""
+    organizer = ProjectOrganizer(path)
+
+    if not organizer.target_dir.exists():
+        return f"Error: Target directory path does not exist: {organizer.target_dir}"
+
+    clean_res = organizer.clean_junk()
+    conn_res = organizer.check_connectivity()
+    req_res = organizer.sync_requirements()
+    files_res = organizer.ensure_workspace_files()
+
+    report = [
+        f"=== PROJECT WORKSPACE REPORT: {organizer.target_dir} ===",
+        f"[1] CACHE CLEANUP   : {clean_res}",
+        f"[2] API CONNECTIVITY:\n{conn_res}",
+        f"[3] REQUIREMENTS    : {req_res}",
+        f"[4] WORKSPACE SETUP : {files_res}",
+        "--------------------------------------------------"
     ]
 
-    return "\n".join(lines)
+    return "\n".join(report)
 
 
-ALL_TOOLS = [make_workspace_python, diagnose_workspace_environment]
+
+
+ALL_TOOLS = [
+            make_workspace_python, 
+             diagnose_workspace_environment,
+             organize_and_sync_project,
+             ]
+
 
 
 # --------------------------------------------------
