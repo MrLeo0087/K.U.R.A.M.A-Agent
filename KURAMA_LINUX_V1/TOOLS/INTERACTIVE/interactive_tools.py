@@ -1,22 +1,24 @@
 import os
 from pathlib import Path
+from typing import Optional
 from pydantic import BaseModel, Field
-from typing import Optional, Union
 from langchain_core.tools import tool
 from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_groq import ChatGroq
 from dotenv import load_dotenv  
 
-# Import your custom logic
-from interactive_class import (WorkspacePython, 
-                               EnvironmentDoctor,
-                               ProjectOrganizer,) 
+# Import custom logic
+from interactive_class import (
+    WorkspacePython, 
+    EnvironmentDoctor,
+    ProjectOrganizer,
+    GitAssistant,
+) 
 
 load_dotenv()
 
-
 # --------------------------------------------------
-# 1. DEFINE EXPLICIT SCHEMAS (Fixes Groq 400 Error)
+# 1. SCHEMAS
 # --------------------------------------------------
 
 class WorkspaceInput(BaseModel):
@@ -28,24 +30,33 @@ class WorkspaceInput(BaseModel):
 class DiagnosticsInput(BaseModel):
     path: str = Field(
         default=".", 
-        description="Directory path to diagnose. Accepts absolute paths like '/media/disk/My Future/project', relative paths, or '~'. Spaces in path are supported.if path not given then use ."
+        description="Directory path to diagnose. Accepts absolute paths, relative paths, or '~'."
     )
 
 class OrganizeProjectInput(BaseModel):
     path: str = Field(
         default=".",
-        description="Directory path of the project to organize, clean, sync, and check. Accepts relative, absolute paths (e.g. '/media/disk/My Future/project'), or '~'. if path not given then use ."
+        description="Directory path of the project to organize, clean, sync, and check."
     )
 
+class GitAssistantInput(BaseModel):
+    repo_path: str = Field(
+        default=".",
+        description="Path to the local git repository directory."
+    )
+    custom_message: Optional[str] = Field(
+        default=None,
+        description="Optional custom commit message."
+    )
 
 # --------------------------------------------------
-# 2. DEFINE TOOLS WITH ARGS_SCHEMA
+# 2. TOOLS WITH SAFE PATH RESOLUTION
 # --------------------------------------------------
 
 @tool(args_schema=WorkspaceInput)
 def make_workspace_python(path: str) -> str:
     """Initializes a new Python project workspace."""
-    clean_path = path.strip("'\"")
+    clean_path = str(path).strip("'\"")
     resolved_path = os.path.abspath(os.path.expanduser(clean_path))
 
     work = WorkspacePython(resolved_path)
@@ -56,26 +67,27 @@ def make_workspace_python(path: str) -> str:
 @tool(args_schema=DiagnosticsInput)
 def diagnose_workspace_environment(path: str = ".") -> str:
     """Runs diagnostics on Python environment, CLI tools, Git config, secrets, dependencies, and file hygiene."""
-    clean_path = path.strip("'\"")
+    clean_path = str(path).strip("'\"")
     resolved_path = os.path.abspath(os.path.expanduser(clean_path))
 
     if not os.path.exists(resolved_path):
         return f"Error: Target directory path does not exist: {resolved_path}"
     try:
         doc = EnvironmentDoctor(resolved_path)
-        result = doc.run_all()
-        # print('result')
-        return result
-
+        return doc.run_all()
     except Exception as e:
-        return e
-
+        return f"Diagnostic Error: {str(e)}"
 
 
 @tool(args_schema=OrganizeProjectInput)
 def organize_and_sync_project(path: str = ".") -> str:
-    """Cleans and organize workspace junk, checks AI API connectivity, syncs requirements.txt with exact versions, and initializes missing project config files. It also create requirement.txt file"""
-    organizer = ProjectOrganizer(path)
+    """Cleans and organizes workspace junk, checks AI API connectivity, syncs requirements.txt with exact versions, and initializes missing project config files."""
+    
+    # FIX: Explicitly cast 'path' to string first so .strip() works regardless of input type!
+    path_str = str(path).strip("'\"")
+    resolved_path = Path(os.path.abspath(os.path.expanduser(path_str)))
+
+    organizer = ProjectOrganizer(resolved_path)
 
     if not organizer.target_dir.exists():
         return f"Error: Target directory path does not exist: {organizer.target_dir}"
@@ -97,30 +109,55 @@ def organize_and_sync_project(path: str = ".") -> str:
     return "\n".join(report)
 
 
+@tool(args_schema=GitAssistantInput)
+def git_assistant_auto_commit_and_push(repo_path: str = ".", custom_message: Optional[str] = None) -> str:
+    """Automates git commit hygiene and synchronization. Stages changes, generates commit messages, and pushes to remote GitHub repository."""
+    clean_path = str(repo_path).strip("'\"")
+    resolved_path = os.path.abspath(os.path.expanduser(clean_path))
+
+    assistant = GitAssistant(repo_path=resolved_path)
+
+    if not assistant.is_git_repo():
+        return f"Error: Target directory is not a valid Git repository: {assistant.repo_path}"
+
+    result = assistant.auto_commit_and_push(custom_message=custom_message)
+
+    report = [
+        f"=== GIT ASSISTANT EXECUTION REPORT: {assistant.repo_path} ===",
+        f"STATUS      : {result.get('status', 'unknown').upper()}",
+        f"MODE USED   : {result.get('diff_mode_used', 'N/A')}",
+        f"COMMIT MSG  : {result.get('commit_message', 'N/A')}",
+        f"DETAILS     : {result.get('message', '')}",
+        "--------------------------------------------------"
+    ]
+
+    return "\n".join(report)
 
 
 ALL_TOOLS = [
-            make_workspace_python, 
-             diagnose_workspace_environment,
-             organize_and_sync_project,
-             ]
-
+    make_workspace_python, 
+    diagnose_workspace_environment,
+    organize_and_sync_project,
+    git_assistant_auto_commit_and_push
+]
 
 
 # --------------------------------------------------
-# 3. INTERACTIVE AGENT WITH SYSTEM PROMPT
+# 3. INTERACTIVE AGENT
 # --------------------------------------------------
 
 class InteractiveAgent:
 
     def __init__(self):
         self.tools_map = {t.name: t for t in ALL_TOOLS}
-        self.llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0)
+        self.llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0)
         
-        # System message instructs model how to handle path strings with spaces
         self.system_message = SystemMessage(
-            content="You are a helpful assistant with tool access. "
-                    "When passing file system paths to tools, pass the unquoted, exact raw path string into the JSON argument."
+            content=(
+                "You are Jarvis, an expert coding assistant.\n"
+                "When a user asks to clean, organize, diagnose, or git push a project path, "
+                "select the appropriate tool and pass the absolute directory path string in the JSON payload."
+            )
         )
 
     def process_command(self, user_prompt: str):
@@ -128,7 +165,6 @@ class InteractiveAgent:
         try:
             llm_with_tools = self.llm.bind_tools(ALL_TOOLS)
             
-            # Send both system and user message
             messages = [self.system_message, HumanMessage(content=user_prompt)]
             response = llm_with_tools.invoke(messages)
 
@@ -142,7 +178,7 @@ class InteractiveAgent:
                     if tool_name in self.tools_map:
                         result = self.tools_map[tool_name].invoke(args)
                         print(f"-> Result:\n{result}")
-                        return "Diagnostics completed successfully."
+                        return "Command executed successfully."
                     else:
                         print(f"-> Error: Tool '{tool_name}' not registered.")
             else:

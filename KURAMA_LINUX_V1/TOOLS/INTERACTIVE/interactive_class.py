@@ -506,8 +506,11 @@ class ProjectOrganizer:
     }
 
     def __init__(self, target_path: str = "."):
-        clean_path = target_path.strip("'\"")
-        self.target_dir = Path(os.path.abspath(os.path.expanduser(clean_path)))
+        # 1. Safely convert to string and strip quotes
+        clean_path = str(target_path).strip("'\"")
+        
+        # 2. Resolve the path properly
+        self.target_dir = Path(clean_path).expanduser().resolve()
 
     def clean_junk(self) -> str:
         """Removes temporary cache directories and compiled files."""
@@ -636,113 +639,200 @@ class ProjectOrganizer:
         return "Workspace config files (.gitignore, .env.example) are present."
 
 
-# File create remove and search
+
+# GIT PUSH COMMIT 
 import os
-import shutil
-from pathlib import Path
-from typing import Optional, List, Dict
+import subprocess
+import json
+import requests
 
-def resolve_safe_path(target_path: str) -> Path:
-    raw_path = target_path.strip("'\"")
-    
-    # Expand tilde ~ to full home path (/home/leo)
-    expanded = os.path.expanduser(raw_path)
-    resolved = Path(os.path.abspath(expanded))
-    
-    # If LLM generates /home/file.py or /home/folder instead of /home/leo/folder
-    user_home = Path.home() # Resolves to /home/leo
-    if resolved.parent == Path("/home") and resolved != user_home:
-        # Redirect /home/main.py -> /home/leo/main.py
-        return user_home / resolved.name
-        
-    return resolved
+class GitAssistant:
+    """
+    A Git Assistant with strict token-budget protections.
+    Prevents large diffs, datasets, and lockfiles from blowing up LLM context/costs.
+    """
 
-class FileSystemManager:
-    """Core engine for high-speed file search, creation, and safe deletion."""
+    # Files to completely ignore during diff generation to save tokens
+    EXCLUDE_PATTERNS = [
+        ":!*.json", ":!*.csv", ":!*.tsv", ":!*.parquet",
+        ":!*.pt", ":!*.pth", ":!*.onnx", ":!*.bin", ":!*.h5",
+        ":!*.ipynb", ":!package-lock.json", ":!poetry.lock", ":!yarn.lock", ":!Cargo.lock"
+    ]
 
-    # Protected system paths that cannot be deleted under any circumstances
-    PROTECTED_PATHS = {
-        "/", "/bin", "/boot", "/dev", "/etc", "/lib", "/lib64", 
-        "/proc", "/root", "/run", "/sbin", "/sys", "/usr", "/var", "/home",
-        "C:\\", "C:\\Windows", "C:\\Program Files", "C:\\Program Files (x86)", "C:\\Users"
-    }
+    def __init__(
+        self, 
+        repo_path: str = ".", 
+        groq_api_key: str = None, 
+        max_diff_chars: int = 2500,  # ~500–600 tokens budget max for diff
+        model_name: str = "llama-3.1-8b-instant"  # Fastest & cheapest model
+    ):
+        self.repo_path = os.path.abspath(repo_path)
+        self.groq_api_key = groq_api_key or os.getenv("GROQ_API_KEY")
+        self.groq_url = "https://api.groq.com/openai/v1/chat/completions"
+        self.max_diff_chars = max_diff_chars
+        self.model_name = model_name
 
-    def __init__(self, base_path: str = "."):
-        clean_path = base_path.strip("'\"")
-        self.base_dir = Path(os.path.abspath(os.path.expanduser(clean_path)))
+    def _run_git(self, args: list) -> tuple[bool, str]:
+        """Runs a git command inside the target repo directory."""
+        try:
+            result = subprocess.run(
+                ["git"] + args,
+                cwd=self.repo_path,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=True
+            )
+            return True, result.stdout.strip()
+        except subprocess.CalledProcessError as e:
+            error_msg = e.stderr.strip() or e.stdout.strip()
+            return False, error_msg
 
-    def search_items(self, pattern: str, root_dir: Optional[str] = None, max_results: int = 50) -> List[Dict[str, str]]:
-        """Fast file and directory search matching patterns or keywords across the system."""
-        target_root = Path(os.path.abspath(os.path.expanduser(root_dir))) if root_dir else self.base_dir
-        
-        if not target_root.exists():
-            return [{"error": f"Path does not exist: {target_root}"}]
+    def is_git_repo(self) -> bool:
+        """Verifies if directory is a valid git repository."""
+        success, _ = self._run_git(["rev-parse", "--is-inside-work-tree"])
+        return success
 
-        matches = []
-        pattern_lower = pattern.lower()
+    def is_first_commit(self) -> bool:
+        """Checks if repo has zero commits (brand new repo)."""
+        success, _ = self._run_git(["rev-parse", "HEAD"])
+        return not success
 
-        # Efficient traversal ignoring permission errors
-        for root, dirs, files in os.walk(target_root, topdown=True, followlinks=False):
-            # Skip heavy system/cache folders during search to keep speed high
-            dirs[:] = [d for d in dirs if d not in {".git", "__pycache__", "node_modules", ".venv", "venv", "$RECYCLE.BIN"}]
+    def stage_all(self) -> tuple[bool, str]:
+        """Stages all changes."""
+        return self._run_git(["add", "."])
 
-            for item in dirs + files:
-                if pattern_lower in item.lower():
-                    full_path = Path(root) / item
-                    matches.append({
-                        "name": item,
-                        "type": "directory" if full_path.is_dir() else "file",
-                        "path": str(full_path)
-                    })
-                    if len(matches) >= max_results:
-                        return matches
+    # Correct
+    def get_safe_diff(self) -> tuple[str, str]:
+        """
+        Fetches the git diff using strict token filters.
+        Returns: (diff_content, diff_type) where diff_type is 'full' or 'stat'
+        """
+        # Base command excluding heavy lock/data files
+        cmd = ["diff", "--cached", "--"] + self.EXCLUDE_PATTERNS
+        success, diff_text = self._run_git(cmd)
 
-        return matches
+        if not success or not diff_text.strip():
+            # If standard diff empty, check if untracked files exist
+            success, diff_text = self._run_git(["diff", "--cached"])
 
-    def create_item(self, target_path: str, is_directory: bool = False, content: str = "") -> str:
-        clean_target = resolve_safe_path(target_path)
+        # SAFEGUARD: If raw diff is too large, fall back to file stats summary (--stat)
+        if len(diff_text) > self.max_diff_chars:
+            print(f"[Token Guard] Diff size ({len(diff_text)} chars) exceeds budget limit.")
+            print("[Token Guard] Switching to lightweight '--stat' mode to save tokens...")
+            
+            stat_cmd = ["diff", "--cached", "--stat"]
+            _, stat_text = self._run_git(stat_cmd)
+            return stat_text, "stat"
+
+        return diff_text, "full"
+
+    def generate_commit_message(self, diff_text: str, diff_type: str) -> str:
+        """
+        Sends guarded diff to LLM and returns commit message.
+        """
+        # Layer 1: Local handling for empty diffs
+        if not diff_text.strip():
+            return "Chore: routine update and minor cleanups"
+
+        # Layer 2: Local handling for first commit (0 tokens consumed)
+        if self.is_first_commit():
+            return "Initial commit: initialize project structure and baseline files"
+
+        if not self.groq_api_key:
+            raise ValueError("GROQ_API_KEY environment variable is not set.")
+
+        system_prompt = (
+            "You are an expert developer assistant. Write a concise, single-line conventional commit message "
+            "(e.g., feat:, fix:, refactor:, docs:, chore:) based on the provided git changes. "
+            "Return ONLY the commit message string without quotes or conversational text."
+        )
+
+        # Layer 3: Hard character truncation guardrail
+        safe_payload = diff_text[:self.max_diff_chars]
+
+        user_content = (
+            f"Git Changes Summary:\n{safe_payload}" 
+            if diff_type == "stat" 
+            else f"Git Code Diff:\n{safe_payload}"
+        )
+
+        headers = {
+            "Authorization": f"Bearer {self.groq_api_key}",
+            "Content-Type": "application/json"
+        }
+
+        payload = {
+            "model": self.model_name,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content}
+            ],
+            "max_tokens": 60,  # Limits model output tokens
+            "temperature": 0.2
+        }
 
         try:
-            if is_directory:
-                # os.makedirs equivalent in pathlib
-                clean_target.mkdir(parents=True, exist_ok=True)
-                return f"Successfully created directory: {clean_target}"
-            else:
-                clean_target.parent.mkdir(parents=True, exist_ok=True)
-                with open(clean_target, "w", encoding="utf-8") as f:
-                    f.write(content or "")
-                return f"Successfully created file: {clean_target} ({len(content or '')} characters)"
+            response = requests.post(self.groq_url, headers=headers, json=payload, timeout=8)
+            response.raise_for_status()
+            return response.json()["choices"][0]["message"]["content"].strip()
         except Exception as e:
-            return f"Error creating item at {clean_target}: {str(e)}"
+            print(f"[Warning] API call failed ({e}). Falling back to local message.")
+            return "Chore: automated code update"
 
-    def remove_item(self, target_path: str, recursive: bool = False) -> str:
-        """Safely removes a file or directory with root-protection guardrails."""
-        clean_target = Path(os.path.abspath(os.path.expanduser(target_path.strip("'\""))))
+    def commit(self, message: str) -> tuple[bool, str]:
+        """Executes git commit."""
+        return self._run_git(["commit", "-m", message])
 
-        # Guardrail Check 1: Must exist
-        if not clean_target.exists():
-            return f"Error: Target path does not exist: {clean_target}"
+    def push(self) -> tuple[bool, str]:
+        """Pushes to remote branch."""
+        return self._run_git(["push"])
 
-        # Guardrail Check 2: Protect system critical paths
-        if str(clean_target) in self.PROTECTED_PATHS or clean_target == clean_target.anchor:
-            return f"SECURITY BLOCKED: Cannot delete root/system path '{clean_target}'."
+    def auto_commit_and_push(self, custom_message: str = None) -> dict:
+        """Main execution function triggered by Jarvis."""
+        if not self.is_git_repo():
+            return {"status": "error", "message": "Not a valid Git repository."}
 
-        try:
-            if clean_target.is_file() or clean_target.is_symlink():
-                clean_target.unlink()
-                return f"Successfully deleted file: {clean_target}"
-            elif clean_target.is_dir():
-                if not recursive and any(clean_target.iterdir()):
-                    return f"Error: Directory '{clean_target}' is not empty. Set recursive=True to delete."
-                shutil.rmtree(clean_target)
-                return f"Successfully deleted directory: {clean_target}"
-            return f"Error: Path {clean_target} is neither file nor directory."
-        except Exception as e:
-            return f"Error deleting {clean_target}: {str(e)}"
+        # Step 1: Stage
+        add_ok, add_err = self.stage_all()
+        if not add_ok:
+            return {"status": "error", "message": f"Staging failed: {add_err}"}
 
+        # Step 2: Get Guarded Diff
+        diff_text, diff_type = self.get_safe_diff()
 
-# --------------------------------------------------
-# LANGCHAIN TOOL WRAPPER
-# --------------------------------------------------
+        # Step 3: Determine Commit Message
+        if custom_message:
+            commit_msg = custom_message
+        else:
+            commit_msg = self.generate_commit_message(diff_text, diff_type)
+
+        # Step 4: Commit
+        commit_ok, commit_err = self.commit(commit_msg)
+        if not commit_ok:
+            return {"status": "info/error", "message": f"Nothing committed or failed: {commit_err}"}
+
+        # Step 5: Push
+        push_ok, push_err = self.push()
+        if not push_ok:
+            return {
+                "status": "warning", 
+                "message": f"Committed locally as '{commit_msg}', but push failed: {push_err}"
+            }
+
+        return {
+            "status": "success",
+            "commit_message": commit_msg,
+            "diff_mode_used": diff_type,
+            "message": "Successfully committed and pushed code to GitHub!"
+        }
+    # Add this method back inside TokenGuardedGitAssistant class:
+    def summarize_today_changes(self) -> str:
+        """Session Recall feature: Summarizes today's commits."""
+        success, logs = self._run_git(["log", "--since=midnight", "--oneline"])
+        if not success or not logs.strip():
+            return "No commits logged today yet."
+        return f"Commits made today:\n{logs}"
+
 
 
