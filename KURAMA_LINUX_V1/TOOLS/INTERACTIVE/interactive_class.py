@@ -3,7 +3,6 @@ import subprocess
 import sys
 import os
 
-
 from templete import gitignore,readme,requirement
 class WorkspacePython:
     def __init__(self,folder):
@@ -154,7 +153,4 @@ class WorkspacePython:
                 "❌ Git is not installed on your system. Run 'sudo apt install git' on Ubuntu."
             )
 
-if __name__ == '__main__':
-    work = WorkspacePython('/home/leo/newproject')
 
-    work.setup()
