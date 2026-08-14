@@ -28,5 +28,11 @@ SpeechRecognition
 pydub
 gTTS
 pyttsx3
-pyaudio
+edge-tts
 sounddevice
+
+
+# For vector database
+langchain-chroma 
+langchain-ollama 
+chromadb

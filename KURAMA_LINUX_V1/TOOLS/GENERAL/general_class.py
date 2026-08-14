@@ -749,3 +749,52 @@ class WebAndSearchController:
                 return f"Failed to fetch Wikipedia data (HTTP {response.status_code})."
         except Exception as e:
             return f"Error fetching Wikipedia summary: {str(e)}"
+
+
+# SLEEP, SHUTDOWN
+import subprocess
+
+
+class PowerController:
+
+    def shutdown(self) -> str:
+        """Powers off the system immediately."""
+        try:
+            subprocess.run(["systemctl", "poweroff"], check=True)
+            return "System is shutting down..."
+        except Exception as e:
+            return f"Failed to shutdown: {e}"
+
+    def restart(self) -> str:
+        """Reboots the system immediately."""
+        try:
+            subprocess.run(["systemctl", "reboot"], check=True)
+            return "System is restarting..."
+        except Exception as e:
+            return f"Failed to restart: {e}"
+
+    def sleep(self) -> str:
+        """Puts the system into sleep/suspend mode."""
+        try:
+            subprocess.run(["systemctl", "suspend"], check=True)
+            return "System is going to sleep..."
+        except Exception as e:
+            return f"Failed to put system to sleep: {e}"
+
+    def signout(self) -> str:
+        """Logs out the current user session."""
+        try:
+            # 1. Primary: Try loginctl for systemd sessions
+            res = subprocess.run(
+                ["loginctl", "terminate-user", "$USER"], capture_output=True
+            )
+            if res.returncode == 0:
+                return "Signing out current user..."
+
+            # 2. Fallback: GNOME desktop session logout
+            subprocess.run(
+                ["gnome-session-quit", "--logout", "--no-prompt"], check=True
+            )
+            return "Signing out current user..."
+        except Exception as e:
+            return f"Failed to sign out: {e}"

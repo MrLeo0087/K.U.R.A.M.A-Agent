@@ -31,6 +31,7 @@ sudo apt update && sudo apt install -y gnome-screenshot
 sudo apt update && sudo apt install -y python3-pyaudio portaudio19-dev ffmpeg
 sudo apt update && sudo apt install -y espeak espeak-ng libespeak1 ffmpeg
 sudo apt update && sudo apt install -y mpv
+sudo apt update && sudo apt install -y mpv alsa-utils pulseaudio-utils
 
 MY EV
 source /home/leo/pyhton_virtual_enviroment/work_venv/bin/activate

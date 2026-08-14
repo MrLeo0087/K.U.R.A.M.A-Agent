@@ -1,10 +1,7 @@
-from typing import Dict, Literal, Optional
+from typing import Literal, Optional
 from dotenv import load_dotenv
-from langchain_chroma import Chroma
-from langchain_core.documents import Document
 from langchain_core.tools import tool
 from langchain_groq import ChatGroq
-from langchain_ollama import OllamaEmbeddings
 from pydantic import BaseModel, Field
 
 from general_class import (
@@ -17,6 +14,7 @@ from general_class import (
     TimeAndWeatherController,
     WebAndSearchController,
     WindowController,
+    PowerController,
 )
 
 load_dotenv()
@@ -210,6 +208,27 @@ def manage_web_and_search(
     else:
         return web_controller.search_google(query)
 
+@tool
+def manage_power(
+    action: Literal["shutdown", "restart", "sleep", "signout"],
+) -> str:
+    """Controls system power actions like shutdown, restart, sleep/suspend, or signout/logout.
+
+    Args:
+        action: 'shutdown' to turn off system, 'restart' to reboot, 'sleep' to suspend, or 'signout' to log out user session.
+    """
+    controller = PowerController()
+
+    if action == "shutdown":
+        return controller.shutdown()
+    elif action == "restart":
+        return controller.restart()
+    elif action == "sleep":
+        return controller.sleep()
+    elif action == "signout":
+        return controller.signout()
+
+    return "Invalid action specified."
 
 # --- TOOL REGISTRY & CHROMADB VECTORSTORE ---
 ALL_TOOLS = {
@@ -222,32 +241,11 @@ ALL_TOOLS = {
     "manage_clipboard_and_screenshot": manage_clipboard_and_screenshot,
     "get_time_weather_and_location": get_time_weather_and_location,
     "manage_web_and_search": manage_web_and_search,
+    "manage_power": manage_power,
 }
 
-# FIXED: Flat list of tools
-TOOLS_LIST = list(ALL_TOOLS.values())
-TOOLS_REGISTRY: Dict[str, callable] = {t.name: t for t in TOOLS_LIST}
-
-embedding_model = OllamaEmbeddings(model="nomic-embed-text")
-
-# FIXED: Iterating over ALL_TOOLS.values() to extract .name and .description
-documents = [
-    Document(
-        page_content=f"{tool_obj.name}: {tool_obj.description}",
-        metadata={"name": tool_obj.name},
-    )
-    for tool_obj in ALL_TOOLS.values()
-]
-
-vectorstore = Chroma.from_documents(
-    documents=documents,
-    embedding=embedding_model,
-    collection_name="KURAMA_TOOLS",
-)
-
-
 # --- AGENT ---
-class JarvisAgent:
+class GeneralAgent:
 
     def __init__(self):
         self.tools_map = ALL_TOOLS  # FIXED: Explicitly set tools map
@@ -256,18 +254,8 @@ class JarvisAgent:
     def process_command(self, user_prompt: str):
         print(f"\nUser: '{user_prompt}'")
         try:
-            retrieved_docs = vectorstore.similarity_search(user_prompt, k=2)
-            matched_tool_names = [
-                doc.metadata["name"] for doc in retrieved_docs
-            ]
-            print(f"ChromaDB Retained Top Tools: {matched_tool_names}\n")
 
-            active_tools = [
-                TOOLS_REGISTRY[name]
-                for name in matched_tool_names
-                if name in TOOLS_REGISTRY
-            ]
-            llm_with_tools = self.llm.bind_tools(active_tools)
+            llm_with_tools = self.llm.bind_tools(ALL_TOOLS.values())
             response = llm_with_tools.invoke(user_prompt)
 
             if response.tool_calls:
@@ -290,44 +278,5 @@ class JarvisAgent:
             print(f"-> Execution failed: {e}")
 
 
-if __name__ == "__main__":
-    from voice_control import VoiceController
-    agent = JarvisAgent()
-    voice = VoiceController()
-
-    print("==================================================")
-    print("      KURAMA / JARVIS VOICE ASSISTANT ONLINE      ")
-    print("==================================================")
-    print("Modes: Type 'v' for voice input, or type command directly.")
-    print("Type 'exit' or 'quit' to stop.\n")
-
-    while True:
-        try:
-            mode = input("Enter command (or press Enter for Voice Mode) : ").strip()
-
-            if mode.lower() in ["exit", "quit"]:
-                voice.speak("Shutting down system. Goodbye!")
-                break
-
-            # If user presses Enter or types 'v', trigger Microphone input
-            if mode == "" or mode.lower() == "v":
-                user_input = voice.listen()
-                if not user_input:
-                    print("-" * 50)
-                    continue
-            else:
-                user_input = mode
-
-            # Process command with LangChain / Groq Agent
-            response = agent.process_command(user_input)
-            print(response)
-
-            # Speak out the response if available
-            if response:
-                voice.speak(str(response))
-
-            print("-" * 50)
-
-        except KeyboardInterrupt:
-            print("\nExiting Jarvis...")
-            break   
+# if __name__ == "__main__":
+    
