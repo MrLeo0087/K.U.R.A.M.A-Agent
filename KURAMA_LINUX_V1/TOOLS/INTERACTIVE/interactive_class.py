@@ -154,3 +154,318 @@ class WorkspacePython:
             )
 
 
+
+# FOr doctor of code
+"""
+Environment & Workspace Diagnostic Tool
+Analyzes system, python dependencies, git configuration, secrets, and repo hygiene.
+"""
+
+import ast
+import importlib.util
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+
+class EnvironmentDoctor:
+    """Consolidated workspace diagnostic engine."""
+
+    MIN_PYTHON_VERSION = (3, 9)
+    MAX_FILE_SIZE_MB = 50.0
+
+    STDLIB_MODULES = set(sys.builtin_module_names) | {
+        "ast", "argparse", "asyncio", "collections", "copy", "csv", "datetime",
+        "functools", "importlib", "io", "itertools", "json", "logging", "math",
+        "multiprocessing", "os", "pathlib", "random", "re", "shutil", "socket",
+        "string", "subprocess", "sys", "threading", "time", "typing", "unittest"
+    }
+
+    PACKAGE_MAPPINGS = {
+        "bs4": "beautifulsoup4",
+        "sklearn": "scikit-learn",
+        "PIL": "pillow",
+        "cv2": "opencv-python",
+        "yaml": "pyyaml",
+        "pyyaml": "yaml",
+        "dotenv": "python-dotenv",
+        "fitz": "pymupdf",
+        "docx": "python-docx"
+    }
+
+    def __init__(self, target_dir=None):
+        self.target_dir = Path(target_dir).resolve() if target_dir else Path.cwd()
+        self.summary_status = []
+
+    def log_header(self, title):
+        print(f"\n--- {title} ---")
+
+    def check_system_and_python(self):
+        """1. Python runtime, Virtual Environment, and Disk usage."""
+        self.log_header("1. SYSTEM & PYTHON RUNTIME")
+        ok = True
+
+        ver_tuple = sys.version_info[:2]
+        ver_str = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+        if ver_tuple < self.MIN_PYTHON_VERSION:
+            print(f"[FAIL] Python Version: {ver_str} (Requires >= {self.MIN_PYTHON_VERSION[0]}.{self.MIN_PYTHON_VERSION[1]})")
+            ok = False
+        else:
+            print(f"[OK]   Python Version: {ver_str}")
+
+        in_venv = sys.prefix != sys.base_prefix
+        if not in_venv:
+            print("[FAIL] Virtual Env: Inactive (Using global Python runtime)")
+            print("       Fix: source work_venv/bin/activate")
+            ok = False
+        else:
+            venv_name = Path(sys.prefix).name
+            print(f"[OK]   Virtual Env: Active ({venv_name})")
+
+        free_gb = shutil.disk_usage(self.target_dir).free / (1024 ** 3)
+        if free_gb < 2.0:
+            print(f"[WARN] Disk Space: Low ({free_gb:.1f} GB available)")
+        else:
+            print(f"[OK]   Disk Space: {free_gb:.1f} GB available")
+
+        self.summary_status.append(("System & Python Runtime", ok))
+        return ok
+
+    def check_system_tools(self):
+        """2. Required CLI tools."""
+        self.log_header("2. SYSTEM CLI TOOLS")
+        essential_tools = ["git", "curl", "ripgrep", "gcc", "make"]
+        ok = True
+
+        for tool in essential_tools:
+            path = shutil.which(tool)
+            if path:
+                print(f"[OK]   {tool:<12} Found ({path})")
+            else:
+                print(f"[FAIL] {tool:<12} Missing (Run: sudo apt install {tool})")
+                ok = False
+
+        self.summary_status.append(("System Tools", ok))
+        return ok
+
+    def check_git_status(self):
+        """3. Git workspace, user configuration, branch, and status."""
+        self.log_header("3. GIT REPOSITORY & IDENTITY")
+
+        if not shutil.which("git"):
+            print("[FAIL] Git CLI unavailable.")
+            self.summary_status.append(("Git Workspace", False))
+            return False
+
+        git_check = subprocess.run(
+            ["git", "rev-parse", "--is-inside-work-tree"],
+            cwd=self.target_dir, capture_output=True, text=True
+        )
+        if git_check.returncode != 0:
+            print("[FAIL] Git Repo: Not initialized in this directory.")
+            print("       Fix: git init")
+            self.summary_status.append(("Git Workspace", False))
+            return False
+
+        print("[OK]   Git Repo: Initialized")
+
+        name = subprocess.run(["git", "config", "user.name"], cwd=self.target_dir, capture_output=True, text=True).stdout.strip()
+        email = subprocess.run(["git", "config", "user.email"], cwd=self.target_dir, capture_output=True, text=True).stdout.strip()
+
+        identity_ok = True
+        if not name or not email:
+            print("[FAIL] Git Identity: Incomplete")
+            if not name:
+                print("       Missing user.name  -> Set: git config --global user.name 'Your Name'")
+            if not email:
+                print("       Missing user.email -> Set: git config --global user.email 'you@example.com'")
+            identity_ok = False
+        else:
+            print(f"[OK]   Git Identity: {name} <{email}>")
+
+        branch = subprocess.run(["git", "branch", "--show-current"], cwd=self.target_dir, capture_output=True, text=True).stdout.strip()
+        print(f"[INFO] Branch: {branch if branch else 'HEAD (no commits yet)'}")
+
+        status = subprocess.run(["git", "status", "--porcelain"], cwd=self.target_dir, capture_output=True, text=True).stdout.strip()
+        if status:
+            count = len(status.splitlines())
+            print(f"[WARN] Working Tree: Dirty ({count} uncommitted file changes/untracked files)")
+        else:
+            print("[OK]   Working Tree: Clean")
+
+        self.summary_status.append(("Git Workspace", identity_ok))
+        return identity_ok
+
+    def check_secrets_and_env(self):
+        """4. Security check for .env files and gitignore protection."""
+        self.log_header("4. SECRETS & ENVIRONMENT SECURITY")
+        env_file = self.target_dir / ".env"
+        gitignore = self.target_dir / ".gitignore"
+
+        if not env_file.exists():
+            print("[INFO] Secrets: No .env file found in target path.")
+            self.summary_status.append(("Secrets & Security", True))
+            return True
+
+        print("[INFO] Secrets: .env file detected.")
+        is_ignored = False
+        if gitignore.exists():
+            with open(gitignore, "r", encoding="utf-8") as f:
+                lines = [line.strip() for line in f.readlines()]
+                if ".env" in lines or "*.env" in lines:
+                    is_ignored = True
+
+        if is_ignored:
+            print("[OK]   Gitignore: .env is excluded from version control.")
+        else:
+            print("[FAIL] DANGER: .env file exists but is NOT listed in .gitignore.")
+            print("       Fix: echo '.env' >> .gitignore")
+
+        keys = []
+        with open(env_file, "r", encoding="utf-8") as f:
+            for line in f:
+                if "=" in line and not line.startswith("#"):
+                    k = line.split("=")[0].strip()
+                    if k:
+                        keys.append(k)
+
+        if keys:
+            print(f"[INFO] Loaded Keys: {', '.join(keys)}")
+
+        self.summary_status.append(("Secrets & Security", is_ignored))
+        return is_ignored
+
+    def check_dependencies(self):
+        """5. Scans code or requirements.txt for external Python dependencies."""
+        self.log_header("5. PYTHON DEPENDENCIES & AST SCAN")
+        req_file = self.target_dir / "requirements.txt"
+        modules = set()
+        syntax_ok = True
+
+        if req_file.exists():
+            source = "requirements.txt"
+            with open(req_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith(("#", "-i", "--")):
+                        pkg = line.split("==")[0].split(">=")[0].split("<=")[0].split("~=")[0].strip()
+                        if pkg:
+                            modules.add(pkg)
+        else:
+            source = "AST Code Scan"
+            local_files = {p.stem for p in self.target_dir.rglob("*.py")}
+            for py_file in self.target_dir.rglob("*.py"):
+                if any(p in py_file.parts for p in ["venv", ".venv", "__pycache__", ".git"]):
+                    continue
+                try:
+                    with open(py_file, "r", encoding="utf-8") as f:
+                        tree = ast.parse(f.read(), filename=str(py_file))
+                    for node in ast.walk(tree):
+                        if isinstance(node, ast.Import):
+                            for alias in node.names:
+                                modules.add(alias.name.split(".")[0])
+                        elif isinstance(node, ast.ImportFrom) and node.module:
+                            modules.add(node.module.split(".")[0])
+                except SyntaxError as e:
+                    print(f"[WARN] Syntax Error in {py_file.name} at line {e.lineno}")
+                    syntax_ok = False
+                except Exception:
+                    continue
+
+            modules = {m for m in modules if m not in self.STDLIB_MODULES and m not in local_files}
+
+        if not modules:
+            print("[INFO] No external Python packages detected.")
+            self.summary_status.append(("Dependencies", syntax_ok))
+            return syntax_ok
+
+        print(f"[INFO] Source: {source} ({len(modules)} package targets)\n")
+        missing = []
+
+        for mod in sorted(modules):
+            lookup_name = self.PACKAGE_MAPPINGS.get(mod.lower(), mod)
+            installed = importlib.util.find_spec(lookup_name) is not None
+            if not installed and lookup_name != mod:
+                installed = importlib.util.find_spec(mod) is not None
+
+            if installed:
+                print(f"[OK]   {mod:<20} Installed")
+            else:
+                print(f"[FAIL] {mod:<20} Missing")
+                missing.append(self.PACKAGE_MAPPINGS.get(mod, mod))
+
+        if missing:
+            print(f"\n       Fix missing: pip install {' '.join(missing)}")
+
+        deps_ok = (len(missing) == 0) and syntax_ok
+        self.summary_status.append(("Dependencies", deps_ok))
+        return deps_ok
+
+    def check_repo_hygiene(self):
+        """6. Large file scanner (>50MB) and build/cache folder check."""
+        self.log_header("6. REPO HYGIENE & LARGE FILES")
+        large_files = []
+        cache_folders = []
+
+        for p in self.target_dir.rglob("*"):
+            if any(part in p.parts for part in ["venv", ".venv", ".git"]):
+                continue
+
+            if p.is_file():
+                mb = p.stat().st_size / (1024 * 1024)
+                if mb > self.MAX_FILE_SIZE_MB:
+                    large_files.append((p.name, mb))
+            elif p.is_dir() and p.name in ["__pycache__", ".ipynb_checkpoints", "build", "dist"]:
+                cache_folders.append(p.name)
+
+        hygiene_ok = True
+        if large_files:
+            print(f"[WARN] Large files detected (>{int(self.MAX_FILE_SIZE_MB)} MB):")
+            for name, size in large_files:
+                print(f"       • {name} ({size:.1f} MB)")
+            hygiene_ok = False
+        else:
+            print(f"[OK]   No oversized binaries (>{int(self.MAX_FILE_SIZE_MB)} MB)")
+
+        if cache_folders:
+            print(f"[INFO] Cache/build folders present: {set(cache_folders)}")
+        else:
+            print("[OK]   Workspace cache structure clean")
+
+        self.summary_status.append(("Repo Hygiene", hygiene_ok))
+        return hygiene_ok
+
+    def run_all(self):
+        """Runs all checks and prints an executive summary block."""
+        print("==================================================")
+        print("           WORKSPACE ENVIRONMENT DOCTOR           ")
+        print("==================================================")
+
+        self.check_system_and_python()
+        self.check_system_tools()
+        self.check_git_status()
+        self.check_secrets_and_env()
+        self.check_dependencies()
+        self.check_repo_hygiene()
+
+        print("\n==================================================")
+        print("                  SYSTEM SUMMARY                  ")
+        print("==================================================")
+        all_passed = True
+        for section, passed in self.summary_status:
+            status = "PASS" if passed else "FAIL/WARN"
+            if not passed:
+                all_passed = False
+            print(f"  {section:<28} : [{status}]")
+
+        print("--------------------------------------------------")
+        if all_passed:
+            print("  OVERALL STATUS             : ALL SYSTEMS GO")
+        else:
+            print("  OVERALL STATUS             : ACTION REQUIRED")
+        print("==================================================\n")
+
+
+
