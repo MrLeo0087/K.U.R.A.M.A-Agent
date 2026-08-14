@@ -13,6 +13,7 @@ from interactive_class import (
     EnvironmentDoctor,
     ProjectOrganizer,
     GitAssistant,
+    TestRunnerController
 ) 
 
 load_dotenv()
@@ -47,6 +48,20 @@ class GitAssistantInput(BaseModel):
     custom_message: Optional[str] = Field(
         default=None,
         description="Optional custom commit message."
+    )
+
+class TestRunnerInput(BaseModel):
+    project_path: str = Field(
+        default=".",
+        description="Path to the directory containing tests or the project root.",
+    )
+    test_file: Optional[str] = Field(
+        default=None,
+        description="Optional specific test file path (e.g., 'tests/test_app.py').",
+    )
+    test_pattern: Optional[str] = Field(
+        default=None,
+        description="Optional pattern/keyword to match test names (e.g., 'test_user_name').",
     )
 
 # --------------------------------------------------
@@ -133,12 +148,56 @@ def git_assistant_auto_commit_and_push(repo_path: str = ".", custom_message: Opt
 
     return "\n".join(report)
 
+@tool(args_schema=TestRunnerInput)
+def run_tests_and_suggest_fix(
+    project_path: str = ".",
+    test_file: Optional[str] = None,
+    test_pattern: Optional[str] = None,
+) -> str:
+    """Runs automated Pytest test suites.
+
+    If a test fails, reads the broken file and returns the error traceback so
+    Jarvis can diagnose and propose a code fix.
+    """
+    controller = TestRunnerController(project_dir=project_path)
+    result = controller.run_pytest_and_diagnose(
+        test_path=test_file, test_pattern=test_pattern
+    )
+
+    if result["status"] == "success":
+        return f"✅ SUCCESS:\n{result['summary']}\n{result['output']}"
+
+    elif result["status"] == "failed":
+        response_lines = [
+            f"❌ TEST FAILURE DETECTED:",
+            f"Summary: {result['summary']}",
+            f"\n--- TRACEBACK ---",
+            result["traceback"],
+        ]
+
+        if result.get("failing_file") and result.get("source_code"):
+            response_lines.extend(
+                [
+                    f"\n--- FAILING FILE: {result['failing_file']} ---",
+                    result["source_code"],
+                    f"\n[INSTRUCTION FOR LLM: Analyze the failure above and suggest the exact fix for {result['failing_file']}]",
+                ]
+            )
+
+        return "\n".join(response_lines)
+
+    else:
+        return (
+            f"⚠️ {result['summary']}\nDetails: {result.get('output', 'None')}"
+        )
+
 
 ALL_TOOLS = [
     make_workspace_python, 
     diagnose_workspace_environment,
     organize_and_sync_project,
-    git_assistant_auto_commit_and_push
+    git_assistant_auto_commit_and_push,
+    run_tests_and_suggest_fix
 ]
 
 

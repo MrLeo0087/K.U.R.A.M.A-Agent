@@ -836,3 +836,130 @@ class GitAssistant:
 
 
 
+
+# Test by pytest
+import os
+import re
+import subprocess
+from pathlib import Path
+from typing import Any, Dict, Optional
+
+
+class TestRunnerController:
+    """Executes pytest, parses failure traces, and reads failing files for immediate debugging."""
+
+    def __init__(self, project_dir: str = "."):
+        resolved_path = Path(os.path.expanduser(project_dir.strip("'\""))).resolve()
+
+        # FIX: If user/LLM passes a direct file path instead of a directory, handle it gracefully!
+        if resolved_path.is_file():
+            self.project_dir = resolved_path.parent
+            self.direct_file_target = resolved_path
+        else:
+            self.project_dir = resolved_path
+            self.direct_file_target = None
+
+    def run_pytest_and_diagnose(
+        self,
+        test_path: Optional[str] = None,
+        test_pattern: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Runs pytest on a target path or pattern."""
+        if not self.project_dir.exists():
+            return {
+                "status": "error",
+                "message": f"Project path '{self.project_dir}' does not exist.",
+            }
+
+        # Build pytest command
+        cmd = ["pytest", "--tb=short", "-q"]
+
+        # If a direct file was passed during __init__, prioritize it
+        if self.direct_file_target:
+            cmd.append(str(self.direct_file_target))
+        elif test_path:
+            full_target = (self.project_dir / test_path).resolve()
+            cmd.append(str(full_target))
+
+        if test_pattern:
+            cmd.extend(["-k", test_pattern])
+
+        try:
+            result = subprocess.run(
+                cmd,
+                cwd=str(self.project_dir),  # ✅ Guaranteed to be a valid directory now!
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=30,
+            )
+
+            stdout = result.stdout.strip()
+            stderr = result.stderr.strip()
+
+            if result.returncode == 0:
+                return {
+                    "status": "success",
+                    "summary": "All tests passed! ✅",
+                    "output": stdout,
+                }
+
+            elif result.returncode == 1:
+                failure_output = stdout or stderr
+                failing_file, code_snippet = self._extract_and_read_failing_file(
+                    failure_output
+                )
+
+                return {
+                    "status": "failed",
+                    "summary": "Some tests failed ❌",
+                    "traceback": failure_output,
+                    "failing_file": failing_file,
+                    "source_code": code_snippet,
+                }
+
+            elif result.returncode == 5:
+                return {
+                    "status": "no_tests",
+                    "summary": "No matching tests found ⚠️",
+                    "output": stdout or stderr,
+                }
+
+            else:
+                return {
+                    "status": "error",
+                    "summary": f"Pytest exit code: {result.returncode}",
+                    "output": stderr or stdout,
+                }
+
+        except subprocess.TimeoutExpired:
+            return {
+                "status": "error",
+                "summary": "Test execution timed out after 30 seconds.",
+            }
+        except FileNotFoundError:
+            return {
+                "status": "error",
+                "summary": "'pytest' is not installed in the active virtual environment.",
+            }
+
+    def _extract_and_read_failing_file(
+        self, failure_output: str
+    ) -> tuple[Optional[str], Optional[str]]:
+        """Parses pytest traceback to find the primary failing file and reads its content."""
+        file_match = re.search(r"([\w/\.-]+\.py):\d+:", failure_output)
+
+        if file_match:
+            relative_file_path = file_match.group(1)
+            file_path = (self.project_dir / relative_file_path).resolve()
+
+            if file_path.exists() and file_path.is_file():
+                try:
+                    with open(file_path, "r", encoding="utf-8") as f:
+                        lines = f.readlines()
+                        content = "".join(lines[:100])
+                        return str(relative_file_path), content
+                except Exception:
+                    pass
+
+        return None, None
