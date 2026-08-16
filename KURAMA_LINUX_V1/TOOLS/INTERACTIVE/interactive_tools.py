@@ -13,7 +13,8 @@ from interactive_class import (
     EnvironmentDoctor,
     ProjectOrganizer,
     GitAssistant,
-    TestRunnerController
+    TestRunnerController,
+    NotebookScriptConverter,
 ) 
 
 load_dotenv()
@@ -191,13 +192,34 @@ def run_tests_and_suggest_fix(
             f"⚠️ {result['summary']}\nDetails: {result.get('output', 'None')}"
         )
 
+@tool
+def convert_notebook_to_script(
+    notebook_path: str, output_path: Optional[str] = None
+) -> str:
+    """Converts a Jupyter Notebook (.ipynb) into a clean, runnable Python script (.py).
 
-ALL_TOOLS = [
+    Removes markdown cells, strips out shell commands (!) and magic commands (%),
+    and structures the output cleanly.
+
+    Args:
+        notebook_path: Path to the input .ipynb file.
+        output_path: Optional output path for the .py file.
+    """
+    # Instantiate the class and execute the process
+    converter = NotebookScriptConverter(
+        notebook_path=notebook_path, output_path=output_path
+    )
+    result = converter.convert()
+
+    return result["message"]
+
+INTERACTIVE_TOOLS = [
     make_workspace_python, 
     diagnose_workspace_environment,
     organize_and_sync_project,
     git_assistant_auto_commit_and_push,
-    run_tests_and_suggest_fix
+    run_tests_and_suggest_fix,
+    convert_notebook_to_script
 ]
 
 
@@ -208,7 +230,7 @@ ALL_TOOLS = [
 class InteractiveAgent:
 
     def __init__(self):
-        self.tools_map = {t.name: t for t in ALL_TOOLS}
+        self.tools_map = {t.name: t for t in INTERACTIVE_TOOLS}
         self.llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0)
         
         self.system_message = SystemMessage(
@@ -222,7 +244,7 @@ class InteractiveAgent:
     def process_command(self, user_prompt: str):
         print(f"\nUser: '{user_prompt}'")
         try:
-            llm_with_tools = self.llm.bind_tools(ALL_TOOLS)
+            llm_with_tools = self.llm.bind_tools(INTERACTIVE_TOOLS)
             
             messages = [self.system_message, HumanMessage(content=user_prompt)]
             response = llm_with_tools.invoke(messages)
@@ -257,3 +279,5 @@ if __name__ == '__main__':
         answer = agent.process_command(user_input)
         print(f'Jarvis : {answer}') 
         print('-'*50)
+
+

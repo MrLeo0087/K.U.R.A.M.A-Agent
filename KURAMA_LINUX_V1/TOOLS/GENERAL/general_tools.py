@@ -281,7 +281,7 @@ def manage_files_folder(
 
 
 # --- TOOL REGISTRY ---
-ALL_TOOLS = {
+GENERAL_TOOLS = {
     "manage_audio": manage_audio,
     "manage_brightness": manage_brightness,
     "manage_window": manage_window,
@@ -295,17 +295,19 @@ ALL_TOOLS = {
 }
 
 
+GENERAL_TOOLS_LIST = list(GENERAL_TOOLS.values())
+
 # --- AGENT ---
 class GeneralAgent:
 
     def __init__(self):
-        self.tools_map = ALL_TOOLS
+        self.tools_map = GENERAL_TOOLS
         self.llm = ChatGroq(model="qwen/qwen3.6-27b", temperature=0)
 
     def process_command(self, user_prompt: str):
         print(f"\nUser: '{user_prompt}'")
         try:
-            llm_with_tools = self.llm.bind_tools(ALL_TOOLS.values())
+            llm_with_tools = self.llm.bind_tools(GENERAL_TOOLS.values())
             response = llm_with_tools.invoke(user_prompt)
 
             if response.tool_calls:

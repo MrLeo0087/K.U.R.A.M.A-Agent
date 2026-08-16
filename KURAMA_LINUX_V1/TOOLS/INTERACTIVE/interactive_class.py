@@ -963,3 +963,85 @@ class TestRunnerController:
                     pass
 
         return None, None
+
+ # IPYNB TO PY
+import os
+import nbformat
+from typing import Optional, Dict, Any
+
+
+class NotebookScriptConverter:
+    """Core logic engine to parse Jupyter notebooks and transform them into clean Python scripts."""
+
+    def __init__(self, notebook_path: str, output_path: Optional[str] = None):
+        self.notebook_path = notebook_path
+        self.output_path = output_path or (os.path.splitext(notebook_path)[0] + ".py")
+
+    def _clean_ipython_magics(self, code: str) -> str:
+        """Comments out IPython magic commands (%) and shell commands (!)."""
+        cleaned_lines = []
+        for line in code.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("%") or stripped.startswith("!"):
+                cleaned_lines.append(f"# {line}  # Removed IPython magic/shell call")
+            else:
+                cleaned_lines.append(line)
+        return "\n".join(cleaned_lines)
+
+    def convert(self) -> Dict[str, Any]:
+        """Executes the conversion process.
+
+        Returns a status dictionary.
+        """
+        if not os.path.exists(self.notebook_path):
+            return {
+                "success": False,
+                "message": f"Notebook file not found at '{self.notebook_path}'.",
+            }
+
+        if not self.notebook_path.endswith(".ipynb"):
+            return {
+                "success": False,
+                "message": f"'{self.notebook_path}' is not a valid .ipynb file.",
+            }
+
+        try:
+            with open(self.notebook_path, "r", encoding="utf-8") as f:
+                nb = nbformat.read(f, as_version=4)
+
+            python_code_blocks = [
+                f"# =================== Notebook: {os.path.basename(self.notebook_path)} ===================\n"
+            ]
+
+            cell_count = 0
+            for cell in nb.cells:
+                if cell.cell_type == "code" and cell.source.strip():
+                    cell_count += 1
+                    cleaned_code = self._clean_ipython_magics(cell.source)
+
+                    python_code_blocks.append(f"# --- Cell {cell_count} ---")
+                    python_code_blocks.append(cleaned_code)
+                    python_code_blocks.append("\n")
+
+            if cell_count == 0:
+                return {
+                    "success": False,
+                    "message": f"No valid code cells found in '{self.notebook_path}'.",
+                }
+
+            final_script = "\n".join(python_code_blocks)
+            with open(self.output_path, "w", encoding="utf-8") as f:
+                f.write(final_script)
+
+            return {
+                "success": True,
+                "message": f"Successfully converted '{self.notebook_path}' -> '{self.output_path}' ({cell_count} code cells processed).",
+                "output_path": self.output_path,
+                "cell_count": cell_count,
+            }
+
+        except Exception as e:
+            return {
+                "success": False,
+                "message": f"Failed to convert notebook: {str(e)}",
+            }
