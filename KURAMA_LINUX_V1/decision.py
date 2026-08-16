@@ -18,9 +18,9 @@ class Task(BaseModel):
         validation_alias=AliasChoices("task", "text", "description"),
         description="Standalone task description."
     )
-    tag: Literal["need_tool", "no_need_tool"] = Field(
+    tag: Literal["need_tool", "no_need_tool","real_time"] = Field(
         ..., 
-        description="'need_tool' for actions/tools or 'no_need_tool' for text generation/chat."
+        description="'need_tool' for actions/tools or 'no_need_tool' for text generation/chat and 'real_time' for query that required currect data or result."
     )
     depend_on: Optional[List[int]] = Field(
         default=None, 
@@ -42,7 +42,7 @@ SYSTEM_PROMPT = """You are KURAMA's task parser. Breakdown user input into a str
 CRITICAL JSON RULES:
 1. Every item inside "tasks" MUST contain the keys: "id", "task", "tag", "depend_on".
 2. Use "task" as the exact key name for the task text (DO NOT use "text" or "description").
-3. Set "tag" to "need_tool" for system actions/tools, or "no_need_tool" for chat/writing tasks.
+3. Set "tag" to "need_tool" for system actions/tools, or "no_need_tool" for chat/writing tasks and 'real_time' for search on google for real time result like sport, news, price etc.
 4. Set "depend_on" to a list of prerequisite task IDs [id] or null.
 """
 

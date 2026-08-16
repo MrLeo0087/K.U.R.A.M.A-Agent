@@ -57,16 +57,16 @@ vector_store = Chroma.from_documents(
     embedding=embedding_model,
     collection_name= 'KURAMA_TOOLS'
 )
+if __name__=='__main__':
+    while True:
+        user = input('Enter your query: ')
+        # Replace similarity_search with MMR search
+        results = vector_store.max_marginal_relevance_search(
+            user, 
+            k=3, 
+            fetch_k=10  # Evaluates top 10 candidates before picking top 3 diverse matches
+        )
+        matched_tool_names = [doc.metadata["name"] for doc in results]
 
-while True:
-    user = input('Enter your query: ')
-    # Replace similarity_search with MMR search
-    results = vector_store.max_marginal_relevance_search(
-        user, 
-        k=3, 
-        fetch_k=10  # Evaluates top 10 candidates before picking top 3 diverse matches
-    )
-    matched_tool_names = [doc.metadata["name"] for doc in results]
-
-    print(matched_tool_names)
+        print(matched_tool_names)
 

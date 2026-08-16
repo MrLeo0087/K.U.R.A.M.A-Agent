@@ -71,7 +71,26 @@ class TestRunnerInput(BaseModel):
 
 @tool(args_schema=WorkspaceInput)
 def make_workspace_python(path: str) -> str:
-    """Initializes a new Python project workspace."""
+    """Scaffolds and initializes a fresh, structured Python project workspace from scratch.
+
+    Use this tool when you need to start a new project, create directory structures, 
+    bootstrap boilerplate files, or set up a clean Python development workspace.
+
+    Capabilities:
+    - Creates standard project folder structures.
+    - Sets up virtual environment boilerplates and initial configuration files.
+    - Prepares clean workspace architecture for python apps.
+
+    When to trigger:
+    - User wants to start, create, initialize, or setup a new Python project.
+    - User asks to create a repository or project folder at a specific path.
+
+    Example user queries that match this tool:
+    - "Initialize a new python project at ~/projects/my_app"
+    - "Create a fresh python workspace for a fastAPI backend"
+    - "Start a new project folder named demo_service"
+    - "Setup project structure at /path/to/dir"
+    """
     clean_path = str(path).strip("'\"")
     resolved_path = os.path.abspath(os.path.expanduser(clean_path))
 
@@ -82,7 +101,28 @@ def make_workspace_python(path: str) -> str:
 
 @tool(args_schema=DiagnosticsInput)
 def diagnose_workspace_environment(path: str = ".") -> str:
-    """Runs diagnostics on Python environment, CLI tools, Git config, secrets, dependencies, and file hygiene."""
+    """Runs a complete system health check, security audit, and environment diagnostic on a Python workspace.
+
+    Use this tool to troubleshoot environment issues, inspect installed dependencies, 
+    check CLI tool availability, verify Git configurations, and detect exposed API keys or secrets.
+
+    Capabilities:
+    - Environment & Python version audit.
+    - CLI tool & binary dependency verification.
+    - Secret leak detection & file hygiene check.
+    - Git configuration and repo sanity checks.
+
+    When to trigger:
+    - User asks why their environment, setup, or python environment is failing or behaving strangely.
+    - User wants an audit, health check, doctor report, or troubleshooting scan.
+
+    Example user queries that match this tool:
+    - "Diagnose my project environment at ."
+    - "Run doctor check on ~/my_project to see if tools are installed"
+    - "Check if my python dependencies, git config, and environment are healthy"
+    - "Audit this repository for broken packages or leaked API keys"
+    - "Why is my python setup not working properly?"
+    """
     clean_path = str(path).strip("'\"")
     resolved_path = os.path.abspath(os.path.expanduser(clean_path))
 
@@ -97,9 +137,29 @@ def diagnose_workspace_environment(path: str = ".") -> str:
 
 @tool(args_schema=OrganizeProjectInput)
 def organize_and_sync_project(path: str = ".") -> str:
-    """Cleans and organizes workspace junk, checks AI API connectivity, syncs requirements.txt with exact versions, and initializes missing project config files."""
-    
-    # FIX: Explicitly cast 'path' to string first so .strip() works regardless of input type!
+    """Cleans up workspace junk files, verifies API key connectivity, syncs requirements.txt with actual environment dependencies, and initializes missing config files.
+
+    Use this tool for project maintenance, file hygiene, dependency synchronization, 
+    and ensuring required workspace configurations exist.
+
+    Capabilities:
+    - Deletes junk files (`__pycache__`, `.DS_Store`, temporary cache files).
+    - Checks internet & AI API connectivity (Groq, OpenAI, Anthropic, etc.).
+    - Freezes installed environment dependencies directly into `requirements.txt`.
+    - Generates missing default files like `.gitignore`, `.env.example`, or `README.md`.
+
+    When to trigger:
+    - User wants to clean, organize, tidy up, or sanitize a project folder.
+    - User wants to update or sync `requirements.txt` with currently installed libraries.
+    - User wants to test API connectivity or remove temporary python cache files.
+
+    Example user queries that match this tool:
+    - "Clean junk files and sync requirements.txt for my project"
+    - "Organize this project directory and remove __pycache__ folders"
+    - "Check if my API keys are working and generate missing config files"
+    - "Tidy up ~/projects/web_app and generate requirements"
+    - "Sanitize project directory and sync dependencies"
+    """
     path_str = str(path).strip("'\"")
     resolved_path = Path(os.path.abspath(os.path.expanduser(path_str)))
 
@@ -124,10 +184,29 @@ def organize_and_sync_project(path: str = ".") -> str:
 
     return "\n".join(report)
 
-
 @tool(args_schema=GitAssistantInput)
 def git_assistant_auto_commit_and_push(repo_path: str = ".", custom_message: Optional[str] = None) -> str:
-    """Automates git commit hygiene and synchronization. Stages changes, generates commit messages, and pushes to remote GitHub repository."""
+    """Automates Git version control workflow by staging changes, generating semantic commit messages, and pushing to remote repositories (GitHub/GitLab).
+
+    Use this tool to commit code, save changes to Git, push local commits to remote origin, 
+    and maintain clean version control hygiene without manually typing git commands.
+
+    Capabilities:
+    - Checks `git status` and stages modified / new files.
+    - Generates descriptive AI commit messages (or uses custom commit message).
+    - Pushes staged commits to origin branch on GitHub/GitLab.
+
+    When to trigger:
+    - User asks to git commit, git push, sync code to GitHub, or save changes.
+    - User wants to upload code updates or sync local workspace with remote repo.
+
+    Example user queries that match this tool:
+    - "Commit and push all my latest changes to GitHub"
+    - "Sync git repository with remote origin"
+    - "Git commit with message 'fix database query bug' and push"
+    - "Save my current work to git and push to master branch"
+    - "Upload project changes to my repository"
+    """
     clean_path = str(repo_path).strip("'\"")
     resolved_path = os.path.abspath(os.path.expanduser(clean_path))
 
@@ -140,7 +219,7 @@ def git_assistant_auto_commit_and_push(repo_path: str = ".", custom_message: Opt
 
     report = [
         f"=== GIT ASSISTANT EXECUTION REPORT: {assistant.repo_path} ===",
-        f"STATUS      : {result.get('status', 'unknown').upper()}",
+        f"STATUS      : {result.get('status', 'upper').upper()}",
         f"MODE USED   : {result.get('diff_mode_used', 'N/A')}",
         f"COMMIT MSG  : {result.get('commit_message', 'N/A')}",
         f"DETAILS     : {result.get('message', '')}",
@@ -155,10 +234,26 @@ def run_tests_and_suggest_fix(
     test_file: Optional[str] = None,
     test_pattern: Optional[str] = None,
 ) -> str:
-    """Runs automated Pytest test suites.
+    """Executes Pytest test suites, captures failing tests, retrieves stack tracebacks, and reads broken source code for AI diagnostics and automated bug fixing.
 
-    If a test fails, reads the broken file and returns the error traceback so
-    Jarvis can diagnose and propose a code fix.
+    Use this tool whenever you need to run unit tests, integration tests, verify code functionality, 
+    or debug test failures across a Python codebase.
+
+    Capabilities:
+    - Runs pytest on entire directories, specific test files, or matching test function names.
+    - Extracts precise stack traces and error logs when tests fail.
+    - Returns source code context of failing files so LLM can suggest fixes.
+
+    When to trigger:
+    - User wants to test code, run pytest, debug failing tests, or verify fixes.
+    - User asks if unit tests pass or wants to inspect code errors.
+
+    Example user queries that match this tool:
+    - "Run tests on my project to see if anything is broken"
+    - "Execute pytest for tests/test_user.py and suggest a fix if it fails"
+    - "Check if my test suite passes"
+    - "Run tests matching pattern 'test_auth' in project root"
+    - "Debug failing unit tests in ~/projects/my_app"
     """
     controller = TestRunnerController(project_dir=project_path)
     result = controller.run_pytest_and_diagnose(
@@ -196,16 +291,27 @@ def run_tests_and_suggest_fix(
 def convert_notebook_to_script(
     notebook_path: str, output_path: Optional[str] = None
 ) -> str:
-    """Converts a Jupyter Notebook (.ipynb) into a clean, runnable Python script (.py).
+    """Converts a Jupyter Notebook (.ipynb file) into a clean, standalone, executable Python script (.py file).
 
-    Removes markdown cells, strips out shell commands (!) and magic commands (%),
-    and structures the output cleanly.
+    Use this tool to extract raw Python code from notebooks, clean up interactive code, 
+    strip out shell commands, remove magic commands, and omit non-executable markdown cells.
 
-    Args:
-        notebook_path: Path to the input .ipynb file.
-        output_path: Optional output path for the .py file.
+    Capabilities:
+    - Parses `.ipynb` JSON structure into valid Python code.
+    - Strips IPython magic commands (`%matplotlib inline`, `%timeit`, etc.).
+    - Strips terminal shell executions (`!pip install`, `!bash`, etc.).
+    - Formats output into structured, production-ready `.py` scripts.
+
+    When to trigger:
+    - User wants to convert, export, turn, or transform a Jupyter Notebook (.ipynb) into a Python script (.py).
+    - User wants to refactor notebook code for production deployment.
+
+    Example user queries that match this tool:
+    - "Convert model_training.ipynb into a clean python script"
+    - "Turn my Jupyter notebook analysis.ipynb into analysis.py"
+    - "Export notebook ~/experiments/demo.ipynb to script without magic commands"
+    - "Transform ipynb file to python executable code"
     """
-    # Instantiate the class and execute the process
     converter = NotebookScriptConverter(
         notebook_path=notebook_path, output_path=output_path
     )
