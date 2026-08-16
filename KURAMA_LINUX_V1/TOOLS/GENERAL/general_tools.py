@@ -8,50 +8,72 @@ from general_class import (
     AudioController,
     ClipboardAndScreenshotController,
     DisplayController,
+    FileSystemManager,
     MediaController,
     SystemInfoController,
     SystemPowerController,
     TimeAndWeatherController,
     WebAndSearchController,
     WindowController,
-    FileSystemManager,
 )
 
 load_dotenv()
 
-# SCHEMAS
+
+# --- SCHEMAS ---
 class FileSystemActionInput(BaseModel):
     action: str = Field(
-        description="Action to perform: 'search', 'create', or 'remove'."
+        description="Action to perform: 'search' (find files), 'create' (make file or folder), or 'remove' (delete)."
     )
     target_path: str = Field(
         default=".",
-        description="Target path. Use '~' or '/home/leo/' for home directory."
+        description="Target path or folder directory. Use '~' or '/home/user/' for home directory.",
     )
     pattern: Optional[str] = Field(
         default="",
-        description="Search pattern if action='search'."
+        description="Filename pattern, keyword, or extension to match when searching (e.g. '*.py', 'report').",
     )
     is_directory: Union[bool, str] = Field(
         default=False,
-        description="MUST be 'false' when operating on a FILE. MUST be 'true' ONLY when operating on a FOLDER."
+        description="MUST be false for files. MUST be true ONLY when creating or removing a folder/directory.",
     )
     content: Optional[str] = Field(
-        default="",
-        description="Text content to write if creating a file."
+        default="", description="Text content to write into the file if creating a file."
     )
     recursive: Union[bool, str] = Field(
-        default=False,
-        description="Set 'true' to delete non-empty directories."
+        default=False, description="Set to true to force-delete non-empty directories."
     )
 
 
-# --- TOOLS ---
+class WebSearchArgs(BaseModel):
+    action: str = Field(
+        default="google_search",
+        description="Navigation action: 'google_search', 'open_url', 'youtube_search', 'play_youtube', or 'wikipedia'.",
+    )
+    query: str = Field(
+        default="", description="Search query, web URL link, video title, or article topic."
+    )
+
+
+# --- TOOLS WITH ENHANCED DEEP RAG RETRIEVAL DOCSTRINGS ---
+
+
 @tool
 def manage_audio(
     task: Literal["set", "change", "mute", "status"], value: Optional[float] = 0
 ) -> str:
-    """Controls Linux system audio output."""
+    """System Audio Controller: Manage output volume, mute sound, unmute, set volume level, turn up or turn down sound.
+
+    Common Trigger Phrases:
+    - "Set volume to 50%", "Increase sound level", "Turn up volume", "Turn down volume", "Lower audio"
+    - "Mute speakers", "Unmute audio", "Silence system", "Check volume status", "How loud is audio"
+
+    Tasks:
+    - 'set': Set exact volume percentage (e.g., value=50)
+    - 'change': Adjust volume relative (+10 or -10)
+    - 'mute': Toggle mute / unmute state
+    - 'status': Get current output volume level and mute status
+    """
     with AudioController() as audio:
         if task == "set":
             return audio.set_volume(value)
@@ -68,7 +90,17 @@ def manage_audio(
 def manage_brightness(
     task: Literal["set", "change", "status"], value: Optional[float] = 0
 ) -> str:
-    """Controls Linux system screen brightness level."""
+    """Screen Brightness Controller: Adjust monitor display brightness, dim screen, increase display light.
+
+    Common Trigger Phrases:
+    - "Screen too bright", "Dim the monitor", "Make screen brighter", "Increase display brightness"
+    - "Set brightness to 80%", "Check brightness level", "Lower monitor light"
+
+    Tasks:
+    - 'set': Set specific brightness percentage (e.g., value=70)
+    - 'change': Increase or decrease current brightness (+15 or -15)
+    - 'status': Check current screen brightness percentage
+    """
     display = DisplayController()
     if task == "set":
         return display.set_brightness(value)
@@ -85,7 +117,21 @@ def manage_window(
     target: str,
     side: Optional[Literal["left", "right"]] = "left",
 ) -> str:
-    """Controls Linux applications, window focus, positioning, and process termination."""
+    """Linux Window & Process Manager: Open apps, launch software, focus desktop window, close application, snap windows, kill process.
+
+    Common Trigger Phrases:
+    - "Open terminal", "Launch Chrome browser", "Start VS Code", "Open calculator app"
+    - "Focus Firefox window", "Bring app to front", "Switch to terminal window"
+    - "Close browser window", "Exit app", "Force quit unresponsive program", "Kill process"
+    - "Snap window left", "Split screen right"
+
+    Tasks:
+    - 'open': Launch application or executable
+    - 'focus': Switch active window focus by title keyword
+    - 'close': Gracefully close active app window
+    - 'snap': Tile/snap window to left or right screen edge
+    - 'kill': Force terminate process by name
+    """
     controller = WindowController()
     if task == "open":
         return controller.open_app(target)
@@ -104,7 +150,20 @@ def manage_window(
 def manage_media(
     task: Literal["play_pause", "next", "previous", "stop", "status"],
 ) -> str:
-    """Controls media playback for YouTube and local media players."""
+    """Media Playback Controller: Control playing music, YouTube audio, Spotify, video playback, pause, resume, skip track.
+
+    Common Trigger Phrases:
+    - "Pause video", "Play song", "Pause music", "Resume playback", "Toggle play pause"
+    - "Next track", "Skip song", "Play next video", "Previous song", "Go back track"
+    - "Stop music playback", "Check what media is currently playing"
+
+    Tasks:
+    - 'play_pause': Toggle play or pause active media
+    - 'next': Skip to next track or video
+    - 'previous': Go back to previous song
+    - 'stop': Stop media playback
+    - 'status': Show currently playing track/video info
+    """
     controller = MediaController()
     if task == "play_pause":
         return controller.play_pause()
@@ -123,7 +182,20 @@ def manage_media(
 def manage_power(
     task: Literal["lock", "sleep", "reboot", "shutdown", "battery"],
 ) -> str:
-    """Controls power states, screen lock, and battery information."""
+    """System Power & Battery Manager: Lock computer screen, suspend PC, reboot Linux, shutdown system, check battery charge percentage.
+
+    Common Trigger Phrases:
+    - "Lock screen", "Lock my PC", "Sleep computer", "Suspend session"
+    - "Reboot system", "Restart Linux PC", "Shut down computer", "Turn off PC"
+    - "Check battery status", "How much battery left", "Is laptop charging"
+
+    Tasks:
+    - 'lock': Lock desktop screen session
+    - 'sleep': Suspend computer to sleep state
+    - 'reboot': Restart Linux machine
+    - 'shutdown': Power off system complete
+    - 'battery': Return battery percentage, state, and charge status
+    """
     controller = SystemPowerController()
     if task == "lock":
         return controller.lock_screen()
@@ -142,7 +214,20 @@ def manage_power(
 def manage_system_info(
     task: Literal["ram", "storage", "cpu", "network", "overview"],
 ) -> str:
-    """Monitors system resources (RAM, Disk, CPU) and Network connection details."""
+    """Hardware Resource & System Info Monitor: Check memory usage RAM, disk space storage, CPU load, IP address, network details.
+
+    Common Trigger Phrases:
+    - "How much RAM is free", "Check memory usage", "Check free disk space", "How full is hard drive"
+    - "Show CPU usage", "Is processor hot", "What is my local IP address", "Check wifi network connection"
+    - "Show full system overview", "System specs diagnostics"
+
+    Tasks:
+    - 'ram': Get RAM total, used, and available space
+    - 'storage': Get disk partition storage capacity
+    - 'cpu': Get CPU percentage load and usage stats
+    - 'network': Get IP address, local interface, and internet status
+    - 'overview': Get complete hardware usage overview
+    """
     controller = SystemInfoController()
     if task == "ram":
         return controller.get_ram_info()
@@ -164,7 +249,18 @@ def manage_clipboard_and_screenshot(
     mode: Literal["full", "area", "window"] = "full",
     delay: int = 0,
 ) -> str:
-    """Reads or copies system clipboard text, or takes desktop screenshots."""
+    """Clipboard Utility & Screen Capture Tool: Copy text to clipboard, read copied text, take desktop screenshot picture.
+
+    Common Trigger Phrases:
+    - "What is in my clipboard", "Read copied text", "Paste clipboard text"
+    - "Copy this string to clipboard", "Save text to clipboard"
+    - "Take a screenshot", "Capture full screen", "Snip area picture", "Screenshot window"
+
+    Actions:
+    - 'read_clipboard': Read active text stored in clipboard buffer
+    - 'copy_clipboard': Write text string directly into system clipboard
+    - 'take_screenshot': Capture desktop image (mode='full', 'area', or 'window')
+    """
     controller = ClipboardAndScreenshotController()
     if action == "read_clipboard":
         return controller.get_clipboard()
@@ -181,7 +277,18 @@ def manage_clipboard_and_screenshot(
 def get_time_weather_and_location(
     location: str = "", mode: str = "time"
 ) -> str:
-    """Get time, weather, and coordinates for a location."""
+    """Time, Date, Clock, Weather Forecast & Location Tool: Check current local time, date, time zone, weather forecast, or GPS coordinates.
+
+    Common Trigger Phrases:
+    - "Tell me time", "What time right now", "What is current time", "What is today's date", "Check clock in London"
+    - "What is the weather today", "Is it raining outside", "Check weather in Tokyo", "Forecast tomorrow"
+    - "Get location coordinates", "Find GPS lat long for Paris"
+
+    Modes:
+    - 'time': Returns current time, date, and timezone for location or local clock
+    - 'weather': Returns temperature, forecast, and weather conditions
+    - 'location': Returns geographic coordinates (latitude and longitude)
+    """
     tw_controller = TimeAndWeatherController()
     mode = mode.lower().strip()
     if mode == "weather":
@@ -192,24 +299,24 @@ def get_time_weather_and_location(
         return tw_controller.get_time(country_or_place=location)
 
 
-class WebSearchArgs(BaseModel):
-    action: str = Field(
-        default="google_search",
-        description=(
-            "Action type: 'open_url', 'google_search', 'youtube_search',"
-            " 'play_youtube', or 'wikipedia'"
-        ),
-    )
-    query: str = Field(
-        default="", description="The search string, URL, or video name"
-    )
-
-
 @tool(args_schema=WebSearchArgs)
-def manage_web_and_search(
-    action: str = "google_search", query: str = ""
-) -> str:
-    """Unified web navigator tool."""
+def manage_web_and_search(action: str = "google_search", query: str = "") -> str:
+    """Web Browser Navigator & Search Engine: Search Google, open websites URLs, search YouTube videos, play video on YouTube, read Wikipedia.
+
+    Common Trigger Phrases:
+    - "Search Google for python tutorials", "Google search quantum computing"
+    - "Open website https://github.com", "Go to url reddit.com"
+    - "Search YouTube for lo-fi music", "Find video on youtube"
+    - "Play MrBeast video on youtube", "Play song on YouTube"
+    - "Look up Wikipedia summary for Albert Einstein"
+
+    Actions:
+    - 'google_search': Perform web search on Google
+    - 'open_url': Open URL directly in web browser
+    - 'youtube_search': Search YouTube for video results
+    - 'play_youtube': Open and play top matching YouTube video directly
+    - 'wikipedia': Search and extract article summary from Wikipedia
+    """
     web_controller = WebAndSearchController()
     action = action.lower().strip() if action else "google_search"
     query = query.strip() if query else ""
@@ -234,7 +341,6 @@ def manage_web_and_search(
         return web_controller.search_google(query)
 
 
-# FILE MANAGEMENT
 @tool(args_schema=FileSystemActionInput)
 def manage_files_folder(
     action: str,
@@ -242,18 +348,41 @@ def manage_files_folder(
     pattern: Optional[str] = "",
     is_directory: Union[bool, str] = False,
     content: Optional[str] = "",
-    recursive: Union[bool, str] = False
+    recursive: Union[bool, str] = False,
 ) -> str:
-    """Manages file system operations: searches for files/folders, creates files or directories, and safely removes files or folders."""
+    """File System Operations Manager: Find files, search directories, create files, write text file, create folder, make environment dir, remove files or delete folders.
+
+    Common Trigger Phrases:
+    - "Search for file script.py", "Find files matching *.txt", "Locate folder"
+    - "Create python file", "Make new file main.py", "Create folder projects/test", "Make environment setup here"
+    - "Delete file test.txt", "Remove folder build", "Delete directory recursively"
+
+    Actions:
+    - 'search': Locate matching files or folders by search pattern
+    - 'create': Create a new file with optional text content, or make a new directory
+    - 'remove': Safely delete file or directory
+    """
     fs = FileSystemManager(target_path)
     action_type = action.lower().strip()
-    
+
     is_dir_flag = str(is_directory).lower().strip() in ("true", "1", "yes")
     recursive_flag = str(recursive).lower().strip() in ("true", "1", "yes")
 
-    # Smart override for common file extensions
-    file_extensions = ('.py', '.txt', '.json', '.md', '.sh', '.html', '.css', '.js', '.c', '.cpp')
-    if action_type in ("create", "remove") and any(target_path.endswith(ext) for ext in file_extensions):
+    file_extensions = (
+        ".py",
+        ".txt",
+        ".json",
+        ".md",
+        ".sh",
+        ".html",
+        ".css",
+        ".js",
+        ".c",
+        ".cpp",
+    )
+    if action_type in ("create", "remove") and any(
+        target_path.endswith(ext) for ext in file_extensions
+    ):
         is_dir_flag = False
 
     if action_type == "search":
@@ -264,14 +393,16 @@ def manage_files_folder(
             return f"No items matching '{pattern}' found in '{target_path}'."
         if "error" in results[0]:
             return results[0]["error"]
-        
+
         lines = [f"Found {len(results)} matching items in '{target_path}':"]
         for item in results:
             lines.append(f" - [{item['type'].upper()}] {item['path']}")
         return "\n".join(lines)
 
     elif action_type == "create":
-        return fs.create_item(target_path=target_path, is_directory=is_dir_flag, content=content or "")
+        return fs.create_item(
+            target_path=target_path, is_directory=is_dir_flag, content=content or ""
+        )
 
     elif action_type == "remove":
         return fs.remove_item(target_path=target_path, recursive=recursive_flag)
@@ -291,11 +422,11 @@ GENERAL_TOOLS = {
     "manage_clipboard_and_screenshot": manage_clipboard_and_screenshot,
     "get_time_weather_and_location": get_time_weather_and_location,
     "manage_web_and_search": manage_web_and_search,
-    "manage_files_folder": manage_files_folder  # FIXED: Matched key to exact tool name
+    "manage_files_folder": manage_files_folder,
 }
 
-
 GENERAL_TOOLS_LIST = list(GENERAL_TOOLS.values())
+
 
 # --- AGENT ---
 class GeneralAgent:

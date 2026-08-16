@@ -14,4 +14,4 @@ class Decision(BaseModel):
 class DecisionLLM(BaseModel):
     tasks = List[Decision]
 
-llm = ChatGroq(model=)
+llm = ChatGroq(model='')

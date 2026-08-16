@@ -24,13 +24,33 @@ ALL_TOOLS = list(GENERAL_TOOLS_LIST+INTERACTIVE_TOOLS)
 
 TOOLS_REGISTER : Dict[str,callable] = {t.name:t for t in ALL_TOOLS}
 
-document =[
-    Document(
-        page_content=f'{t.name}:{t.description}',
-        metadata = {'name': t.name},
+# document =[
+#     Document(
+#         page_content=f'{t.name}:{t.description}',
+#         metadata = {'name': t.name},
+#     )
+#     for t in ALL_TOOLS
+# ]
+document = []
+for t in ALL_TOOLS:
+    # Extract parameter names from args_schema if available
+    args_info = ""
+    if hasattr(t, "args") and t.args:
+        args_info = ", ".join(t.args.keys())
+    
+    # Enrich the document content
+    content = (
+        f"Tool Name: {t.name}\n"
+        f"Description: {t.description}\n"
+        f"Parameters: {args_info}\n"
     )
-    for t in ALL_TOOLS
-]
+    
+    document.append(
+        Document(
+            page_content=content,
+            metadata={"name": t.name}
+        )
+    )
 
 vector_store = Chroma.from_documents(
     documents=document,
@@ -40,12 +60,13 @@ vector_store = Chroma.from_documents(
 
 while True:
     user = input('Enter your query: ')
-    result = vector_store.similarity_search(user,k=3)
-
-    # print(result[Document])
-    matched_tool_names = [
-                    doc.metadata["name"] for doc in result
-                ]
+    # Replace similarity_search with MMR search
+    results = vector_store.max_marginal_relevance_search(
+        user, 
+        k=3, 
+        fetch_k=10  # Evaluates top 10 candidates before picking top 3 diverse matches
+    )
+    matched_tool_names = [doc.metadata["name"] for doc in results]
 
     print(matched_tool_names)
 
