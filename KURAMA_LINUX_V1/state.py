@@ -11,10 +11,7 @@ def merge_lists(a: Optional[list] = None, b: Optional[list] = None) -> list:
 class KuramaState(TypedDict):
     query: str
     tasks: List[Task]
-    # Stores outputs from all nodes by task ID or node name
     results: Annotated[dict[Any, Any], merge_dicts]
-    # Tracks failed task IDs or node names
     failed_tasks: Annotated[List[Any], merge_lists]
     context: str
-    # Only written ONCE at the very end of the graph
     final_response: Optional[str]

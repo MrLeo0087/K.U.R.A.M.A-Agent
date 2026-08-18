@@ -77,7 +77,7 @@ def searxng_search_node(state: KuramaState, task_id: int = 0) -> Dict[str, Any]:
     raw_context = "\n\n".join(raw_snippets)
 
     # Step 2: Pass raw results to LLM to extract ONLY the needed information
-    llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0.2)
+    llm = ChatGroq(model="openai/gpt-oss-20b", temperature=0.2)
     
     user_prompt = f"User Query: {query}\n\nRaw Web Results:\n{raw_context}"
     
