@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Jarvis
+Comment=Jarvis voice assistant (say "Hey Jarvis")
+Exec="@JARVIS_DIR@/scripts/jarvis-start.sh" --no-workers
+Path=@JARVIS_DIR@
+Terminal=false
+X-GNOME-Autostart-enabled=true
+X-GNOME-Autostart-Delay=10

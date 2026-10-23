@@ -1,0 +1,18 @@
+# systemd --user unit for the Jarvis background workers (installed by scripts/install_autostart.sh,
+# which replaces @JARVIS_DIR@ with the repo path). Manage: systemctl --user status jarvis-workers
+[Unit]
+Description=Jarvis background workers (watchdogs, resource guard, Telegram bot, reminders)
+After=network-online.target graphical-session.target
+
+[Service]
+Type=simple
+WorkingDirectory=@JARVIS_DIR@
+ExecStart=@JARVIS_DIR@/venv/bin/python -u -m jarvis.workers
+Restart=on-failure
+RestartSec=10
+UMask=0077
+Nice=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target

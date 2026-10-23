@@ -4,6 +4,7 @@ appended progressively to data/outputs/<YYYYmmdd-HHMM>-<slug>.md. Smart model on
 """
 from __future__ import annotations
 
+import json
 import logging
 import math
 import re
@@ -12,7 +13,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from jarvis.core import config, llm, planner
+from jarvis.core import config, llm, planner, store
 
 log = logging.getLogger("jarvis.writer")
 
@@ -89,14 +90,47 @@ def run(ctx, request: str, lang: str = "en", kind: str = "write") -> str:
     path = output_path(ctx.job.title)
     path.write_text(f"# {outline.title}\n\n", encoding="utf-8")
     ctx.set_output(path)
-    system = CODE_PROMPT if kind == "code" else SECTION_PROMPT.format(lang=LANG_NAMES[lang])
-    tail = ""
-    for i, head in enumerate(outline.sections, 1):
+    state = {"request": request, "lang": lang, "kind": kind, "title": outline.title,
+             "sections": list(outline.sections), "done": 0, "path": str(path), "per": per, "max_tok": max_tok}
+    return _write_sections(ctx, state)
+
+
+# --- P9b resume: kv "job_resume:<job id>" holds the outline and how many sections are written ---
+RESUME_PREFIX = "job_resume:"
+
+
+def _save_state(ctx, state: dict) -> None:
+    try:
+        store.kv_set(f"{RESUME_PREFIX}{ctx.job.id}", json.dumps(state, ensure_ascii=False))
+    except Exception as e:
+        log.debug("resume state not saved: %s", e)
+
+
+def resume(ctx, state: dict) -> str:
+    """Job body that continues a previous job's document from its next section."""
+    path = Path(state["path"])
+    if not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f"# {state['title']}\n\n", encoding="utf-8")
+    ctx.set_output(path)
+    return _write_sections(ctx, state)
+
+
+def _write_sections(ctx, state: dict) -> str:
+    request, lang, kind = state["request"], state["lang"], state["kind"]
+    title, sections, per, max_tok = state["title"], state["sections"], state["per"], state["max_tok"]
+    path, n = Path(state["path"]), len(state["sections"])
+    system = CODE_PROMPT if kind == "code" else SECTION_PROMPT.format(lang=LANG_NAMES.get(lang, "English"))
+    text = path.read_text(encoding="utf-8") if state.get("done") else ""
+    tail = text[-300:] if text else ""
+    _save_state(ctx, state)
+    for i in range(int(state.get("done") or 0) + 1, n + 1):
+        head = sections[i - 1]
         ctx.check()
         ctx.progress(f"section {i}/{n}")
         msgs = [{"role": "system", "content": system},
                 {"role": "user", "content":
-                    f"Request: {request}\nTitle: {outline.title}\nOutline: {'; '.join(outline.sections)}\n"
+                    f"Request: {request}\nTitle: {title}\nOutline: {'; '.join(sections)}\n"
                     + (f"The previous section ended: ...{tail}\n" if tail else "")
                     + f"Write section {i} of {n}, \"{head}\", in about {per} words."}]
         reply = llm.chat(msgs, tier=config.WRITER_TIER, purpose=ctx.purpose(f"section{i}"),
@@ -105,7 +139,13 @@ def run(ctx, request: str, lang: str = "en", kind: str = "write") -> str:
         with path.open("a", encoding="utf-8") as f:
             f.write(f"## {head}\n\n{body}\n\n")
         tail = body[-300:]
+        state["done"] = i
+        _save_state(ctx, state)
     ctx.progress(f"done ({count_words(path.read_text(encoding='utf-8'))} words)")
+    try:
+        store.kv_delete(f"{RESUME_PREFIX}{ctx.job.id}")
+    except Exception as e:
+        log.debug("resume state not cleared: %s", e)
     return str(path)
 
 

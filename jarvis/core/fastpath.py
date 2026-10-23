@@ -283,6 +283,66 @@ def _system_intent(t: str) -> Intent | None:
     return None
 
 
+# --- P9a desktop extras (DND, night light, wallpaper, battery, focus, YouTube) ---
+_ONW = r"(?P<on>on|chalu karo|chalu kar do|on karo|on gara|chalu gara|चालू करो|चालू गर|अन गर)"
+_OFFW = r"(?P<off>off|band karo|band kar do|off karo|off gara|banda gara|बंद करो|बन्द गर|अफ गर)"
+_DND = r"(?:the )?(?:do not disturb|do-not-disturb|dnd|डु नट डिस्टर्ब)(?: mode)?"
+_NL = r"(?:the )?(?:night light|night-light|nightlight|blue light filter|नाइट लाइट)"
+
+
+def _onoff(obj: str) -> list[re.Pattern]:
+    return _rx(r"(?:turn|switch|put) (?:(?P<on>on)|(?P<off>off)) " + obj + r"(?: now)?",
+               r"(?:turn|switch) " + obj + r" (?:(?P<on>on)|(?P<off>off))(?: now)?",
+               r"(?:(?P<on>enable|activate|start)|(?P<off>disable|deactivate|stop)) " + obj + r"(?: now)?",
+               obj + r" (?:" + _ONW + "|" + _OFFW + ")")
+
+
+DND_PATS, NL_PATS = _onoff(_DND), _onoff(_NL)
+WALL_NEXT = _rx(r"(?:next|another|new|different) (?:desktop )?(?:wallpaper|background)",
+                r"(?:change|switch|swap) (?:the |my )?(?:desktop )?(?:wallpaper|background)(?: image)?",
+                r"(?:wallpaper|वालपेपर) (?:badlo|badal do|fera|ferdeu|बदलो|बदल दो|फेर|फेरिदेउ)")
+WALL_RANDOM = _rx(r"(?:set |pick |give me )?(?:a )?random (?:desktop )?wallpaper",
+                  r"shuffle (?:the |my )?wallpapers?")
+BATTERY = _rx(r"(?:what(?:'s| is) (?:my |the )?|check (?:my |the )?|show (?:me )?(?:my |the )?)?"
+              r"battery(?: status| level| percentage| percent| life| health)?(?: now)?",
+              r"how much (?:battery|charge)(?: (?:is )?(?:left|remaining|do i have|have i got))?(?: now)?",
+              r"is (?:my |the )?(?:laptop|battery|computer) charging",
+              r"(?:battery|बैटरी|ब्याट्री) (?:kitni hai|kitna hai|kati cha|kati chha|कितनी है|कति छ|कति बाँकी छ)")
+_MIN = r"(?: for (?P<n>\d{1,3}) ?(?:minutes?|mins?|min|m))?"
+FOCUS_START = _rx(r"(?:start|begin|enable|turn on|activate)(?: a| the| my)? (?:focus(?: mode| session)?|pomodoro)" + _MIN,
+                  r"(?:focus mode|pomodoro)(?: on)?" + _MIN, r"(?:i want to |let me |help me )?focus" + _MIN)
+FOCUS_STOP = _rx(r"(?:stop|end|cancel|turn off|finish|disable)(?: the| my)? (?:focus(?: mode| session)?|pomodoro)",
+                 r"(?:focus mode|pomodoro) off")
+_YT = r"(?:youtube|you tube|यूट्यूब|युट्युब)"
+_YT_DO = r"(?:play|bajao|chalao|chalau|laga do|lagao|बजाओ|चलाओ|चलाउ|लगाओ)(?: (?:karo|gara|garnu|kar do|करो|गर|गर्नु))?"
+YOUTUBE = _rx(r"(?:play|put on|watch) (?P<q>.+?) (?:on|in|from) " + _YT,
+              _YT + r"(?: (?:ma|maa|pe|par|mein|me|मा|पर|में))? (?P<q>.+?) " + _YT_DO,
+              r"(?P<q>.+?) " + _YT + r"(?: (?:ma|maa|pe|par|mein|me|मा|पर|में))? " + _YT_DO)
+
+
+def _p9a_intent(t: str) -> Intent | None:
+    for name, tool, pats in (("dnd", "do_not_disturb", DND_PATS), ("night_light", "night_light", NL_PATS)):
+        if m := _full(pats, t):
+            on = m.groupdict().get("on") is not None
+            return Intent(name, tool, "desktop", {"action": "on" if on else "off"})
+    if _full(WALL_RANDOM, t):
+        return Intent("wallpaper", "set_wallpaper", "desktop", {"mode": "random"})
+    if _full(WALL_NEXT, t):
+        return Intent("wallpaper", "set_wallpaper", "desktop", {"mode": "next"})
+    if _full(BATTERY, t):
+        return Intent("battery", "battery_status", "power", {})
+    if _full(FOCUS_STOP, t):
+        return Intent("focus", "focus_mode", "desktop", {"action": "stop"})
+    if m := _full(FOCUS_START, t):
+        n = m.groupdict().get("n")
+        return Intent("focus", "focus_mode", "desktop", {"action": "start", "minutes": int(n) if n else 25})
+    if m := _full(YOUTUBE, t):
+        q = m.group("q").strip(" ,.\"'")
+        if q and len(q) <= 120 and not re.fullmatch(r"(?:it|this|that|something|anything|music|a video)", q, I):
+            return Intent("youtube", "youtube", "media", {"query": q, "action": "play"}, q)
+    return None
+
+
 # --- P7 memory / usage ---
 DIGEST = _rx(
     r"(?:(?:give|show|tell|read) me |what(?:'s| is) |send me )?(?:my |the |today'?s |todays )?(?:daily )?digest"
@@ -388,6 +448,8 @@ def match(text: str) -> Intent | None:
                              and place.endswith("ing")):  # "weather for running"
             return None
         return Intent("weather", "weather", "weather", {"place": place, "days": _days(m, t)}, place)
+    if p9b := _p9b_intent(t):  # P9b reminders
+        return p9b
     if p7 := _p7_intent(t):
         return p7
     if _full(RECALL_LAST, t):
@@ -399,6 +461,8 @@ def match(text: str) -> Intent | None:
         if not note or text.rstrip().endswith("?") or _CHATTY.match(note):
             return None
         return Intent("remember", "remember", "memory", {"text": note}, note)
+    if p9 := _p9a_intent(t):  # P9a
+        return p9
     if sysi := _system_intent(t):
         return sysi
     if si := search_intent(t):
@@ -556,3 +620,30 @@ def try_answer(text: str, lang: str | None = None, confirm=None, mode: str = "te
     except Exception as e:
         log.warning("could not log routing: %s", e)
     return FastResult(answer, intent, ok, ms)
+
+
+# --- P9b --- reminders: "remind me to X at/in ...", "remind me at ... to X", list, cancel
+REMIND = _rx(r"(?:remind me|set (?:a |an )?(?:reminder|alarm)|add (?:a )?reminder|create (?:a )?reminder)"
+             r"(?: for me)?(?: to| that| about| for)?\s+(?P<rest>.+)")
+REMIND_LIST = _rx(
+    r"(?:what|which|any) (?:reminders|schedules|scheduled (?:commands|tasks)) (?:do i have|are there|are set|"
+    r"have i set)(?: today)?",
+    r"(?:list|show|tell)(?: me)?(?: all)?(?: of)?(?: my)? (?:reminders|schedules|scheduled (?:commands|tasks))",
+    r"(?:my|all) reminders", r"do i have any reminders")
+REMIND_CANCEL = _rx(r"(?:cancel|delete|remove|stop) (?:the )?(?:reminder|schedule|scheduled command)"
+                    r"(?: number| no\.?)? ?#?(?P<id>\d+)")
+
+
+def _p9b_intent(t: str) -> Intent | None:
+    if _full(REMIND_LIST, t):
+        return Intent("schedules", "list_schedules", "schedule")
+    if m := _full(REMIND_CANCEL, t):
+        return Intent("schedules", "cancel_schedule", "schedule", {"item": m.group("id")})
+    if m := _full(REMIND, t):
+        from jarvis.core import when
+
+        got = when.split(m.group("rest"))
+        if got:
+            what, when_text, _ = got
+            return Intent("remind", "add_reminder", "schedule", {"text": what, "when": when_text}, what)
+    return None

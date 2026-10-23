@@ -18,6 +18,9 @@ INSTALL = {
     "loginctl": "it ships with systemd", "systemctl": "it ships with systemd",
     "gnome-screensaver-command": "sudo apt install gnome-screensaver",
     "xdg-screensaver": "sudo apt install xdg-utils",
+    # P9a
+    "gsettings": "sudo apt install libglib2.0-bin", "upower": "sudo apt install upower",
+    "mpv": "sudo apt install mpv", "xdg-open": "sudo apt install xdg-utils",
 }
 
 

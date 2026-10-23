@@ -97,7 +97,7 @@ def test_runtime_error_retries_once_with_traceback(gen):
 
 
 def test_sensitive_needs_ask_twice_and_show_commands(gen, monkeypatch):
-    gen(spec(code=WALL, needs=("system",), name="set_wallpaper", reusable=True, arg="/home/u/a.jpg",
+    gen(spec(code=WALL, needs=("system",), name="wallpaper_skill", reusable=True, arg="/home/u/a.jpg",
              summary="Changes your desktop wallpaper to a picture you choose."))
     ran = []
     monkeypatch.setattr(toolsmith, "run_sandbox", lambda *a, **k: ran.append(a) or toolsmith.RunResult(True, "ok"))
@@ -115,16 +115,16 @@ def test_personal_task_asks_twice_even_when_pure(gen):
 
 def test_wallpaper_skill_saved_with_dry_run_commands(gen, monkeypatch):
     monkeypatch.setattr(toolsmith, "DRY_RUN_CMDS", True)
-    gen(spec(code=WALL, needs=("system",), name="set_wallpaper", reusable=True, arg="/home/u/a.jpg",
+    gen(spec(code=WALL, needs=("system",), name="wallpaper_skill", reusable=True, arg="/home/u/a.jpg",
              summary="Changes your desktop wallpaper."))
     res, asked = run_make("change my wallpaper", [True, True])
     assert "[dry run] would run: gsettings set org.gnome.desktop.background picture-uri-dark" in res.output
-    assert "Saved as skill 'set_wallpaper'" in res.output
-    meta = toolsmith.load_meta("set_wallpaper")
+    assert "Saved as skill 'wallpaper_skill'" in res.output
+    meta = toolsmith.load_meta("wallpaper_skill")
     assert meta["sensitive"] and "shell" in meta["needs"] and "system" in meta["needs"]
-    t = registry.get("set_wallpaper")
+    t = registry.get("wallpaper_skill")
     assert registry.group_of(t) == "skills" and registry.safety_of(t) == "confirm"
-    toolsmith.delete("set_wallpaper")
+    toolsmith.delete("wallpaper_skill")
 
 
 def test_reusable_saved_then_reused_with_zero_generation(gen, monkeypatch):
@@ -150,13 +150,13 @@ def test_reusable_saved_then_reused_with_zero_generation(gen, monkeypatch):
 
 def test_sensitive_skill_asks_before_reuse(gen, monkeypatch):
     monkeypatch.setattr(toolsmith, "DRY_RUN_CMDS", True)
-    gen(spec(code=WALL, needs=("system",), name="set_wallpaper", reusable=True))
+    gen(spec(code=WALL, needs=("system",), name="wallpaper_skill", reusable=True))
     run_make("change my wallpaper", [True, True])
     asked = []
-    out = safety.execute("use_skill", {"name": "set_wallpaper", "arg": "/x.jpg"},
+    out = safety.execute("use_skill", {"name": "wallpaper_skill", "arg": "/x.jpg"},
                          confirm=lambda p: asked.append(p) or False)
     assert "said no" in out.output and len(asked) == 1
-    toolsmith.delete("set_wallpaper")
+    toolsmith.delete("wallpaper_skill")
 
 
 def test_lru_keeps_at_most_max(gen, monkeypatch):

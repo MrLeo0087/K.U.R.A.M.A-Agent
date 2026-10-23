@@ -1,0 +1,43 @@
+"""Scheduler worker (P9b): every config.SCHEDULER_INTERVAL_S (15 s) fire due reminders / scheduled
+commands (reminders.run_due). Items missed while Jarvis was off fire once on start if < 1 h late, else
+they are marked missed and the user is told. On start it also tells the user once about background
+jobs interrupted by the last quit/restart."""
+from __future__ import annotations
+
+import time
+from typing import Callable
+
+from jarvis.core import config, reminders, store
+from jarvis.workers.base import Worker
+
+
+class Scheduler(Worker):
+    name = "scheduler"
+    interval_s = config.SCHEDULER_INTERVAL_S
+
+    def __init__(self, interval_s: float | None = None, now: Callable[[], float] | None = None):
+        super().__init__(interval_s)
+        self._now = now or time.time
+        self.fired = 0
+        self.missed = 0
+
+    def setup(self) -> None:
+        try:
+            from jarvis.core import jobs
+
+            jobs.announce_interrupted()
+        except Exception as e:
+            self.log.warning("interrupted-jobs check failed: %s", e)
+
+    def tick(self) -> None:
+        for item in reminders.run_due(self._now()):
+            if item["action"] == "fired":
+                self.fired += 1
+            else:
+                self.missed += 1
+            self.log.info("schedule #%d %s", item["id"], item["action"])
+
+    def info(self) -> dict:
+        rows = store.schedules_list(enabled_only=True, limit=1)
+        return {"pending": len(store.schedules_list(enabled_only=True, limit=100)), "fired": self.fired,
+                "missed": self.missed, "next": rows[0]["next_run"] if rows else None}

@@ -34,3 +34,5 @@ click==8.5.0
 aiohttp==3.14.5
 pydantic==2.14.1
 PyYAML==6.0.3
+# P12 wake word: free Google Web Speech recognizer (pure Python + bundled flac; checked: no torch/PyAudio)
+SpeechRecognition==3.17.0

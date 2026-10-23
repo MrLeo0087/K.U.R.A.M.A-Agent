@@ -1,0 +1,149 @@
+"""P9b reminders and scheduled commands (SQLite `schedules`), shared by the schedule tools, the fast path
+and the scheduler worker.
+
+  - add(text, when_text, kind): parse the time (when.py regex, one fast-tier call as fallback), store it
+  - run_due(now): fire everything due. Reminders -> notify() (desktop + Telegram + spoken when idle).
+    Commands -> fast path first (zero tokens), else the agent in text mode with confirmations DENIED
+    (confirm-level tools never run unattended; the notification says so). Items more than
+    config.SCHEDULE_MISSED_GRACE_S late (laptop off/asleep) are not run: they are marked missed and
+    the user is told. Repeating items are rescheduled to their next future occurrence.
+"""
+from __future__ import annotations
+
+import logging
+import re
+import time
+from datetime import datetime
+
+from jarvis.core import config, notify, store, when
+
+log = logging.getLogger("jarvis.reminders")
+
+KINDS = ("reminder", "command")
+
+
+def _dt(now: float | None) -> datetime:
+    return datetime.fromtimestamp(now if now is not None else time.time())
+
+
+def add(text: str, when_text: str, kind: str = "reminder", now: float | None = None,
+        use_llm: bool = True) -> str:
+    text = re.sub(r"^(?:to|that)\s+", "", " ".join((text or "").split()), flags=re.I).strip(" .")
+    if not text:
+        return "error: nothing to remind you about"
+    kind = kind if kind in KINDS else "reminder"
+    now_ts = now if now is not None else time.time()
+    w = when.resolve(when_text or "", _dt(now_ts), use_llm=use_llm)
+    if w is None:
+        return (f"error: I couldn't understand the time {when_text!r} "
+                "(try 'at 5 pm', 'in 20 minutes', 'tomorrow at 9', 'every weekday at 9:30')")
+    if w.ts <= now_ts:
+        return f"error: {when_text!r} is in the past"
+    sid = store.schedule_add(text, kind, w.ts, w.repeat)
+    desc = w.describe(_dt(now_ts))
+    if kind == "command":
+        return (f"Scheduled #{sid} {desc}: \"{text}\". Steps that need your confirmation won't run "
+                "unattended.")
+    return f"Okay, reminder #{sid} set for {desc}: {text}."
+
+
+def _line(r: dict, now: float | None = None) -> str:
+    desc = when.describe(r["next_run"], r.get("repeat") or "none", _dt(now))
+    label = "command" if r.get("kind") == "command" else "reminder"
+    return f"#{r['id']} {label} {desc}: {r['text']}"
+
+
+def list_text(now: float | None = None) -> str:
+    rows = store.schedules_list(enabled_only=True, limit=20)
+    if not rows:
+        return "You have no reminders or scheduled commands."
+    return "\n".join(_line(r, now) for r in rows)
+
+
+def find(query: str | int) -> dict | None:
+    q = str(query).strip().lower().lstrip("#")
+    q = re.sub(r"^(?:reminder|schedule|number|no\.?)\s*#?", "", q).strip()
+    if q.isdigit():
+        return store.schedule_get(int(q))
+    words = [w for w in re.findall(r"\w+", q) if w not in ("the", "a", "my", "to", "reminder", "about")]
+    best, score = None, 0
+    for r in store.schedules_list(enabled_only=True, limit=50):
+        s = sum(1 for w in words if w in r["text"].lower())
+        if s > score:
+            best, score = r, s
+    return best
+
+
+def cancel(query: str | int) -> str:
+    r = find(query)
+    if r is None:
+        return f"no reminder matches {query!r}"
+    if not r.get("enabled"):
+        return f"#{r['id']} is already {r.get('note') or 'finished'}: {r['text']}"
+    store.schedule_update(r["id"], enabled=0, note="cancelled")
+    return f"Cancelled #{r['id']}: {r['text']}"
+
+
+# --- firing (scheduler worker) ---
+def run_command(text: str) -> str:
+    """Run a scheduled command unattended: fast path (zero tokens) else the agent, confirmations denied."""
+    denied: list[str] = []
+
+    def deny(prompt: str, *a, **k) -> bool:
+        denied.append(str(prompt))
+        return False
+
+    answer = ""
+    try:
+        from jarvis.core import fastpath
+
+        fr = fastpath.try_answer(text, confirm=deny)
+        if fr is not None:
+            answer = fr.answer
+        else:
+            from jarvis.core import agent
+
+            bot = agent.Agent(confirm=deny, summarize_async=False, use_planner=False, persist=False,
+                              channel="scheduler")
+            answer = bot.run(text, mode="text")
+    except Exception as e:  # a failing command must never take the worker down
+        log.exception("scheduled command failed")
+        answer = f"failed: {type(e).__name__}: {e}"
+    if denied:
+        answer = (f"{answer}\n(Not done: {len(denied)} step(s) need your confirmation and never run "
+                  "unattended. Ask me directly to approve.)").strip()
+    return str(answer)[:1500]
+
+
+def fire(row: dict) -> list[str]:
+    if row.get("kind") == "command":
+        result = run_command(row["text"])
+        return notify.notify(f"Scheduled: {row['text'][:60]}", result, level="info", source="scheduler")
+    return notify.notify("Reminder", row["text"], level="info", source="scheduler")
+
+
+def run_due(now: float | None = None) -> list[dict]:
+    """Fire (or mark missed) every due item. Returns [{id, action}] for logging/tests."""
+    now = now if now is not None else time.time()
+    done: list[dict] = []
+    for r in store.schedules_due(now):
+        late = now - (r["next_run"] or now)
+        missed = late > config.SCHEDULE_MISSED_GRACE_S
+        nxt = when.next_after(r.get("repeat") or "none", r["next_run"], now)
+        # update first: a crash while firing must never fire it twice
+        if nxt:
+            store.schedule_update(r["id"], last_run=now, next_run=nxt, note="missed" if missed else "")
+        else:
+            store.schedule_update(r["id"], last_run=now, enabled=0, note="missed" if missed else "done")
+        if missed:
+            due = datetime.fromtimestamp(r["next_run"]).strftime("%a %H:%M")
+            what = "reminder" if r.get("kind") != "command" else "scheduled command (not run)"
+            notify.notify(f"Missed {what}", f"{r['text']} (was due {due})", level="warning", source="scheduler")
+            done.append({"id": r["id"], "action": "missed"})
+            continue
+        try:
+            fire(r)
+        except Exception:
+            log.exception("schedule #%d failed to fire", r["id"])
+        done.append({"id": r["id"], "action": "fired"})
+    return done

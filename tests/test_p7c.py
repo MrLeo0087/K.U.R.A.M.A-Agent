@@ -315,33 +315,33 @@ def test_search_template_nepali():
 
 
 # --- toolsmith reachable through request_tools (wallpaper acceptance case) ---
-def test_change_wallpaper_routes_to_toolsmith_with_consent(respond, monkeypatch):
+def test_unknown_task_routes_to_toolsmith_with_consent(respond, monkeypatch):
     from jarvis.core import router
-    assert router.rule_groups("change my wallpaper") == []  # no fake "system" match any more
+    assert router.rule_groups("toggle bluetooth") == []  # P9a gave wallpaper a real tool; bluetooth has none
     monkeypatch.setattr(toolsmith, "DRY_RUN_CMDS", True)
     code = ("from jarvis_helpers import run_cmd\ndef run(arg):\n    return run_cmd(['gsettings', 'set', "
             "'org.gnome.desktop.background', 'picture-uri', 'file://' + arg])\n")
     gen = []
     monkeypatch.setattr(toolsmith, "generate", lambda task, feedback="": gen.append(task) or toolsmith.ToolSpec(
-        possible=True, reason="", reusable=True, name="set_wallpaper", summary="Changes your wallpaper.",
+        possible=True, reason="", reusable=True, name="toggle_bluetooth", summary="Toggles bluetooth.",
         needs=["system"], arg_hint="image path", arg="/usr/share/backgrounds/a.jpg", code=code))
 
     def fn(messages, kw):
         last = messages[-1]
         if isinstance(last, ToolMessage) and last.name == "make_tool":
-            return AIMessage(content="Done, your wallpaper is changed.")
+            return AIMessage(content="Done, bluetooth is toggled.")
         if "make_tool" in names(kw):
-            return tc("make_tool", {"task": "change my wallpaper"}, "c2")
+            return tc("make_tool", {"task": "toggle bluetooth"}, "c2")
         if "request_tools" in names(kw):
-            return tc("request_tools", {"groups": ["toolsmith"], "reason": "no wallpaper tool"})
+            return tc("request_tools", {"groups": ["toolsmith"], "reason": "no bluetooth tool"})
         return AIMessage(content="?")
     respond(fn)
     asked = []
     bot = agent.Agent(confirm=lambda p: asked.append(p) or True)
-    assert bot.run("change my wallpaper") == "Done, your wallpaper is changed."
+    assert bot.run("toggle bluetooth") == "Done, bluetooth is toggled."
     assert asked[0] == toolsmith.CONSENT["en"] and "gsettings set" in asked[1] and len(gen) == 1
-    assert toolsmith.load_meta("set_wallpaper")["sensitive"]
-    toolsmith.delete("set_wallpaper")
+    assert toolsmith.load_meta("toggle_bluetooth")["sensitive"]
+    toolsmith.delete("toggle_bluetooth")
 
 
 def test_refusal_with_tools_bound_retries_with_meta(respond, monkeypatch):

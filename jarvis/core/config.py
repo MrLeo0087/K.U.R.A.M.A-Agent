@@ -131,6 +131,31 @@ BARGE_IN_RMS = 1500  # int16 RMS a frame must exceed (keeps speaker echo from tr
 BARGE_IN_FRAMES = 8  # consecutive loud+voiced 30 ms frames needed (~240 ms)
 BARGE_IN_GRACE_S = 0.4  # ignore the mic right after playback starts
 
+# --- wake ---
+# "Hey Jarvis" wake word (P12): webrtcvad + noise gate find short bursts; only those are sent to the
+# free Google Web Speech recognizer (SpeechRecognition, no key), Groq Whisper if Google fails.
+WAKE_ENABLED = os.getenv("JARVIS_WAKE", "1").lower() not in ("0", "false", "no", "off")
+WAKE_ENGINE = os.getenv("JARVIS_WAKE_ENGINE", "google")  # google | groq
+WAKE_GOOGLE_LANG = os.getenv("JARVIS_WAKE_LANG", "en-IN")
+WAKE_GOOGLE_TIMEOUT_S = 4.0
+WAKE_GOOGLE_RETRY_S = 60.0  # after a Google failure (offline), use Groq for this long
+WAKE_MAX_CHECKS_PER_MIN = int(os.getenv("JARVIS_WAKE_CHECKS_PER_MIN", "8"))
+# Wake bursts must be this loud (room noise sent 11 bursts/min to Google at the turn-VAD level of 900).
+WAKE_MIN_RMS = float(os.getenv("JARVIS_WAKE_MIN_RMS", "1600"))
+WAKE_MATCH_RATIO = 0.75  # difflib ratio for wake-name tokens
+WAKE_NAME_ALONE = os.getenv("JARVIS_WAKE_NAME_ALONE", "1").lower() not in ("0", "false", "no", "off")
+WAKE_BURST_MIN_S = 0.4  # speech bursts outside this range are never recognized
+WAKE_BURST_MAX_S = 2.5
+WAKE_LONG_BURSTS = True  # 2.5-6 s bursts: check the first WAKE_LONG_HEAD_S ("hey jarvis what's the time")
+WAKE_LONG_MAX_S = 6.0
+WAKE_LONG_HEAD_S = 2.0
+WAKE_GAP_MS = 450  # this much quiet ends a burst
+WAKE_IDLE_S = float(os.getenv("JARVIS_WAKE_IDLE_S", "45"))  # awake -> sleeping after this long without speech
+WAKE_ACK = os.getenv("JARVIS_WAKE_ACK", "beep")  # beep (instant, local) | voice ("Yes?") | none
+WAKE_STOP_WORD = True  # in wake mode, saying "stop" while Jarvis speaks interrupts playback
+WAKE_STOP_RMS = 1500.0  # the "stop" burst must be this loud (speaker echo is filtered by length)
+WAKE_DEBUG = os.getenv("JARVIS_WAKE_DEBUG", "0").lower() not in ("0", "false", "no", "off")
+
 # --- playback / TTS ---
 AUDIO_PLAYERS = ("ffplay", "mpv", "paplay")  # first one found by `which` is used
 TTS_RATE = "+0%"  # edge-tts speaking rate
@@ -202,12 +227,18 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
                "storage", "workers", "computer doing", "laptop doing", "सिस्टम", "रैम", "डिस्क", "मेमोरी"),
     "audio": ("volume", "mute", "unmute", "louder", "quieter", "sound", "speaker", "speakers", "mic",
               "microphone", "audio", "awaz", "awaaz", "awaj", "aawaj", "bolume", "आवाज", "आवाज़", "भोल्युम", "माइक"),
+    "desktop": ("do not disturb", "dnd", "notifications", "notification", "night light", "night-light",
+                "blue light", "wallpaper", "wallpapers", "background image", "desktop background",
+                "auto theme", "auto dark", "automatic dark", "dark at sunset", "sunset", "sunrise",
+                "focus mode", "focus session", "pomodoro", "deep work", "वालपेपर", "नाइट लाइट",
+                "डिस्टर्ब", "फोकस मोड", "सूचना", "नोटिफिकेशन"),
     "display": ("brightness", "brighter", "dimmer", "dim the screen", "screen brightness", "backlight",
                 "चमक", "ब्राइटनेस", "light mode", "dark mode", "light theme", "dark theme", "theme",
                 "night mode", "day mode"),
     "screen": ("screenshot", "screenshots", "screen shot", "screen capture", "capture the screen",
                "capture screen", "स्क्रीनशॉट"),
-    "power": ("lock", "lock screen", "sleep", "suspend", "shutdown", "shut down", "reboot", "restart",
+    "power": ("battery", "charging", "charge left", "battery health", "बैटरी", "ब्याट्री", "बेट्री",
+              "lock", "lock screen", "sleep", "suspend", "shutdown", "shut down", "reboot", "restart",
               "power off", "लॉक"),
     "clipboard": ("clipboard", "clip board", "copy", "copied", "paste", "क्लिपबोर्ड"),
     "speech": ("read aloud", "read out", "read it out", "read this", "read that", "say aloud",
@@ -218,9 +249,11 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
                 "split", "side by side", "half screen", "big screen", "पूरा स्क्रीन", "what's open",
                 "what is open", "things open", "currently open", "open right now", "running apps",
                 "which apps", "open apps", "are open", "is open", "open on my", "open in my", "खुला", "खुले"),
-    "apps": ("open", "close", "launch", "focus", "app", "application", "workspace", "kill", "browser",
+    "apps": ("force quit", "force close", "not responding", "frozen", "hung", "end process", "terminate",
+             "open", "close", "launch", "focus", "app", "application", "workspace", "kill", "browser",
              "terminal"),
-    "media": ("play", "pause", "resume", "unpause", "music", "song", "next track", "previous track",
+    "media": ("on youtube", "youtube video", "youtube ma", "youtube pe", "youtube par", "यूट्यूब", "युट्युब",
+              "next video", "playlists", "play", "pause", "resume", "unpause", "music", "song", "next track", "previous track",
               "next song", "previous song", "skip", "playing", "playlist", "गाना", "गीत"),
     "git": ("git", "commit", "branch", "repo", "repository", "git status", "git log", "diff",
             "staged", "checkout", "changes", "uncommitted"),
@@ -282,6 +315,8 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
     "jobs": ("job", "jobs", "background", "working on", "progress", "job status", "cancel",
              "stop writing", "essay status", "essay", "article", "story", "report", "write a",
              "लेख", "निबंध"),
+    "schedule": ("remind me", "reminder", "reminders", "schedule", "scheduled", "every day at", "every morning",
+                 "every weekday", "alarm", "yaad dila", "yaad dilana", "सम्झाइदेउ", "याद दिला"),
 }
 # Descriptions offered to the fast classifier when no rule matched.
 TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
@@ -297,13 +332,14 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
     "automation": "trigger n8n workflows; crash watchdog (auto-restart dev servers) targets and status",
     "audio": "speaker volume, mute, microphone mute",
     "display": "screen brightness, light/dark mode",
+    "desktop": "do not disturb, night light, wallpaper, automatic dark/light at sunset, focus (pomodoro) timer",
     "screen": "take a screenshot (full screen, window or area)",
-    "power": "lock the screen, sleep/suspend (shutdown and restart are blocked)",
+    "power": "battery status, lock the screen, sleep/suspend (shutdown and restart are blocked)",
     "clipboard": "read or write the clipboard, clipboard history",
     "speech": "read text or the clipboard aloud",
     "windows": "snap, maximize, minimize, restore or list windows",
-    "apps": "open, close or focus apps; launch a named workspace of apps and sites",
-    "media": "music and video playback (play, pause, next, previous, what's playing)",
+    "apps": "open, close, focus or force-kill apps; launch a named workspace of apps and sites",
+    "media": "music and video playback (play, pause, next, previous, what's playing), YouTube, playlists",
     "git": "git status, log, diff, commit and branches",
     "dev": "tests, new projects, Python environment checks",
     "codequality": "dependency doctor (unpinned/outdated/vulnerable/unused), secrets scan, pre-commit gate, "
@@ -315,20 +351,22 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
     "knowledge": "search or ask questions about the user's own code, docs and notes (RAG); index a folder",
     "usage": "LLM token usage, budget and API cost; daily digest of the day's activity",
     "browser": "open a website or URL in the browser",
-    "jobs": "long writing jobs (essays, articles, reports) and background job status/cancel",
+    "jobs": "long writing jobs (essays, articles, reports) and background job status/cancel/resume",
+    "schedule": "reminders and scheduled commands at a time or repeating; list or cancel them",
 }
 # Tiny glosses for the request_tools meta-tool (sent on every unmatched turn, so each word costs):
 # "" = the group name says it all.
 TOOL_GROUP_GLOSS: dict[str, str] = {
     "general": "time", "weather": "", "files": "folders", "filesearch": "",
-    "telegram": "send to phone", "toolsmith": "new tool", "skills": "", "system": "RAM, CPU, disk",
-    "watch": "process, log", "automation": "n8n", "audio": "volume, mic", "display": "brightness, theme",
-    "screen": "screenshot", "power": "lock", "clipboard": "", "speech": "read aloud", "windows": "",
-    "apps": "", "media": "music", "git": "", "dev": "tests, venv", "codequality": "secrets, review",
-    "devutils": "docstrings, ipynb",
+    "telegram": "phone", "toolsmith": "new tool", "skills": "", "system": "RAM, CPU, disk",
+    "watch": "process, log", "automation": "n8n", "audio": "volume", "display": "brightness, theme",
+    "screen": "screenshot", "power": "battery", "clipboard": "", "speech": "", "windows": "",
+    "apps": "", "media": "music", "desktop": "DND, wallpaper", "git": "", "dev": "tests, venv", "codequality": "review",
+    "devutils": "docstrings",
     "web": "search, wiki", "memory": "notes",
-    "knowledge": "my code, docs", "usage": "tokens", "browser": "open site",
+    "knowledge": "my code", "usage": "tokens", "browser": "",
     "jobs": "writing",
+    "schedule": "remind",
 }
 
 # Words that suggest multi-step reasoning (router asks for the smart tier).
@@ -351,7 +389,7 @@ SHELL_ALLOWLIST = ("ls", "cat", "head", "tail", "wc", "grep", "rg", "fdfind", "f
 # --- Background core (P6): python -m jarvis.workers ---
 WORKERS_ENABLED: tuple[str, ...] = tuple(
     w.strip() for w in os.getenv("JARVIS_WORKERS", "process_watch,resource_guard,crash_watchdog,"
-                                 "telegram_bot,n8n_inbound,daily_digest").split(",") if w.strip())
+                                 "telegram_bot,n8n_inbound,daily_digest,auto_theme,scheduler").split(",") if w.strip())
 WORKER_MIN_INTERVAL_S = 5.0  # no daemon polls faster than this
 WORKER_MAX_BACKOFF_S = 300.0  # error backoff cap (interval * 2^errors)
 WORKER_LOG_BYTES = 1_000_000  # rotating log per worker: ~1 MB x 3
@@ -506,3 +544,24 @@ FILE_SAFE_ROOTS = tuple(Path(p).expanduser() for p in os.getenv(
     "JARVIS_FILE_ROOTS", "~/projects:/media/leo/Project1").split(":") if p)
 SHARE_ROOTS = (Path.home(), Path("/media/leo/Project1"))  # send_file_telegram only sends files under these
 TELEGRAM_FILE_MAX_MB = 50
+
+# --- P9a --- desktop extras (DND, night light, wallpaper, auto theme, focus, YouTube, playlists)
+WALLPAPER_DIRS = tuple(p for p in (Path.home() / "Pictures" / "Wallpapers", Path.home() / "Pictures",
+                                   Path("/home/leo/WhiteSur-wallpapers")) if p.exists()) or (Path.home() / "Pictures",)
+AUTO_THEME = os.getenv("JARVIS_AUTO_THEME", "0").lower() in ("1", "true", "yes", "on")  # kv "auto_theme" overrides
+AUTO_THEME_SOURCE = "sun"  # "sun" = home-city sunrise/sunset (Open-Meteo), "fixed" = AUTO_THEME_TIMES
+AUTO_THEME_TIMES = ("07:00", "18:30")  # (light from, dark from); also the offline fallback
+AUTO_THEME_INTERVAL_S = 60.0
+FOCUS_CLOSE: tuple[str, ...] = ()  # apps focus_mode closes at start, e.g. ("discord", "telegram")
+PLAYLISTS: dict[str, str] = {  # spoken name -> URL or local music folder
+    "lofi": "https://www.youtube.com/watch?v=jfKfPfyJRdk",
+}
+
+# --- P9b --- reminders / scheduled commands, RAM-aware jobs, resume
+SCHEDULER_INTERVAL_S = 15.0  # scheduler worker tick
+SCHEDULE_MISSED_GRACE_S = 3600.0  # items later than this (laptop off) are marked missed, not run
+JOB_RESOURCE_GATE = os.getenv("JARVIS_JOB_GATE", "1").lower() not in ("0", "false", "no", "off")
+JOB_MIN_FREE_MB = int(os.getenv("JARVIS_JOB_MIN_FREE_MB", "800"))  # queued jobs wait below this free RAM
+JOB_MAX_LOAD_PER_CORE = 1.5  # ...or while the 1-min load average exceeds cores x this
+JOB_RECHECK_S = 10.0
+JOB_MAX_WAIT_S = 600.0  # then they start anyway (with a note)

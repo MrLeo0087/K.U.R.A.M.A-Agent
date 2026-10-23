@@ -10,6 +10,7 @@ def tmp_store(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "JOBS_NOTIFY", False)  # never pop desktop notifications in tests
     monkeypatch.setattr(config, "FASTPATH", False)  # LLM-path tests stay on the LLM path; fastpath tests enable it
     monkeypatch.setattr(config, "STT_DUAL", False)  # single-pass STT unless a test opts in
+    monkeypatch.setattr(config, "JOB_RESOURCE_GATE", False, raising=False)  # P9b: jobs never wait on real RAM
     from jarvis.tools.general import open_url
     opened: list[str] = []
     monkeypatch.setattr(open_url, "_open", opened.append)  # never open the real browser

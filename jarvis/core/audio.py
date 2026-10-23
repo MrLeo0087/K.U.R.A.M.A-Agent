@@ -171,14 +171,15 @@ def _input_stream(callback: Callable, sample_rate: int, frame_ms: int):
 
 
 def record(max_s: float | None = None, on_speech_start: Callable[[], None] | None = None,
-           stop_event: threading.Event | None = None, vad: _VadLike | None = None) -> bytes | None:
+           stop_event: threading.Event | None = None, vad: _VadLike | None = None,
+           start_timeout_s: float | None = None) -> bytes | None:
     """Block until one utterance is captured. Returns WAV bytes, or None (silence / cancelled).
 
     Setting stop_event ends recording early: before speech it cancels, after speech it keeps
-    what was captured so far.
+    what was captured so far. start_timeout_s overrides VAD_START_TIMEOUT_S (wake mode idle wait).
     """
     sr, fms = config.AUDIO_SAMPLE_RATE, config.VAD_FRAME_MS
-    ep = Endpointer(vad=vad, sample_rate=sr, frame_ms=fms, max_s=max_s)
+    ep = Endpointer(vad=vad, sample_rate=sr, frame_ms=fms, max_s=max_s, start_timeout_s=start_timeout_s)
     ep.on_speech_start = on_speech_start
     frames: queue.Queue[bytes] = queue.Queue()
     need = frame_bytes(sr, fms)

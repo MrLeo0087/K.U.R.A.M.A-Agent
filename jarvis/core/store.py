@@ -58,6 +58,11 @@ CREATE TABLE IF NOT EXISTS sessions (
     channel TEXT, extracted INTEGER DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_start ON sessions(start);
+CREATE TABLE IF NOT EXISTS schedules (
+    id INTEGER PRIMARY KEY, text TEXT NOT NULL, kind TEXT DEFAULT 'reminder', next_run REAL,
+    repeat TEXT DEFAULT 'none', created REAL, last_run REAL, enabled INTEGER DEFAULT 1, note TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_schedules_due ON schedules(enabled, next_run);
 CREATE TABLE IF NOT EXISTS profile (
     key TEXT PRIMARY KEY, value TEXT NOT NULL, source TEXT, created REAL, updated REAL,
     hits INTEGER DEFAULT 0, last_used REAL
@@ -544,3 +549,54 @@ def alerts_between(t0: float, t1: float) -> list[dict]:
 def notes_between(t0: float, t1: float) -> list[dict]:
     rows = _exec("SELECT * FROM notes WHERE created>=? AND created<? ORDER BY created", (t0, t1))
     return [dict(r) for r in rows]
+
+
+# --- P9b: reminders / scheduled commands ---
+SCHEDULE_FIELDS = ("text", "kind", "next_run", "repeat", "last_run", "enabled", "note")
+
+
+def schedule_add(text: str, kind: str, next_run: float, repeat: str = "none") -> int:
+    with _lock:
+        if _conn is None:
+            init(_path)
+        cur = _conn.execute("INSERT INTO schedules(text,kind,next_run,repeat,created,enabled,note) "  # type: ignore[union-attr]
+                            "VALUES (?,?,?,?,?,1,'')", (text, kind, next_run, repeat or "none", time.time()))
+        return int(cur.lastrowid)
+
+
+def schedule_update(sched_id: int, **fields: Any) -> None:
+    cols = [k for k in fields if k in SCHEDULE_FIELDS]
+    if cols:
+        _exec(f"UPDATE schedules SET {', '.join(c + '=?' for c in cols)} WHERE id=?",
+              tuple(fields[c] for c in cols) + (sched_id,))
+
+
+def schedule_get(sched_id: int) -> dict | None:
+    rows = _exec("SELECT * FROM schedules WHERE id=?", (sched_id,))
+    return dict(rows[0]) if rows else None
+
+
+def schedules_list(enabled_only: bool = True, limit: int = 50) -> list[dict]:
+    where = "WHERE enabled=1 " if enabled_only else ""
+    return [dict(r) for r in _exec(f"SELECT * FROM schedules {where}ORDER BY next_run LIMIT ?", (limit,))]
+
+
+def schedules_due(now: float) -> list[dict]:
+    return [dict(r) for r in _exec("SELECT * FROM schedules WHERE enabled=1 AND next_run<=? ORDER BY next_run",
+                                   (now,))]
+
+
+def schedule_delete(sched_id: int) -> bool:
+    with _lock:
+        if _conn is None:
+            init(_path)
+        return _conn.execute("DELETE FROM schedules WHERE id=?", (sched_id,)).rowcount > 0  # type: ignore[union-attr]
+
+
+def kv_delete(key: str) -> None:
+    _exec("DELETE FROM kv WHERE key=?", (key,))
+
+
+def kv_prefix(prefix: str) -> dict[str, str]:
+    rows = _exec("SELECT key, value FROM kv WHERE key LIKE ?", (prefix.replace("%", "") + "%",))
+    return {r[0]: r[1] for r in rows}

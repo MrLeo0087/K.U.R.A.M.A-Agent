@@ -23,6 +23,8 @@ from jarvis.core import config, ratelimit, store
 log = logging.getLogger("jarvis.jobs")
 
 ACTIVE = ("queued", "running")
+INTERRUPTED_QUIT = "interrupted (Jarvis quit)"
+INTERRUPTED_RESTART = "interrupted (Jarvis restarted)"
 
 
 class JobCancelled(Exception):
@@ -98,7 +100,7 @@ class JobManager:
         self._callbacks: list[Callable[[Job], None]] = []
         try:  # jobs left running by a previous process can never finish
             for row in store.jobs_list(50, ACTIVE):
-                store.job_update(row["id"], status="failed", error="interrupted (Jarvis restarted)",
+                store.job_update(row["id"], status="failed", error=INTERRUPTED_RESTART,
                                  finished=time.time())
         except Exception as e:
             log.warning("could not clean stale jobs: %s", e)
@@ -133,6 +135,9 @@ class JobManager:
         if job.cancel_event.is_set():
             self._finish(job, ctx, "cancelled")
             return
+        if not self._wait_resources(job):
+            self._finish(job, ctx, "cancelled")
+            return
         job.status = "running"
         self._save(job, status="running")
         try:
@@ -149,11 +154,34 @@ class JobManager:
             status = "cancelled" if job.cancel_event.is_set() else "failed"
         self._finish(job, ctx, status)
 
+    def _wait_resources(self, job: Job) -> bool:
+        """P9b: hold a queued job while RAM/CPU is short (re-check every JOB_RECHECK_S, at most
+        JOB_MAX_WAIT_S, then run anyway with a note). False when the job was cancelled meanwhile."""
+        if not config.JOB_RESOURCE_GATE:
+            return True
+        t0 = time.monotonic()
+        while (reason := resource_wait_reason()):
+            if time.monotonic() - t0 >= config.JOB_MAX_WAIT_S:
+                job.progress = f"started anyway after waiting {config.JOB_MAX_WAIT_S / 60:.0f} min for free {reason}"
+                self._save(job, progress=job.progress)
+                log.info("job #%d: %s", job.id, job.progress)
+                return True
+            if job.progress != f"waiting for free {reason}":
+                job.progress = f"waiting for free {reason}"
+                self._save(job, progress=job.progress)
+            if job.cancel_event.wait(config.JOB_RECHECK_S):
+                return False
+        if job.progress.startswith("waiting for free"):
+            job.progress = ""
+        return True
+
     def _finish(self, job: Job, ctx: JobContext, status: str) -> None:
         job.status, job.finished = status, time.time()
         ctx.refresh_tokens()
         self._save(job, status=status, finished=job.finished, output_path=job.output_path,
                    error=job.error[:500], tokens=job.tokens, progress=job.progress)
+        if status == "done":
+            store.kv_delete(f"job_resume:{job.id}")
         for cb in list(self._callbacks):
             try:
                 cb(job)
@@ -219,6 +247,7 @@ class JobManager:
     def shutdown(self, cancel: bool = True, wait: bool = False) -> None:
         if cancel:
             for j in self.active():
+                j.error = j.error or INTERRUPTED_QUIT  # P9b: resumable writing jobs are offered on restart
                 j.cancel_event.set()
         self._pool.shutdown(wait=wait, cancel_futures=cancel)
 
@@ -343,3 +372,86 @@ def _agent_job(ctx: JobContext, text: str) -> str:
     path.write_text(f"# {ctx.job.title}\n\n{answer}\n", encoding="utf-8")
     ctx.set_output(path)
     return str(path)
+
+
+# --- P9b: RAM/CPU gate, interrupted jobs, resume ---
+def resource_wait_reason() -> str | None:
+    """"RAM" / "CPU" while a new background job should wait, else None."""
+    try:
+        import os
+
+        import psutil
+
+        if psutil.virtual_memory().available / 1048576 < config.JOB_MIN_FREE_MB:
+            return "RAM"
+        if os.getloadavg()[0] > (os.cpu_count() or 1) * config.JOB_MAX_LOAD_PER_CORE:
+            return "CPU"
+    except Exception as e:  # never block jobs because a probe failed
+        log.debug("resource probe failed: %s", e)
+    return None
+
+
+def _resumable() -> list[dict]:
+    from jarvis.core.writer import RESUME_PREFIX
+
+    out = []
+    for key in store.kv_prefix(RESUME_PREFIX):
+        try:
+            row = store.job_get(int(key[len(RESUME_PREFIX):]))
+        except ValueError:
+            continue
+        if row and row.get("status") not in ACTIVE + ("done",):
+            out.append(row)
+    return sorted(out, key=lambda r: r["id"])
+
+
+def announce_interrupted(mark_stale: bool = False) -> int:
+    """Tell the user once about writing jobs interrupted by a quit/restart. Returns how many were new.
+    mark_stale (main process only): create the manager first, which marks jobs a crash left running."""
+    if mark_stale:
+        get_manager()
+    rows = [r for r in _resumable() if (r.get("error") or "").startswith("interrupted")]
+    seen = set((store.kv_get("jobs_interrupted_notified") or "").split(","))
+    new = [r for r in rows if str(r["id"]) not in seen]
+    if not new:
+        return 0
+    ids = ", ".join(f"#{r['id']}" for r in new)
+    first = new[0]["id"]
+    from jarvis.core import notify as _notify
+
+    _notify.notify("Interrupted jobs", f"{len(new)} job(s) were interrupted ({ids}). Say 'resume job {first}' "
+                   "to continue.", level="info", source="jobs")
+    store.kv_set("jobs_interrupted_notified", ",".join(sorted((seen | {str(r["id"]) for r in new}) - {""})))
+    return len(new)
+
+
+def resume(query: str | int) -> str:
+    """Continue an interrupted writing job from its next section (as a new job, same output file)."""
+    import json
+
+    from jarvis.core import writer
+
+    digits = str(query).strip().lower().replace("job", "").strip().lstrip("#")
+    if not digits.isdigit():
+        rows = _resumable()
+        if not rows:
+            return "no interrupted writing job to resume"
+        digits = str(rows[-1]["id"])
+    jid = int(digits)
+    row = store.job_get(jid)
+    if row is None:
+        return f"no job #{jid}"
+    if row["status"] == "done":
+        return f"job #{jid} is already done: {row.get('output_path') or row['title']}"
+    if row["status"] in ACTIVE:
+        return f"job #{jid} is still {row['status']}"
+    raw = store.kv_get(f"{writer.RESUME_PREFIX}{jid}")
+    if not raw:
+        return f"job #{jid} can't be resumed (only writing jobs keep their progress)"
+    state = json.loads(raw)
+    job = get_manager().submit(row["title"], row["kind"] or "write", lambda ctx: writer.resume(ctx, state),
+                               row.get("request") or "", state.get("lang", "en"))
+    store.kv_delete(f"{writer.RESUME_PREFIX}{jid}")
+    n = len(state["sections"])
+    return (f"resuming job #{jid} as job #{job.id}: {row['title']}, from section "
+            f"{min(int(state.get('done') or 0) + 1, n)}/{n} (same file)")

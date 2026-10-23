@@ -13,7 +13,7 @@ QUIT = {"/quit", "/exit", "/q"}
 
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
-    if "--voice" in argv:  # `python -m jarvis --voice`; text chat stays the default
+    if "--voice" in argv or "--wake" in argv:  # `python -m jarvis --voice`; text chat stays the default
         from jarvis.voice import main as voice_main
 
         return voice_main(argv)
@@ -24,6 +24,10 @@ def main(argv: list[str] | None = None) -> int:
     bot = agent.Agent(channel="text")  # confirmations use safety's terminal prompt in text mode
     bot.warm()
     jobs.set_mode("text")  # finished background jobs print "[job #N done] ..."
+    try:  # P9b: "N jobs were interrupted - say 'resume job N'" (once)
+        jobs.announce_interrupted(mark_stale=True)
+    except Exception:
+        pass
     if tty:
         print(f"Jarvis text chat ({config.LLM_FAST} / {config.LLM_DEFAULT}, tools on). /quit to exit.")
     while True:
