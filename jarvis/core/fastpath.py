@@ -248,6 +248,16 @@ SWITCHES = [  # (intent name, tool, group, args, patterns); first full match win
         r"screenshot(?: now)?", r"capture (?:the |my )?(?:whole |entire |full )?screen",
         r"(?:ek )?(?:screenshot|स्क्रीनशॉट|स्क्रिनसट) (?:lo|le lo|lelo|khicho|kheecho|kheech lo|liu|linu|"
         r"लो|ले लो|लेलो|खिचो|खिच्नु|लिनु|लेउ)")),
+    ("theme", "set_theme", "display", {"mode": "light"}, _rx(
+        r"(?:switch|change|turn|set|put|go)(?: (?:on|to|the|my|laptop|desktop|computer|theme|it|into|of))* (?:to |into )?"
+        r"(?:the )?light (?:mode|theme)(?: now| please)?",
+        r"(?:enable|use|activate) (?:the )?light (?:mode|theme)(?: now)?", r"light (?:mode|theme)(?: on| please| now)?",
+        r"(?:make it|make the (?:screen|laptop|desktop)) light")),
+    ("theme", "set_theme", "display", {"mode": "dark"}, _rx(
+        r"(?:switch|change|turn|set|put|go)(?: (?:on|to|the|my|laptop|desktop|computer|theme|it|into|of))* (?:to |into )?"
+        r"(?:the )?dark (?:mode|theme)(?: now| please)?",
+        r"(?:enable|use|activate) (?:the )?dark (?:mode|theme)(?: now)?", r"dark (?:mode|theme)(?: on| please| now)?",
+        r"(?:make it|make the (?:screen|laptop|desktop)) dark", r"night mode(?: on)?")),
     ("lock", "lock_screen", "power", {}, _rx(
         r"lock (?:the |my |this )?(?:screen|computer|pc|laptop|desktop|system|machine)(?: now)?",
         r"(?:screen|computer|laptop|स्क्रीन|स्क्रिन|कम्प्युटर|कंप्यूटर) (?:lock|लॉक|लक) " + _DO_HI)),
@@ -444,7 +454,7 @@ _T = {
     "name": {"en": "Nice to meet you, {x}. I'll remember your name.", "hi": "आपसे मिलकर अच्छा लगा, {x}। मैं आपका नाम याद रखूँगा।",
              "ne": "भेटेर खुसी लाग्यो, {x}। म तपाईंको नाम सम्झिराख्छु।"},
 }
-_SYSTEM = {"volume", "brightness", "mute", "mic", "media", "screenshot", "lock"}
+_SYSTEM = {"volume", "brightness", "mute", "mic", "media", "screenshot", "lock", "theme"}
 
 
 def _render_system(intent: Intent, out: str, lang: str) -> str:
@@ -459,6 +469,8 @@ def _render_system(intent: Intent, out: str, lang: str) -> str:
         if action == "status":
             return out[:1].upper() + out[1:].rstrip(".") + "."
         return _say({"pause": "paused", "play": "playing"}.get(action, action), lang, "")
+    if intent.name == "theme":
+        return out if not out.lower().startswith("error") else out
     return _say(intent.name, lang, "")  # screenshot / lock
 _TIME_OUT = re.compile(r"^It's (?P<h12>\d+:\d\d) (?P<ampm>AM|PM) on (?P<day>\w+), (?P<date>\d+ \w+ \d+)"
                        r"(?: in (?P<where>.+?))?\.$")

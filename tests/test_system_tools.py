@@ -409,3 +409,27 @@ def test_routing_each_group():
     for text, group in ROUTES.items():
         assert group in router.route(text, log_it=False).groups, text
     assert router.route("open youtube", log_it=False).groups == ["browser"]  # media no longer joins
+
+
+def test_set_theme_keeps_custom_theme_family(monkeypatch):
+    from jarvis.tools.general import set_theme as st
+    state = {("org.gnome.desktop.interface", "color-scheme"): "prefer-dark",
+             ("org.gnome.desktop.interface", "gtk-theme"): "WhiteSur-Dark",
+             ("org.gnome.shell.extensions.user-theme", "name"): "WhiteSur-Dark"}
+    monkeypatch.setattr(st._sys, "which", lambda b: "/usr/bin/" + b)
+    monkeypatch.setattr(st, "_get", lambda schema, key: state.get((schema, key)))
+    monkeypatch.setattr(st, "_set", lambda schema, key, v: state.__setitem__((schema, key), v))
+    monkeypatch.setattr(st, "_installed", lambda name: name in {"WhiteSur-Light", "WhiteSur-Dark"})
+    out = st.set_theme.invoke({"mode": "light"}) if hasattr(st.set_theme, "invoke") else st.set_theme("light")
+    assert "light" in out
+    assert state[("org.gnome.desktop.interface", "color-scheme")] == "prefer-light"
+    assert state[("org.gnome.desktop.interface", "gtk-theme")] == "WhiteSur-Light"
+    assert ("org.gnome.desktop.interface", "icon-theme") not in state  # icons/cursor untouched
+
+
+def test_yes_no_understands_run_it_and_refusal_variants():
+    from jarvis.core import meta, safety, fastpath
+    assert safety.parse_yes_no("Just run it.") is True and safety.parse_yes_no("haan karo") is True
+    assert safety.parse_yes_no("hmm maybe") is None and safety.parse_yes_no("no, don't") is False
+    assert meta.looks_like_refusal("I don't currently have a tool to directly change the system theme.")
+    assert fastpath.match("Okay, switch the light mode now.").args == {"mode": "light"}

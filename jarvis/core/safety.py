@@ -27,7 +27,10 @@ YES_WORDS = {
     "proceed", "haan", "han", "haa", "ha", "hā", "ho", "hajur", "huncha", "hunchha", "hunxa",
     "theek", "thik", "ji", "jee", "हो", "हाँ", "हां", "हा", "जी", "हजुर", "हुन्छ", "ठीक",
 }
-YES_PHRASES = ("do it", "go ahead", "of course")
+YES_PHRASES = ("do it", "go ahead", "of course", "run it", "just run", "go for it", "please do", "yes please",
+               "make it", "create it", "create a tool", "make a tool", "make one", "carry on", "continue",
+               "absolutely", "definitely", "why not", "sounds good", "let's do", "lets do", "gara", "garnus",
+               "gardinus", "karo", "kar do", "kardo", "chalau", "chala do", "चलाउ", "गर", "करो", "कर दो")
 NO_WORDS = {
     "n", "no", "nope", "nah", "don't", "dont", "cancel", "stop", "abort", "deny", "negative", "never",
     "nahi", "nahin", "nai", "mat", "hoina", "haina", "hoeena", "नहीं", "नही", "ना", "मत", "होइन",

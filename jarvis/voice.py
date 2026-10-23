@@ -79,7 +79,15 @@ class VoiceLoop:
         except (audio.AudioError, stt.STTError) as e:
             print(f"[confirm failed: {e}]")
             return False
-        ok = safety.parse_yes_no(tr.text) is True
+        verdict = safety.parse_yes_no(tr.text)
+        if verdict is None and not getattr(self, "_reasking", False):
+            print(f"you({tr.lang})> {tr.text}   [unclear]", flush=True)
+            self._reasking = True
+            try:  # ask once more instead of silently treating "unclear" as no
+                return self.confirm("Sorry, was that a yes or a no?")
+            finally:
+                self._reasking = False
+        ok = verdict is True
         print(f"you({tr.lang})> {tr.text}   [{'yes' if ok else 'no'}]", flush=True)
         return ok
 

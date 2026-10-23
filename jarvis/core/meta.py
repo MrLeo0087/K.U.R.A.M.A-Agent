@@ -23,8 +23,9 @@ _cache: dict[tuple[str, ...], dict] = {}
 
 # Inability phrasing (en/hi/ne), checked on the first ~240 chars of a tool-less answer.
 _REFUSAL = re.compile(
-    r"\b(?:i\s+(?:don'?t|do not)\s+have\s+(?:a\s+way|any\s+way|access|the\s+ability|real[- ]time|live|"
-    r"internet|browsing|tools?)|i\s+(?:can'?t|cannot|can not|am unable|'m unable|am not able|'m not able)|"
+    r"\b(?:i\s+(?:don'?t|do not)\s+(?:currently\s+|really\s+|yet\s+|actually\s+)?have\s+(?:a\s+way|any\s+way|"
+    r"access|the\s+ability|real[- ]time|live|internet|browsing|tools?|a\s+tool|any\s+tools?)|"
+    r"there(?:'s| is)\s+no\s+tool|i\s+(?:can'?t|cannot|can not|am unable|'m unable|am not able|'m not able)|"
     r"no\s+(?:tool|way to|access to)|unable to|not able to|i\s+(?:don'?t|do not)\s+know|"
     r"i\s+have\s+no\s+(?:way|access|tool)|beyond my (?:capabilities|abilities)|as an ai)"
     r"|मैं नहीं|नहीं कर सकत|नहीं बता सकत|सक्दिन|सक्दैन|थाहा छैन|पता नहीं", re.I)

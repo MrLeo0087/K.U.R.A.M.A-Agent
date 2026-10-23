@@ -81,7 +81,9 @@ GEN_PROMPT = (
     "the user would change next time (e.g. the target date, amount, city or image path; get today with "
     "datetime.date.today()); arg_hint says what arg is (e.g. 'target date YYYY-MM-DD') and arg is the value "
     "for this request. name: general snake_case with no specific values. "
-    "summary: one plain sentence a non-technical person understands. needs: what it touches (none if pure)."
+    "summary: one plain sentence a non-technical person understands. needs: what it touches (none if pure). "
+    "Change ONLY what the user asked for; never reset or replace other settings (themes, icons, cursors, "
+    "fonts, files). Prefer the smallest change (GNOME light/dark = org.gnome.desktop.interface color-scheme)."
 )
 
 
