@@ -104,3 +104,40 @@ def geocode(place: str) -> dict | None:
 def label(geo: dict) -> str:
     name, country = geo.get("name", ""), geo.get("country", "")
     return name if not country or country == name else f"{name}, {country}"
+
+
+# WMO weather interpretation codes -> words
+CODES = {
+    0: "clear sky", 1: "mainly clear", 2: "partly cloudy", 3: "overcast", 45: "fog", 48: "freezing fog",
+    51: "light drizzle", 53: "drizzle", 55: "heavy drizzle", 56: "freezing drizzle", 57: "freezing drizzle",
+    61: "light rain", 63: "rain", 65: "heavy rain", 66: "freezing rain", 67: "freezing rain",
+    71: "light snow", 73: "snow", 75: "heavy snow", 77: "snow grains", 80: "light showers",
+    81: "showers", 82: "violent showers", 85: "snow showers", 86: "heavy snow showers",
+    95: "thunderstorm", 96: "thunderstorm with hail", 99: "thunderstorm with heavy hail",
+}
+
+
+def describe(code) -> str:
+    try:
+        return CODES.get(int(code), "unknown conditions")
+    except (TypeError, ValueError):
+        return "unknown conditions"
+
+
+def current_line(place: str) -> str:
+    """'It's 24°C and mainly clear in Kathmandu.' or '' (plain HTTP, no tool registry: the daily
+    digest worker uses this so it never imports LangChain)."""
+    try:
+        geo = geocode(place)
+        if not geo:
+            return ""
+        data = get_json("https://api.open-meteo.com/v1/forecast", {
+            "latitude": geo["lat"], "longitude": geo["lon"], "timezone": "auto",
+            "current": "temperature_2m,weather_code"})
+        cur = data.get("current") or {}
+        t = cur.get("temperature_2m")
+        if t is None:
+            return ""
+        return f"It's {round(float(t))}°C and {describe(cur.get('weather_code'))} in {geo.get('name') or place}."
+    except Exception:
+        return ""

@@ -10,22 +10,7 @@ from jarvis.tools.general import _geo
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 _cache = _geo.TTLCache(config.WEATHER_CACHE_S)
 
-# WMO weather interpretation codes -> words
-CODES = {
-    0: "clear sky", 1: "mainly clear", 2: "partly cloudy", 3: "overcast", 45: "fog", 48: "freezing fog",
-    51: "light drizzle", 53: "drizzle", 55: "heavy drizzle", 56: "freezing drizzle", 57: "freezing drizzle",
-    61: "light rain", 63: "rain", 65: "heavy rain", 66: "freezing rain", 67: "freezing rain",
-    71: "light snow", 73: "snow", 75: "heavy snow", 77: "snow grains", 80: "light showers",
-    81: "showers", 82: "violent showers", 85: "snow showers", 86: "heavy snow showers",
-    95: "thunderstorm", 96: "thunderstorm with hail", 99: "thunderstorm with heavy hail",
-}
-
-
-def describe(code) -> str:
-    try:
-        return CODES.get(int(code), "unknown conditions")
-    except (TypeError, ValueError):
-        return "unknown conditions"
+CODES, describe = _geo.CODES, _geo.describe  # WMO codes live in _geo (also used by the digest)
 
 
 def _r(x) -> str:

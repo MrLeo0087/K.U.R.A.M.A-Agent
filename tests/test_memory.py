@@ -516,3 +516,30 @@ def test_routing_knowledge_and_usage_groups():
     assert router.rule_groups("how many tokens did I use")[0] == "usage"
     assert "memory" in router.rule_groups("what did we talk about yesterday")
     assert "files" not in router.rule_groups("what does my code do with telegram")
+
+
+# --------------------------------------------------------------------------- RAM rules (8 GB laptop)
+def test_vectors_float16_streamed_in_blocks(tmp_path, idx, fake_model):
+    make_repo(tmp_path / "repo")
+    idx.index_path(tmp_path / "repo")
+    assert idx.vec_dtype() == "float16"
+    blob = idx._q("SELECT vec FROM vectors LIMIT 1")[0][0]
+    assert len(blob) == FakeModel.dim * 2
+    qv = idx.embedder.embed(["telegram stale messages"], query=True)[0]
+    full = idx.scan_vectors(qv, 3)
+    assert idx.scan_vectors(qv, 3, block=1) == full  # block-streamed top-n == one-shot
+    assert not hasattr(idx, "_mat")  # no vector matrix kept between searches
+
+
+def test_no_heavy_imports_at_startup_or_in_digest_worker():
+    import subprocess
+    import sys
+    code = ("import sys; import jarvis.core.agent, jarvis.core.memory, jarvis.workers.daily_digest, jarvis.core.digest;"
+            "bad=[m for m in ('fastembed','onnxruntime','numpy') if m in sys.modules];"
+            "print(bad)")
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=str(config.ROOT), timeout=60)
+    assert out.stdout.strip() == "[]", out.stderr[-500:]
+    code2 = ("import sys; import jarvis.workers.daily_digest, jarvis.core.digest;"
+             "print([m for m in ('langchain_core','jarvis.core.llm','jarvis.core.registry','fastembed') if m in sys.modules])")
+    out2 = subprocess.run([sys.executable, "-c", code2], capture_output=True, text=True, cwd=str(config.ROOT), timeout=60)
+    assert out2.stdout.strip() == "[]", out2.stderr[-500:]

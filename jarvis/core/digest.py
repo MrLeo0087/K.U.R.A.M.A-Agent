@@ -49,9 +49,13 @@ def git_activity(t0: float, t1: float, roots: list[Path] | None = None) -> list[
 
 
 def _weather(weather_fn: Callable[[str], str] | None) -> str:
-    from jarvis.core import greeting
+    if weather_fn is not None:
+        from jarvis.core import greeting
+        return greeting.weather_line(weather_fn)
+    from jarvis.core import profile
+    from jarvis.tools.general import _geo  # plain HTTP: keeps LangChain out of the workers process
 
-    return greeting.weather_line(weather_fn)
+    return _geo.current_line(profile.home_place())
 
 
 def build_digest(date: str = "today", now: datetime | None = None, use_llm: bool | None = None,

@@ -3,13 +3,13 @@
 Storage is one SQLite file (config.MEMORY_DB_PATH): `files` (path, mtime, size, sha1), `chunks`
 (path + line range + text), `chunks_fts` (FTS5, BM25) and `vectors` (float32 blobs). Search fuses
 BM25 and brute-force numpy cosine with reciprocal rank fusion. Why not FAISS: at <= ~50k chunks x
-384 dims a single matrix-vector product takes a few ms and ~75 MB at the very top end, FAISS adds a
+384 dims a streamed matrix-vector scan takes a few ms per block, FAISS adds a
 native dependency and a second store to keep in sync, and SQLite already gives us FTS5,
 incremental updates and deletes for free.
 
 Embeddings come from fastembed (ONNX Runtime, no torch) and are loaded lazily on the first
-index/search call; the model and the cached vector matrix are dropped after
-config.EMBED_IDLE_UNLOAD_S idle seconds. By default (config.EMBED_IN_SUBPROCESS) the model lives in a
+index/search call and dropped after config.EMBED_IDLE_UNLOAD_S idle seconds. Vectors are stored
+as float16 and streamed from SQLite in blocks per search (never held in RAM between searches). By default (config.EMBED_IN_SUBPROCESS) the model lives in a
 child process (`python -m jarvis.core.memory _worker`), so unloading frees everything, including
 the ~80 MB of onnxruntime/fastembed imports that a `del` cannot release in-process. If the model cannot load (offline) search is BM25-only
 and missing vectors are filled in on the next index pass.
@@ -115,6 +115,10 @@ def _worker_loop() -> None:
     """Child side of ProcessModel."""
     out = sys.stdout.buffer
     sys.stdout = sys.stderr  # stray prints must never corrupt the pickle stream
+    try:
+        os.nice(config.EMBED_NICE)  # background priority: the desktop stays responsive while indexing
+    except OSError:
+        pass
     import numpy as np
     import psutil
 
@@ -821,6 +825,10 @@ def start_index_job(path: str | Path | None = None, lang: str = "en") -> Any:
     label = Path(path).name if path else "your project and notes"
 
     def run(ctx: Any) -> None:
+        try:  # lower only this job thread's CPU priority (Linux: per-thread nice)
+            os.setpriority(os.PRIO_PROCESS, threading.get_native_id(), config.EMBED_NICE)
+        except (OSError, AttributeError):
+            pass
         st = (index_path(path, progress=ctx.progress, cancel=ctx.check) if path
               else index_roots(progress=ctx.progress, cancel=ctx.check))
         ctx.progress(f"{st.get('files', 0)} files, {st.get('indexed', 0)} (re)indexed, "

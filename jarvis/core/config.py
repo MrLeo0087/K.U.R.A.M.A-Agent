@@ -373,10 +373,11 @@ RATE_INTERACTIVE_MAX_WAIT_S = 3.0  # interactive calls wait at most this long, t
 # (220 MB, 384-d, 50+ languages incl. hi/ne). Changing the model re-embeds the whole index.
 EMBED_MODEL = os.getenv("JARVIS_EMBED_MODEL", "BAAI/bge-small-en-v1.5")
 EMBED_CACHE_DIR = DATA_DIR / "models"
-EMBED_THREADS = 4  # ONNX intra-op threads (leave cores for VS Code / Chrome)
-EMBED_BATCH = 8  # small batches: less padding, lower peak RAM, same or better speed on CPU
+EMBED_THREADS = 2  # ONNX intra-op threads (leave cores for VS Code / Chrome)
+EMBED_BATCH = 8  # measured on the repo: batch 8 peaks at ~475 MB vs ~680 MB for 16, and is faster on CPU
+EMBED_NICE = 10  # the embedding process and the index job thread run at low CPU priority
 EMBED_IN_SUBPROCESS = True  # model in a child process: unloading frees ALL its RAM (incl. imports)
-EMBED_IDLE_UNLOAD_S = 120.0  # drop the model (and the cached vector matrix) after this idle time
+EMBED_IDLE_UNLOAD_S = 120.0  # stop the embedding process after this idle time
 MEMORY_DB_PATH = DATA_DIR / "memory.db"  # chunks + FTS5 + float32 vectors (separate from jarvis.db)
 MEMORY_ROOTS: list[Path] = [ROOT] + ([Path.home() / "notes"] if (Path.home() / "notes").is_dir() else [])
 MEMORY_EXTS = (".py", ".md", ".txt", ".toml", ".yaml", ".yml", ".json", ".ipynb", ".js", ".jsx", ".ts",
