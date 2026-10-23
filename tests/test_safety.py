@@ -14,11 +14,13 @@ def test_safe_tool_runs_and_is_logged():
     assert (row["tool"], row["safety"], row["outcome"], row["ok"]) == ("get_time", "safe", "allowed", 1)
 
 
-def test_confirm_yes_runs():
+def test_confirm_yes_runs(tmp_path):
     asked = []
-    r = safety.execute("dummy_delete", '{"path": "/tmp/x"}', confirm=lambda p: asked.append(p) or True)
-    assert r.ok and "would delete" in r.output
-    assert asked and asked[0].startswith("Should I delete a file or folder") and "/tmp/x" in asked[0]
+    f = tmp_path / "x"
+    f.write_text("x")
+    r = safety.execute("delete_to_trash", '{"path": "%s"}' % f, confirm=lambda p: asked.append(p) or True)
+    assert r.ok and "trash" in r.output
+    assert asked and asked[0].startswith("Should I move a file or folder to the trash") and str(f) in asked[0]
     row = logs()[0]
     assert (row["safety"], row["outcome"]) == ("confirm", "allowed")
 
@@ -28,7 +30,7 @@ def test_confirm_no_timeout_and_errors_deny():
         raise TimeoutError
 
     for confirm in (lambda p: False, None, boom):
-        r = safety.execute("dummy_delete", {"path": "/tmp/y"}, confirm=confirm)
+        r = safety.execute("delete_to_trash", {"path": "/tmp/y"}, confirm=confirm)
         assert not r.ok and "declined" in r.output
     rows = logs()[:3]
     assert all((x["outcome"], x["safety"], x["ok"]) == ("denied", "confirm", 0) for x in rows)
@@ -52,7 +54,7 @@ def test_blocked_never_runs():
 
 def test_unknown_tool_and_bad_args_logged():
     assert not safety.execute("nope", {}).ok
-    assert not safety.execute("dummy_delete", {}).ok  # missing path
+    assert not safety.execute("delete_to_trash", {}).ok  # missing path
     assert [x["outcome"] for x in logs()[:2]] == ["error", "error"]
 
 

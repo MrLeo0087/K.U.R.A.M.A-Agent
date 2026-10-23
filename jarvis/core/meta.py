@@ -13,8 +13,11 @@ import re
 from jarvis.core import config, registry
 
 NAME = "request_tools"
-HINT = ("Tool groups are available through request_tools. If one fits the user's request, call it "
-        "now; if none fits, reply in one short sentence that Jarvis can't do that yet.")
+HINT = ("Tool groups are available through request_tools. If one fits the user's request, call it now. "
+        "If none fits but it is a real task Jarvis could do on this computer, request toolsmith. "
+        "Otherwise reply kindly in one short sentence that you can't do that yet.")
+TOOLSMITH_HINT = ("No tool exists for this task yet: call make_tool now (it asks the user before building "
+                  "anything) instead of saying you can't.")
 LOADED = "Loaded tools for: {groups}. Call the right tool now."
 _cache: dict[tuple[str, ...], dict] = {}
 
@@ -28,10 +31,12 @@ _REFUSAL = re.compile(
 
 
 def looks_like_refusal(text: str) -> bool:
-    return bool(_REFUSAL.search((text or "")[:240]))
+    return bool(_REFUSAL.search((text or "")[:240].replace("\u2019", "'")))  # curly apostrophes too
 
 
 def gloss(group: str) -> str:
+    if group == "skills":  # saved toolsmith skills: their names say what they do
+        return ", ".join(t.name for t in registry.schemas_for(["skills"])[:6])
     if group in config.TOOL_GROUP_GLOSS:
         return config.TOOL_GROUP_GLOSS[group]
     return " ".join(config.TOOL_GROUP_DESCRIPTIONS.get(group, group).split()[:4]).rstrip(",;")

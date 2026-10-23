@@ -6,6 +6,7 @@ text mode, a spoken yes/no hook in voice mode; anything unanswered is denied.
 """
 from __future__ import annotations
 
+import contextvars
 import logging
 import re
 import select
@@ -87,6 +88,25 @@ def get_confirm(mode: str) -> ConfirmFn:
     return _HOOKS.get(mode, deny_all)
 
 
+# --- per-call context (P7c): tools that ask their own questions (toolsmith, file writes) ---
+_CTX: contextvars.ContextVar[dict] = contextvars.ContextVar("jarvis_tool_ctx", default={})
+
+
+def context() -> dict:
+    """The running tool call's context: confirm fn, user_text, lang, mode (empty outside execute)."""
+    return _CTX.get()
+
+
+def ask(prompt: str) -> bool:
+    """Ask the user from inside a tool (the caller's confirm hook); no hook or an error means no."""
+    fn = _CTX.get().get("confirm") or deny_all
+    try:
+        return bool(fn(prompt))
+    except Exception as e:
+        log.warning("confirmation failed: %s", e)
+        return False
+
+
 def describe(tool: registry.BaseTool, args: dict) -> str:
     """Short question for the user, e.g. "Should I delete a file (path=/tmp/x)?"."""
     what = tool.description.rstrip(". ")
@@ -100,7 +120,7 @@ def describe(tool: registry.BaseTool, args: dict) -> str:
 
 # --- the gate ---
 def execute(name: str, args: Any = None, confirm: ConfirmFn | None = None,
-            reg: registry.Registry | None = None) -> ToolResult:
+            reg: registry.Registry | None = None, ctx: dict | None = None) -> ToolResult:
     """Run one tool call through the safety policy and log it."""
     reg = reg or registry.REGISTRY
     t0 = time.monotonic()
@@ -136,5 +156,9 @@ def execute(name: str, args: Any = None, confirm: ConfirmFn | None = None,
         if not approved:
             return done(ToolResult(False, f"The user declined: {name} was not run.", "denied"),
                         "denied", "confirm", clean)
-    res = reg.call(name, clean)
+    token = _CTX.set({**(ctx or {}), "confirm": confirm or deny_all})
+    try:
+        res = reg.call(name, clean)
+    finally:
+        _CTX.reset(token)
     return done(res, "allowed" if res.ok else "error", level, clean)

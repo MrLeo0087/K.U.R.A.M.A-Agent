@@ -30,12 +30,12 @@ def repo(tmp_path):
 
 
 def test_tools_registered_with_groups_and_safety():
-    tools = {t.name: t for t in registry.schemas_for(["dev", "git", "files"])}
+    tools = {t.name: t for t in registry.schemas_for(["dev", "git", "filesearch"])}
     expect = {"scaffold_project": "confirm", "env_doctor": "safe", "find_files": "safe",
               "git_status": "safe", "git_log": "safe", "git_diff_summary": "safe",
               "git_commit": "confirm", "git_branch": "confirm", "run_tests": "safe"}
     assert {n: registry.safety_of(tools[n]) for n in expect} == expect
-    assert registry.group_of(tools["find_files"]) == "files"
+    assert registry.group_of(tools["find_files"]) == "filesearch"
     assert registry.group_of(tools["git_commit"]) == "git" and registry.group_of(tools["env_doctor"]) == "dev"
 
 

@@ -1,6 +1,9 @@
 """Multi-intent planner: cheap regex detection first, a tiny fast-tier structured call only when flagged.
 
-plan(text) -> Plan(tasks=[{"text", "kind": "quick"|"long"}], method="single"|"llm"|"rules").
+plan(text) -> Plan(tasks=[{"text", "kind": "quick"|"long", "depends_on"?: [i, ...]}], method=...).
+P7c: a task that refers back ("it", "that", "the folder", "then", ...) depends on the previous one;
+chains() groups dependent tasks so the agent runs them in order (independent ones still fan out).
+Trailing "and give me the result / tell me / summarize it" clauses belong to the previous task.
 Single-intent requests cost zero extra tokens. The long-job heuristic (big writing/code/scan
 requests) also applies to single requests, so "write a 2000-word essay" becomes a background job.
 """
@@ -61,7 +64,9 @@ PLAN_PROMPT = (
     "own task, even if joined by and/also/then/र/अनि/और. Keep each task in the user's own words and "
     "language (only fix obvious speech-to-text slips), e.g. 'what is the time in Nepal'. kind=long only for "
     "writing long text (essay, article, story, report), generating code, or scanning a whole "
-    "project; else quick.\n"
+    "project; else quick. depends_on: indices of earlier tasks whose result this task needs (it, that, "
+    "the folder/file/poem, then). 'give me the result', 'tell me', 'summarize it' are part of the "
+    "previous task, never a task of their own.\n"
     "Example: 'open google and tell me the time' -> [open Google (quick), tell me the time (quick)]"
 )
 
@@ -69,6 +74,7 @@ PLAN_PROMPT = (
 class Task(BaseModel):
     text: str = Field(description="one self-contained task")
     kind: Literal["quick", "long"] = "quick"
+    depends_on: list[int] = Field(default_factory=list, description="indices of earlier tasks it needs")
 
 
 class TaskPlan(BaseModel):
@@ -156,7 +162,81 @@ def split_clauses(text: str) -> list[str]:
     return [c.strip() for c in _SEP.split(text) if c and c.strip()]
 
 
+# "...and give me the result": asks for the previous task's answer -> part of that task (P7c).
+RESULT_TAIL = re.compile(
+    r"^(?:(?:and|then|also|aur|ani)\s+)*(?:please\s+)?(?:(?:can|could)\s+you\s+)?(?:"
+    r"(?:give|tell|show|bring|send)\s+(?:me|us)(?:\s+(?:the|its|their|all)?\s*(?:results?|answers?|summary|"
+    r"details|scores?|output|it|that|them|what\s+you\s+(?:find|found)|top\s+results?))?|let\s+me\s+know|"
+    r"summari[sz]e\s+(?:it|that|them|the\s+results?)|read\s+(?:it|that|them)(?:\s+(?:out|aloud))?(?:\s+to\s+me)?|"
+    r"explain\s+(?:it|that|them)|(?:mujhe\s+)?(?:result\s+)?batao|malai\s+(?:bhana|bhannu|dekhau)|"
+    r"(?:मुझे\s+)?बताओ|मलाई\s+भन\S*|नतिजा\s+देखाउ\S*)\s*[.!?।]*$", re.I)
+# Refers back to an earlier task's result -> depends on the previous task (P7c).
+_REF = re.compile(
+    r"(?<![\w'])(?:it|its|that|them|those|then|after\s+that|afterwards|the\s+(?:folder|file|directory|poem|"
+    r"text|results?|output|note|story|essay|code|script|song|list|summary|answer|message|page|image|photo|"
+    r"document|project|repo))(?![\w'])|त्यो|त्यसलाई|त्यसमा|यसलाई|यसमा|उसे|इसे|उसमें|इसमें|फिर|त्यसपछि", re.I)
+
+
+def is_result_tail(clause: str) -> bool:
+    return bool(RESULT_TAIL.match(clause.strip()))
+
+
+def merge_tails(tasks: list[dict]) -> list[dict]:
+    """Glue "give me the result"-style tasks onto the previous task; remap depends_on indices."""
+    out: list[dict] = []
+    remap: dict[int, int] = {}
+    for i, t in enumerate(tasks):
+        if out and is_result_tail(t["text"]):
+            out[-1] = {**out[-1], "text": f"{out[-1]['text'].rstrip(' .,')} and {t['text'].strip()}"}
+            remap[i] = len(out) - 1
+            continue
+        remap[i] = len(out)
+        out.append(dict(t))
+    for j, t in enumerate(out):
+        deps = sorted({remap[d] for d in t.get("depends_on", []) if d in remap and remap[d] < j})
+        if deps:
+            t["depends_on"] = deps
+        else:
+            t.pop("depends_on", None)
+    return out
+
+
+def add_dependencies(tasks: list[dict]) -> list[dict]:
+    """Simple rule on top of the model's depends_on: a task that refers back depends on the previous one."""
+    for i, t in enumerate(tasks):
+        deps = {d for d in t.get("depends_on", []) if isinstance(d, int) and 0 <= d < i}
+        if i and _REF.search(t["text"]):
+            deps.add(i - 1)
+        if deps:
+            t["depends_on"] = sorted(deps)
+        else:
+            t.pop("depends_on", None)
+    return tasks
+
+
+def chains(tasks: list[dict]) -> list[list[int]]:
+    """Connected groups of task indices (in order). Single-index groups are independent tasks."""
+    parent = list(range(len(tasks)))
+
+    def find(x: int) -> int:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    for i, t in enumerate(tasks):
+        for d in t.get("depends_on", []):
+            if 0 <= d < len(tasks):
+                parent[find(i)] = find(d)
+    groups: dict[int, list[int]] = {}
+    for i in range(len(tasks)):
+        groups.setdefault(find(i), []).append(i)
+    return sorted(groups.values(), key=lambda g: g[0])
+
+
 def is_command(clause: str) -> bool:
+    if is_result_tail(clause):
+        return False
     return bool(router.looks_like_command(clause) or router.rule_groups(clause)
                 or _HI_NE_VERBS.search(clause) or is_long_job(clause))
 
@@ -193,8 +273,13 @@ def decompose(text: str) -> list[dict]:
     msgs = [{"role": "system", "content": PLAN_PROMPT}, {"role": "user", "content": text}]
     tp = llm.structured(msgs, TaskPlan, tier="fast", purpose="planner",
                         max_tokens=config.PLANNER_MAX_TOKENS, priority="interactive")
-    tasks = [{"text": t.text.strip(), "kind": _kind(t.text, t.kind)}
-             for t in tp.tasks if t.text and t.text.strip()]
+    tasks = []
+    for t in tp.tasks:
+        if t.text and t.text.strip():
+            d = {"text": t.text.strip(), "kind": _kind(t.text, t.kind)}
+            if t.depends_on:
+                d["depends_on"] = list(t.depends_on)
+            tasks.append(d)
     return tasks[: config.PLANNER_MAX_TASKS]
 
 
@@ -209,6 +294,7 @@ def plan(text: str) -> Plan:
         tasks, method = [], "rules"
     if not tasks:
         tasks, method = _rule_tasks(text), "rules"
+    tasks = add_dependencies(merge_tails(tasks))
     if len(tasks) == 1 and tasks[0]["kind"] == "quick":
         tasks = [{"text": text, "kind": "quick"}]  # really one request: keep the user's wording
     return Plan(tasks, method)

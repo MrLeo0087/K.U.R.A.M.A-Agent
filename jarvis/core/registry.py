@@ -226,6 +226,12 @@ class Registry:
                         imported.append(info.name)
                     except Exception as e:  # one broken tool must not kill the others
                         log.error("failed to load tool module %s: %s", info.name, e)
+        if "jarvis.tools" in self.packages:  # P7c: saved toolsmith skills (small JSON files, lazy run)
+            try:
+                from jarvis.core import toolsmith
+                toolsmith.register_saved(self)
+            except Exception as e:
+                log.warning("could not load saved skills: %s", e)
         self._discovered = True
         return imported
 

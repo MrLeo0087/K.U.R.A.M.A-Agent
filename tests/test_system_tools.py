@@ -380,15 +380,15 @@ def test_fastpath_system_answers_without_llm(desk, monkeypatch):
     def boom(*a, **k):
         raise AssertionError("the fast path must not call the LLM")
     monkeypatch.setattr(llm, "chat", boom)
-    assert fastpath.try_answer("volume up", lang="en").answer == "Volume is at 60%."
+    assert fastpath.try_answer("volume up", lang="en").answer == "Done, the volume is at 60%."
     assert fastpath.try_answer("set volume to 25", lang="hi").answer == "आवाज़ 25% पर है।"
-    assert fastpath.try_answer("mute", lang="en").answer == "Sound muted."
+    assert fastpath.try_answer("mute", lang="en").answer == "Okay, sound is muted."
     assert fastpath.try_answer("mute mic", lang="ne").answer == "माइक बन्द गरें।"
-    assert fastpath.try_answer("pause", lang="en").answer == "Paused."
+    assert fastpath.try_answer("pause", lang="en").answer == "Okay, paused."
     assert fastpath.try_answer("what's playing", lang="en").answer == "Paused: Artist - Song."
-    assert fastpath.try_answer("brightness to 80", lang="en").answer == "Brightness is at 80%."
-    assert fastpath.try_answer("take a screenshot", lang="en").answer.startswith("Screenshot saved")
-    assert fastpath.try_answer("lock the screen", lang="en").answer == "Locking the screen."
+    assert fastpath.try_answer("brightness to 80", lang="en").answer == "Done, brightness is at 80%."
+    assert fastpath.try_answer("take a screenshot", lang="en").answer.startswith("Done! Your screenshot")
+    assert fastpath.try_answer("lock the screen", lang="en").answer == "Sure, locking the screen."
     desk.bright_denied = True
     ans = fastpath.try_answer("brightness up", lang="en").answer
     assert ans.startswith("Sorry, that didn't work: no permission") and "video" in ans

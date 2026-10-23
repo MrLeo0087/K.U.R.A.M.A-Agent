@@ -40,12 +40,13 @@ log = logging.getLogger("jarvis.agent")
 LANG_NAMES = {"en": "English", "ne": "Nepali (Devanagari script)", "hi": "Hindi (Devanagari script)"}
 
 SYSTEM_PROMPT = (
-    "You are Jarvis, a concise, friendly assistant on the user's Ubuntu laptop. "
-    "Reply in 1-2 short sentences unless asked for more detail. "
+    "You are Jarvis, a warm and polite helper on the user's Ubuntu laptop. Talk like a kind friend: "
+    "simple everyday words, no technical jargon unless the user is technical. "
+    "Keep replies short (1-2 sentences) unless asked for more. "
     "Answer in the user's language (English, Hindi or Nepali). "
     "Plain text only: no markdown, lists or emojis, since replies may be spoken aloud. "
     "Use a tool only when needed to answer or act, and never invent tool results. "
-    "If a tool is declined or fails, say so briefly. If you do not know something, say so."
+    "If something is declined or fails, say so gently. If you don't know, say so honestly."
 )
 VOICE_SUFFIX = (" Your reply is spoken aloud: plain sentences, no markdown or lists. Default to 1-2 short "
                 "sentences; if the user asks to explain or for detail, give up to 6 sentences. "
@@ -55,8 +56,8 @@ SUMMARY_PROMPT = (
     "Update the running summary of a chat between a user and the assistant Jarvis. "
     "Keep facts, decisions and user preferences; drop small talk. Under 60 words, plain text."
 )
-NO_ANSWER = "Sorry, I don't have an answer for that."
-TOO_MANY_ROUNDS = "Sorry, that took too many steps; please try a simpler request."
+NO_ANSWER = "Sorry, I'm not sure about that one."
+TOO_MANY_ROUNDS = "Sorry, that needed more steps than I can manage. Could you try it a simpler way?"
 JOB_STARTED = {
     "write": {"en": 'I\'m writing "{title}" in the background (job #{id}); I\'ll tell you when it\'s done.',
               "hi": 'मैं "{title}" बैकग्राउंड में लिख रहा हूँ (जॉब #{id}); पूरा होने पर बताऊँगा।',
@@ -65,7 +66,9 @@ JOB_STARTED = {
              "hi": 'मैं "{title}" पर बैकग्राउंड में काम कर रहा हूँ (जॉब #{id}); पूरा होने पर बताऊँगा।',
              "ne": 'म "{title}" मा पृष्ठभूमिमा काम गर्दैछु (काम #{id}); सकिएपछि भन्छु।'},
 }
-TASK_FAILED = "Sorry, I couldn't do that part: {text}."
+TASK_FAILED = "Sorry, I couldn't manage this part: {text}."
+PREV_RESULT = "\n(Result of the previous step, use it: {result})"
+PREV_RESULT_MAX = 1500
 
 
 class AgentState(TypedDict, total=False):
@@ -82,6 +85,8 @@ class AgentState(TypedDict, total=False):
     lang: str | None
     tasks: list[dict]  # planner output: [{"text", "kind": quick|long}]
     task: dict  # one fanned-out task (Send payload)
+    chain: list[dict]  # P7c: dependent tasks, run in order, each gets the previous result
+    request: str  # P7c: the user's whole original request (sub-tasks keep it for tool context)
     idx: int
     results: Annotated[list, operator.add]  # fan-out results, merged by the join node
     retried: bool  # P7b: the refusal retry already happened this turn
@@ -133,10 +138,12 @@ class Agent:
         g.add_node("plan", self._plan_node)
         g.add_node("quick", self._quick_node)
         g.add_node("long", self._long_node)
+        g.add_node("chain", self._chain_node)
         g.add_node("join", self._join_node)
         g.add_edge(START, "plan")
-        g.add_conditional_edges("plan", self._after_plan, ["route", "quick", "long"])
+        g.add_conditional_edges("plan", self._after_plan, ["route", "quick", "long", "chain"])
         g.add_edge("quick", "join")
+        g.add_edge("chain", "join")
         g.add_edge("long", "join")
         g.add_edge("join", END)
         return g.compile()
@@ -165,25 +172,50 @@ class Agent:
             return "route"  # normal single request: unchanged path
         base = {"mode": state.get("mode", "text"), "lang": state.get("lang"),
                 "user_text": state["user_text"]}
-        return [Send("long" if t["kind"] == "long" else "quick", {**base, "task": t, "idx": i})
-                for i, t in enumerate(tasks)]
+        sends = []
+        for group in planner.chains(tasks):  # independent tasks fan out; dependent ones run in order
+            if len(group) == 1:
+                i = group[0]
+                t = tasks[i]
+                sends.append(Send("long" if t["kind"] == "long" else "quick", {**base, "task": t, "idx": i}))
+            else:
+                sends.append(Send("chain", {**base, "chain": [{**tasks[i], "idx": i} for i in group],
+                                            "idx": group[0]}))
+        return sends
+
+    def _run_task(self, text: str, mode: str, lang: str | None, prev: str = "", request: str = "") -> str:
+        """One quick task through the route->llm->tools subgraph (prev: earlier step's result)."""
+        if not prev:
+            fast = self._fast(text, lang, mode, record=False)
+            if fast is not None:  # zero-token quick task
+                return fast.answer
+        content = text + (PREV_RESULT.format(result=prev[:PREV_RESULT_MAX]) if prev else "")
+        msgs = self._messages(text, mode, lang)
+        msgs[-1] = HumanMessage(content=content)
+        sub: AgentState = {"user_text": text, "messages": msgs, "stream": False, "mode": mode, "lang": lang,
+                           "rounds": 0, "pending": [], "request": request or text}
+        try:
+            final = self.task_graph.invoke(sub, self._config())
+            return final.get("answer") or NO_ANSWER
+        except llm.LLMError as e:
+            log.warning("quick task failed: %s", e)
+            return TASK_FAILED.format(text=text)
 
     def _quick_node(self, state: AgentState) -> dict:
         t, mode = state["task"], state.get("mode", "text")
-        fast = self._fast(t["text"], state.get("lang"), mode, record=False)
-        if fast is not None:  # zero-token quick task
-            return {"results": [{"idx": state.get("idx", 0), "kind": "quick", "text": t["text"],
-                                 "answer": fast.answer}]}
-        sub: AgentState = {"user_text": t["text"], "messages": self._messages(t["text"], mode, state.get("lang")),
-                           "stream": False, "mode": mode, "rounds": 0, "pending": []}
-        try:
-            final = self.task_graph.invoke(sub, self._config())
-            answer = final.get("answer") or NO_ANSWER
-        except llm.LLMError as e:
-            log.warning("quick task failed: %s", e)
-            answer = TASK_FAILED.format(text=t["text"])
+        answer = self._run_task(t["text"], mode, state.get("lang"), request=state.get("user_text", ""))
         return {"results": [{"idx": state.get("idx", 0), "kind": "quick", "text": t["text"],
                              "answer": answer}]}
+
+    def _chain_node(self, state: AgentState) -> dict:
+        """P7c: dependent tasks in order; each step sees the previous step's result."""
+        mode, prev, out = state.get("mode", "text"), "", []
+        for t in state.get("chain") or []:
+            answer = self._run_task(t["text"], mode, state.get("lang"), prev, request=state.get("user_text", ""))
+            out.append({"idx": t.get("idx", 0), "kind": "quick", "text": t["text"], "answer": answer})
+            prev = answer
+        self.last["chain"] = [r["idx"] for r in out]
+        return {"results": out}
 
     def _long_node(self, state: AgentState) -> dict:
         t = state["task"]
@@ -242,8 +274,6 @@ class Agent:
         """Refusal retry allowed: not done yet, no real tool used this turn, not small talk."""
         if state.get("retried") or not config.META_REFUSAL_RETRY:
             return False
-        if any(not meta.is_meta(t) for t in state.get("tools") or []):
-            return False
         if any(isinstance(m, ToolMessage) and m.name != meta.NAME for m in state["messages"]):
             return False
         return self._meta_ok(state["user_text"])
@@ -279,7 +309,12 @@ class Agent:
             log.info("tool-less refusal, retrying once with %s: %r", meta.NAME, answer[:80])
             self._log_meta(state["user_text"], [])
             self.last["meta_retry"] = True
-            return {"messages": msgs + [SystemMessage(content=meta.HINT)], "tools": [meta.schema()],
+            retry_tools: list[Any] = [meta.schema()]
+            hint = meta.HINT
+            if router.looks_like_command(state["user_text"]):  # a real task with no tool: offer the toolsmith
+                retry_tools += [t for t in registry.schemas_for(["toolsmith"]) if t.name == "make_tool"]
+                hint += " " + meta.TOOLSMITH_HINT if len(retry_tools) > 1 else ""
+            return {"messages": msgs + [SystemMessage(content=hint)], "tools": retry_tools,
                     "pending": [], "retried": True, "again": True, "rounds": rounds + 1,
                     "tier": "fast" if state.get("tier") == "voice" else state.get("tier", "fast")}
         return {"messages": msgs + [AIMessage(content=answer)], "pending": [], "answer": answer,
@@ -352,7 +387,10 @@ class Agent:
                                outcome="error", result=content)
                 ok = False
             else:
-                res = safety.execute(name, args, confirm=confirm)
+                res = safety.execute(name, args, confirm=confirm,
+                                     ctx={"user_text": state["user_text"], "lang": state.get("lang"),
+                                          "mode": state.get("mode", "text"),
+                                          "request": state.get("request") or state["user_text"]})
                 content, ok = res.output, res.ok
             self.last.setdefault("tools", []).append({"name": name, "ok": ok})
             out.append(ToolMessage(content=content, tool_call_id=tc["id"], name=name))

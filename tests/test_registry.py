@@ -91,8 +91,8 @@ def test_discovery_imports_tool_files():
     mods = registry.REGISTRY.discover()
     assert "jarvis.tools.general.echo_time" in mods
     assert registry.safety_of(registry.get("get_time")) == "safe"
-    assert registry.safety_of(registry.get("dummy_delete")) == "confirm"
+    assert registry.safety_of(registry.get("delete_to_trash")) == "confirm"
     assert {"general", "files"} <= set(registry.groups())
     names = [t.name for t in registry.schemas_for(["general"])]
-    assert "get_time" in names and "dummy_delete" not in names
+    assert "get_time" in names and "delete_to_trash" not in names
     assert registry.call("get_time").ok

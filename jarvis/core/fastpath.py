@@ -124,6 +124,46 @@ RECALL_ALL = _rx(
 )
 
 # --- open ---
+# --- "search X" means SHOW the results page (P7c); asking for the answer goes to the LLM + web tools ---
+_ENG = r"(?P<eng>google|youtube|you tube|wikipedia|wiki)"
+_HI_DO = r"(?: (?:gara|garnu|garnus|garideu|gardeu|karo|kar do|kijiye|करो|गर|गर्नु|गरिदेउ))?"
+_HI_ON = r"(?: (?:ma|maa|pe|par|mein|me|मा|पर|में))?"
+SEARCH = _rx(
+    _ENG + _HI_ON + r" (?P<q>.+?) (?:search|khoj|सर्च|खोज)" + _HI_DO,
+    r"(?P<q>.+?) " + _ENG + _HI_ON + r" (?:search|khoj|सर्च|खोज)" + _HI_DO,
+    r"(?:search|look up|lookup)(?: (?:on |in )?" + _ENG + r")?(?: for| about)? (?P<q>.+?)"
+    r"(?: (?:on|in|using|with) " + _ENG.replace("eng", "eng2") + r")?",
+    r"(?P<eng>google) (?:for )?(?P<q>.+)",
+)
+_SEARCH_ANSWER = re.compile(
+    r"\b(?:give me|tell me|let me know|what|who|whom|whose|when|where|why|how|which|results?|answers?|"
+    r"summar\w*|explain|latest|score|batao|bhana)\b|बताओ|भन", I)
+_SEARCH_LOCAL = re.compile(r"\b(?:my|files?|folders?|code|notes?|repo|project|computer|laptop|clipboard|"
+                           r"emails?|history|memory)\b", I)
+SEARCH_URLS = {"google": "https://www.google.com/search?q={q}",
+               "youtube": "https://www.youtube.com/results?search_query={q}",
+               "wikipedia": "https://en.wikipedia.org/w/index.php?search={q}"}
+SEARCH_NAMES = {"google": "Google", "youtube": "YouTube", "wikipedia": "Wikipedia"}
+
+
+def search_intent(t: str) -> Intent | None:
+    if _SEARCH_ANSWER.search(t):
+        return None  # they want the answer: LLM path with web_search / wikipedia
+    m = _full(SEARCH, t)
+    if not m:
+        return None
+    gd = m.groupdict()
+    q = (gd.get("q") or "").strip(" ,.?!\"'")
+    eng = (gd.get("eng") or gd.get("eng2") or "google").lower().replace("you tube", "youtube")
+    eng = "wikipedia" if eng == "wiki" else eng
+    if not q or len(q) > 120 or _SEARCH_LOCAL.search(q) or q.lower() in SEARCH_NAMES:
+        return None
+    from urllib.parse import quote_plus
+
+    url = SEARCH_URLS[eng].format(q=quote_plus(q))
+    return Intent("search", "open_url", "browser", {"target": url}, f"{SEARCH_NAMES[eng]}|{q}")
+
+
 OPEN = _rx(
     r"(?P<verb>open|launch|start|run|fire up|bring up|go to)(?: up)? (?:the |my )?(?P<target>.+?)"
     r"(?: (?:app|application|for me))?",
@@ -351,6 +391,8 @@ def match(text: str) -> Intent | None:
         return Intent("remember", "remember", "memory", {"text": note}, note)
     if sysi := _system_intent(t):
         return sysi
+    if si := search_intent(t):
+        return si
     if m := _full(OPEN, t):
         return _open_intent(m.group("target").strip(" ,"), m.group("verb").lower())
     return None
@@ -377,26 +419,28 @@ def _open_intent(target: str, verb: str) -> Intent | None:
 _T = {
     "remember": {"en": "Okay, I'll remember: {x}.", "hi": "ठीक है, मैं याद रखूँगा: {x}।",
                  "ne": "हुन्छ, म सम्झिराख्छु: {x}।"},
-    "open": {"en": "Opening {x}.", "hi": "{x} खोल रहा हूँ।", "ne": "{x} खोल्दैछु।"},
+    "open": {"en": "Sure, opening {x}.", "hi": "ज़रूर, {x} खोल रहा हूँ।", "ne": "हुन्छ, {x} खोल्दैछु।"},
+    "search": {"en": "Sure, opening {e} results for {q}.", "hi": "ज़रूर, {e} पर {q} के नतीजे खोल रहा हूँ।",
+               "ne": "हुन्छ, {e} मा {q} को नतिजा खोल्दैछु।"},
     "open_fail": {"en": "Sorry, I couldn't open {x}.", "hi": "माफ़ कीजिए, {x} नहीं खुल सका।",
                   "ne": "माफ गर्नुहोस्, {x} खोल्न सकिनँ।"},
     "no_place": {"en": "Sorry, I couldn't find a place called {x}.", "hi": "माफ़ कीजिए, {x} नाम की जगह नहीं मिली।",
                  "ne": "माफ गर्नुहोस्, {x} नामको ठाउँ भेटिएन।"},
     "failed": {"en": "Sorry, that didn't work: {x}", "hi": "माफ़ कीजिए, यह नहीं हुआ: {x}",
                "ne": "माफ गर्नुहोस्, भएन: {x}"},
-    "volume": {"en": "Volume is at {x}%.", "hi": "आवाज़ {x}% पर है।", "ne": "भोल्युम {x}% मा छ।"},
-    "brightness": {"en": "Brightness is at {x}%.", "hi": "ब्राइटनेस {x}% पर है।", "ne": "ब्राइटनेस {x}% मा छ।"},
-    "muted": {"en": "Sound muted.", "hi": "आवाज़ बंद कर दी।", "ne": "आवाज बन्द गरें।"},
+    "volume": {"en": "Done, the volume is at {x}%.", "hi": "आवाज़ {x}% पर है।", "ne": "भोल्युम {x}% मा छ।"},
+    "brightness": {"en": "Done, brightness is at {x}%.", "hi": "ब्राइटनेस {x}% पर है।", "ne": "ब्राइटनेस {x}% मा छ।"},
+    "muted": {"en": "Okay, sound is muted.", "hi": "आवाज़ बंद कर दी।", "ne": "आवाज बन्द गरें।"},
     "unmuted": {"en": "Sound is back on.", "hi": "आवाज़ चालू कर दी।", "ne": "आवाज फेरि चालू भयो।"},
-    "mic_muted": {"en": "Microphone muted.", "hi": "माइक बंद कर दिया।", "ne": "माइक बन्द गरें।"},
-    "mic_unmuted": {"en": "Microphone is on.", "hi": "माइक चालू कर दिया।", "ne": "माइक चालू गरें।"},
-    "paused": {"en": "Paused.", "hi": "रोक दिया।", "ne": "रोकें।"},
-    "playing": {"en": "Playing.", "hi": "चला रहा हूँ।", "ne": "बजाउँदैछु।"},
-    "next": {"en": "Next track.", "hi": "अगला गाना।", "ne": "अर्को गीत।"},
-    "previous": {"en": "Previous track.", "hi": "पिछला गाना।", "ne": "अघिल्लो गीत।"},
-    "screenshot": {"en": "Screenshot saved in your Screenshots folder.",
+    "mic_muted": {"en": "Okay, your microphone is muted.", "hi": "माइक बंद कर दिया।", "ne": "माइक बन्द गरें।"},
+    "mic_unmuted": {"en": "Okay, your microphone is on.", "hi": "माइक चालू कर दिया।", "ne": "माइक चालू गरें।"},
+    "paused": {"en": "Okay, paused.", "hi": "रोक दिया।", "ne": "रोकें।"},
+    "playing": {"en": "Okay, playing.", "hi": "चला रहा हूँ।", "ne": "बजाउँदैछु।"},
+    "next": {"en": "Okay, next track.", "hi": "अगला गाना।", "ne": "अर्को गीत।"},
+    "previous": {"en": "Okay, previous track.", "hi": "पिछला गाना।", "ne": "अघिल्लो गीत।"},
+    "screenshot": {"en": "Done! Your screenshot is saved in the Screenshots folder.",
                    "hi": "स्क्रीनशॉट Screenshots फ़ोल्डर में सेव हो गया।", "ne": "स्क्रिनसट Screenshots फोल्डरमा सेभ भयो।"},
-    "lock": {"en": "Locking the screen.", "hi": "स्क्रीन लॉक कर रहा हूँ।", "ne": "स्क्रिन लक गर्दैछु।"},
+    "lock": {"en": "Sure, locking the screen.", "hi": "स्क्रीन लॉक कर रहा हूँ।", "ne": "स्क्रिन लक गर्दैछु।"},
     "name": {"en": "Nice to meet you, {x}. I'll remember your name.", "hi": "आपसे मिलकर अच्छा लगा, {x}। मैं आपका नाम याद रखूँगा।",
              "ne": "भेटेर खुसी लाग्यो, {x}। म तपाईंको नाम सम्झिराख्छु।"},
 }
@@ -431,8 +475,8 @@ def render(intent: Intent, ok: bool, output: str, lang: str) -> str:
     if intent.name in ("time", "weather") and err and "couldn't find a place" in out:
         return _say("no_place", lang, intent.label)
     if err:
-        if intent.name == "open":
-            return _say("open_fail", lang, intent.label)
+        if intent.name in ("open", "search"):
+            return _say("open_fail", lang, intent.label.split("|")[0])
         return _say("failed", lang, re.sub(r"^error:\s*", "", out))
     if intent.name == "time" and (m := _TIME_OUT.match(out)):
         where, h12, ampm = m.group("where"), m.group("h12"), m.group("ampm")
@@ -448,6 +492,9 @@ def render(intent: Intent, ok: bool, output: str, lang: str) -> str:
         return _say("remember", lang, intent.label)
     if intent.name == "open":
         return _say("open", lang, intent.label)
+    if intent.name == "search":
+        eng, q = intent.label.split("|", 1)
+        return _T["search"].get(lang, _T["search"]["en"]).format(e=eng, q=q)
     if intent.name == "name":
         return _say("name", lang, intent.label)
     return out  # weather / recall / digest / tokens / session: the tool output is already text

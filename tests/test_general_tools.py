@@ -234,8 +234,8 @@ def test_fastpath_hit_makes_zero_llm_calls(fast_on, no_llm, http, apps):
     assert bot.run("what was the last thing I told you to remember?").endswith("5678.")
     assert "in Tokyo, Japan." in bot.run("what time is it in Tokyo")
     assert bot.run("weather in Nepalganj").startswith("Nepalgunj, Nepal: 24°C")
-    assert bot.run("open youtube") == "Opening youtube."
-    assert "".join(bot.stream("open vs code", mode="voice", lang="ne")) == "Visual Studio Code खोल्दैछु।"
+    assert bot.run("open youtube") == "Sure, opening youtube."
+    assert "".join(bot.stream("open vs code", mode="voice", lang="ne")) == "हुन्छ, Visual Studio Code खोल्दैछु।"
     assert apps == ["code"]
     assert store.tokens_today() == 0
     rows = store.recent_routing(20)

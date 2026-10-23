@@ -53,13 +53,19 @@ def _http():
     return _client
 
 
-def telegram_call(method: str, payload: dict | None = None, timeout: float | None = None) -> dict:
-    """POST one Bot API method; returns the decoded "result" (raises RuntimeError on failure)."""
+def telegram_call(method: str, payload: dict | None = None, timeout: float | None = None,
+                  files: dict | None = None) -> dict:
+    """POST one Bot API method; returns the decoded "result" (raises RuntimeError on failure).
+    files={"document": (name, fileobj)} sends multipart form data (sendDocument/sendPhoto)."""
     if not config.TELEGRAM_BOT_TOKEN:
         raise RuntimeError("telegram is not configured")
     url = TELEGRAM_API.format(token=config.TELEGRAM_BOT_TOKEN, method=method)
     try:
-        r = _http().post(url, json=payload or {}, timeout=timeout or config.HTTP_TIMEOUT_S)
+        if files:
+            r = _http().post(url, data={k: str(v) for k, v in (payload or {}).items()}, files=files,
+                             timeout=timeout or 120)
+        else:
+            r = _http().post(url, json=payload or {}, timeout=timeout or config.HTTP_TIMEOUT_S)
         data = r.json()
     except Exception as e:  # network / JSON error: never leak the URL
         raise RuntimeError(redact(f"{type(e).__name__}: {e}")) from None

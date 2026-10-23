@@ -189,11 +189,15 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
     "weather": ("weather", "temperature", "forecast", "rain", "raining", "hot", "cold", "humid",
                 "mausam", "mosam", "mousam", "मौसम", "मोसम", "वेदर", "barsat", "पानी पर्छ", "बारिश",
                 "तापक्रम", "तापमान"),
-    "files": ("file", "files", "folder", "folders", "directory", "delete", "remove", "rename",
-              "move file", "copy file", "trash", "locate", "named", "grep", "ripgrep", "where is",
-              "which file", "containing", "फाइल", "मिटाओ", "मेटाउ"),
-    "system": ("battery", "cpu", "ram", "wifi", "bluetooth", "night light", "dark mode", "wallpaper",
-               "do not disturb", "system doing", "my system", "system status", "system health",
+    "files": ("file", "files", "folder", "folders", "directory", "delete", "remove", "rename", "mkdir",
+              "move file", "copy file", "trash", "फाइल", "फोल्डर", "मिटाओ", "मेटाउ"),
+    "filesearch": ("find file", "find files", "find the file", "locate", "named", "grep", "ripgrep", "where is",
+                   "which file", "containing", "search files", "search for files"),
+    "telegram": ("telegram", "to my phone", "on my phone", "send it to my phone", "टेलिग्राम", "फोनमा पठाउ",
+                 "फोनमा", "फोन पर भेज", "फ़ोन पर भेज", "phone ma pathau", "phone pe bhej"),
+    "toolsmith": ("make a tool", "make tool", "create a tool", "build a tool", "new tool", "skills", "skill",
+                  "saved tools", "my tools"),
+    "system": ("battery", "cpu", "ram", "system doing", "my system", "system status", "system health",
                "resources", "resource usage", "memory usage", "ram usage", "disk", "disk space", "swap",
                "storage", "workers", "computer doing", "laptop doing", "सिस्टम", "रैम", "डिस्क", "मेमोरी"),
     "audio": ("volume", "mute", "unmute", "louder", "quieter", "sound", "speaker", "speakers", "mic",
@@ -257,7 +261,11 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
 TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
     "general": "time and date (any city or country), simple utilities",
     "weather": "current weather and up to 3-day forecast for any place",
-    "files": "find files by name or content; delete, move or rename files and folders",
+    "files": "create folders, write files, move/copy, move to trash",
+    "filesearch": "find files by name or by text content",
+    "telegram": "send a file or a message to the user's Telegram (phone)",
+    "toolsmith": "no tool fits a real task: offer to build a small new tool; saved skills list/delete",
+    "skills": "small tools Jarvis built earlier (saved skills)",
     "system": "system resources (RAM, swap, CPU, disk, Jarvis memory) and background workers status",
     "watch": "watch a process/PID until it exits or tail a training log and alert on errors/progress",
     "automation": "trigger n8n workflows; crash watchdog (auto-restart dev servers) targets and status",
@@ -282,12 +290,13 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
 # Tiny glosses for the request_tools meta-tool (sent on every unmatched turn, so each word costs):
 # "" = the group name says it all.
 TOOL_GROUP_GLOSS: dict[str, str] = {
-    "general": "time, date", "weather": "", "files": "find, move, delete", "system": "RAM, CPU, disk, battery",
-    "watch": "process, log", "automation": "n8n, watchdog", "audio": "volume, mic", "display": "brightness",
+    "general": "time, date", "weather": "", "files": "folders, write, trash", "filesearch": "",
+    "telegram": "send to phone", "toolsmith": "build new tool", "skills": "", "system": "RAM, CPU, disk",
+    "watch": "process, log", "automation": "n8n", "audio": "volume, mic", "display": "brightness",
     "screen": "screenshot", "power": "lock, suspend", "clipboard": "", "speech": "read aloud", "windows": "",
-    "apps": "", "media": "music", "git": "", "dev": "tests, Python env",
-    "web": "search, Wikipedia, page", "memory": "notes, past chats",
-    "knowledge": "project code, docs", "usage": "token cost", "browser": "open site",
+    "apps": "", "media": "music", "git": "", "dev": "tests, venv",
+    "web": "search, wiki, page", "memory": "notes, past chats",
+    "knowledge": "my code, docs", "usage": "token cost", "browser": "open site",
     "jobs": "long writing",
 }
 
@@ -443,3 +452,25 @@ WEB_PAGE_MAX_BYTES = 2_000_000  # read_webpage stops downloading past this
 WEB_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) Jarvis/1.0 (personal assistant)"
 META_TOOLS = os.getenv("JARVIS_META_TOOLS", "1").lower() not in ("0", "false", "no", "off")  # request_tools
 META_REFUSAL_RETRY = True  # a tool-less "I can't" answer is retried once with request_tools bound
+
+# --- P7c toolsmith, file tools, Telegram sharing ---
+SANDBOX_DIR = DATA_DIR / "sandbox"  # one throwaway folder per generated-tool run
+SKILLS_DIR = DATA_DIR / "skills"  # saved reusable generated tools: <name>.py + <name>.json
+SKILLS_MAX = 20  # LRU: the least recently used skill is deleted past this
+TOOLSMITH_TIER = "fast"  # code generation tier (smart tier is the fallback)
+TOOLSMITH_MAX_TOKENS = 1200
+SANDBOX_TIMEOUT_S = 15.0  # wall clock
+SANDBOX_CPU_S = 10  # RLIMIT_CPU
+SANDBOX_MEM_MB = 256  # RLIMIT_AS
+SANDBOX_NOFILE = 64
+SANDBOX_STDOUT_MAX = 4096
+SANDBOX_IMPORTS = ("math", "statistics", "datetime", "json", "re", "random", "string", "collections",
+                   "itertools", "functools", "decimal", "fractions", "textwrap", "calendar", "zoneinfo",
+                   "urllib.parse", "csv", "hashlib", "uuid", "base64", "difflib", "unicodedata", "secrets")
+# SHELL_ALLOWLIST binaries a generated tool may still NOT run (interpreters, installers, git, servers).
+TOOLSMITH_CMD_DENY = ("python3", "pip", "pytest", "git", "uvicorn", "n8n", "xdotool", "find")
+# File tools: writes under these roots are "safe"; anywhere else asks first.
+FILE_SAFE_ROOTS = tuple(Path(p).expanduser() for p in os.getenv(
+    "JARVIS_FILE_ROOTS", "~/projects:/media/leo/Project1").split(":") if p)
+SHARE_ROOTS = (Path.home(), Path("/media/leo/Project1"))  # send_file_telegram only sends files under these
+TELEGRAM_FILE_MAX_MB = 50

@@ -101,7 +101,7 @@ def test_chat_sends_no_tools(fake):
 
 
 def test_confirm_denied_through_agent(fake):
-    calls = fake(call("dummy_delete", {"path": "/tmp/a"}), AIMessage(content="Okay, I did not delete it."))
+    calls = fake(call("delete_to_trash", {"path": "/tmp/a"}), AIMessage(content="Okay, I did not delete it."))
     a = agent.Agent(confirm=lambda p: False)
     assert "not" in a.run("delete the file /tmp/a")
     assert store.recent_tool_calls(1)[0]["outcome"] == "denied"
@@ -109,10 +109,10 @@ def test_confirm_denied_through_agent(fake):
 
 
 def test_unrouted_tool_is_refused(fake):
-    fake(call("dummy_delete", {"path": "/"}), AIMessage(content="Done."))
+    fake(call("delete_to_trash", {"path": "/"}), AIMessage(content="Done."))
     agent.Agent(confirm=lambda p: True).run("what time is it")
     row = store.recent_tool_calls(1)[0]
-    assert (row["tool"], row["outcome"]) == ("dummy_delete", "error")
+    assert (row["tool"], row["outcome"]) == ("delete_to_trash", "error")
 
 
 def test_round_limit_forces_answer(fake):

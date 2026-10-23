@@ -349,13 +349,14 @@ def test_telegram_ignores_other_chats_and_routes_text(tg):
     assert bot.offset == 13 and store.kv_get("telegram_offset") == "13"
 
 
-def test_telegram_confirm_yes_no_timeout_and_blocked(tg, monkeypatch):
+def test_telegram_confirm_yes_no_timeout_and_blocked(tg, monkeypatch, tmp_path):
     bot = telegram_bot.TelegramBot()
+    (tmp_path / "x").write_text("x")
     tg["updates"] = [[upd(1, "yes", chat=7), upd(2, "yes")]]
-    res = safety.execute("dummy_delete", {"path": "/tmp/x"}, confirm=bot.confirm)
-    assert res.ok and "dry run" in res.output and "Reply yes/no" in tg["sent"][0]
+    res = safety.execute("delete_to_trash", {"path": str(tmp_path / "x")}, confirm=bot.confirm)
+    assert res.ok and "trash" in res.output and "Reply yes/no" in tg["sent"][0]
     tg["updates"] = [[upd(3, "no"), upd(4, "/jobs")]]
-    res = safety.execute("dummy_delete", {"path": "/tmp/x"}, confirm=bot.confirm)
+    res = safety.execute("delete_to_trash", {"path": str(tmp_path / "x")}, confirm=bot.confirm)
     assert not res.ok and "declined" in res.output
     assert list(bot._backlog) == [upd(4, "/jobs")]  # the message after the answer is not lost
     bot.tick()

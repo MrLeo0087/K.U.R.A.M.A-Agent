@@ -18,6 +18,13 @@ def tmp_store(tmp_path, monkeypatch):
     def no_real_system(argv, *a, **k):
         raise AssertionError(f"real system command in a test: {argv}")
     monkeypatch.setattr(_sys, "_exec", no_real_system)  # never touch volume/brightness/lock/clipboard
+    monkeypatch.setattr(config, "SKILLS_DIR", tmp_path / "skills")  # P7c: never the real saved skills
+    monkeypatch.setattr(config, "SANDBOX_DIR", tmp_path / "sandbox")
+    from jarvis.core import toolsmith
+    toolsmith._tried.clear()
+    from jarvis.tools.general import _files
+    trashed: list = []
+    monkeypatch.setattr(_files, "trash", trashed.append)  # never move real files to the trash
     ratelimit.reset()
     yield store
     jobs.reset_manager()

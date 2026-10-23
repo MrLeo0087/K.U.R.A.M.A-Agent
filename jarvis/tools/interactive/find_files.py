@@ -41,7 +41,7 @@ def _clean(line: str) -> str:
     return line if len(line) <= LINE_CHARS else line[: LINE_CHARS - 3] + "..."
 
 
-@tool(group="files", safety="safe", description="Find files by name (glob or part of name) or by text content under a folder.")
+@tool(group="filesearch", safety="safe", description="Find files by name (glob or part of name) or by text content under a folder.")
 def find_files(query: str, path: str = "~", kind: Literal["name", "content"] = "name", limit: int = 20) -> str:
     """Search files.
 
