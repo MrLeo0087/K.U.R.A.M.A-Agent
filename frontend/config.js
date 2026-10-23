@@ -24,6 +24,8 @@ export function loadSettings() {
   try {
     const q = new URLSearchParams(location.search).get("api");
     if (q && /^https?:\/\//i.test(q)) { s.apiBase = q.replace(/\/+$/, ""); saveSettings(s); }
+    const lp = new URLSearchParams(location.search).get("lowpower");  // ?lowpower=1 (wallpaper mode)
+    if (lp !== null) s.lowPower = lp !== "0";
   } catch { /* ignore */ }
   return s;
 }
