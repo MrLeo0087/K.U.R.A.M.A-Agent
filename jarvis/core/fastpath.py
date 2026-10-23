@@ -2,7 +2,9 @@
 from a template, with no LLM call. Anything not matched exactly returns None (normal LLM path).
 
 Intents: local/world time, weather, remember <x>, recall all/last, open <app or site>, and (P5b)
-volume, mute, mic mute, media play/pause/next/previous, brightness, screenshot, lock screen.
+volume, mute, mic mute, media play/pause/next/previous, brightness, screenshot, lock screen, and (P7)
+daily digest, token usage, "what did we talk about yesterday", "what do you know about me" and
+"my name is X" / "call me X" (acknowledged; the agent's regex capture stores the fact).
 English plus common romanized/Devanagari Hindi and Nepali. Disable with config.FASTPATH=False.
 """
 from __future__ import annotations
@@ -231,6 +233,56 @@ def _system_intent(t: str) -> Intent | None:
     return None
 
 
+# --- P7 memory / usage ---
+DIGEST = _rx(
+    r"(?:(?:give|show|tell|read) me |what(?:'s| is) |send me )?(?:my |the |today'?s |todays )?(?:daily )?digest"
+    r"(?: for (?P<date>today|yesterday))?(?: today)?",
+    r"(?:summari[sz]e|recap) my day", r"(?:give me |show me )?(?:my |a |the )?(?:daily|day'?s) (?:summary|recap)",
+)
+TOKENS = _rx(
+    r"how many tokens (?:did|have) (?:i|we|you) (?:use|used|spend|spent|burn|burned)"
+    r"(?: (?P<period>today|this week|this month))?(?: so far)?(?: (?P<period2>today|this week|this month))?",
+    r"(?:show |tell me |what(?:'s| is) )?(?:my |the )?(?:token|api|groq) (?:usage|use|spend|cost)"
+    r"(?: (?P<period3>today|this week|this month))?",
+    r"how much (?:of my )?(?:token )?budget (?:is left|have i used|did i use)(?: today)?",
+)
+SESSION = _rx(
+    r"what (?:did|have) (?:we|i) (?:talk|chat|speak|discuss|talked|chatted|discussed)(?: about)?"
+    r"(?: (?P<when>yesterday|today|last time|earlier|before|this morning|on \w+))?",
+    r"what (?:were|was) (?:we|i) (?:talking|chatting|discussing)(?: about)?(?: (?P<when2>yesterday|today|last time|earlier|before))?",
+    r"(?:what was|recap) (?:our|my) (?:last|previous) (?:conversation|chat|session)",
+)
+ABOUT_ME = _rx(
+    r"what (?:do|else do|all do) you know about me", r"what have you learn(?:ed|t) about me",
+    r"who am i", r"tell me (?:what you know )?about (?:me|myself)", r"(?:show |what(?:'s| is) )?my profile",
+    r"(?:timilai|tapai lai|tumhe|aapko) mero (?:barema|bare ma) (?:ke|kya) thaha (?:cha|xa|chha)",
+)
+NAME = _rx(
+    r"(?:my name is|my name's|call me|you can call me|mero naam|mera naam|mero nam)\s+"
+    r"(?P<name>[^\W\d_][\w'-]*(?: [^\W\d_][\w'-]*)?)(?: (?:ho|hai))?",
+    r"(?:मेरो|मेरा) नाम (?P<name>\S+(?: \S+)?) (?:हो|है)",
+)
+_NAME_BAD = re.compile(r"\b(?:not|and|what|is|the|a|an|back|later|tomorrow|when|if|now|again|maybe|soon|please)\b", I)
+
+
+def _p7_intent(t: str) -> Intent | None:
+    if m := _full(DIGEST, t):
+        return Intent("digest", "daily_digest", "usage", {"date": (m.groupdict().get("date") or "today").lower()})
+    if m := _full(TOKENS, t):
+        per = next((v for k, v in m.groupdict().items() if k.startswith("period") and v), "today").lower()
+        return Intent("tokens", "token_usage", "usage", {"period": per.replace("this ", "")})
+    if m := _full(SESSION, t):
+        when = next((v for v in m.groupdict().values() if v), "last").lower()
+        when = "last" if when in ("last time", "earlier", "before") else when
+        return Intent("session", "recall_session", "memory", {"query": re.sub(r"^on ", "", when)})
+    if _full(ABOUT_ME, t):
+        return Intent("about_me", "recall", "memory", {"which": "profile"})
+    if (m := _full(NAME, t)) and not _NAME_BAD.search(m.group("name")):
+        name = m.group("name").strip()
+        return Intent("name", "_profile", "memory", {"key": "name", "value": name}, name)
+    return None
+
+
 def _full(patterns: list[re.Pattern], text: str) -> re.Match | None:
     for p in patterns:
         if m := p.fullmatch(text):
@@ -286,6 +338,8 @@ def match(text: str) -> Intent | None:
                              and place.endswith("ing")):  # "weather for running"
             return None
         return Intent("weather", "weather", "weather", {"place": place, "days": _days(m, t)}, place)
+    if p7 := _p7_intent(t):
+        return p7
     if _full(RECALL_LAST, t):
         return Intent("recall", "recall", "memory", {"which": "last"})
     if _full(RECALL_ALL, t):
@@ -343,6 +397,8 @@ _T = {
     "screenshot": {"en": "Screenshot saved in your Screenshots folder.",
                    "hi": "स्क्रीनशॉट Screenshots फ़ोल्डर में सेव हो गया।", "ne": "स्क्रिनसट Screenshots फोल्डरमा सेभ भयो।"},
     "lock": {"en": "Locking the screen.", "hi": "स्क्रीन लॉक कर रहा हूँ।", "ne": "स्क्रिन लक गर्दैछु।"},
+    "name": {"en": "Nice to meet you, {x}. I'll remember your name.", "hi": "आपसे मिलकर अच्छा लगा, {x}। मैं आपका नाम याद रखूँगा।",
+             "ne": "भेटेर खुसी लाग्यो, {x}। म तपाईंको नाम सम्झिराख्छु।"},
 }
 _SYSTEM = {"volume", "brightness", "mute", "mic", "media", "screenshot", "lock"}
 
@@ -392,10 +448,24 @@ def render(intent: Intent, ok: bool, output: str, lang: str) -> str:
         return _say("remember", lang, intent.label)
     if intent.name == "open":
         return _say("open", lang, intent.label)
-    return out  # weather / recall: the tool output is already a sentence
+    if intent.name == "name":
+        return _say("name", lang, intent.label)
+    return out  # weather / recall / digest / tokens / session: the tool output is already text
 
 
-def try_answer(text: str, lang: str | None = None, confirm=None) -> FastResult | None:
+def _internal(intent: Intent) -> tuple[bool, str]:
+    """Intents handled without a registered tool (P7 profile acknowledgement)."""
+    if intent.tool == "_profile":
+        from jarvis.core import profile
+        profile.save(intent.args["key"], intent.args["value"], "fastpath")
+        return True, "ok"
+    return False, f"error: unknown internal intent {intent.tool}"
+
+
+_VOICE_FIRST_LINE = {"digest", "tokens"}  # long reports: voice speaks the first (summary) line only
+
+
+def try_answer(text: str, lang: str | None = None, confirm=None, mode: str = "text") -> FastResult | None:
     """Run the matched tool and return a templated answer, or None to use the LLM path."""
     if not config.FASTPATH:
         return None
@@ -410,14 +480,20 @@ def try_answer(text: str, lang: str | None = None, confirm=None) -> FastResult |
     if lang is None:
         from jarvis.core.planner import detect_lang
         lang = detect_lang(text)
-    res = safety.execute(intent.tool, {k: v for k, v in intent.args.items() if not k.startswith("_")},
-                          confirm=confirm)
-    if intent.name in ("time", "weather") and "couldn't find a place" in (res.output or ""):
+    if intent.tool.startswith("_"):
+        ok, output = _internal(intent)
+    else:
+        res = safety.execute(intent.tool, {k: v for k, v in intent.args.items() if not k.startswith("_")},
+                              confirm=confirm)
+        ok, output = res.ok, res.output
+    if intent.name in ("time", "weather") and "couldn't find a place" in (output or ""):
         return None  # unknown place: let the LLM path try (it can fix spelling)
-    answer = render(intent, res.ok, res.output, lang or "en")
+    answer = render(intent, ok, output, lang or "en")
+    if mode == "voice" and intent.name in _VOICE_FIRST_LINE:
+        answer = answer.split("\n", 1)[0]
     ms = int((time.monotonic() - t0) * 1000)
     try:
         store.log_routing(text, [intent.group], "fastpath", ms)
     except Exception as e:
         log.warning("could not log routing: %s", e)
-    return FastResult(answer, intent, res.ok, ms)
+    return FastResult(answer, intent, ok, ms)

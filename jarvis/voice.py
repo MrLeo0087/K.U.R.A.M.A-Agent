@@ -32,7 +32,7 @@ class VoiceLoop:
         self._hk: hotkey.HotkeyListener | None = None
         self._greeter: tts.Speaker | None = None  # startup greeting (own speaker, stoppable)
         self.lang = config.TTS_DEFAULT_LANG
-        self.agent = agent.Agent(confirm=self.confirm)
+        self.agent = agent.Agent(confirm=self.confirm, channel="voice")
         self.agent.warm()  # LangChain/LangGraph setup at startup, not on the first turn
         safety.set_confirm_hook("voice", self.confirm)
         jobs.set_mode("voice")  # finished background jobs are queued and spoken when idle
@@ -171,13 +171,7 @@ class VoiceLoop:
             print(f"[tts] {self.speaker.error}")
         if self.speaker.first_audio_s is not None:
             print(f"[first audio {self.speaker.first_audio_s:.2f}s]")
-        reply = "".join(parts).strip()
-        try:
-            store.add_message("user", tr.text)
-            store.add_message("assistant", reply)
-        except Exception:
-            pass
-        return barged
+        return barged  # the agent persists the turn (P7 sessions)
 
     # --- main loop ---
     def run(self) -> int:
@@ -216,6 +210,7 @@ class VoiceLoop:
         finally:
             self.speaker.stop()
             jobs.shutdown()
+            self.agent.end_session()
             if self._hk:
                 self._hk.stop()
         return 0

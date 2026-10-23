@@ -9,11 +9,18 @@ Multitasking (P3b-2): a plan node runs first. One quick task -> the path above, 
 Several tasks -> LangGraph Send fan-out: each quick task runs the route->llm->tools subgraph
 concurrently (own state), each long task is submitted to the JobManager and returns at once; a
 join node composes ONE reply without an LLM call. History is updated once, at the end.
+
+Memory (P7): every turn is persisted to SQLite under a session (store.sessions: start/end, turns,
+rolling summary). A turn after config.SESSION_IDLE_S of silence starts a new session with fresh
+context. User facts are captured by regex each turn (0 tokens); profile facts are injected into
+the system prompt only on personal turns (<= ~60 tokens); end_session() runs at most one
+fast-tier fact extraction per session.
 """
 from __future__ import annotations
 
 import logging
 import operator
+import re
 import threading
 import time
 from typing import Annotated, Any, Callable, Iterator, TypedDict
@@ -21,7 +28,7 @@ from typing import Annotated, Any, Callable, Iterator, TypedDict
 from langchain_core.messages import (AIMessage, BaseMessage, HumanMessage, SystemMessage,
                                      ToolMessage)
 
-from jarvis.core import config, fastpath, jobs, llm, planner, registry, router, safety, store
+from jarvis.core import config, fastpath, jobs, llm, planner, profile, registry, router, safety, store
 
 log = logging.getLogger("jarvis.agent")
 
@@ -81,10 +88,15 @@ def job_started_text(job_id: int, title: str, kind: str, lang: str | None) -> st
 
 class Agent:
     def __init__(self, confirm: Callable[[str], bool] | None = None, summarize_async: bool = True,
-                 use_planner: bool = True):
+                 use_planner: bool = True, persist: bool = True, channel: str = ""):
         self.confirm = confirm  # overrides safety.get_confirm(mode) when set
         self.summarize_async = summarize_async
         self.use_planner = use_planner
+        self.persist = persist  # P7: store messages/sessions, learn profile facts
+        self.channel = channel
+        self.session_id: int | None = None
+        self._last_turn = 0.0
+        self._self_talk: list[str] = []  # user statements about themselves (session-end extraction source)
         self._task_graph: Any = None
         self.history: list[BaseMessage] = []
         self.summary = ""
@@ -285,9 +297,77 @@ class Agent:
             if self.summary:
                 system += SUMMARY_SUFFIX.format(summary=self.summary)
             recent = self.history[-2 * config.HISTORY_TURNS:]
+        if self.persist:  # token-gated: nothing unless the turn is personal / refers to the past
+            try:
+                line = profile.context_line(user_text)
+            except Exception as e:
+                log.warning("profile injection failed: %s", e)
+                line = ""
+            if line:
+                system += " " + line
+                self.last["profile_tokens"] = self.last.get("profile_tokens", 0) + profile.estimate_tokens(line)
         return [SystemMessage(content=system), *recent, HumanMessage(content=user_text)]
 
+    # --- sessions + profile (P7) ---
+    _SELF_TALK = re.compile(r"\b(?:i|i'm|i am|my|mero|mera)\b|मेरो|मेरा", re.I)
+
+    def _begin_turn(self, user_text: str) -> None:
+        """New session after a long silence (fresh context); regex fact capture (0 tokens)."""
+        if not self.persist:
+            return
+        now = time.time()
+        if self.session_id is not None and now - self._last_turn > config.SESSION_IDLE_S:
+            self.end_session(blocking=False)
+            with self._lock:
+                self.history, self._overflow, self.summary = [], [], ""
+        try:
+            facts = profile.capture_and_save(user_text)
+        except Exception as e:
+            log.warning("profile capture failed: %s", e)
+            facts = []
+        if facts:
+            self.last["facts"] = facts
+        elif self._SELF_TALK.search(user_text) and not user_text.rstrip().endswith("?"):
+            self._self_talk = (self._self_talk + [user_text[:200]])[-6:]
+
+    def _persist_turn(self, user_text: str, answer: str) -> None:
+        if not self.persist:
+            return
+        try:
+            if self.session_id is None:
+                self.session_id = store.session_start(self.channel)
+            store.add_message("user", user_text, session=self.session_id)
+            store.add_message("assistant", answer, session=self.session_id)
+            store.session_touch(self.session_id)
+        except Exception as e:
+            log.warning("could not persist turn: %s", e)
+        self._last_turn = time.time()
+
+    def end_session(self, blocking: bool = True) -> None:
+        """Close the current session: at most ONE fast-tier profile extraction (from the rolling
+        summary, else the user's statements about themselves). Safe to call more than once."""
+        sid, summary, talk = self.session_id, self.summary, self._self_talk
+        self.session_id, self._self_talk = None, []
+        if sid is None:
+            return
+
+        def work() -> None:
+            try:
+                src = summary or " | ".join(talk)
+                sess = store.session_get(sid) or {}
+                if config.PROFILE_LLM_EXTRACT and src and not sess.get("extracted"):
+                    profile.extract_llm(src)
+                    store.session_update(sid, extracted=True)
+            except Exception as e:
+                log.warning("end_session failed: %s", e)
+
+        if blocking:
+            work()
+        else:
+            threading.Thread(target=work, name="session-end", daemon=True).start()
+
     def _remember(self, user_text: str, answer: str) -> None:
+        self._persist_turn(user_text, answer)
         batch: list[BaseMessage] = []
         with self._lock:
             self.history += [HumanMessage(content=user_text), AIMessage(content=answer)]
@@ -317,6 +397,11 @@ class Agent:
         if text:
             with self._lock:
                 self.summary = text[:600]
+            if self.persist and self.session_id is not None:
+                try:
+                    store.session_update(self.session_id, summary=self.summary)
+                except Exception as e:
+                    log.warning("could not save summary: %s", e)
 
     # --- zero-token fast path ---
     def _fast(self, user_text: str, lang: str | None, mode: str, record: bool = True) -> Any:
@@ -324,7 +409,7 @@ class Agent:
         if not config.FASTPATH or (record and self.use_planner and planner.is_multi(user_text)):
             return None
         res = fastpath.try_answer(user_text, lang=lang,
-                                  confirm=self.confirm or safety.get_confirm(mode))
+                                  confirm=self.confirm or safety.get_confirm(mode), mode=mode)
         if res is not None:
             entry = {"name": res.intent.tool, "ok": res.ok}
             if record:
@@ -345,6 +430,7 @@ class Agent:
         return {"recursion_limit": 2 * config.AGENT_MAX_TOOL_ROUNDS + 6}
 
     def run(self, user_text: str, mode: str = "text", lang: str | None = None) -> str:
+        self._begin_turn(user_text)
         fast = self._fast(user_text, lang, mode)
         if fast is not None:
             self._remember(user_text, fast.answer)
@@ -356,6 +442,7 @@ class Agent:
 
     def stream(self, user_text: str, mode: str = "text", lang: str | None = None) -> Iterator[str]:
         """Yield answer text deltas. Tool rounds (and confirmations) happen before the first one."""
+        self._begin_turn(user_text)
         fast = self._fast(user_text, lang, mode)
         if fast is not None:
             self._remember(user_text, fast.answer)

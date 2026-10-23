@@ -13,7 +13,7 @@ from jarvis.core import config
 
 log = logging.getLogger("jarvis.greeting")
 
-_WEATHER = re.compile(r"^(?P<where>[^:,]+)[^:]*: (?P<t>-?\d+)°C, feels like [^,]+, (?P<desc>[^.]+)\.")
+_WEATHER = re.compile(r"^(?P<where>[^:,]+)[^:]*: (?P<t>-?\d+)°C(?:, feels like [^,]+,| and) (?P<desc>[^.]+)\.")
 
 
 def part_of_day(hour: int) -> str:
@@ -64,7 +64,14 @@ def counts() -> tuple[int, int]:
 def build(now: datetime | None = None, weather_fn: Callable[[str], str] | None = None,
           jobs_n: int | None = None, notes_n: int | None = None) -> str:
     now = now or datetime.now()
-    parts = [f"{part_of_day(now.hour)}, it's {now.strftime('%I:%M %p').lstrip('0')}."]
+    name = ""
+    try:
+        from jarvis.core import profile
+        name = profile.user_name()
+    except Exception as e:  # the greeting must never fail
+        log.info("greeting name skipped: %s", e)
+    hello = f"{part_of_day(now.hour)}, {name}" if name else part_of_day(now.hour)
+    parts = [f"{hello}, it's {now.strftime('%I:%M %p').lstrip('0')}."]
     if config.GREETING_WEATHER and (w := weather_line(weather_fn)):
         parts.append(w)
     if jobs_n is None or notes_n is None:

@@ -53,6 +53,26 @@ CREATE TABLE IF NOT EXISTS watches (
 CREATE TABLE IF NOT EXISTS kv (
     key TEXT PRIMARY KEY, value TEXT, ts REAL
 );
+CREATE TABLE IF NOT EXISTS sessions (
+    id INTEGER PRIMARY KEY, start REAL NOT NULL, end REAL, turns INTEGER DEFAULT 0, summary TEXT,
+    channel TEXT, extracted INTEGER DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_start ON sessions(start);
+CREATE TABLE IF NOT EXISTS profile (
+    key TEXT PRIMARY KEY, value TEXT NOT NULL, source TEXT, created REAL, updated REAL,
+    hits INTEGER DEFAULT 0, last_used REAL
+);
+"""
+# P7: FTS5 over chat messages (external content, kept in sync by triggers).
+_MESSAGES_FTS = """
+CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(text, content='messages', content_rowid='id',
+    tokenize='porter unicode61');
+CREATE TRIGGER IF NOT EXISTS messages_ai AFTER INSERT ON messages BEGIN
+    INSERT INTO messages_fts(rowid, text) VALUES (new.id, new.text);
+END;
+CREATE TRIGGER IF NOT EXISTS messages_ad AFTER DELETE ON messages BEGIN
+    INSERT INTO messages_fts(messages_fts, rowid, text) VALUES ('delete', old.id, old.text);
+END;
 """
 
 _lock = threading.RLock()
@@ -62,9 +82,10 @@ _path: Path | None = None
 
 def init(db_path: str | Path | None = None) -> Path:
     """(Re)open the database at db_path (default config.DB_PATH) and ensure the schema."""
-    global _conn, _path
+    global _conn, _path, _session_id
     with _lock:
         close()
+        _session_id = None
         _path = Path(db_path) if db_path else Path(config.DB_PATH)
         _path.parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(str(_path), check_same_thread=False, timeout=10, isolation_level=None)
@@ -83,6 +104,20 @@ def _migrate(conn: sqlite3.Connection) -> None:
     for col in ("outcome", "result"):
         if col not in cols:
             conn.execute(f"ALTER TABLE tool_calls ADD COLUMN {col} TEXT")
+    added = {  # P7: STT audio seconds, message sessions, note importance
+        "llm_calls": (("audio_s", "REAL DEFAULT 0"),),
+        "messages": (("session", "INTEGER"),),
+        "notes": (("hits", "INTEGER DEFAULT 0"), ("last_used", "REAL")),
+    }
+    for table, new_cols in added.items():
+        have = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+        for col, decl in new_cols:
+            if col not in have:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
+    fresh = not conn.execute("SELECT 1 FROM sqlite_master WHERE name='messages_fts'").fetchone()
+    conn.executescript(_MESSAGES_FTS)
+    if fresh:  # index messages stored before P7
+        conn.execute("INSERT INTO messages_fts(messages_fts) VALUES ('rebuild')")
 
 
 def close() -> None:
@@ -106,12 +141,13 @@ def _today_start() -> float:
 
 # --- writers ---
 def log_llm(model: str, purpose: str, prompt_tokens: int, completion_tokens: int,
-            latency_ms: int, ok: bool, error: str = "", estimated: bool = False) -> None:
+            latency_ms: int, ok: bool, error: str = "", estimated: bool = False,
+            audio_s: float = 0.0) -> None:
     p, c = int(prompt_tokens or 0), int(completion_tokens or 0)
     _exec("INSERT INTO llm_calls(ts,model,purpose,prompt_tokens,completion_tokens,total_tokens,"
-          "latency_ms,ok,error,estimated) VALUES (?,?,?,?,?,?,?,?,?,?)",
+          "latency_ms,ok,error,estimated,audio_s) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
           (time.time(), model, purpose, p, c, p + c, int(latency_ms), int(bool(ok)),
-           (error or "")[:500], int(bool(estimated))))
+           (error or "")[:500], int(bool(estimated)), float(audio_s or 0.0)))
 
 
 def log_tool(tool: str, args: Any, ok: bool, latency_ms: int, safety: str = "safe",
@@ -129,8 +165,10 @@ def log_routing(query: str, groups: list[str], method: str, latency_ms: int) -> 
           (time.time(), query[:500], json.dumps(list(groups)), method, int(latency_ms)))
 
 
-def add_message(role: str, text: str) -> None:
-    _exec("INSERT INTO messages(ts,role,text) VALUES (?,?,?)", (time.time(), role, text))
+def add_message(role: str, text: str, session: int | None = None) -> None:
+    """session defaults to the current chat session (see session_start)."""
+    _exec("INSERT INTO messages(ts,role,text,session) VALUES (?,?,?,?)",
+          (time.time(), role, text, session if session is not None else _session_id))
 
 
 # --- readers ---
@@ -363,3 +401,146 @@ def kv_get(key: str, default: str | None = None) -> str | None:
 def kv_set(key: str, value: str) -> None:
     _exec("INSERT INTO kv(key,value,ts) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, "
           "ts=excluded.ts", (key, value, time.time()))
+
+
+# --- chat sessions (P7 session recall) ---
+_session_id: int | None = None
+
+
+def session_start(channel: str = "", ts: float | None = None) -> int:
+    """Open a new chat session and make it the current one for add_message."""
+    global _session_id
+    t = ts or time.time()
+    with _lock:
+        if _conn is None:
+            init(_path)
+        cur = _conn.execute("INSERT INTO sessions(start,end,turns,summary,channel) VALUES (?,?,0,'',?)",  # type: ignore[union-attr]
+                            (t, t, channel))
+        _session_id = int(cur.lastrowid)
+    return _session_id
+
+
+def current_session() -> int | None:
+    return _session_id
+
+
+def session_touch(session_id: int, turns: int = 1) -> None:
+    _exec("UPDATE sessions SET end=?, turns=turns+? WHERE id=?", (time.time(), int(turns), session_id))
+
+
+def session_update(session_id: int, summary: str | None = None, extracted: bool | None = None) -> None:
+    if summary is not None:
+        _exec("UPDATE sessions SET summary=? WHERE id=?", (summary, session_id))
+    if extracted is not None:
+        _exec("UPDATE sessions SET extracted=? WHERE id=?", (int(extracted), session_id))
+
+
+def session_get(session_id: int) -> dict | None:
+    rows = _exec("SELECT * FROM sessions WHERE id=?", (session_id,))
+    return dict(rows[0]) if rows else None
+
+
+def sessions_between(t0: float, t1: float, min_turns: int = 1) -> list[dict]:
+    rows = _exec("SELECT * FROM sessions WHERE start>=? AND start<? AND turns>=? ORDER BY start",
+                 (t0, t1, min_turns))
+    return [dict(r) for r in rows]
+
+
+def sessions_recent(limit: int = 5, exclude: int | None = None, min_turns: int = 1) -> list[dict]:
+    rows = _exec("SELECT * FROM sessions WHERE id IS NOT ? AND turns>=? ORDER BY start DESC LIMIT ?",
+                 (exclude, min_turns, int(limit)))
+    return [dict(r) for r in rows]
+
+
+def messages_between(t0: float, t1: float, role: str | None = None, limit: int = 500) -> list[dict]:
+    if role:
+        rows = _exec("SELECT id,ts,role,text,session FROM messages WHERE ts>=? AND ts<? AND role=? "
+                     "ORDER BY id LIMIT ?", (t0, t1, role, int(limit)))
+    else:
+        rows = _exec("SELECT id,ts,role,text,session FROM messages WHERE ts>=? AND ts<? ORDER BY id "
+                     "LIMIT ?", (t0, t1, int(limit)))
+    return [dict(r) for r in rows]
+
+
+def session_messages(session_id: int, role: str | None = None, limit: int = 200) -> list[dict]:
+    sql = "SELECT id,ts,role,text FROM messages WHERE session=?" + (" AND role=?" if role else "")
+    params: tuple = (session_id, role) if role else (session_id,)
+    return [dict(r) for r in _exec(sql + " ORDER BY id LIMIT ?", params + (int(limit),))]
+
+
+def messages_search(fts_query: str, limit: int = 8, exclude_session: int | None = None) -> list[dict]:
+    """FTS5 match over past messages (best first). fts_query is an FTS5 expression."""
+    try:
+        rows = _exec("SELECT m.id,m.ts,m.role,m.text,m.session FROM messages_fts f "
+                     "JOIN messages m ON m.id=f.rowid WHERE messages_fts MATCH ? "
+                     "AND (? IS NULL OR m.session IS NOT ?) ORDER BY bm25(messages_fts) LIMIT ?",
+                     (fts_query, exclude_session, exclude_session, int(limit)))
+    except sqlite3.OperationalError:
+        return []
+    return [dict(r) for r in rows]
+
+
+# --- user profile facts (P7 tiered memory) ---
+def profile_set(key: str, value: str, source: str = "") -> bool:
+    """Insert or REPLACE the fact for key. True if it was new or changed."""
+    now = time.time()
+    old = _exec("SELECT value FROM profile WHERE key=?", (key,))
+    if old and old[0][0] == value:
+        _exec("UPDATE profile SET last_used=? WHERE key=?", (now, key))
+        return False
+    _exec("INSERT INTO profile(key,value,source,created,updated,hits,last_used) VALUES (?,?,?,?,?,0,?) "
+          "ON CONFLICT(key) DO UPDATE SET value=excluded.value, source=excluded.source, "
+          "updated=excluded.updated, last_used=excluded.last_used", (key, value, source, now, now, now))
+    return True
+
+
+def profile_get(key: str) -> str | None:
+    rows = _exec("SELECT value FROM profile WHERE key=?", (key,))
+    return rows[0][0] if rows else None
+
+
+def profile_all() -> list[dict]:
+    return [dict(r) for r in _exec("SELECT * FROM profile ORDER BY updated DESC")]
+
+
+def profile_delete(key: str) -> bool:
+    with _lock:
+        if _conn is None:
+            init(_path)
+        return _conn.execute("DELETE FROM profile WHERE key=?", (key,)).rowcount > 0  # type: ignore[union-attr]
+
+
+def profile_touch(keys: list[str]) -> None:
+    now = time.time()
+    for k in keys:
+        _exec("UPDATE profile SET hits=hits+1, last_used=? WHERE key=?", (now, k))
+
+
+# --- range readers (P7 usage report + daily digest) ---
+def llm_usage_between(t0: float, t1: float) -> list[dict]:
+    """Per (model, purpose): calls, ok calls, prompt/completion/total tokens, audio seconds."""
+    rows = _exec("SELECT model, purpose, COUNT(*) AS calls, SUM(ok) AS ok_calls, "
+                 "COALESCE(SUM(prompt_tokens),0) AS prompt, COALESCE(SUM(completion_tokens),0) AS completion, "
+                 "COALESCE(SUM(total_tokens),0) AS total, COALESCE(SUM(audio_s),0) AS audio_s "
+                 "FROM llm_calls WHERE ts>=? AND ts<? GROUP BY model, purpose", (t0, t1))
+    return [dict(r) for r in rows]
+
+
+def routing_count(method: str, t0: float, t1: float) -> int:
+    return int(_exec("SELECT COUNT(*) FROM routing WHERE method=? AND ts>=? AND ts<?", (method, t0, t1))[0][0])
+
+
+def jobs_finished_between(t0: float, t1: float, status: str = "done") -> list[dict]:
+    rows = _exec("SELECT * FROM jobs WHERE status=? AND finished>=? AND finished<? ORDER BY finished",
+                 (status, t0, t1))
+    return [dict(r) for r in rows]
+
+
+def alerts_between(t0: float, t1: float) -> list[dict]:
+    rows = _exec("SELECT * FROM alerts WHERE ts>=? AND ts<? ORDER BY ts", (t0, t1))
+    return [dict(r) for r in rows]
+
+
+def notes_between(t0: float, t1: float) -> list[dict]:
+    rows = _exec("SELECT * FROM notes WHERE created>=? AND created<? ORDER BY created", (t0, t1))
+    return [dict(r) for r in rows]

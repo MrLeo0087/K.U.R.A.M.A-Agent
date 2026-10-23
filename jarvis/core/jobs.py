@@ -335,7 +335,8 @@ def _agent_job(ctx: JobContext, text: str) -> str:
     """Run the normal agent (no planner, confirmations denied) and save its answer."""
     from jarvis.core import agent, safety, writer
 
-    bot = agent.Agent(confirm=safety.deny_all, summarize_async=False, use_planner=False)
+    bot = agent.Agent(confirm=safety.deny_all, summarize_async=False, use_planner=False,
+                      persist=False)
     ctx.progress("working")
     answer = bot.run(text)
     path = writer.output_path(ctx.job.title)

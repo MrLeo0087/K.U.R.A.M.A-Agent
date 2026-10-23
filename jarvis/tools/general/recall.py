@@ -1,4 +1,5 @@
-"""recall: read back remembered notes: all, only the last one, or those matching a query (safe)."""
+"""recall: read back remembered notes (all, last, or matching a query) or, with which="profile", the facts
+Jarvis learned about the user (safe)."""
 from __future__ import annotations
 
 from typing import Literal
@@ -15,16 +16,19 @@ def format_notes(notes: list[dict], total: int) -> str:
     return f"You asked me to remember {len(notes)} {word}{more}: {items}."
 
 
-@tool(group="memory", safety="safe", description="Recall remembered notes: all, only the last one, or ones matching a search.")
-def recall(which: Literal["all", "last", "search"] = "all", query: str = "", limit: int = 10) -> str:
+@tool(group="memory", safety="safe", description="Recall remembered notes (all, last, search) or what you know about the user (profile).")
+def recall(which: Literal["all", "last", "search", "profile"] = "all", query: str = "", limit: int = 10) -> str:
     """Recall notes.
 
     Args:
-        which: "all" (newest 10), "last" (only the most recent note) or "search" (notes containing query).
+        which: "all" (newest 10), "last" (most recent note), "search" (notes containing query) or "profile" (facts about the user).
         query: Text to look for when which is "search".
         limit: Max notes to return.
     """
     limit = max(1, min(int(limit or 10), 50))
+    if which == "profile":
+        from jarvis.core import profile
+        return profile.describe(limit)
     if which == "last":
         notes = store.notes_recent(1)
         return f"The last thing you told me to remember: {notes[0]['text']}." if notes else \

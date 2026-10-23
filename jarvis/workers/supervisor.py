@@ -33,6 +33,7 @@ WORKERS: dict[str, str] = {
     "crash_watchdog": "jarvis.workers.crash_watchdog:CrashWatchdog",
     "telegram_bot": "jarvis.workers.telegram_bot:TelegramBot",
     "n8n_inbound": "jarvis.workers.n8n_inbound:N8nInbound",
+    "daily_digest": "jarvis.workers.daily_digest:DailyDigest",
 }
 HEARTBEAT_S = 10.0
 

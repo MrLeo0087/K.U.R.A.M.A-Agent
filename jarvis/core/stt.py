@@ -104,7 +104,11 @@ def _one(wav: bytes, language: str | None, models: list[str]) -> Transcript:
             log.warning("stt %s failed (%s), trying fallback", model, type(e).__name__)
             continue
         ms = int((time.monotonic() - t0) * 1000)
-        store.log_llm(model, "stt", 0, 0, ms, True)
+        try:  # audio seconds for the usage report (verbose_json has duration; else from WAV size)
+            audio_s = float(_field(result, "duration", None) or max(0, len(wav) - 44) / (2 * config.AUDIO_SAMPLE_RATE))
+        except (TypeError, ValueError):
+            audio_s = 0.0
+        store.log_llm(model, "stt", 0, 0, ms, True, audio_s=audio_s)
         text = result if isinstance(result, str) else (_field(result, "text", "") or "")
         text = text.strip()
         if text.lower() in _HALLUCINATIONS:

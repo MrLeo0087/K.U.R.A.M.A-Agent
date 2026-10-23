@@ -191,7 +191,7 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
                 "तापक्रम", "तापमान"),
     "files": ("file", "files", "folder", "folders", "directory", "delete", "remove", "rename",
               "move file", "copy file", "trash", "locate", "named", "grep", "ripgrep", "where is",
-              "which file", "codebase", "code base", "in my code", "containing", "फाइल", "मिटाओ", "मेटाउ"),
+              "which file", "containing", "फाइल", "मिटाओ", "मेटाउ"),
     "system": ("battery", "cpu", "ram", "wifi", "bluetooth", "night light", "dark mode", "wallpaper",
                "do not disturb", "system doing", "my system", "system status", "system health",
                "resources", "resource usage", "memory usage", "ram usage", "disk", "disk space", "swap",
@@ -226,7 +226,17 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
             "langgraph", "data science"),
     "web": ("search", "news", "google", "look up", "lookup", "browse", "website"),
     "memory": ("remember", "recall", "note", "notes", "last time", "yesterday", "remind",
-               "what did i tell you", "forget", "yaad", "याद", "सम्झ"),
+               "what did i tell you", "forget", "yaad", "याद", "सम्झ", "talk about", "talked about",
+               "we discussed", "did we discuss", "our conversation", "about me", "know about me",
+               "my profile", "my name", "who am i"),
+    "knowledge": ("in my code", "my notes", "search my", "where did i", "how did i", "find in project",
+                  "what does my code", "docs", "documentation", "codebase", "code base", "my codebase",
+                  "codebase question", "in my project", "in the project", "in this repo", "in the repo",
+                  "my repo", "index folder", "index my", "index the", "knowledge", "in the code",
+                  "where is the code", "which function", "which module"),
+    "usage": ("token", "tokens", "token usage", "api usage", "api cost", "groq usage", "how much did i spend",
+              "cost", "budget", "digest", "daily digest", "daily summary", "summary of my day", "my day",
+              "टोकन"),
     "browser": ("url", "link", "website", "web site", "site", "youtube", "gmail", "github",
                 "chatgpt", "open google", "www", "http", "https"),
     "watch": ("watch", "watches", "watching", "monitor", "keep an eye", "tell me when", "notify me when",
@@ -259,7 +269,9 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
     "git": "git status, log, diff, commit and branches",
     "dev": "tests, new projects, Python environment checks",
     "web": "web search, news",
-    "memory": "remember, recall or forget short notes the user dictates",
+    "memory": "notes the user dictates, facts about the user (profile), past conversations/sessions",
+    "knowledge": "search or ask questions about the user's own code, docs and notes (RAG); index a folder",
+    "usage": "LLM token usage, budget and API cost; daily digest of the day's activity",
     "browser": "open a website or URL in the browser",
     "jobs": "long writing jobs (essays, articles, reports) and background job status/cancel",
 }
@@ -282,7 +294,7 @@ SHELL_ALLOWLIST = ("ls", "cat", "head", "tail", "wc", "grep", "rg", "fdfind", "f
 # --- Background core (P6): python -m jarvis.workers ---
 WORKERS_ENABLED: tuple[str, ...] = tuple(
     w.strip() for w in os.getenv("JARVIS_WORKERS", "process_watch,resource_guard,crash_watchdog,"
-                                 "telegram_bot,n8n_inbound").split(",") if w.strip())
+                                 "telegram_bot,n8n_inbound,daily_digest").split(",") if w.strip())
 WORKER_MIN_INTERVAL_S = 5.0  # no daemon polls faster than this
 WORKER_MAX_BACKOFF_S = 300.0  # error backoff cap (interval * 2^errors)
 WORKER_LOG_BYTES = 1_000_000  # rotating log per worker: ~1 MB x 3
@@ -353,3 +365,52 @@ MODEL_RPM = int(os.getenv("JARVIS_MODEL_RPM", "30"))
 MODEL_LIMITS: dict[str, dict[str, int]] = {}
 RATE_BACKGROUND_RESERVE = 0.3  # share of TPM/RPM background jobs must leave free for interactive
 RATE_INTERACTIVE_MAX_WAIT_S = 3.0  # interactive calls wait at most this long, then go anyway
+
+
+# --- Memory / RAG (P7) ---
+# Embeddings: fastembed + ONNX Runtime (no torch). bge-small-en-v1.5 = 67 MB, 384-d, English/code.
+# For Nepali/Hindi notes use "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+# (220 MB, 384-d, 50+ languages incl. hi/ne). Changing the model re-embeds the whole index.
+EMBED_MODEL = os.getenv("JARVIS_EMBED_MODEL", "BAAI/bge-small-en-v1.5")
+EMBED_CACHE_DIR = DATA_DIR / "models"
+EMBED_THREADS = 4  # ONNX intra-op threads (leave cores for VS Code / Chrome)
+EMBED_BATCH = 8  # small batches: less padding, lower peak RAM, same or better speed on CPU
+EMBED_IN_SUBPROCESS = True  # model in a child process: unloading frees ALL its RAM (incl. imports)
+EMBED_IDLE_UNLOAD_S = 120.0  # drop the model (and the cached vector matrix) after this idle time
+MEMORY_DB_PATH = DATA_DIR / "memory.db"  # chunks + FTS5 + float32 vectors (separate from jarvis.db)
+MEMORY_ROOTS: list[Path] = [ROOT] + ([Path.home() / "notes"] if (Path.home() / "notes").is_dir() else [])
+MEMORY_EXTS = (".py", ".md", ".txt", ".toml", ".yaml", ".yml", ".json", ".ipynb", ".js", ".jsx", ".ts",
+               ".tsx", ".sh", ".bash", ".rst")
+MEMORY_EXCLUDE_DIRS = ("data", "venv", ".venv", "env", "node_modules", "__pycache__", "site-packages",
+                       "dist", "build", "target", "outputs", "checkpoints", "wandb", "mlruns")
+MEMORY_EXCLUDE_FILES = ("package-lock.json", "yarn.lock", "pnpm-lock.yaml", "poetry.lock", "uv.lock")
+MEMORY_MAX_FILE_BYTES = 1_000_000
+CHUNK_CHARS = 800
+CHUNK_OVERLAP = 150  # chars of the previous chunk repeated at the start of the next (non-boundary splits)
+RRF_K = 60  # reciprocal rank fusion constant (BM25 rank + vector rank)
+SEARCH_CANDIDATES = 40  # per retriever before fusion
+KNOWLEDGE_K = 5
+KNOWLEDGE_MAX_CHARS = 800  # search_knowledge output cap
+KNOWLEDGE_SNIPPET_CHARS = 200
+ASK_K = 4
+ASK_CONTEXT_CHARS = 1500  # context sent to the fast tier by ask_knowledge
+ASK_MAX_TOKENS = 400
+ASK_CACHE = True  # normalized question -> answer, cleared whenever the index changes
+# Sessions + tiered memory
+SESSION_IDLE_S = 4 * 3600.0  # a turn after this much silence starts a new session (fresh context)
+SESSION_RECALL_MAX_CHARS = 800
+PROFILE_MAX = 50  # facts kept; the least used/oldest are pruned (name/home city are protected)
+PROFILE_LLM_EXTRACT = True  # one fast-tier call per session END (never per turn) to extract facts
+PROFILE_EXTRACT_MAX_TOKENS = 150
+PROFILE_INJECT_MAX = 3  # facts injected into the system prompt on personal turns only
+PROFILE_INJECT_MAX_CHARS = 240  # ~60 tokens
+PROFILE_DECAY_DAYS = 30.0  # recency half-life-ish for fact ranking
+# Usage / cost
+FASTPATH_TOKENS_SAVED_EST = 300  # avg prompt+completion tokens an LLM round would have cost
+# Optional paid-tier prices in USD per 1M tokens, e.g. {"openai/gpt-oss-20b": {"in": 0.1, "out": 0.5},
+# "whisper-large-v3-turbo": {"audio_hour": 0.04}}. Empty = we do not guess.
+MODEL_PRICES: dict[str, dict[str, float]] = {}
+# Daily digest (worker daily_digest + tool daily_digest)
+DIGEST_TIME = os.getenv("JARVIS_DIGEST_TIME", "21:00")
+DIGEST_USE_LLM = False  # True: one fast-tier call to polish the template
+DIGEST_INTERVAL_S = 60.0

@@ -41,7 +41,7 @@ class Bridge:
         if self._agent is None:
             from jarvis.core import agent, safety  # lazy: LangChain only when a text request comes
 
-            self._agent = agent.Agent(confirm=safety.deny_all)
+            self._agent = agent.Agent(confirm=safety.deny_all, channel="n8n")
         return self._agent
 
     def handle(self, path: str, headers: dict, body: bytes) -> tuple[int, dict]:

@@ -128,7 +128,7 @@ class TelegramBot(Worker):
             from jarvis.core import agent, safety  # lazy: LangChain only when needed
 
             safety.set_confirm_hook("telegram", self.confirm)
-            self._agent = agent.Agent(confirm=safety.get_confirm("telegram"))
+            self._agent = agent.Agent(confirm=safety.get_confirm("telegram"), channel="telegram")
         return self._agent
 
     # --- confirm hook (safety mode "telegram") ---

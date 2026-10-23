@@ -83,7 +83,10 @@ def weather(place: str = "", days: int = 1) -> str:
         place: City, town or country (any spelling); empty = the user's home place.
         days: 1 = today, 2 = include tomorrow, up to 3.
     """
-    place = (place or "").strip() or config.HOME_PLACE
+    if not (place or "").strip():
+        from jarvis.core import profile  # learned home city, else config.HOME_PLACE
+        place = profile.home_place()
+    place = place.strip()
     days = max(1, min(int(days or 1), 3))
     key = (place.lower(), days)
     if (hit := _cache.get(key)) is not None:

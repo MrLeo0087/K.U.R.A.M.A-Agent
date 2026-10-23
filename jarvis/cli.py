@@ -21,7 +21,7 @@ def main(argv: list[str] | None = None) -> int:
         print("GROQ_API_KEY missing: add it to .env", file=sys.stderr)
         return 1
     tty = sys.stdin.isatty()
-    bot = agent.Agent()  # confirmations use safety's terminal prompt in text mode
+    bot = agent.Agent(channel="text")  # confirmations use safety's terminal prompt in text mode
     bot.warm()
     jobs.set_mode("text")  # finished background jobs print "[job #N done] ..."
     if tty:
@@ -52,15 +52,11 @@ def main(argv: list[str] | None = None) -> int:
         tools = bot.last.get("tools") or []
         if tools and tty:
             print(f"[tools: {', '.join(t['name'] + ('' if t['ok'] else ' (failed)') for t in tools)}]")
-        try:
-            store.add_message("user", line)
-            store.add_message("assistant", "".join(parts).strip())
-        except Exception:
-            pass
     active = jobs.get_manager().active() if jobs._manager else []
     if active:
         print(f"[cancelling {len(active)} background job(s); partial output stays in data/outputs]")
     jobs.shutdown()
+    bot.end_session()  # persists the session; at most one fast-tier profile extraction
     return 0
 
 
