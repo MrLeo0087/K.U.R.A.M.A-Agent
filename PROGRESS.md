@@ -5,6 +5,7 @@ Status legend: [ ] todo · [~] in progress · [x] done · [h] done, needs human 
 ## Workflow (user rule, 2026-10-23)
 Build ONE phase at a time. After each phase: commit, give the user exact test steps, then STOP and wait for their OK ("works" / "continue"). Never auto-start the next phase. Fixes the user reports for a phase come first.
 UPDATE 2026-10-23 (after P7c): the user said "continue build this project now, complete it now", so it's continuous mode for the remaining phases (P8a→P12). Build, verify, commit, post a short status with test steps, and go straight to the next phase. Still stop for secrets, sudo/apt, destructive actions, or if the user interrupts with fixes (fixes come first).
+UPDATE 2026-10-23 (during P8b): the user asked to stop after P8b and let them check. Back to ONE phase at a time: after each phase, stop and wait for the user's OK.
 
 ## Phases
 - [x] P0 Bootstrap: git, .gitignore, .env.example, CLAUDE.md, PROGRESS.md
