@@ -24,7 +24,7 @@ TOOL_MIN_SCORE = 50
 # Spoken name -> names to look for, in order.
 ALIASES: dict[str, list[str]] = {}
 for _spoken, _targets in {
-    ("vs code", "vscode", "visual studio", "visual studio code", "code editor", "vs"): ["visual studio code", "vscode", "code"],
+    ("vs code", "vscode", "visual studio", "visual studio code", "code editor", "vs", "bs code", "code"): ["visual studio code", "vscode", "code"],
     ("settings", "system settings", "control center", "control panel", "setting"): ["settings"],
     ("files", "file manager", "file explorer", "explorer", "nautilus", "my files"): ["files", "nautilus"],
     ("terminal", "console", "command line", "shell", "command prompt"): ["terminal", "console", "ptyxis"],

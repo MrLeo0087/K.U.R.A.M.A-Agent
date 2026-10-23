@@ -373,3 +373,11 @@ def test_open_url_mocked(monkeypatch):
     assert opened == ["https://www.youtube.com"]
     assert registry.get("open_url").metadata["safety"] == "safe"
     assert "browser" in router.rule_groups("open youtube")
+
+
+def test_window_control_is_never_a_writing_job():
+    from jarvis.core import planner, router
+    assert not planner.is_long_job("uh make the full screen to VS Code the VS Code is not full screen")
+    assert not planner.is_long_job("split Brave and VS Code side by side")
+    assert planner.is_long_job("write a python script that renames files")
+    assert router.route("Can you full screen the VS Code?", log_it=False).groups == ["windows"]

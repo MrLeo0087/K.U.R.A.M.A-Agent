@@ -114,7 +114,15 @@ def job_kind(text: str) -> str:
     return "write"
 
 
+_APP_CODE = re.compile(r"(?<![\w])(?:vs|bs|visual\s+studio)\s+code(?![\w])", re.I)
+_CONTROL = re.compile(r"(?<![\w])(?:full\s?screen|maximi[sz]e|minimi[sz]e|snap|split|side\s+by\s+side|"
+                      r"window|open|close|focus|switch\s+to|launch|quit)(?![\w])", re.I)
+
+
 def is_long_job(text: str) -> bool:
+    text = _APP_CODE.sub("vscode", text)  # "VS Code" is an app, not "write code"
+    if _CONTROL.search(text) and target_words(text) is None and not _NOUNS.search(text):
+        return False  # window/app control ("make VS Code full screen")
     if _SCAN.search(text) or _CODE.search(text):
         return True
     words = target_words(text)

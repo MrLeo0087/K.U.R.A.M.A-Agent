@@ -57,3 +57,18 @@ def test_nepali_hint_prefers_large_v3(monkeypatch):
     monkeypatch.setattr(llm, "get_client", lambda: client)
     r = stt.transcribe(b"x", language="ne")
     assert r.model == config.STT_FALLBACK and r.lang == "ne"
+
+
+def test_mishearing_fixes_and_prompt(monkeypatch):
+    from unittest.mock import MagicMock
+    from jarvis.core import config, llm, stt
+    assert stt.fix_text("Can you full screen the BS code?") == "Can you full screen the VS Code?"
+    assert stt.fix_text("split Brave and Bear Skull") == "split Brave and VS Code"
+    assert stt.fix_text("Hey Karama, open versus code") == "Hey Kurama, open VS Code"
+    assert stt.fix_text("my vs account") == "my vs account"  # untouched
+    client = MagicMock()
+    client.audio.transcriptions.create.return_value = {"text": "open bs code", "language": "english"}
+    monkeypatch.setattr(llm, "get_client", lambda: client)
+    r = stt.transcribe(b"x")
+    assert r.text == "open VS Code"
+    assert client.audio.transcriptions.create.call_args.kwargs["prompt"] == config.STT_PROMPT

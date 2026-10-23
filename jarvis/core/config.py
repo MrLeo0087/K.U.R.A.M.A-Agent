@@ -61,6 +61,16 @@ STT_LANGUAGES = ("en", "ne", "hi")
 # Whisper auto-detect mislabels Nepali as Hindi. Set JARVIS_STT_LANG=ne to pin it.
 STT_LANGUAGE_HINT = os.getenv("JARVIS_STT_LANG") or None
 STT_PREFER_FALLBACK_LANGS = ("ne",)  # use large-v3 first for these
+# Whisper vocabulary hint (biases spelling of names/apps; tested not to break hi/ne detection).
+STT_PROMPT = os.getenv("JARVIS_STT_PROMPT",
+                       "Kurama, Jarvis, VS Code, Brave, YouTube, GitHub, Nepalgunj, Kathmandu, Pokhara.")
+# Common mishearings fixed after transcription (regex, case-insensitive, word-bounded).
+STT_FIXES: dict[str, str] = {
+    r"\b(?:b\.?\s?s\.?|be\s?as|versus|vs\.?|v\.\s?s\.)\s+(?:code|cold|cord|court|coat)\b": "VS Code",
+    r"\bvisual\s+studio(?:\s+code)?\b": "VS Code",
+    r"\bbear\s+skull\b": "VS Code",
+    r"\b(?:karama|kurma|corama|kurrama)\b": "Kurama",
+}
 
 # --- TTS (edge-tts) ---
 VOICES: dict[str, str] = {
@@ -140,6 +150,7 @@ ROUTER_MAX_GROUPS = 3
 ROUTER_URL_GROUP = "browser"  # group for messages containing a URL/domain
 ROUTER_SITE_OVER_APPS = True  # "open youtube": a known site/URL drops the apps group (browser wins)
 FASTPATH = os.getenv("JARVIS_FASTPATH", "1").lower() not in ("0", "false", "no", "off")  # regex intents, 0 tokens
+ASSISTANT_NAMES = ("jarvis", "kurama")  # wake/address words stripped from commands
 HOME_PLACE = os.getenv("JARVIS_HOME_PLACE", "Kathmandu")  # default for weather
 HTTP_TIMEOUT_S = 5.0
 WEATHER_CACHE_S = 600  # weather results are reused for 10 min
@@ -189,7 +200,8 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
                "speak this", "read the clipboard", "read clipboard", "padh ke sunao", "पढ़कर सुनाओ",
                "पढेर सुनाउ"),
     "windows": ("window", "windows", "snap", "minimize", "minimise", "maximize", "maximise",
-                "left half", "right half", "tile", "restore window"),
+                "left half", "right half", "tile", "restore window", "full screen", "fullscreen",
+                "split", "side by side", "half screen", "big screen", "पूरा स्क्रीन"),
     "apps": ("open", "close", "launch", "focus", "app", "application", "workspace", "kill", "browser",
              "terminal"),
     "media": ("play", "pause", "resume", "unpause", "music", "song", "next track", "previous track",

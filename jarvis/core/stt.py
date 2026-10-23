@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import io
 import logging
+import re
 import time
 import wave
 from dataclasses import dataclass
@@ -67,6 +68,13 @@ def _field(result, name: str, default=None):
     return getattr(result, name, default)
 
 
+def fix_text(text: str) -> str:
+    """Apply config.STT_FIXES (known mishearings such as "BS code" -> "VS Code")."""
+    for pat, rep in config.STT_FIXES.items():
+        text = re.sub(pat, rep, text, flags=re.I)
+    return text
+
+
 def transcribe(wav: bytes, language: str | None = None) -> Transcript:
     """Transcribe WAV bytes. language=None means auto-detect."""
     client = llm.get_client()
@@ -79,6 +87,8 @@ def transcribe(wav: bytes, language: str | None = None) -> Transcript:
         t0 = time.monotonic()
         kwargs = {"model": model, "file": ("speech.wav", wav), "response_format": "verbose_json",
                   "temperature": 0.0}
+        if config.STT_PROMPT:
+            kwargs["prompt"] = config.STT_PROMPT
         if language:
             kwargs["language"] = language
         try:
@@ -97,5 +107,5 @@ def transcribe(wav: bytes, language: str | None = None) -> Transcript:
             text = ""
         raw = language or _field(result, "language", "") or ""
         dur = _field(result, "duration", None) or wav_duration(wav)
-        return Transcript(text, map_language(raw), model, raw, float(dur), ms)
+        return Transcript(fix_text(text), map_language(raw), model, raw, float(dur), ms)
     raise STTError(f"all STT models failed ({', '.join(models)}): {last}") from last

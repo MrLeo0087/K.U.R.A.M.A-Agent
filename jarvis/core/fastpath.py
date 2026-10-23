@@ -37,9 +37,10 @@ class FastResult:
 
 
 # --- normalisation ---
-_LEAD = re.compile(r"^\s*(?:(?:hey|hi|ok|okay|yo)\s+)?(?:jarvis\b[\s,!.:]*)?(?:please\s+)?"
+_NAMES = "|".join(map(re.escape, config.ASSISTANT_NAMES))
+_LEAD = re.compile(r"^\s*(?:(?:hey|hi|ok|okay|yo)[\s,]+)?(?:(?:" + _NAMES + r")\b[\s,!.:]*)?(?:please\s+)?"
                    r"(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?)?", I)
-_TRAIL = re.compile(r"(?:[\s,]+(?:please|jarvis))*[\s?.!।॥]*$", I)
+_TRAIL = re.compile(r"(?:[\s,]+(?:please|" + _NAMES + r"))*[\s?.!।॥]*$", I)
 
 
 def normalize(text: str) -> str:
