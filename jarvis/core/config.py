@@ -223,11 +223,21 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
               "next song", "previous song", "skip", "playing", "playlist", "गाना", "गीत"),
     "git": ("git", "commit", "branch", "repo", "repository", "git status", "git log", "diff",
             "staged", "checkout", "changes", "uncommitted"),
-    "dev": ("pytest", "run tests", "test suite", "scaffold", "venv", "pip", "requirements", "lint",
-            "dependency", "dependencies", "notebook", "tests", "unit tests", "failing tests",
+    "dev": ("pytest", "run tests", "test suite", "scaffold", "venv", "pip", "requirements", "notebook", "tests", "unit tests", "failing tests",
             "doctor", "env doctor", "environment doctor", "environment check", "my environment",
             "dev environment", "python version", "virtualenv", "project", "new project", "fastapi",
             "langgraph", "data science"),
+    "codequality": ("dependency", "dependencies", "dependency doctor", "dependency check", "outdated",
+                    "outdated packages", "unpinned", "vulnerable", "vulnerability", "vulnerabilities", "cve",
+                    "pip-audit", "secret scan", "scan for secrets", "secrets", "secret leak", "leaked key",
+                    "leaked keys", "api key leak", "pre-commit", "precommit", "pre commit", "commit hook",
+                    "lint", "linter", "linting", "ruff", "hygiene", "repo hygiene", "clean up the repo", "code review",
+                    "review my code", "review the code", "review code", "review my diff", "review the diff",
+                    "review my changes", "review the changes", "review my commit", "review the last commit",
+                    "review last commit", "review this file", "review the file", "code quality",
+                    "code review karo", "mera code review", "code check karo", "code herdeu", "कोड रिभ्यु",
+                    "कोड रिव्यू", "कोड समीक्षा", "कोड जाँच", "कोड जाँच गर", "कोड हेर", "सिक्रेट", "डिपेन्डेन्सी",
+                    "निर्भरता"),
     "web": ("search", "search for", "news", "google", "look up", "lookup", "browse", "website", "wikipedia",
             "wiki", "who is", "who was", "who are", "latest", "headlines", "search the web", "search online",
             "on the internet", "read this page", "read the page", "web page", "webpage", "खोज", "ढूंढ"),
@@ -280,6 +290,8 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
     "media": "music and video playback (play, pause, next, previous, what's playing)",
     "git": "git status, log, diff, commit and branches",
     "dev": "tests, new projects, Python environment checks",
+    "codequality": "dependency doctor (unpinned/outdated/vulnerable/unused), secrets scan, pre-commit gate, "
+                   "repo hygiene, AI code review of a diff/file/commit",
     "web": "search the web (DuckDuckGo/SearXNG), Wikipedia summaries of people/topics, read a web page",
     "memory": "notes the user dictates, facts about the user (profile), past conversations/sessions",
     "knowledge": "search or ask questions about the user's own code, docs and notes (RAG); index a folder",
@@ -290,13 +302,13 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
 # Tiny glosses for the request_tools meta-tool (sent on every unmatched turn, so each word costs):
 # "" = the group name says it all.
 TOOL_GROUP_GLOSS: dict[str, str] = {
-    "general": "time, date", "weather": "", "files": "folders, write, trash", "filesearch": "",
+    "general": "time, date", "weather": "", "files": "folders, trash", "filesearch": "",
     "telegram": "send to phone", "toolsmith": "build new tool", "skills": "", "system": "RAM, CPU, disk",
     "watch": "process, log", "automation": "n8n", "audio": "volume, mic", "display": "brightness",
-    "screen": "screenshot", "power": "lock, suspend", "clipboard": "", "speech": "read aloud", "windows": "",
-    "apps": "", "media": "music", "git": "", "dev": "tests, venv",
-    "web": "search, wiki, page", "memory": "notes, past chats",
-    "knowledge": "my code, docs", "usage": "token cost", "browser": "open site",
+    "screen": "screenshot", "power": "lock", "clipboard": "", "speech": "read aloud", "windows": "",
+    "apps": "", "media": "music", "git": "", "dev": "tests, venv", "codequality": "secrets, review",
+    "web": "search, wiki", "memory": "notes, chats",
+    "knowledge": "my code, docs", "usage": "tokens", "browser": "open site",
     "jobs": "long writing",
 }
 
@@ -314,7 +326,8 @@ SHELL_ALLOWLIST = ("ls", "cat", "head", "tail", "wc", "grep", "rg", "fdfind", "f
                    "du", "free", "uptime", "whoami", "date", "echo", "pwd", "which", "python3",
                    "pytest", "pip", "xdotool", "wmctrl", "xrandr", "xclip", "pactl", "amixer",
                    "brightnessctl", "upower", "gsettings", "loginctl", "notify-send",
-                   "n8n", "uvicorn")  # P6: dev servers the crash watchdog may keep alive
+                   "n8n", "uvicorn",  # P6: dev servers the crash watchdog may keep alive
+                   "ruff", "pip-audit")  # P8a: optional linters for the codequality tools
 
 # --- Background core (P6): python -m jarvis.workers ---
 WORKERS_ENABLED: tuple[str, ...] = tuple(
@@ -468,7 +481,7 @@ SANDBOX_IMPORTS = ("math", "statistics", "datetime", "json", "re", "random", "st
                    "itertools", "functools", "decimal", "fractions", "textwrap", "calendar", "zoneinfo",
                    "urllib.parse", "csv", "hashlib", "uuid", "base64", "difflib", "unicodedata", "secrets")
 # SHELL_ALLOWLIST binaries a generated tool may still NOT run (interpreters, installers, git, servers).
-TOOLSMITH_CMD_DENY = ("python3", "pip", "pytest", "git", "uvicorn", "n8n", "xdotool", "find")
+TOOLSMITH_CMD_DENY = ("python3", "pip", "pytest", "git", "uvicorn", "n8n", "xdotool", "find", "ruff", "pip-audit")
 # File tools: writes under these roots are "safe"; anywhere else asks first.
 FILE_SAFE_ROOTS = tuple(Path(p).expanduser() for p in os.getenv(
     "JARVIS_FILE_ROOTS", "~/projects:/media/leo/Project1").split(":") if p)

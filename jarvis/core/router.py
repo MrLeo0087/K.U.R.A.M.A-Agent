@@ -124,6 +124,10 @@ _PROJECT_Q = re.compile(r"\b(?:what|explain|describe|summari[sz]e|tell me about|
                         r".*\b(?:this|the|my|our)\s+(?:project|repo|repository|codebase|code\s*base|code)\b", re.I)
 
 
+_GIT_ACTION = re.compile(r"\b(?:git (?:status|log|diff)|branch|checkout|(?<!-)(?<!last )commit (?:it|this|them|that|"
+                         r"the changes|my changes|everything|all)|and commit|then commit)\b", re.I)
+
+
 def refine(text: str, groups: list[str]) -> list[str]:
     """Cheap post-rules: "search my notes" / "latest commit" stay local (drop web unless the text says
     google/web/news...); "what is this project about" -> knowledge only."""
@@ -132,6 +136,8 @@ def refine(text: str, groups: list[str]) -> list[str]:
         groups = [g for g in groups if g != "web"]
     if "knowledge" in groups and len(groups) > 1 and _PROJECT_Q.search(text):
         groups = ["knowledge"]
+    if "codequality" in groups and len(groups) > 1:  # "review my code / last commit", "pre-commit" (P8a)
+        groups = [g for g in groups if g not in ("knowledge", "files") and (g != "git" or _GIT_ACTION.search(text))]
     return groups
 
 
