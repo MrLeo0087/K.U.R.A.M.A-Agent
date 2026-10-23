@@ -61,6 +61,10 @@ STT_LANGUAGES = ("en", "ne", "hi")
 # Whisper auto-detect mislabels Nepali as Hindi. Set JARVIS_STT_LANG=ne to pin it.
 STT_LANGUAGE_HINT = os.getenv("JARVIS_STT_LANG") or None
 STT_PREFER_FALLBACK_LANGS = ("ne",)  # use large-v3 first for these
+# Run a Nepali-forced large-v3 pass in parallel with auto-detect and pick the trustworthy one
+# (Whisper mislabels Nepali as English/Slovak/Hindi). Doubles STT calls, adds no latency.
+STT_DUAL = os.getenv("JARVIS_STT_DUAL", "1").lower() not in ("0", "false", "no", "off")
+STT_EN_MIN_LOGPROB = -0.6  # auto "English" below this confidence is treated as suspicious
 # Whisper vocabulary hint (biases spelling of names/apps; tested not to break hi/ne detection).
 STT_PROMPT = os.getenv("JARVIS_STT_PROMPT",
                        "Kurama, Jarvis, VS Code, Brave, YouTube, GitHub, Nepalgunj, Kathmandu, Pokhara.")
@@ -179,9 +183,10 @@ WORKSPACES: dict[str, dict[str, list[str]]] = {
 ROUTER_RULES: dict[str, tuple[str, ...]] = {
     "general": ("time", "date", "day is it", "clock", "what day", "o'clock", "baje",
                 "kitne baje", "kati bajyo", "bajyo", "samay", "समय", "बजे", "बज्यो", "तारीख", "मिति",
-                "time in", "time of"),
+                "time in", "time of", "टाइम", "कितने बजे", "कति बजे"),
     "weather": ("weather", "temperature", "forecast", "rain", "raining", "hot", "cold", "humid",
-                "mausam", "मौसम", "barsat", "पानी पर्छ", "बारिश"),
+                "mausam", "mosam", "mousam", "मौसम", "मोसम", "वेदर", "barsat", "पानी पर्छ", "बारिश",
+                "तापक्रम", "तापमान"),
     "files": ("file", "files", "folder", "folders", "directory", "delete", "remove", "rename",
               "move file", "copy file", "trash", "locate", "named", "grep", "ripgrep", "where is",
               "which file", "codebase", "code base", "in my code", "containing", "फाइल", "मिटाओ", "मेटाउ"),
@@ -201,7 +206,9 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
                "पढेर सुनाउ"),
     "windows": ("window", "windows", "snap", "minimize", "minimise", "maximize", "maximise",
                 "left half", "right half", "tile", "restore window", "full screen", "fullscreen",
-                "split", "side by side", "half screen", "big screen", "पूरा स्क्रीन"),
+                "split", "side by side", "half screen", "big screen", "पूरा स्क्रीन", "what's open",
+                "what is open", "things open", "currently open", "open right now", "running apps",
+                "which apps", "open apps", "are open", "is open", "open on my", "open in my", "खुला", "खुले"),
     "apps": ("open", "close", "launch", "focus", "app", "application", "workspace", "kill", "browser",
              "terminal"),
     "media": ("play", "pause", "resume", "unpause", "music", "song", "next track", "previous track",

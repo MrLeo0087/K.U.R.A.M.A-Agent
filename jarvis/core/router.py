@@ -80,8 +80,15 @@ def site_over_apps(text: str, groups: list[str]) -> list[str]:
     return groups
 
 
+# Hindi/Nepali command verbs (stems): open, tell, show, do, run, close, put on, play, give, make...
+_DEVA_CMD = re.compile(r"(?:खोल|बताउ|बताओ|बताइ|बता द|देखाउ|दिखा|गर्नु|गरिदे|गर|करो|कर द|चलाउ|चलाओ|बन्द|"
+                       r"बंद|लगाउ|लगाओ|बजाउ|बजाओ|दिनु|दो|बनाउ|बनाओ|सुनाउ|सुनाओ|लेख|लिख|खोज|ढूंढ)")
+
+
 def looks_like_command(text: str) -> bool:
     _, _, cmd = _compiled()
+    if _DEVA_CMD.search(text):  # Hindi/Nepali imperative (keyword lists are thin there)
+        return True
     return bool(cmd.search(text.lower()))
 
 

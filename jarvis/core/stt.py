@@ -45,6 +45,7 @@ class Transcript:
     raw_lang: str = ""
     duration_s: float = 0.0
     latency_ms: int = 0
+    logprob: float | None = None  # mean segment avg_logprob (confidence), when available
 
     def __str__(self) -> str:
         return self.text
@@ -75,14 +76,17 @@ def fix_text(text: str) -> str:
     return text
 
 
-def transcribe(wav: bytes, language: str | None = None) -> Transcript:
-    """Transcribe WAV bytes. language=None means auto-detect."""
+def _logprob(result) -> float | None:
+    segs = _field(result, "segments", None) or []
+    vals = [_field(sg, "avg_logprob", None) for sg in segs]
+    vals = [float(v) for v in vals if v is not None]
+    return sum(vals) / len(vals) if vals else None
+
+
+def _one(wav: bytes, language: str | None, models: list[str]) -> Transcript:
+    """One transcription, trying `models` in order (fallback on error)."""
     client = llm.get_client()
     last: Exception | None = None
-    language = language or config.STT_LANGUAGE_HINT
-    models = [config.STT_MODEL, config.STT_FALLBACK]
-    if language in config.STT_PREFER_FALLBACK_LANGS:
-        models.reverse()  # turbo garbles Nepali; large-v3 with a hint is accurate
     for model in models:
         t0 = time.monotonic()
         kwargs = {"model": model, "file": ("speech.wav", wav), "response_format": "verbose_json",
@@ -107,5 +111,80 @@ def transcribe(wav: bytes, language: str | None = None) -> Transcript:
             text = ""
         raw = language or _field(result, "language", "") or ""
         dur = _field(result, "duration", None) or wav_duration(wav)
-        return Transcript(fix_text(text), map_language(raw), model, raw, float(dur), ms)
+        return Transcript(fix_text(text), map_language(raw), model, raw, float(dur), ms,
+                          None if isinstance(result, str) else _logprob(result))
     raise STTError(f"all STT models failed ({', '.join(models)}): {last}") from last
+
+
+# --- language arbitration (Whisper often mislabels Nepali as English/Hindi/Slovak...) ---
+_DEVA = re.compile(r"[\u0900-\u097F]")
+_LATIN = re.compile(r"[A-Za-z]")
+_HI_WORDS = {"है", "हैं", "में", "क्या", "कैसा", "कैसी", "कैसे", "नहीं", "हूँ", "हूं", "था", "थी", "और",
+             "कितने", "मुझे", "मेरा", "मेरी", "आप", "अच्छा", "बताओ", "बताइए", "करो", "हुआ", "सकती", "सकते", "सकता"}
+_NE_WORDS = {"छ", "छन्", "हो", "मा", "कस्तो", "कति", "भयो", "अहिले", "हुन्छ", "छैन", "मेरो", "मलाई",
+             "तपाईं", "तिमी", "बज्यो", "गर", "गर्नु", "गर", "दिनु", "भन", "भन्नु", "खोल", "के"}
+
+
+def text_lang(text: str) -> str:
+    """en / hi / ne from the words themselves (script + common Hindi/Nepali function words)."""
+    if len(_DEVA.findall(text)) <= len(_LATIN.findall(text)):
+        return "en"
+    toks = re.findall(r"[\u0900-\u0963\u0966-\u097F]+", text)  # words, without danda ।॥
+    ne = sum(t in _NE_WORDS or (len(t) > 2 and t.endswith("मा")) for t in toks)
+    hi = sum(t in _HI_WORDS for t in toks)
+    return "hi" if hi > ne else "ne"
+
+
+def _clean_english(t: Transcript) -> bool:
+    """Plausible English: known label, ASCII only, not a choppy word salad, confident enough."""
+    txt = t.text
+    if t.raw_lang.strip().lower() not in LANG_MAP or t.lang != "en" or not txt:
+        return False
+    if any(ord(c) > 127 for c in txt):  # "Môže bota okého" etc.
+        return False
+    words = re.findall(r"[A-Za-z']+", txt)
+    if txt.count(",") >= 3 and len(words) <= 2 * txt.count(","):  # "Oly, Japan, Ma, Mousim, Gusto"
+        return False
+    return t.logprob is None or t.logprob >= config.STT_EN_MIN_LOGPROB
+
+
+def choose(auto: Transcript, ne: Transcript | None) -> Transcript:
+    """Pick between the auto-detect pass and the Nepali-forced pass."""
+    if ne is None or not ne.text:
+        return auto
+    if _clean_english(auto):
+        return auto
+    if (auto.raw_lang.strip().lower() in LANG_MAP and auto.lang == "hi" and _DEVA.search(auto.text)
+            and text_lang(ne.text) == "hi"):
+        auto.lang = "hi"
+        return auto
+    ne.lang = text_lang(ne.text)  # large-v3 + "ne" transcribes ne, hi and en speech correctly
+    return ne
+
+
+def transcribe(wav: bytes, language: str | None = None) -> Transcript:
+    """Transcribe WAV bytes. language=None: auto-detect, plus (STT_DUAL) a parallel Nepali-forced
+    large-v3 pass so Nepali is not lost to Whisper's language mislabels (no extra latency)."""
+    language = language or config.STT_LANGUAGE_HINT
+    turbo_first = [config.STT_MODEL, config.STT_FALLBACK]
+    if language:
+        models = turbo_first[::-1] if language in config.STT_PREFER_FALLBACK_LANGS else turbo_first
+        return _one(wav, language, models)
+    if not config.STT_DUAL:
+        return _one(wav, None, turbo_first)
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=2) as ex:
+        f_auto = ex.submit(_one, wav, None, turbo_first)
+        f_ne = ex.submit(_one, wav, "ne", turbo_first[::-1])
+        try:
+            auto = f_auto.result()
+        except STTError:
+            return f_ne.result()
+        try:
+            ne = f_ne.result()
+        except STTError:
+            ne = None
+    best = choose(auto, ne)
+    best.latency_ms = max(auto.latency_ms, ne.latency_ms if ne else 0)
+    return best

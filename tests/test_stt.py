@@ -72,3 +72,38 @@ def test_mishearing_fixes_and_prompt(monkeypatch):
     r = stt.transcribe(b"x")
     assert r.text == "open VS Code"
     assert client.audio.transcriptions.create.call_args.kwargs["prompt"] == config.STT_PROMPT
+
+
+def _tr(text, lang, raw=None, lp=-0.2, model="m"):
+    from jarvis.core import stt
+    return stt.Transcript(text, lang, model, raw if raw is not None else lang, 1.0, 100, lp)
+
+
+def test_dual_pass_language_arbitration():
+    from jarvis.core import stt
+    ne_forced = _tr("अहिले जापान मा मोसम कस्तो छ?", "ne", "ne", model="whisper-large-v3")
+    # Nepali speech mislabeled English (word salad) or Slovak -> the Nepali-forced pass wins
+    assert stt.choose(_tr("Oly, Japan, Ma, Mousim, Gusto, Zoh.", "en", "english", -0.9), ne_forced) is ne_forced
+    assert stt.choose(_tr("Môže bota okého vid Zabán", "en", "slovak"), ne_forced).lang == "ne"
+    # clean English stays on the auto pass
+    en = _tr("What is the weather in Japan right now?", "en", "english", -0.17)
+    assert stt.choose(en, _tr("What is the weather in Japan right now?", "ne")) is en
+    # real Hindi stays Hindi
+    hi = _tr("अभी जापान में मौसम कैसा है?", "hi", "hindi", -0.05)
+    assert stt.choose(hi, _tr("अभी जापान में मौसम कैसा है?", "ne")) is hi
+    assert stt.text_lang("नमस्ते, मेरा नाम जार्विस है। आज मौसम अच्छा है।") == "hi"
+    assert stt.text_lang("मलाई नेपालमा अहिले कति बज्यो?") == "ne"
+
+
+def test_dual_pass_runs_both_in_parallel(monkeypatch):
+    from jarvis.core import config, stt
+    monkeypatch.setattr(config, "STT_DUAL", True)
+    calls = []
+
+    def fake_one(wav, language, models):
+        calls.append(language)
+        return _tr("Oly, Japan, Ma", "en", "english", -0.9) if language is None else \
+            _tr("अहिले जापानमा मौसम कस्तो छ?", "ne")
+    monkeypatch.setattr(stt, "_one", fake_one)
+    out = stt.transcribe(b"x")
+    assert sorted(calls, key=str) == [None, "ne"] and out.lang == "ne"
