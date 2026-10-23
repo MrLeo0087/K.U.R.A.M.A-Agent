@@ -57,10 +57,12 @@ _LEAD = re.compile(r"^\s*(?:(?:hey\s+)?jarvis[\s,]+)?(?:please\s+)?(?:(?:can|cou
                    r"\s+(?:me\s+)?(?:an?\s+|the\s+)?", re.I)
 
 PLAN_PROMPT = (
-    "Split the user's request into independent tasks (at most 4), each a self-contained command "
-    "in the user's own words and language. kind=long for writing long text (essay, article, story, "
-    "report), generating code, or scanning a whole project; otherwise quick. If it is really one "
-    "request, return one task."
+    "Split the request into separate tasks, one per action (max 4). Each different action is its "
+    "own task, even if joined by and/also/then/र/अनि/और. Rewrite each as a short self-contained "
+    "command in the user's language, fixing obvious speech-to-text slips. kind=long only for "
+    "writing long text (essay, article, story, report), generating code, or scanning a whole "
+    "project; else quick.\n"
+    "Example: 'open google and tell me the time' -> [open Google (quick), tell me the time (quick)]"
 )
 
 
@@ -195,7 +197,7 @@ def plan(text: str) -> Plan:
         tasks = decompose(text)
         method = "llm"
     except llm.LLMError as e:
-        log.warning("planner decomposition failed, splitting by rules: %s", e)
+        log.info("planner decomposition failed, splitting by rules: %s", e)
         tasks, method = [], "rules"
     if not tasks:
         tasks, method = _rule_tasks(text), "rules"

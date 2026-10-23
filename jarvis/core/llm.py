@@ -442,16 +442,21 @@ def structured(messages: Sequence[Any], schema: type, tier: str = "fast", purpos
             base = model_for(model)
             if "max_tokens" in type(base).model_fields:
                 base = base.model_copy(update={"max_tokens": rate[2]})
-            out = base.with_structured_output(schema, include_raw=True).invoke(msgs, config=_cfg(purpose))
+            # Strict json_schema = constrained decoding: the reply is always valid JSON.
+            # (function_calling on gpt-oss occasionally emits broken JSON -> Groq 400.)
+            method = config.STRUCTURED_METHOD.get(model, "function_calling")
+            kw = {"method": method, "strict": True} if method == "json_schema" else {"method": method}
+            out = base.with_structured_output(schema, include_raw=True, **kw).invoke(
+                msgs, config=_cfg(purpose))
         except Exception as e:
             last = e
             _settle(ticket, None, rate)
-            log.warning("structured output failed on %s: %s", model, e)
+            log.debug("structured output failed on %s: %s", model, e)
             continue
         _settle(ticket, _reply(out.get("raw"), model), rate)
         if out.get("parsed") is None:
             last = out.get("parsing_error") or ValueError("no structured output")
-            log.warning("structured output unparsable on %s: %s", model, last)
+            log.debug("structured output unparsable on %s: %s", model, last)
             continue
         return out["parsed"]
     raise LLMError(f"structured output failed ({tier}): {last}") from last

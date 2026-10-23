@@ -42,6 +42,12 @@ TIER_CHAIN: dict[str, list[str]] = {
 }
 # Extra per-model request params. gpt-oss models are reasoning models: keep reasoning
 # short and hidden so replies stay fast and token-cheap.
+# with_structured_output method per model. gpt-oss supports strict json_schema (constrained
+# decoding, never invalid JSON); others fall back to function calling.
+STRUCTURED_METHOD: dict[str, str] = {
+    LLM_DEFAULT: "json_schema",
+    LLM_FAST: "json_schema",
+}
 MODEL_PARAMS: dict[str, dict] = {
     LLM_DEFAULT: {"reasoning_effort": "low", "reasoning_format": "hidden"},
     LLM_FAST: {"reasoning_effort": "low", "reasoning_format": "hidden"},
