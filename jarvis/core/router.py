@@ -128,9 +128,35 @@ _GIT_ACTION = re.compile(r"\b(?:git (?:status|log|diff)|branch|checkout|(?<!-)(?
                          r"the changes|my changes|everything|all)|and commit|then commit)\b", re.I)
 
 
+# "generate/create/make a requirements.txt", "requirements banao": devutils (generate_requirements), while
+# other "requirements" phrasings (check/outdated/pinned) stay with codequality's dependency_doctor (P8b).
+_GEN_REQ = re.compile(
+    r"\b(?:generate|create|make|write|build|produce|regenerate|auto-?generate)\s+(?:(?:a|an|the|new|my|me|fresh|"
+    r"pinned|proper|updated)\s+){0,3}requirements\b|\brequirements(?:\.txt)?(?:\s+(?:file|फाइल))?\s+(?:banao|"
+    r"bana\s+do|banau|banaideu|banaidinu|generate|create|बनाओ|बना\s+दो|बनाउ|बनाइदेउ|बनाऊ|बनाइदिनु|तयार)", re.I)
+_BROAD = re.compile(r"\b(?:this|my|the|a)?\s*(?:project|projects|repo|repository|code|training|runs?|"
+                    r"experiments?|results?)\b")
+_DEVUTILS_DROP = frozenset(("knowledge", "files", "filesearch", "codequality"))
+
+
+def devutils_refine(text: str, groups: list[str]) -> list[str]:
+    """devutils phrases win over the broad groups they overlap (dev "notebook", git "diff", knowledge
+    "this project"); other groups stay only if they still match once the devutils words are removed."""
+    if _GEN_REQ.search(text):
+        groups = ["devutils"] + [g for g in groups if g != "devutils"]
+    if "devutils" not in groups or len(groups) == 1:
+        return groups
+    rules, _, _ = _compiled()
+    rest = _GEN_REQ.sub(" ", rules["devutils"].sub(" ", text.lower())) if "devutils" in rules else text.lower()
+    keep = set(rule_groups(_BROAD.sub(" ", rest)))
+    return [g for g in groups if g == "devutils" or (g in keep and g not in _DEVUTILS_DROP)
+            and (g != "git" or _GIT_ACTION.search(text))]
+
+
 def refine(text: str, groups: list[str]) -> list[str]:
     """Cheap post-rules: "search my notes" / "latest commit" stay local (drop web unless the text says
     google/web/news...); "what is this project about" -> knowledge only."""
+    groups = devutils_refine(text, groups)
     if "web" in groups and len(groups) > 1 and _LOCAL_GROUPS.intersection(groups) \
             and not _EXPLICIT_WEB.search(text):
         groups = [g for g in groups if g != "web"]

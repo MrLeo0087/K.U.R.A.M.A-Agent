@@ -223,7 +223,7 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
               "next song", "previous song", "skip", "playing", "playlist", "गाना", "गीत"),
     "git": ("git", "commit", "branch", "repo", "repository", "git status", "git log", "diff",
             "staged", "checkout", "changes", "uncommitted"),
-    "dev": ("pytest", "run tests", "test suite", "scaffold", "venv", "pip", "requirements", "notebook", "tests", "unit tests", "failing tests",
+    "dev": ("pytest", "run tests", "test suite", "scaffold", "venv", "pip", "tests", "unit tests", "failing tests",
             "doctor", "env doctor", "environment doctor", "environment check", "my environment",
             "dev environment", "python version", "virtualenv", "project", "new project", "fastapi",
             "langgraph", "data science"),
@@ -237,7 +237,22 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
                     "review last commit", "review this file", "review the file", "code quality",
                     "code review karo", "mera code review", "code check karo", "code herdeu", "कोड रिभ्यु",
                     "कोड रिव्यू", "कोड समीक्षा", "कोड जाँच", "कोड जाँच गर", "कोड हेर", "सिक्रेट", "डिपेन्डेन्सी",
-                    "निर्भरता"),
+                    "निर्भरता", "requirements", "requirements.txt", "requirements file", "check requirements"),
+    "devutils": ("docstring", "docstrings", "doc string", "doc strings", "type hint", "type hints", "type hinting",
+                 "type annotations", "add type hints", "document my functions", "document these functions",
+                 "notebook", "notebooks", "jupyter", "ipynb", "notebook to script", "notebook to python",
+                 "requirements generator", "generate requirements", "create requirements",
+                 "config diff", "config changes", "config changed", "config change", "what changed in config",
+                 "what changed in my config", "what changed in the config", "changes in config", "changes in my config",
+                 "config snapshot", "snapshot config", "snapshot my config", "snapshot the config", "compare config",
+                 "config drift", "benchmark table", "benchmark results", "results table", "result table",
+                 "metrics table", "compare runs", "compare results", "compare experiments", "leaderboard",
+                 "experiment results", "डकस्ट्रिङ", "डकस्ट्रिंग", "डॉकस्ट्रिंग", "टाइप हिन्ट", "टाइप हिंट", "नोटबुक",
+                 "नोटबुकलाई", "कन्फिग", "कॉन्फ़िग", "कॉन्फिग", "बेन्चमार्क", "बेंचमार्क", "नतिजा तालिका",
+                 "परिणाम तालिका", "रिजल्ट टेबल", "config me kya badla", "config ma ke pheriyo",
+                 "config ma ke badliyo", "config मा के फेरियो", "config मा के बदलियो", "config में क्या बदला",
+                 "कन्फिगमा के फेरियो", "type hint lagao", "docstring lekh", "docstring likho",
+                 "results ki table", "benchmark table banao"),
     "web": ("search", "search for", "news", "google", "look up", "lookup", "browse", "website", "wikipedia",
             "wiki", "who is", "who was", "who are", "latest", "headlines", "search the web", "search online",
             "on the internet", "read this page", "read the page", "web page", "webpage", "खोज", "ढूंढ"),
@@ -292,6 +307,8 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
     "dev": "tests, new projects, Python environment checks",
     "codequality": "dependency doctor (unpinned/outdated/vulnerable/unused), secrets scan, pre-commit gate, "
                    "repo hygiene, AI code review of a diff/file/commit",
+    "devutils": "add docstrings/type hints, notebook (.ipynb) to .py script, generate requirements.txt from "
+                "imports, config file snapshots/diff, benchmark/results markdown table",
     "web": "search the web (DuckDuckGo/SearXNG), Wikipedia summaries of people/topics, read a web page",
     "memory": "notes the user dictates, facts about the user (profile), past conversations/sessions",
     "knowledge": "search or ask questions about the user's own code, docs and notes (RAG); index a folder",
@@ -302,14 +319,15 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
 # Tiny glosses for the request_tools meta-tool (sent on every unmatched turn, so each word costs):
 # "" = the group name says it all.
 TOOL_GROUP_GLOSS: dict[str, str] = {
-    "general": "time, date", "weather": "", "files": "folders, trash", "filesearch": "",
-    "telegram": "send to phone", "toolsmith": "build new tool", "skills": "", "system": "RAM, CPU, disk",
+    "general": "time", "weather": "", "files": "folders", "filesearch": "",
+    "telegram": "send to phone", "toolsmith": "new tool", "skills": "", "system": "RAM, CPU, disk",
     "watch": "process, log", "automation": "n8n", "audio": "volume, mic", "display": "brightness",
     "screen": "screenshot", "power": "lock", "clipboard": "", "speech": "read aloud", "windows": "",
     "apps": "", "media": "music", "git": "", "dev": "tests, venv", "codequality": "secrets, review",
-    "web": "search, wiki", "memory": "notes, chats",
+    "devutils": "docstrings, ipynb",
+    "web": "search, wiki", "memory": "notes",
     "knowledge": "my code, docs", "usage": "tokens", "browser": "open site",
-    "jobs": "long writing",
+    "jobs": "writing",
 }
 
 # Words that suggest multi-step reasoning (router asks for the smart tier).
