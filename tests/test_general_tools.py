@@ -88,12 +88,12 @@ def test_tools_registered():
 # --- weather / time ---
 def test_weather_any_place_with_spelling_fallback_and_cache(http):
     out = weather_mod.weather("Nepalganj")
-    assert out.startswith("Nepalgunj, Nepal: 24°C, feels like 25°C, partly cloudy")
-    assert "Humidity 60%" in out and "Today 18 to 30°C, 10% chance of rain." in out
+    # main points only: no humidity/wind, feels-like only when it differs by >= 4 degrees
+    assert out == "Nepalgunj, Nepal: 24°C and partly cloudy. Today 18 to 30°C, no rain expected."
     n = len(http)
     assert weather_mod.weather("Nepalganj") == out and len(http) == n  # cached: no new HTTP
     two = weather_mod.weather("Nepalganj", days=2)
-    assert "Tomorrow 17 to 28°C, light rain, 80% chance of rain." in two
+    assert "Tomorrow 17 to 28°C, light rain, rain likely (80%)." in two
     assert http[-1][1]["forecast_days"] == 2 and http[-1][1]["latitude"] == 28.05
 
 
@@ -101,13 +101,13 @@ def test_weather_home_place_and_unknown(http, monkeypatch):
     monkeypatch.setattr(config, "HOME_PLACE", "Kathmandu")
     assert weather_mod.weather().startswith("Kathmandu, Nepal:")
     assert "couldn't find" in weather_mod.weather("Atlantis")
-    assert weather_mod.weather("Tokyo", days=9).count("°C, ") >= 3  # clamped to 3 days
+    assert weather_mod.weather("Tokyo", days=9).count(" to ") == 3  # clamped to 3 days
 
 
 def test_get_time_local_and_world(http):
-    assert "UTC" in get_time() and not http  # local: no geocoder call
+    assert get_time().startswith("It's ") and not http  # local: no geocoder call
     out = get_time("Tokyo")
-    assert out.startswith("Tokyo, Japan: ") and "(UTC+0900)" in out
+    assert out.startswith("It's ") and out.endswith("in Tokyo, Japan.")
     assert "couldn't find" in get_time("Atlantis")
 
 
@@ -253,3 +253,25 @@ def test_unknown_place_falls_through_to_llm(fast_on, http):
     # unknown place: no templated "not found"; the LLM path gets a chance to fix the spelling
     assert fastpath.try_answer("weather in Atlantis") is None
     assert fastpath.match("is it going to rain in Pokhara tomorrow?").args == {"place": "Pokhara", "days": 2}
+
+
+def test_time_answer_is_short_and_date_only_when_asked():
+    out = "It's 1:06 PM on Friday, 23 October 2026 in Tokyo, Japan."
+    i = fastpath.Intent("time", "get_time", "general", {"place": "Tokyo"}, "Tokyo")
+    assert fastpath.render(i, True, out, "en") == "It's 1:06 PM in Tokyo, Japan."
+    assert fastpath.match("what's the date today").args == {"_date": True}
+    local = fastpath.Intent("time", "get_time", "general", {"_date": True})
+    assert fastpath.render(local, True, "It's 9:05 AM on Friday, 23 October 2026.", "en") == \
+        "It's 9:05 AM, Friday, 23 October 2026."
+
+
+def test_geocode_prefers_named_country(monkeypatch):
+    from jarvis.tools.general import _geo
+    _geo._geo_cache.clear()
+    hits = [{"name": "Jumla", "country": "Elsewhere", "latitude": 1, "longitude": 1, "timezone": "UTC"},
+            {"name": "Jumla", "country": "Nepal", "latitude": 29.3, "longitude": 82.2,
+             "timezone": "Asia/Kathmandu"}]
+    seen = []
+    monkeypatch.setattr(_geo, "get_json", lambda url, params: seen.append(params) or {"results": hits})
+    g = _geo.geocode("Jumla of Nepal")
+    assert g["country"] == "Nepal" and seen[0]["name"] == "Jumla" and seen[0]["count"] == 5

@@ -63,14 +63,15 @@ TIME_LOCAL = _rx(
     r"समय क्या (?:हुआ|है)", r"के समय भयो",
 )
 TIME_PLACE = _rx(
-    r"(?:tell me |what(?:'s| is) )?(?:the )?(?:current |local )?time (?:right now |now )?(?:in|at|of) (?P<place>.+)",
+    r"(?:(?:tell me|give me|provide|show me|check|get|find|say) |what(?:'s| is) )?(?:the )?(?:current |local )?"
+    r"time (?:right now |now )?(?:in|at|of|for) (?P<place>.+)",
     r"what time is it (?:now |right now )?(?:in|at) (?P<place>.+)",
     r"(?P<place>.+?) (?:ma|mein|me|मा|में) (?:abhi |ahile )?(?:kati bajyo|kitne baje(?: hain| hai)?|"
     r"कति बज्यो|कितने बजे (?:हैं|है)|time kya hai)",
 )
 
 # --- weather ---
-_PRE = r"(?:(?:tell me|show me|check|get|give me) )?(?:what(?:'s| is) |how(?:'s| is) )?(?:the )?(?:current |today'?s |todays )?"
+_PRE = r"(?:(?:tell me|show me|check|get|give me|provide|find|say) )?(?:what(?:'s| is) |how(?:'s| is) )?(?:the )?(?:current |today'?s |todays )?"
 _WHEN = r"(?: (?P<when>today|now|right now|tomorrow|this week|next 3 days|for the next 3 days|outside))?"
 WEATHER = _rx(
     _PRE + r"weather(?: (?:like|report|update|forecast|today|now|outside))*"
@@ -271,7 +272,8 @@ def match(text: str) -> Intent | None:
     if not t or len(t) > 200:
         return None
     if m := _full(TIME_LOCAL, t):
-        return Intent("time", "get_time", "general")
+        want_date = bool(re.search(r"\b(?:date|day|today)\b|गते|तारीख|बार", t, I))
+        return Intent("time", "get_time", "general", {"_date": True} if want_date else {})
     if m := _full(TIME_PLACE, t):
         place = _place(m.group("place"))
         if place:
@@ -357,7 +359,8 @@ def _render_system(intent: Intent, out: str, lang: str) -> str:
             return out[:1].upper() + out[1:].rstrip(".") + "."
         return _say({"pause": "paused", "play": "playing"}.get(action, action), lang, "")
     return _say(intent.name, lang, "")  # screenshot / lock
-_TIME_OUT = re.compile(r"^(?:(?P<where>.+?): )?(?P<day>\w+), (?P<date>\d+ \w+ \d+), (?P<hm>\d\d:\d\d)")
+_TIME_OUT = re.compile(r"^It's (?P<h12>\d+:\d\d) (?P<ampm>AM|PM) on (?P<day>\w+), (?P<date>\d+ \w+ \d+)"
+                       r"(?: in (?P<where>.+?))?\.$")
 
 
 def _say(key: str, lang: str, x: str) -> str:
@@ -375,12 +378,13 @@ def render(intent: Intent, ok: bool, output: str, lang: str) -> str:
             return _say("open_fail", lang, intent.label)
         return _say("failed", lang, re.sub(r"^error:\s*", "", out))
     if intent.name == "time" and (m := _TIME_OUT.match(out)):
-        where, hm = m.group("where"), m.group("hm")
+        where, h12, ampm = m.group("where"), m.group("h12"), m.group("ampm")
+        date_txt = f"{m.group('day')}, {m.group('date')}" if intent.args.get("_date") else ""
         if lang == "hi":
-            return f"{where + ' में ' if where else ''}अभी {hm} बजे हैं, {m.group('day')}, {m.group('date')}।"
+            return f"{where + ' में ' if where else ''}अभी {h12} बजे हैं{', ' + date_txt if date_txt else ''}।"
         if lang == "ne":
-            return f"{where + 'मा ' if where else ''}अहिले {hm} बज्यो, {m.group('day')}, {m.group('date')}।"
-        return f"It's {hm} on {m.group('day')}, {m.group('date')}{' in ' + where if where else ''}."
+            return f"{where + 'मा ' if where else ''}अहिले {h12} बज्यो{', ' + date_txt if date_txt else ''}।"
+        return f"It's {h12} {ampm}{' in ' + where if where else ''}{', ' + date_txt if date_txt else ''}."
     if intent.name in _SYSTEM:
         return _render_system(intent, out, lang)
     if intent.name == "remember":
@@ -405,7 +409,8 @@ def try_answer(text: str, lang: str | None = None, confirm=None) -> FastResult |
     if lang is None:
         from jarvis.core.planner import detect_lang
         lang = detect_lang(text)
-    res = safety.execute(intent.tool, intent.args, confirm=confirm)
+    res = safety.execute(intent.tool, {k: v for k, v in intent.args.items() if not k.startswith("_")},
+                          confirm=confirm)
     if intent.name in ("time", "weather") and "couldn't find a place" in (res.output or ""):
         return None  # unknown place: let the LLM path try (it can fix spelling)
     answer = render(intent, res.ok, res.output, lang or "en")

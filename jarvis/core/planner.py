@@ -58,8 +58,8 @@ _LEAD = re.compile(r"^\s*(?:(?:hey\s+)?jarvis[\s,]+)?(?:please\s+)?(?:(?:can|cou
 
 PLAN_PROMPT = (
     "Split the request into separate tasks, one per action (max 4). Each different action is its "
-    "own task, even if joined by and/also/then/र/अनि/और. Rewrite each as a short self-contained "
-    "command in the user's language, fixing obvious speech-to-text slips. kind=long only for "
+    "own task, even if joined by and/also/then/र/अनि/और. Keep each task in the user's own words and "
+    "language (only fix obvious speech-to-text slips), e.g. 'what is the time in Nepal'. kind=long only for "
     "writing long text (essay, article, story, report), generating code, or scanning a whole "
     "project; else quick.\n"
     "Example: 'open google and tell me the time' -> [open Google (quick), tell me the time (quick)]"

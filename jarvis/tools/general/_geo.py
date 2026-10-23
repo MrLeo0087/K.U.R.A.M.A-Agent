@@ -69,8 +69,6 @@ def _variants(place: str) -> list[str]:
     for a, b in (("ganj", "gunj"), ("gunj", "ganj"), ("pur", "pura"), ("mandu", "mandoo")):
         if a in low:
             out.append(re.sub(a, b, place, flags=re.I))
-    if "," in place:  # "Paris, France" -> "Paris"
-        out.append(place.split(",")[0].strip())
     return list(dict.fromkeys(v for v in out if v))
 
 
@@ -84,9 +82,15 @@ def geocode(place: str) -> dict | None:
     if cached is not None:
         return cached or None
     found: dict | None = None
+    region = ""
+    if m := re.match(r"^(.+?)\s*(?:,|\bof\b|\bin\b)\s*(.+)$", place, re.I):
+        place, region = m.group(1).strip(), m.group(2).strip().lower()
     for q in _variants(place):
-        data = get_json(GEOCODE_URL, {"name": q, "count": 1, "format": "json"})
+        data = get_json(GEOCODE_URL, {"name": q, "count": 5 if region else 1, "format": "json"})
         res = (data or {}).get("results") or []
+        if region:  # prefer the hit in the named country/state
+            res = sorted(res, key=lambda r: region not in
+                         f"{r.get('country', '')} {r.get('admin1', '')}".lower())
         if res:
             r = res[0]
             found = {"name": r.get("name") or q, "country": r.get("country") or "",

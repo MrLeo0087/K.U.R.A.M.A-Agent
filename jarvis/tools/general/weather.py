@@ -35,26 +35,43 @@ def _r(x) -> str:
         return "?"
 
 
+def _rain(p) -> str:
+    """Main point about rain only: none / chance / likely."""
+    if p is None:
+        return ""
+    p = round(float(p))
+    if p < 20:
+        return "no rain expected"
+    return f"{p}% chance of rain" if p < 60 else f"rain likely ({p}%)"
+
+
 def _format(where: str, data: dict, days: int) -> str:
+    """Short, speakable summary: now + today's range + rain (feels-like/wind only if notable)."""
     cur, d = data.get("current") or {}, data.get("daily") or {}
-    parts = [f"{where}: {_r(cur.get('temperature_2m'))}°C, feels like {_r(cur.get('apparent_temperature'))}°C, "
-             f"{describe(cur.get('weather_code'))}. Humidity {_r(cur.get('relative_humidity_2m'))}%, "
-             f"wind {_r(cur.get('wind_speed_10m'))} km/h."]
+    temp, feels = cur.get("temperature_2m"), cur.get("apparent_temperature")
+    now = f"{where}: {_r(temp)}°C and {describe(cur.get('weather_code'))}"
+    try:
+        if abs(float(feels) - float(temp)) >= 4:
+            now += f", feels like {_r(feels)}°C"
+        if float(cur.get("wind_speed_10m") or 0) >= 30:
+            now += ", windy"
+    except (TypeError, ValueError):
+        pass
+    parts = [now + "."]
     lo, hi = d.get("temperature_2m_min") or [], d.get("temperature_2m_max") or []
     rain, codes, dates = (d.get("precipitation_probability_max") or [], d.get("weather_code") or [],
                           d.get("time") or [])
     for i in range(min(days, len(lo), len(hi))):
-        p = rain[i] if i < len(rain) and rain[i] is not None else None
-        rain_txt = f", {_r(p)}% chance of rain" if p is not None else ""
+        r = _rain(rain[i] if i < len(rain) else None)
         if i == 0:
-            parts.append(f"Today {_r(lo[0])} to {_r(hi[0])}°C{rain_txt}.")
-        else:
-            try:
-                day = "Tomorrow" if i == 1 else date.fromisoformat(dates[i]).strftime("%A")
-            except (IndexError, ValueError):
-                day = f"Day {i + 1}"
-            what = describe(codes[i]) if i < len(codes) else ""
-            parts.append(f"{day} {_r(lo[i])} to {_r(hi[i])}°C, {what}{rain_txt}.")
+            parts.append(f"Today {_r(lo[0])} to {_r(hi[0])}°C" + (f", {r}." if r else "."))
+            continue
+        try:
+            day = "Tomorrow" if i == 1 else date.fromisoformat(dates[i]).strftime("%A")
+        except (IndexError, ValueError):
+            day = f"Day {i + 1}"
+        what = describe(codes[i]) if i < len(codes) else ""
+        parts.append(f"{day} {_r(lo[i])} to {_r(hi[i])}°C, {what}" + (f", {r}." if r else "."))
     return " ".join(parts)
 
 

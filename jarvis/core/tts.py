@@ -44,6 +44,7 @@ def clean_for_speech(text: str) -> str:
     text = re.sub(r"^\s*(?:[-*+•]|\d+[.)])\s+", "", text, flags=re.M)  # list bullets/numbers
     text = re.sub(r"[*_~>|#]+", "", text)
     text = _EMOJI.sub("", text)
+    text = re.sub(r"\s*°\s*C\b", " degrees", text)
     return re.sub(r"\s+", " ", text).strip()
 
 
