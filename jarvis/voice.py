@@ -31,6 +31,7 @@ class VoiceLoop:
         self._hk: hotkey.HotkeyListener | None = None
         self.lang = config.TTS_DEFAULT_LANG
         self.agent = agent.Agent(confirm=self.confirm)
+        self.agent.warm()  # LangChain/LangGraph setup at startup, not on the first turn
         safety.set_confirm_hook("voice", self.confirm)
 
     # --- spoken confirmation (called from the agent's tool node) ---

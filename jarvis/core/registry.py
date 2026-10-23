@@ -1,7 +1,10 @@
-"""Tool registry: `@tool(...)` on a plain function -> OpenAI/Groq function-calling schema.
+"""Tool registry: `@tool(group=..., safety=..., description=...)` on a plain function -> a
+LangChain StructuredTool (compact JSON schema from type hints + docstring, group and safety in
+.metadata). The decorated function stays a plain function; the tool is `func.tool`.
 
 One file = one tool under jarvis/tools/{interactive,general,external}/. `discover()` imports
 them all (pkgutil walk); the module-level helpers use the default registry and discover lazily.
+`schemas_for(groups)` returns only the routed groups' tools, ready for `model.bind_tools`.
 """
 from __future__ import annotations
 
@@ -16,6 +19,9 @@ import typing
 from dataclasses import dataclass, field
 from typing import Any, Callable, Literal, Union, get_args, get_origin
 
+from langchain_core.tools import BaseTool, StructuredTool
+from langchain_core.utils.function_calling import convert_to_openai_tool
+
 from jarvis.core import config
 
 log = logging.getLogger("jarvis.registry")
@@ -28,20 +34,25 @@ class ToolError(Exception):
     """Unknown tool or bad arguments."""
 
 
-@dataclass
-class Tool:
-    name: str
-    func: Callable[..., Any]
-    group: str
-    safety: str
-    description: str
-    parameters: dict
-    module: str = ""
+Tool = BaseTool  # registry entries are LangChain tools
 
-    @property
-    def schema(self) -> dict:
-        return {"type": "function", "function": {
-            "name": self.name, "description": self.description, "parameters": self.parameters}}
+
+def safety_of(t: BaseTool) -> str:
+    return (t.metadata or {}).get("safety", "safe")
+
+
+def group_of(t: BaseTool) -> str:
+    return (t.metadata or {}).get("group", "general")
+
+
+def parameters_of(t: BaseTool) -> dict:
+    s = t.args_schema
+    return s if isinstance(s, dict) else convert_to_openai_tool(t)["function"]["parameters"]
+
+
+def schema_of(t: BaseTool) -> dict:
+    """OpenAI/Groq function-calling schema (what bind_tools sends)."""
+    return convert_to_openai_tool(t)
 
 
 @dataclass
@@ -170,7 +181,7 @@ def _to_text(result: Any) -> str:
 # --- registry ---
 @dataclass
 class Registry:
-    tools: dict[str, Tool] = field(default_factory=dict)
+    tools: dict[str, BaseTool] = field(default_factory=dict)
     packages: tuple[str, ...] = ("jarvis.tools",)
     _discovered: bool = False
 
@@ -181,12 +192,15 @@ class Registry:
 
         def deco(func: Callable) -> Callable:
             summary, arg_docs = _parse_doc(func.__doc__)
-            t = Tool(name=name or func.__name__, func=func, group=group, safety=safety,
-                     description=(description or summary or func.__name__).strip(),
-                     parameters=build_parameters(func, arg_docs), module=func.__module__)
+            t = StructuredTool.from_function(
+                func=func, name=name or func.__name__,
+                description=(description or summary or func.__name__).strip(),
+                args_schema=build_parameters(func, arg_docs),
+                metadata={"group": group, "safety": safety, "module": func.__module__})
             old = self.tools.get(t.name)
-            if old and old.module != t.module:
-                log.warning("tool %s from %s replaces the one from %s", t.name, t.module, old.module)
+            if old and (old.metadata or {}).get("module") != func.__module__:
+                log.warning("tool %s from %s replaces the one from %s", t.name, func.__module__,
+                            (old.metadata or {}).get("module"))
             self.tools[t.name] = t
             func.tool = t  # type: ignore[attr-defined]
             return func
@@ -217,20 +231,24 @@ class Registry:
         if not self._discovered:
             self.discover()
 
-    def get(self, name: str) -> Tool | None:
+    def get(self, name: str) -> BaseTool | None:
         self._ensure()
         return self.tools.get(name)
 
     def groups(self) -> list[str]:
         self._ensure()
-        return sorted({t.group for t in self.tools.values()})
+        return sorted({group_of(t) for t in self.tools.values()})
 
-    def schemas_for(self, groups: list[str] | tuple[str, ...]) -> list[dict]:
+    def schemas_for(self, groups: list[str] | tuple[str, ...]) -> list[BaseTool]:
+        """LangChain tools of the routed groups only (for bind_tools)."""
         self._ensure()
         wanted = set(groups)
-        return [t.schema for t in self.tools.values() if t.group in wanted]
+        return [t for t in self.tools.values() if group_of(t) in wanted]
 
-    def parse_args(self, tool: Tool, args: Any) -> dict:
+    def openai_schemas_for(self, groups: list[str] | tuple[str, ...]) -> list[dict]:
+        return [schema_of(t) for t in self.schemas_for(groups)]
+
+    def parse_args(self, tool: BaseTool, args: Any) -> dict:
         if args is None or args == "":
             args = {}
         if isinstance(args, str):
@@ -241,12 +259,13 @@ class Registry:
         if not isinstance(args, dict):
             raise ToolError("arguments must be a JSON object")
         try:
-            hints = typing.get_type_hints(tool.func)
+            hints = typing.get_type_hints(getattr(tool, "func", None))
         except Exception:
             hints = {}
-        props = tool.parameters.get("properties", {})
+        params = parameters_of(tool)
+        props = params.get("properties", {})
         clean = {k: _coerce(v, hints.get(k, Any)) for k, v in args.items() if k in props}
-        missing = [k for k in tool.parameters.get("required", []) if k not in clean]
+        missing = [k for k in params.get("required", []) if k not in clean]
         if missing:
             raise ToolError(f"missing required argument(s): {', '.join(missing)}")
         return clean
@@ -257,7 +276,7 @@ class Registry:
         if t is None:
             return ToolResult(False, f"error: unknown tool {name!r}", "unknown tool")
         try:
-            out = t.func(**self.parse_args(t, args))
+            out = t.invoke(self.parse_args(t, args))
         except ToolError as e:
             return ToolResult(False, f"error: {e}", str(e))
         except Exception as e:
@@ -273,4 +292,5 @@ discover = REGISTRY.discover
 get = REGISTRY.get
 groups = REGISTRY.groups
 schemas_for = REGISTRY.schemas_for
+openai_schemas_for = REGISTRY.openai_schemas_for
 call = REGISTRY.call

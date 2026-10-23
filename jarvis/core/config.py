@@ -41,8 +41,8 @@ TIER_CHAIN: dict[str, list[str]] = {
 # Extra per-model request params. gpt-oss models are reasoning models: keep reasoning
 # short and hidden so replies stay fast and token-cheap.
 MODEL_PARAMS: dict[str, dict] = {
-    LLM_DEFAULT: {"reasoning_effort": "low", "include_reasoning": False},
-    LLM_FAST: {"reasoning_effort": "low", "include_reasoning": False},
+    LLM_DEFAULT: {"reasoning_effort": "low", "reasoning_format": "hidden"},
+    LLM_FAST: {"reasoning_effort": "low", "reasoning_format": "hidden"},
     LLM_VISION: {"reasoning_effort": "none"},  # qwen3 thinking mode is slow; off by default
 }
 

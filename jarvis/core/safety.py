@@ -88,7 +88,7 @@ def get_confirm(mode: str) -> ConfirmFn:
     return _HOOKS.get(mode, deny_all)
 
 
-def describe(tool: registry.Tool, args: dict) -> str:
+def describe(tool: registry.BaseTool, args: dict) -> str:
     """Short question for the user, e.g. "Should I delete a file (path=/tmp/x)?"."""
     what = tool.description.rstrip(". ")
     what = what[:1].lower() + what[1:]
@@ -140,12 +140,13 @@ def execute(name: str, args: Any = None, confirm: ConfirmFn | None = None,
     try:
         clean = reg.parse_args(tool, args)
     except registry.ToolError as e:
-        return done(ToolResult(False, f"error: {e}", str(e)), "error", tool.safety, args)
+        return done(ToolResult(False, f"error: {e}", str(e)), "error", registry.safety_of(tool), args)
 
-    if tool.safety == "blocked":
+    level = registry.safety_of(tool)
+    if level == "blocked":
         return done(ToolResult(False, f"Refused: {name} is blocked by the safety policy.",
                                "blocked"), "blocked", "blocked", clean)
-    if tool.safety == "confirm":
+    if level == "confirm":
         ask = confirm or deny_all
         try:
             approved = bool(ask(describe(tool, clean)))
@@ -156,4 +157,4 @@ def execute(name: str, args: Any = None, confirm: ConfirmFn | None = None,
             return done(ToolResult(False, f"The user declined: {name} was not run.", "denied"),
                         "denied", "confirm", clean)
     res = reg.call(name, clean)
-    return done(res, "allowed" if res.ok else "error", tool.safety, clean)
+    return done(res, "allowed" if res.ok else "error", level, clean)

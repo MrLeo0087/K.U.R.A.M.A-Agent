@@ -22,6 +22,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     tty = sys.stdin.isatty()
     bot = agent.Agent()  # confirmations use safety's terminal prompt in text mode
+    bot.warm()
     if tty:
         print(f"Jarvis text chat ({config.LLM_FAST} / {config.LLM_DEFAULT}, tools on). /quit to exit.")
     while True:

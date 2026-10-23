@@ -1,26 +1,43 @@
-"""Groq chat client: streaming, retry/backoff on 429/5xx, smart->fast fallback, budget, logging.
+"""Groq chat through LangChain (ChatGroq): per-model settings from config, our own retry/backoff on
+429/5xx (retry-after aware), tier fallback chain, daily budget, and a callback handler that logs
+every attempt (model, purpose, tokens, latency, ok/error) to SQLite.
 
 Usage:
-    reply = chat(msgs)                       # Reply (str(reply) == text)
-    for delta in chat(msgs, stream=True): ...  # text deltas; generator returns the Reply
+    reply = chat(msgs)                          # Reply (str(reply) == text, reply.message = AIMessage)
+    for delta in chat(msgs, stream=True): ...   # text deltas; the generator returns the Reply
+    model = get_chat_model("fast")              # configured runnable (ChatGroq + fallbacks + logging)
+
+msgs may be LangChain messages or OpenAI-style dicts. All ChatGroq instances share one raw Groq
+client (get_client), which also serves Whisper STT.
 """
 from __future__ import annotations
 
+import json
 import logging
 import random
 import re
+import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any, Iterator
+from typing import Any, Iterator, Sequence
+from uuid import UUID
 
 import groq
+from langchain_core.callbacks import BaseCallbackHandler
+from langchain_core.messages import AIMessage, BaseMessage, convert_to_messages
+from langchain_groq import ChatGroq
 
 from jarvis.core import budget, config, store
 
 log = logging.getLogger("jarvis.llm")
 
 _client: Any = None
+_models: dict[str, ChatGroq] = {}
+_models_lock = threading.Lock()
 _sleep = time.sleep  # patched in tests
+
+# MODEL_PARAMS keys that are ChatGroq fields; anything else goes to model_kwargs.
+_CHATGROQ_FIELDS = {"reasoning_effort", "reasoning_format", "service_tier", "stop"}
 
 
 class LLMError(RuntimeError):
@@ -31,15 +48,17 @@ class LLMError(RuntimeError):
 class Reply:
     text: str
     model: str
-    tool_calls: list[dict] = field(default_factory=list)
+    tool_calls: list[dict] = field(default_factory=list)  # [{id, name, arguments (JSON str)}]
     prompt_tokens: int = 0
     completion_tokens: int = 0
     estimated: bool = False
+    message: AIMessage | None = None
 
     def __str__(self) -> str:
         return self.text
 
 
+# --- clients and models ---
 def get_client() -> Any:
     global _client
     if _client is None:
@@ -50,24 +69,145 @@ def get_client() -> Any:
 
 
 def set_client(client: Any) -> None:
-    """Inject a client (tests) or reset with None."""
+    """Inject a raw Groq client (tests) or reset with None. Drops cached ChatGroq models."""
     global _client
     _client = client
+    with _models_lock:
+        _models.clear()
 
 
-# --- helpers ---
+class _NoAsync:
+    """Placeholder so ChatGroq does not build an unused async HTTP client."""
+
+    def create(self, *a: Any, **k: Any) -> Any:
+        raise NotImplementedError("Jarvis only uses the sync Groq client")
+
+
+def model_settings(model: str) -> dict:
+    params = dict(config.MODEL_PARAMS.get(model, {}))
+    kw = {k: params.pop(k) for k in list(params) if k in _CHATGROQ_FIELDS}
+    if params:
+        kw["model_kwargs"] = params
+    return kw
+
+
+def model_for(model: str) -> ChatGroq:
+    """Cached ChatGroq for one model id (max_retries=0: retries are ours)."""
+    with _models_lock:
+        m = _models.get(model)
+        if m is None:
+            m = ChatGroq(model=model, temperature=config.LLM_TEMPERATURE,
+                         max_tokens=config.LLM_MAX_TOKENS, max_retries=0,
+                         client=get_client().chat.completions, async_client=_NoAsync(),
+                         **model_settings(model))
+            _models[model] = m
+    return m
+
+
+def warm(tiers: Sequence[str] = ("fast", "smart", "voice")) -> None:
+    """Build the ChatGroq objects up front so the first turn pays no setup cost."""
+    try:
+        for tier in tiers:
+            for m in config.TIER_CHAIN.get(tier, []):
+                model_for(m)
+    except LLMError as e:  # no key yet: the first real call reports it
+        log.warning("llm warm-up skipped: %s", e)
+
+
+# --- logging callback ---
 def _estimate_tokens(text: str) -> int:
     return len(text) // 4 + 1 if text else 0
 
 
-def _estimate_prompt(messages: list[dict]) -> int:
+def _content_text(content: Any) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(p if isinstance(p, str) else str(p.get("text", "")) for p in content
+                       if isinstance(p, (str, dict)))
+    return str(content or "")
+
+
+def _estimate_prompt(messages: Sequence[Any]) -> int:
     total = 0
     for m in messages:
         c = m.get("content") if isinstance(m, dict) else getattr(m, "content", "")
-        total += _estimate_tokens(c if isinstance(c, str) else str(c or "")) + 4
+        total += _estimate_tokens(_content_text(c)) + 4
     return total
 
 
+def _log(model: str, purpose: str, p: int, c: int, t0: float, ok: bool, error: str = "",
+         estimated: bool = False) -> None:
+    try:
+        store.log_llm(model, purpose, p, c, int((time.monotonic() - t0) * 1000), ok, error, estimated)
+    except Exception as e:  # logging must never break a reply
+        log.warning("store.log_llm failed: %s", e)
+
+
+class UsageLogger(BaseCallbackHandler):
+    """Logs every chat-model run to SQLite from usage_metadata (estimates when missing)."""
+
+    raise_error = False
+
+    def __init__(self) -> None:
+        self._runs: dict[UUID, dict] = {}
+        self._lock = threading.Lock()
+
+    def on_chat_model_start(self, serialized: dict, messages: list[list[BaseMessage]], *,
+                            run_id: UUID, metadata: dict | None = None, **kw: Any) -> None:
+        md = metadata or {}
+        model = md.get("ls_model_name") or (kw.get("invocation_params") or {}).get("model", "")
+        with self._lock:
+            self._runs[run_id] = {"t0": time.monotonic(), "model": model, "chars": 0,
+                                  "purpose": md.get("purpose", ""),
+                                  "prompt": _estimate_prompt(messages[0] if messages else [])}
+
+    def on_llm_new_token(self, token: str, *, run_id: UUID, **kw: Any) -> None:
+        st = self._runs.get(run_id)
+        if st is not None:
+            st["chars"] += len(token or "")
+
+    def on_llm_end(self, response: Any, *, run_id: UUID, **kw: Any) -> None:
+        with self._lock:
+            st = self._runs.pop(run_id, None)
+        if st is None:
+            return
+        gen = response.generations[0][0] if response.generations and response.generations[0] else None
+        usage = getattr(getattr(gen, "message", None), "usage_metadata", None)
+        if usage:
+            p, c, est = usage.get("input_tokens", 0), usage.get("output_tokens", 0), False
+        else:
+            p, c, est = st["prompt"], _estimate_tokens(getattr(gen, "text", "") or ""), True
+        _log(st["model"], st["purpose"], p, c, st["t0"], True, estimated=est)
+
+    def on_llm_error(self, error: BaseException, *, run_id: UUID, **kw: Any) -> None:
+        with self._lock:
+            st = self._runs.pop(run_id, None)
+        if st is None:
+            return
+        if isinstance(error, GeneratorExit):  # consumer stopped the stream early (barge-in)
+            _log(st["model"], st["purpose"], st["prompt"], st["chars"] // 4 + 1, st["t0"], True,
+                 "aborted", estimated=True)
+        else:
+            _log(st["model"], st["purpose"], 0, 0, st["t0"], False, f"{type(error).__name__}: {error}")
+
+
+LOGGER = UsageLogger()
+
+
+def _cfg(purpose: str) -> dict:
+    return {"callbacks": [LOGGER], "metadata": {"purpose": purpose}}
+
+
+def get_chat_model(tier: str = "fast", purpose: str = "") -> Any:
+    """The tier's configured runnable: primary ChatGroq with fallbacks, logging attached."""
+    chain = _chain(tier)
+    primary = model_for(chain[0])
+    runnable = primary.with_fallbacks([model_for(m) for m in chain[1:]]) if len(chain) > 1 else primary
+    return runnable.with_config(_cfg(purpose))
+
+
+# --- retry helpers ---
 def _status(err: Exception) -> int | None:
     return getattr(err, "status_code", None)
 
@@ -129,33 +269,8 @@ def _chain(tier: str) -> list[str]:
     return allowed
 
 
-def _log(model: str, purpose: str, p: int, c: int, t0: float, ok: bool, error: str = "",
-         estimated: bool = False) -> None:
-    try:
-        store.log_llm(model, purpose, p, c, int((time.monotonic() - t0) * 1000), ok, error, estimated)
-    except Exception as e:  # logging must never break a reply
-        log.warning("store.log_llm failed: %s", e)
-
-
-def _request(model: str, messages: list[dict], stream: bool, tools: list | None,
-             max_tokens: int | None, temperature: float | None, extra: dict) -> dict:
-    kw: dict[str, Any] = {
-        "model": model,
-        "messages": messages,
-        "stream": stream,
-        "max_tokens": max_tokens or config.LLM_MAX_TOKENS,
-        "temperature": config.LLM_TEMPERATURE if temperature is None else temperature,
-        **config.MODEL_PARAMS.get(model, {}),
-        **extra,
-    }
-    if tools:
-        kw["tools"] = tools
-        kw.setdefault("tool_choice", "auto")
-    return kw
-
-
-def _plan_retry(err: Exception, attempt: int, retries: int, has_next: bool) -> float | None:
-    """Return seconds to sleep before retrying the same model, or None to move on/stop."""
+def _plan_retry(err: Exception, attempt: int, retries: int) -> float | None:
+    """Seconds to sleep before retrying the same model, or None to move on/stop."""
     if not _retryable(err) or attempt >= retries:
         return None
     wait = _retry_after(err)
@@ -166,129 +281,109 @@ def _plan_retry(err: Exception, attempt: int, retries: int, has_next: bool) -> f
     return wait
 
 
-def _tool_calls_from_message(msg: Any) -> list[dict]:
-    out = []
-    for tc in getattr(msg, "tool_calls", None) or []:
-        fn = getattr(tc, "function", None)
-        out.append({"id": getattr(tc, "id", ""), "name": getattr(fn, "name", ""),
-                    "arguments": getattr(fn, "arguments", "") or ""})
-    return out
+def _plan(models: list[str]) -> Iterator[tuple[int, str, int]]:
+    """(index, model, retries) for each model in the chain, logging fallbacks."""
+    for i, model in enumerate(models):
+        if i:
+            log.warning("falling back %s -> %s", models[i - 1], model)
+        yield i, model, config.LLM_RETRIES_BEFORE_FALLBACK if i < len(models) - 1 else config.LLM_MAX_RETRIES
+
+
+def _on_error(e: Exception, model: str, attempt: int, retries: int) -> bool:
+    """Sleep and return True to retry this model; False to fall back; raise if fatal."""
+    wait = _plan_retry(e, attempt, retries)
+    if wait is None:
+        if not _retryable(e):
+            raise LLMError(f"{model}: {e}") from e
+        return False
+    log.info("retry %s in %.1fs (%s)", model, wait, type(e).__name__)
+    _sleep(wait)
+    return True
+
+
+# --- requests ---
+def _bound(model: str, tools: Sequence | None, max_tokens: int | None, temperature: float | None,
+           extra: dict) -> Any:
+    extra = dict(extra)
+    tool_choice = extra.pop("tool_choice", None)
+    m: Any = model_for(model)
+    if tools:
+        m = m.bind_tools(list(tools), tool_choice=tool_choice or "auto")
+    kw: dict[str, Any] = {"max_tokens": max_tokens or config.LLM_MAX_TOKENS, **extra}
+    if temperature is not None:
+        kw["temperature"] = temperature
+    return m.bind(**kw)
+
+
+def _reply(msg: Any, model: str) -> Reply:
+    if msg is None:
+        msg = AIMessage(content="")
+    if not isinstance(msg, AIMessage):
+        msg = AIMessage(content=msg.content, tool_calls=getattr(msg, "tool_calls", []) or [],
+                        usage_metadata=getattr(msg, "usage_metadata", None))
+    usage = msg.usage_metadata or {}
+    calls = [{"id": tc.get("id") or "", "name": tc["name"],
+              "arguments": json.dumps(tc.get("args") or {}, ensure_ascii=False)}
+             for tc in msg.tool_calls]
+    return Reply(_content_text(msg.content), model, calls, usage.get("input_tokens", 0),
+                 usage.get("output_tokens", 0), not usage, msg)
+
+
+def to_messages(messages: Sequence[Any]) -> list[BaseMessage]:
+    return convert_to_messages(list(messages))
 
 
 # --- public API ---
-def chat(messages: list[dict], tier: str = "fast", stream: bool = False, tools: list | None = None,
+def chat(messages: Sequence[Any], tier: str = "fast", stream: bool = False, tools: Sequence | None = None,
          purpose: str = "", max_tokens: int | None = None, temperature: float | None = None,
          **extra: Any) -> Reply | Iterator[str]:
-    """Chat completion on Groq. tier: "fast" | "smart" | "vision"."""
+    """Chat on Groq via ChatGroq. tier: "fast" | "smart" | "voice" | "vision".
+    tools: LangChain tools (or OpenAI-format dicts); extra may hold tool_choice."""
     models = _chain(tier)
+    msgs = to_messages(messages)
     if stream:
-        return _stream(models, messages, tools, purpose, max_tokens, temperature, extra)
-    return _complete(models, messages, tools, purpose, max_tokens, temperature, extra)
+        return _stream(models, msgs, tools, purpose, max_tokens, temperature, extra)
+    return _complete(models, msgs, tools, purpose, max_tokens, temperature, extra)
 
 
-def _complete(models, messages, tools, purpose, max_tokens, temperature, extra) -> Reply:
-    client = get_client()
+def _complete(models, msgs, tools, purpose, max_tokens, temperature, extra) -> Reply:
     last: Exception | None = None
-    for i, model in enumerate(models):
-        has_next = i < len(models) - 1
-        retries = config.LLM_RETRIES_BEFORE_FALLBACK if has_next else config.LLM_MAX_RETRIES
+    for _, model, retries in _plan(models):
         for attempt in range(retries + 1):
-            t0 = time.monotonic()
             try:
-                resp = client.chat.completions.create(
-                    **_request(model, messages, False, tools, max_tokens, temperature, extra))
+                msg = _bound(model, tools, max_tokens, temperature, extra).invoke(
+                    msgs, config=_cfg(purpose))
             except Exception as e:
                 last = e
-                _log(model, purpose, 0, 0, t0, False, f"{type(e).__name__}: {e}")
-                wait = _plan_retry(e, attempt, retries, has_next)
-                if wait is None:
-                    if not _retryable(e):
-                        raise LLMError(f"{model}: {e}") from e
-                    break
-                log.info("retry %s in %.1fs (%s)", model, wait, type(e).__name__)
-                _sleep(wait)
-                continue
-            msg = resp.choices[0].message
-            text = msg.content or ""
-            usage = getattr(resp, "usage", None)
-            est = usage is None
-            p = getattr(usage, "prompt_tokens", 0) if usage else _estimate_prompt(messages)
-            c = getattr(usage, "completion_tokens", 0) if usage else _estimate_tokens(text)
-            _log(model, purpose, p, c, t0, True, estimated=est)
-            return Reply(text, model, _tool_calls_from_message(msg), p, c, est)
-        if has_next:
-            log.warning("falling back %s -> %s", model, models[i + 1])
+                if _on_error(e, model, attempt, retries):
+                    continue
+                break
+            return _reply(msg, model)
     raise LLMError(f"all models failed ({', '.join(models)}): {last}") from last
 
 
-def _chunk_usage(chunk: Any) -> Any:
-    xg = getattr(chunk, "x_groq", None)
-    u = getattr(xg, "usage", None) if xg is not None else None
-    return u or getattr(chunk, "usage", None)
-
-
-def _merge_tool_deltas(acc: dict[int, dict], deltas: Any) -> None:
-    for d in deltas or []:
-        slot = acc.setdefault(getattr(d, "index", 0) or 0, {"id": "", "name": "", "arguments": ""})
-        if getattr(d, "id", None):
-            slot["id"] = d.id
-        fn = getattr(d, "function", None)
-        if fn is not None:
-            slot["name"] += getattr(fn, "name", None) or ""
-            slot["arguments"] += getattr(fn, "arguments", None) or ""
-
-
-def _stream(models, messages, tools, purpose, max_tokens, temperature, extra):
-    client = get_client()
+def _stream(models, msgs, tools, purpose, max_tokens, temperature, extra):
     last: Exception | None = None
-    for i, model in enumerate(models):
-        has_next = i < len(models) - 1
-        retries = config.LLM_RETRIES_BEFORE_FALLBACK if has_next else config.LLM_MAX_RETRIES
+    for _, model, retries in _plan(models):
         for attempt in range(retries + 1):
-            t0 = time.monotonic()
-            parts: list[str] = []
-            tool_acc: dict[int, dict] = {}
-            usage = None
+            acc = None
             started = False
             try:
-                resp = client.chat.completions.create(
-                    **_request(model, messages, True, tools, max_tokens, temperature, extra))
-                for chunk in resp:
-                    usage = _chunk_usage(chunk) or usage
-                    choices = getattr(chunk, "choices", None)
-                    if not choices:
-                        continue
-                    delta = choices[0].delta
-                    _merge_tool_deltas(tool_acc, getattr(delta, "tool_calls", None))
-                    text = getattr(delta, "content", None)
+                for chunk in _bound(model, tools, max_tokens, temperature, extra).stream(
+                        msgs, config=_cfg(purpose)):
+                    acc = chunk if acc is None else acc + chunk
+                    text = _content_text(chunk.content)
                     if text:
                         started = True
-                        parts.append(text)
                         yield text
-            except GeneratorExit:  # consumer stopped early (e.g. barge-in)
-                full = "".join(parts)
-                _log(model, purpose, _estimate_prompt(messages), _estimate_tokens(full), t0, True,
-                     "aborted", estimated=True)
+            except GeneratorExit:  # consumer stopped early; closing propagates to ChatGroq (logged)
                 raise
             except Exception as e:
                 last = e
-                _log(model, purpose, 0, 0, t0, False, f"{type(e).__name__}: {e}")
                 if started:
                     raise LLMError(f"{model}: stream broke mid-reply: {e}") from e
-                wait = _plan_retry(e, attempt, retries, has_next)
-                if wait is None:
-                    if not _retryable(e):
-                        raise LLMError(f"{model}: {e}") from e
-                    break
-                log.info("retry %s in %.1fs (%s)", model, wait, type(e).__name__)
-                _sleep(wait)
-                continue
-            full = "".join(parts)
-            est = usage is None
-            p = getattr(usage, "prompt_tokens", 0) if usage else _estimate_prompt(messages)
-            c = getattr(usage, "completion_tokens", 0) if usage else _estimate_tokens(full)
-            _log(model, purpose, p, c, t0, True, estimated=est)
-            return Reply(full, model, [tool_acc[k] for k in sorted(tool_acc)], p, c, est)
-        if has_next:
-            log.warning("falling back %s -> %s", model, models[i + 1])
+                if _on_error(e, model, attempt, retries):
+                    continue
+                break
+            return _reply(acc, model)
     raise LLMError(f"all models failed ({', '.join(models)}): {last}") from last

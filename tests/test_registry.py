@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Literal, Optional
 
+from langchain_core.tools import StructuredTool
+
 from jarvis.core import config, registry
 
 
@@ -32,7 +34,9 @@ def make_registry():
 
 def test_schema_from_hints_defaults_and_docstring():
     reg = make_registry()
-    s = reg.get("set_volume").schema
+    t = reg.get("set_volume")
+    assert isinstance(t, StructuredTool) and t.metadata["group"] == "media"
+    s = registry.schema_of(t)
     assert s["type"] == "function"
     f = s["function"]
     assert f["name"] == "set_volume" and f["description"] == "Set the volume."
@@ -46,14 +50,15 @@ def test_schema_from_hints_defaults_and_docstring():
                                 "description": "Output devices."}
     assert props["note"] == {"type": "string"}
     t = reg.get("long_output")
-    assert t.description == "Return a very long string." and t.safety == "confirm"
-    assert t.parameters == {"type": "object", "properties": {}}
+    assert t.description == "Return a very long string." and registry.safety_of(t) == "confirm"
+    assert registry.parameters_of(t) == {"type": "object", "properties": {}}
 
 
 def test_groups_schemas_and_call():
     reg = make_registry()
     assert reg.groups() == ["media", "misc"]
-    assert [s["function"]["name"] for s in reg.schemas_for(["media"])] == ["set_volume"]
+    assert [t.name for t in reg.schemas_for(["media"])] == ["set_volume"]
+    assert [s["function"]["name"] for s in reg.openai_schemas_for(["media"])] == ["set_volume"]
     r = reg.call("set_volume", '{"level": "40", "mute": "true", "bogus": 1}')
     assert r.ok and r.output == "40percent mute=True scale=1.0 devices=None"
     assert not reg.call("set_volume", {}).ok  # missing required
@@ -85,9 +90,9 @@ def test_bad_safety_level_rejected():
 def test_discovery_imports_tool_files():
     mods = registry.REGISTRY.discover()
     assert "jarvis.tools.general.echo_time" in mods
-    assert registry.get("get_time").safety == "safe"
-    assert registry.get("dummy_delete").safety == "confirm"
+    assert registry.safety_of(registry.get("get_time")) == "safe"
+    assert registry.safety_of(registry.get("dummy_delete")) == "confirm"
     assert {"general", "files"} <= set(registry.groups())
-    names = [s["function"]["name"] for s in registry.schemas_for(["general"])]
+    names = [t.name for t in registry.schemas_for(["general"])]
     assert "get_time" in names and "dummy_delete" not in names
     assert registry.call("get_time").ok
