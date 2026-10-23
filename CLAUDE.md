@@ -2,6 +2,7 @@
 
 ## Hardware and OS (hard constraints)
 - Ubuntu on X11. NO GPU. 8 GB RAM shared with VS Code and Chrome. Never assume CUDA, nvidia-smi or pynvml.
+- Jarvis runs ALL DAY on this laptop: idle RSS and idle CPU matter more than peak speed. Nothing heavy at import/startup; load on demand and unload when idle; measure idle RSS after every phase.
 - Never install PyTorch or TensorFlow into Jarvis unless a tool absolutely needs it. Prefer ONNX runtime, APIs, or small CPU libraries. Heavy inference runs on Groq, not locally.
 - RAM budget: Jarvis core idle under 600 MB, hard cap 1.5 GB including daemons. Lazy-import heavy modules (cv2, mediapipe, fastembed, playwright) only when their tool runs and release them after. Max ONE vision/camera feature running at a time.
 - Daemons are tiny: plain Python plus psutil plus watchdog, poll interval at least 5 s, log rotation.
