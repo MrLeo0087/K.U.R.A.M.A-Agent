@@ -18,8 +18,8 @@ def _fd_binary() -> str:
     return "fdfind" if exe.endswith("fdfind") else exe
 
 
-def name_argv(query: str, limit: int) -> list[str]:
-    argv = [_fd_binary(), "--color=never", "--type", "f", "--max-results", str(limit)]
+def name_argv(query: str, limit: int, ftype: str = "f") -> list[str]:
+    argv = [_fd_binary(), "--color=never", "--type", ftype, "--max-results", str(limit), "--absolute-path"]
     for ex in _proc.EXCLUDES:
         argv += ["--exclude", ex]
     argv += ["--glob"] if any(c in query for c in "*?[") else ["--fixed-strings"]
@@ -41,34 +41,44 @@ def _clean(line: str) -> str:
     return line if len(line) <= LINE_CHARS else line[: LINE_CHARS - 3] + "..."
 
 
-@tool(group="filesearch", safety="safe", description="Find files by name (glob or part of name) or by text content under a folder.")
-def find_files(query: str, path: str = "~", kind: Literal["name", "content"] = "name", limit: int = 20) -> str:
-    """Search files.
+@tool(group="filesearch", safety="safe", description="Find files or folders by name, or text inside files (searches the project drive and home).")
+def find_files(query: str, path: str = "", kind: Literal["name", "folder", "content"] = "name",
+               limit: int = 20) -> str:
+    """Search files or folders. Without a path it searches the project drive (/media/leo/Project1) and home.
 
     Args:
-        query: File name, part of it or a glob (*.py) for kind=name; text to look for when kind=content.
-        path: Folder to search (default: home).
-        kind: name or content.
+        query: File/folder name, part of it or a glob (*.py) for name/folder; text to look for when kind=content.
+        path: Folder to search; loose names work ("project1 then tara"). Empty = project drive + home.
+        kind: name (files), folder, or content (text inside files).
         limit: Max results (max 50).
     """
     query = (query or "").strip()
     if not query:
         return "error: give something to search for"
-    base = _proc.resolve_dir(path, "~")
+    from jarvis.core.paths import roots
+    bases = [_proc.resolve_dir(path)] if (path or "").strip() else roots()
+    base = bases[0] if len(bases) == 1 else " and ".join(str(b) for b in bases)
     limit = max(1, min(int(limit or 20), 50))
-    argv = name_argv(query, limit) if kind == "name" else content_argv(query, limit)
-    partial = ""
-    try:
-        cp = _proc.run(argv, cwd=base, timeout=TIMEOUT)
-        if cp.returncode not in (0, 1):
-            return f"error: {(cp.stderr or 'search failed').strip()[:200]}"
-        out = cp.stdout
-    except _proc.ProcError as e:
-        if "timed out" not in str(e):
-            raise
-        out, partial = e.output, f" (timed out after {TIMEOUT}s; partial, narrow the path)"
-    hits = [_clean(ln) for ln in out.splitlines() if ln.strip()][:limit]
+    if kind == "content":
+        argv = content_argv(query, limit)
+    else:
+        argv = name_argv(query, limit, "d" if kind == "folder" else "f")
+    out, partial = "", ""
+    for b in bases:
+        try:
+            cp = _proc.run(argv, cwd=b, timeout=TIMEOUT)
+            if cp.returncode not in (0, 1):
+                return f"error: {(cp.stderr or 'search failed').strip()[:200]}"
+            out += cp.stdout
+        except _proc.ProcError as e:
+            if "timed out" not in str(e):
+                raise
+            out, partial = out + (e.output or ""), f" (timed out after {TIMEOUT}s; partial, narrow the path)"
+        if kind == "content":
+            out = "\n".join(f"{b}/{ln}" if ln and not ln.startswith("/") else ln for ln in out.splitlines())
+    hits = list(dict.fromkeys(_clean(ln) for ln in out.splitlines() if ln.strip()))[:limit]
+    what = {"name": "files", "folder": "folders", "content": "hits"}[kind]
     if not hits:
-        return f"no {'files named' if kind == 'name' else 'matches for'} {query!r} under {base}{partial}"
-    head = f"{len(hits)}{'+' if len(hits) == limit else ''} {'files' if kind == 'name' else 'hits'} under {base}{partial}:"
+        return f"no {what} matching {query!r} under {base}{partial}"
+    head = f"{len(hits)}{'+' if len(hits) == limit else ''} {what} under {base}{partial}:"
     return _proc.clip("\n".join([head, *hits]))

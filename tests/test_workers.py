@@ -53,8 +53,11 @@ def tg(monkeypatch):
     return api
 
 
+NOW = int(time.time()) + 60  # one fixed "now" so repeated builds of the same update compare equal
+
+
 def upd(uid, text=None, chat=42, **extra):
-    msg = {"chat": {"id": chat}, "date": int(time.time()), **extra}
+    msg = {"chat": {"id": chat}, "date": NOW, **extra}
     if text is not None:
         msg["text"] = text
     return {"update_id": uid, "message": msg}

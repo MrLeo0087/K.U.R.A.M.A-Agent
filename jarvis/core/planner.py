@@ -125,7 +125,15 @@ _CONTROL = re.compile(r"(?<![\w])(?:full\s?screen|maximi[sz]e|minimi[sz]e|snap|s
                       r"window|open|close|focus|switch\s+to|launch|quit)(?![\w])", re.I)
 
 
+# "create a new python project called X" = the scaffold_project tool, not a writing job
+_SCAFFOLD = re.compile(r"(?<![\w])(?:create|make|start|scaffold|set\s*up|init(?:iali[sz]e)?|bana\w*)\s+(?:a\s+|an\s+)?"
+                       r"(?:new\s+)?(?:python|fastapi|langgraph|data[- ]science|cli|flask|django)?\s*"
+                       r"(?:project|app\s+skeleton|boilerplate|template)(?![\w])", re.I)
+
+
 def is_long_job(text: str) -> bool:
+    if _SCAFFOLD.search(text) and target_words(text) is None:
+        return False
     text = _APP_CODE.sub("vscode", text)  # "VS Code" is an app, not "write code"
     if _CONTROL.search(text) and target_words(text) is None and not _NOUNS.search(text):
         return False  # window/app control ("make VS Code full screen")
@@ -158,8 +166,20 @@ def detect_lang(text: str) -> str:
     return "ne" if ne > hi else "hi"
 
 
+# A clause that is only a folder name ("tara folder", "the src directory") continues a spoken path
+# ("search main.py in project1 then tara folder"), it is not a separate task.
+_PATH_TAIL = re.compile(r"^(?:(?:and|then)\s+)?(?:(?:in|inside|into)\s+)?(?:the\s+|my\s+)?[\w .-]{1,40}?\s+"
+                        r"(?:folder|directory|dir|subfolder|फोल्डर)\s*[.?!]*$", re.I)
+
+
 def split_clauses(text: str) -> list[str]:
-    return [c.strip() for c in _SEP.split(text) if c and c.strip()]
+    out: list[str] = []
+    for c in (c.strip() for c in _SEP.split(text) if c and c.strip()):
+        if out and _PATH_TAIL.match(c):
+            out[-1] = f"{out[-1]} then {c}"
+        else:
+            out.append(c)
+    return out
 
 
 # "...and give me the result": asks for the previous task's answer -> part of that task (P7c).

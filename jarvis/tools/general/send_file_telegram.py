@@ -41,5 +41,7 @@ def send_file_telegram(path: str, caption: str = "") -> str:
     method, field = ("sendPhoto", "photo") if photo else ("sendDocument", "document")
     payload = {"chat_id": config.TELEGRAM_CHAT_ID, **({"caption": caption[:1000]} if caption else {})}
     with open(p, "rb") as fh:
-        notify.telegram_call(method, payload, files={field: (p.name, fh)})
+        ok = notify.telegram_call(method, payload, files={field: (p.name, fh)})
+    if not ok:
+        return f"error: Telegram didn't accept {p.name} (check the bot token/chat id or your internet)"
     return f"Sent {p.name} to Telegram."

@@ -90,7 +90,7 @@ def test_find_files_by_name_and_content(tmp_path):
     assert "pkg/config.py" in out and "venv/" not in out
     out = find_files.find_files("token_limit", str(tmp_path), kind="content")
     assert "pkg/config.py:1:TOKEN_LIMIT = 5" in out and "venv/" not in out
-    assert "no files named" in find_files.find_files("nothing_here.xyz", str(tmp_path))
+    assert "no files matching" in find_files.find_files("nothing_here.xyz", str(tmp_path))
 
 
 def test_env_doctor_report_hides_key(monkeypatch, tmp_path):

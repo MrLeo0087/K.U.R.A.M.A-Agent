@@ -19,6 +19,7 @@ def send_message_telegram(text: str) -> str:
         return err
     chunks = [text[i:i + config.TELEGRAM_MAX_REPLY_CHARS] for i in range(0, len(text), config.TELEGRAM_MAX_REPLY_CHARS)]
     for chunk in chunks[:5]:
-        notify.telegram_call("sendMessage", {"chat_id": config.TELEGRAM_CHAT_ID, "text": chunk,
-                                             "disable_web_page_preview": True})
+        if not notify.telegram_call("sendMessage", {"chat_id": config.TELEGRAM_CHAT_ID, "text": chunk,
+                                                    "disable_web_page_preview": True}):
+            return "error: Telegram didn't accept the message (check the bot token/chat id or your internet)"
     return f"Sent to Telegram ({len(text)} characters)."

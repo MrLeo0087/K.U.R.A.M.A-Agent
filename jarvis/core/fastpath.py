@@ -138,8 +138,9 @@ SEARCH = _rx(
 _SEARCH_ANSWER = re.compile(
     r"\b(?:give me|tell me|let me know|what|who|whom|whose|when|where|why|how|which|results?|answers?|"
     r"summar\w*|explain|latest|score|batao|bhana)\b|बताओ|भन", I)
-_SEARCH_LOCAL = re.compile(r"\b(?:my|files?|folders?|code|notes?|repo|project|computer|laptop|clipboard|"
-                           r"emails?|history|memory)\b", I)
+_SEARCH_LOCAL = re.compile(r"\b(?:my|files?|folders?|director(?:y|ies)|code|notes?|repo|project\d*|computer|"
+                           r"laptop|pc|drive|clipboard|emails?|history|memory|downloads|desktop|documents)\b|"
+                           r"\w\.[A-Za-z0-9]{1,6}\b|/", I)  # "main.py", paths: search the laptop, not Google
 SEARCH_URLS = {"google": "https://www.google.com/search?q={q}",
                "youtube": "https://www.youtube.com/results?search_query={q}",
                "wikipedia": "https://en.wikipedia.org/w/index.php?search={q}"}

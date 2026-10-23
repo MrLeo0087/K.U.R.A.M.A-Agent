@@ -55,7 +55,11 @@ def run(argv: list[str], cwd: str | Path | None = None, timeout: float = 20,
 def resolve_dir(path: str | None, default: str = ".") -> Path:
     p = Path(os.path.expanduser(path or default)).resolve()
     if not p.is_dir():
-        raise ProcError(f"not a folder: {p}")
+        from jarvis.core.paths import smart_path  # "project1 then tara" -> /media/leo/Project1/Tara
+        hit = smart_path(str(path or default), want="dir")
+        if hit is None:
+            raise ProcError(f"not a folder: {p}")
+        p = hit.resolve()
     return p
 
 

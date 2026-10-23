@@ -25,7 +25,18 @@ def resolve(path: str) -> Path:
     p = Path(raw).expanduser()
     if not p.is_absolute():
         p = Path.home() / p
-    return p.resolve()
+    p = p.resolve()
+    if not p.exists() and (not p.parent.exists() or p.parent == Path.home()):
+        # spoken/loose folder ("project1 then tara folder/notes.txt"): find the real folder. Never used when
+        # the parent exists, so a new file is never redirected onto some other existing file.
+        from jarvis.core.paths import smart_path
+        hit = smart_path(str(path))
+        if hit is None:
+            parent = smart_path(str(Path(str(path)).parent), want="dir")
+            hit = parent / p.name if parent else None
+        if hit is not None:
+            return hit.resolve()
+    return p
 
 
 def inside(p: Path, root: Path) -> bool:

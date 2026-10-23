@@ -542,6 +542,16 @@ TOOLSMITH_CMD_DENY = ("python3", "pip", "pytest", "git", "uvicorn", "n8n", "xdot
 # File tools: writes under these roots are "safe"; anywhere else asks first.
 FILE_SAFE_ROOTS = tuple(Path(p).expanduser() for p in os.getenv(
     "JARVIS_FILE_ROOTS", "~/projects:/media/leo/Project1").split(":") if p)
+# --- smart paths ---
+# Where loose names are looked up ("tara folder") and spoken aliases ("project1" -> the project drive).
+SEARCH_ROOTS = ("/media/leo/Project1", "~")
+PATH_ALIASES = {
+    "project1": "/media/leo/Project1", "projectone": "/media/leo/Project1", "projectdrive": "/media/leo/Project1",
+    "home": "~", "downloads": "~/Downloads", "download": "~/Downloads", "desktop": "~/Desktop",
+    "documents": "~/Documents", "pictures": "~/Pictures", "music": "~/Music", "videos": "~/Videos",
+    "kurama": "/media/leo/Project1/New_project/KURAMA", "jarvis": "/media/leo/Project1/New_project/KURAMA",
+}
+PATH_MATCH_MIN = 0.72
 SHARE_ROOTS = (Path.home(), Path("/media/leo/Project1"))  # send_file_telegram only sends files under these
 TELEGRAM_FILE_MAX_MB = 50
 

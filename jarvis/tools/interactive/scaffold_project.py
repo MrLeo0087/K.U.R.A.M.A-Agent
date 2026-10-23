@@ -194,7 +194,11 @@ def scaffold_project(name: str, kind: Kind = "python-cli", path: str = "~/projec
         return "error: project name must start with a letter and use only letters, digits, - _ ."
     if kind not in REQUIREMENTS:
         return f"error: kind must be one of {', '.join(REQUIREMENTS)}"
-    target = Path(path or "~/projects").expanduser().resolve() / name
+    base = Path(path or "~/projects").expanduser()
+    if not base.is_absolute() or not base.is_dir():  # "project1", "project1 then tara": spoken folders
+        from jarvis.core.paths import smart_path
+        base = smart_path(path or "", want="dir") or (base if base.is_absolute() else Path.home() / base)
+    target = base.resolve() / name
     if target.exists() and (not target.is_dir() or any(target.iterdir())):
         return f"refused: {target} already exists and is not empty"
     files = files_for(name, kind)
