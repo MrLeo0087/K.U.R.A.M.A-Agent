@@ -35,6 +35,9 @@ CREATE TABLE IF NOT EXISTS jobs (
     id INTEGER PRIMARY KEY, title TEXT, kind TEXT, status TEXT, request TEXT, created REAL,
     finished REAL, output_path TEXT, error TEXT, tokens INTEGER DEFAULT 0, progress TEXT
 );
+CREATE TABLE IF NOT EXISTS notes (
+    id INTEGER PRIMARY KEY, text TEXT NOT NULL, created REAL NOT NULL
+);
 """
 
 _lock = threading.RLock()
@@ -201,3 +204,40 @@ def tokens_for_purpose(prefix: str) -> int:
     rows = _exec("SELECT COALESCE(SUM(total_tokens),0) FROM llm_calls WHERE purpose LIKE ?",
                  (prefix.replace("%", "") + "%",))
     return int(rows[0][0])
+
+
+# --- notes (remember / recall / forget) ---
+def note_add(text: str) -> int:
+    with _lock:
+        if _conn is None:
+            init(_path)
+        cur = _conn.execute("INSERT INTO notes(text,created) VALUES (?,?)", (text, time.time()))  # type: ignore[union-attr]
+        return int(cur.lastrowid)
+
+
+def notes_recent(limit: int = 10, query: str = "") -> list[dict]:
+    """Newest first; query filters by substring (case-insensitive)."""
+    if query:
+        like = "%" + query.replace("%", "").replace("_", "") + "%"
+        rows = _exec("SELECT * FROM notes WHERE text LIKE ? ORDER BY id DESC LIMIT ?", (like, int(limit)))
+    else:
+        rows = _exec("SELECT * FROM notes ORDER BY id DESC LIMIT ?", (int(limit),))
+    return [dict(r) for r in rows]
+
+
+def notes_count() -> int:
+    return int(_exec("SELECT COUNT(*) FROM notes")[0][0])
+
+
+def note_delete(note_id: int) -> bool:
+    with _lock:
+        if _conn is None:
+            init(_path)
+        return _conn.execute("DELETE FROM notes WHERE id=?", (int(note_id),)).rowcount > 0  # type: ignore[union-attr]
+
+
+def notes_clear() -> int:
+    with _lock:
+        if _conn is None:
+            init(_path)
+        return int(_conn.execute("DELETE FROM notes").rowcount)  # type: ignore[union-attr]

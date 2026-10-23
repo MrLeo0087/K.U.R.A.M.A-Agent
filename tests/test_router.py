@@ -20,8 +20,9 @@ def test_keyword_rules(no_llm):
 
 
 def test_rules_drop_groups_without_tools(no_llm):
-    r = router.route("open firefox")  # 'apps' has no tools yet
+    r = router.route("turn up the volume")  # 'system' has no tools yet
     assert (r.groups, r.method) == ([], "rules")
+    assert router.route("open firefox").groups == ["apps"]
 
 
 def test_pure_chat_sends_no_tools(no_llm):

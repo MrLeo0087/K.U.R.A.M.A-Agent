@@ -26,7 +26,8 @@ class Route:
 def _pattern(words: tuple[str, ...]) -> re.Pattern:
     alts = sorted((re.escape(w.lower()) for w in words), key=len, reverse=True)
     # \w-based boundaries also work for Devanagari words.
-    return re.compile(r"(?<![\w'])(?:" + "|".join(alts) + r")(?![\w'])")
+    # "(?!\.\w)": "notes.txt" is a file name, not the word "notes".
+    return re.compile(r"(?<![\w'])(?:" + "|".join(alts) + r")(?![\w']|\.\w)")
 
 
 _RULES: dict[str, re.Pattern] = {}
@@ -55,6 +56,28 @@ def rule_groups(text: str) -> list[str]:
     if config.ROUTER_URL_GROUP and _URL.search(low):  # "open example.com" / "https://..."
         hits[config.ROUTER_URL_GROUP] = hits.get(config.ROUTER_URL_GROUP, 0) + 1
     return [g for g, n in sorted(hits.items(), key=lambda kv: -kv[1]) if n]
+
+
+_SITE: re.Pattern | None = None
+_OPEN_VERB = re.compile(r"(?<![\w'])(?:open|launch|start|go to|kholo|khol|खोल)")
+
+
+def mentions_site(text: str) -> bool:
+    """A URL/domain or a known site name (open_url.SITES) appears in text."""
+    global _SITE
+    if _SITE is None:
+        from jarvis.tools.general.open_url import SITES  # lazy: router stays importable alone
+        _SITE = _pattern(tuple(SITES))
+    low = text.lower()
+    return bool(_URL.search(low) or _SITE.search(low))
+
+
+def site_over_apps(text: str, groups: list[str]) -> list[str]:
+    """"open youtube" -> browser, not apps (cheap rule; "open vs code" keeps apps)."""
+    if (config.ROUTER_SITE_OVER_APPS and "apps" in groups and "browser" in groups
+            and _OPEN_VERB.search(text.lower()) and mentions_site(text)):
+        return [g for g in groups if g != "apps"]
+    return groups
 
 
 def looks_like_command(text: str) -> bool:
@@ -98,7 +121,7 @@ def route(text: str, log_it: bool = True) -> Route:
     matched = rule_groups(text)
     if matched:
         r.method = "rules"
-        r.groups = [g for g in matched if g in available]
+        r.groups = site_over_apps(text, [g for g in matched if g in available])
     elif available and looks_like_command(text):
         r.method = "classifier"
         groups, reasoning = classify(text, available)

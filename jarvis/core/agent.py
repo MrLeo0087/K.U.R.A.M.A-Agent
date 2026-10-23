@@ -21,7 +21,7 @@ from typing import Annotated, Any, Callable, Iterator, TypedDict
 from langchain_core.messages import (AIMessage, BaseMessage, HumanMessage, SystemMessage,
                                      ToolMessage)
 
-from jarvis.core import config, jobs, llm, planner, registry, router, safety, store
+from jarvis.core import config, fastpath, jobs, llm, planner, registry, router, safety, store
 
 log = logging.getLogger("jarvis.agent")
 
@@ -150,6 +150,10 @@ class Agent:
 
     def _quick_node(self, state: AgentState) -> dict:
         t, mode = state["task"], state.get("mode", "text")
+        fast = self._fast(t["text"], state.get("lang"), mode, record=False)
+        if fast is not None:  # zero-token quick task
+            return {"results": [{"idx": state.get("idx", 0), "kind": "quick", "text": t["text"],
+                                 "answer": fast.answer}]}
         sub: AgentState = {"user_text": t["text"], "messages": self._messages(t["text"], mode, state.get("lang")),
                            "stream": False, "mode": mode, "rounds": 0, "pending": []}
         try:
@@ -314,6 +318,22 @@ class Agent:
             with self._lock:
                 self.summary = text[:600]
 
+    # --- zero-token fast path ---
+    def _fast(self, user_text: str, lang: str | None, mode: str, record: bool = True) -> Any:
+        """fastpath.try_answer for a single-intent request (None -> normal LLM path)."""
+        if not config.FASTPATH or (record and self.use_planner and planner.is_multi(user_text)):
+            return None
+        res = fastpath.try_answer(user_text, lang=lang,
+                                  confirm=self.confirm or safety.get_confirm(mode))
+        if res is not None:
+            entry = {"name": res.intent.tool, "ok": res.ok}
+            if record:
+                self.last = {"tools": [entry], "fastpath": res.intent.name, "t0": time.monotonic(),
+                             "route": router.Route([res.intent.group], "fastpath", False, res.latency_ms)}
+            else:
+                self.last.setdefault("tools", []).append(entry)
+        return res
+
     # --- public API ---
     def _state(self, user_text: str, mode: str, lang: str | None, stream: bool) -> AgentState:
         self.last = {"tools": [], "t0": time.monotonic()}
@@ -325,6 +345,10 @@ class Agent:
         return {"recursion_limit": 2 * config.AGENT_MAX_TOOL_ROUNDS + 6}
 
     def run(self, user_text: str, mode: str = "text", lang: str | None = None) -> str:
+        fast = self._fast(user_text, lang, mode)
+        if fast is not None:
+            self._remember(user_text, fast.answer)
+            return fast.answer
         final = self.graph.invoke(self._state(user_text, mode, lang, False), self._config())
         answer = final.get("answer") or NO_ANSWER
         self._remember(user_text, answer)
@@ -332,6 +356,11 @@ class Agent:
 
     def stream(self, user_text: str, mode: str = "text", lang: str | None = None) -> Iterator[str]:
         """Yield answer text deltas. Tool rounds (and confirmations) happen before the first one."""
+        fast = self._fast(user_text, lang, mode)
+        if fast is not None:
+            self._remember(user_text, fast.answer)
+            yield fast.answer
+            return
         state = self._state(user_text, mode, lang, True)
         self._abort.clear()
         parts: list[str] = []

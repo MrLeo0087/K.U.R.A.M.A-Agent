@@ -138,10 +138,19 @@ AGENT_SUMMARY_BATCH_TURNS = 3  # fold this many old turns into the rolling summa
 CONFIRM_TIMEOUT_S = 20.0  # unanswered confirmations are denied
 ROUTER_MAX_GROUPS = 3
 ROUTER_URL_GROUP = "browser"  # group for messages containing a URL/domain
+ROUTER_SITE_OVER_APPS = True  # "open youtube": a known site/URL drops the apps group (browser wins)
+FASTPATH = os.getenv("JARVIS_FASTPATH", "1").lower() not in ("0", "false", "no", "off")  # regex intents, 0 tokens
+HOME_PLACE = os.getenv("JARVIS_HOME_PLACE", "Kathmandu")  # default for weather
+HTTP_TIMEOUT_S = 5.0
+WEATHER_CACHE_S = 600  # weather results are reused for 10 min
+GEO_CACHE_S = 86_400  # geocoder results are reused for a day
 # Keyword rules: group -> words/phrases (matched on word boundaries, case-insensitive).
 ROUTER_RULES: dict[str, tuple[str, ...]] = {
     "general": ("time", "date", "day is it", "clock", "what day", "o'clock", "baje",
-                "kitne baje", "kati bajyo", "bajyo", "samay", "समय", "बजे", "बज्यो", "तारीख", "मिति"),
+                "kitne baje", "kati bajyo", "bajyo", "samay", "समय", "बजे", "बज्यो", "तारीख", "मिति",
+                "time in", "time of"),
+    "weather": ("weather", "temperature", "forecast", "rain", "raining", "hot", "cold", "humid",
+                "mausam", "मौसम", "barsat", "पानी पर्छ", "बारिश"),
     "files": ("file", "files", "folder", "folders", "directory", "delete", "remove", "rename",
               "move file", "copy file", "trash", "locate", "named", "grep", "ripgrep", "where is",
               "which file", "codebase", "code base", "in my code", "containing", "फाइल", "मिटाओ", "मेटाउ"),
@@ -159,8 +168,9 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
             "doctor", "env doctor", "environment doctor", "environment check", "my environment",
             "dev environment", "python version", "virtualenv", "project", "new project", "fastapi",
             "langgraph", "data science"),
-    "web": ("search", "weather", "news", "google", "look up", "lookup", "browse", "website"),
-    "memory": ("remember", "recall", "note", "notes", "last time", "yesterday", "remind"),
+    "web": ("search", "news", "google", "look up", "lookup", "browse", "website"),
+    "memory": ("remember", "recall", "note", "notes", "last time", "yesterday", "remind",
+               "what did i tell you", "forget", "yaad", "याद", "सम्झ"),
     "browser": ("url", "link", "website", "web site", "site", "youtube", "gmail", "github",
                 "chatgpt", "open google", "www", "http", "https"),
     "jobs": ("job", "jobs", "background", "working on", "progress", "job status", "cancel",
@@ -169,15 +179,16 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
 }
 # Descriptions offered to the fast classifier when no rule matched.
 TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
-    "general": "time, date and simple utilities",
+    "general": "time and date (any city or country), simple utilities",
+    "weather": "current weather and up to 3-day forecast for any place",
     "files": "find files by name or content; delete, move or rename files and folders",
     "system": "volume, brightness, battery, power, screenshots, clipboard",
     "apps": "open, close, focus or arrange apps and windows",
     "media": "music and video playback",
     "git": "git status, log, diff, commit and branches",
     "dev": "tests, new projects, Python environment checks",
-    "web": "web search, weather, news",
-    "memory": "notes and recalling past conversations",
+    "web": "web search, news",
+    "memory": "remember, recall or forget short notes the user dictates",
     "browser": "open a website or URL in the browser",
     "jobs": "long writing jobs (essays, articles, reports) and background job status/cancel",
 }
