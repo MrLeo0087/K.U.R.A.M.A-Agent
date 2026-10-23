@@ -18,6 +18,11 @@ QUIT = {"/quit", "/exit", "/q"}
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    if "--voice" in argv:  # `python -m jarvis --voice`; text chat stays the default
+        from jarvis.voice import main as voice_main
+
+        return voice_main(argv)
     if not config.GROQ_API_KEY:
         print("GROQ_API_KEY missing: add it to .env", file=sys.stderr)
         return 1

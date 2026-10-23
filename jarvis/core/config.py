@@ -46,6 +46,9 @@ MODEL_PARAMS: dict[str, dict] = {
 STT_MODEL = "whisper-large-v3-turbo"
 STT_FALLBACK = "whisper-large-v3"
 STT_LANGUAGES = ("en", "ne", "hi")
+# Whisper auto-detect mislabels Nepali as Hindi. Set JARVIS_STT_LANG=ne to pin it.
+STT_LANGUAGE_HINT = os.getenv("JARVIS_STT_LANG") or None
+STT_PREFER_FALLBACK_LANGS = ("ne",)  # use large-v3 first for these
 
 # --- TTS (edge-tts) ---
 VOICES: dict[str, str] = {
@@ -79,3 +82,28 @@ LLM_MAX_WAIT_S = 20.0  # never sleep longer than this for one retry
 
 # --- chat ---
 HISTORY_TURNS = 6
+
+# --- audio capture / VAD (P2) ---
+AUDIO_SAMPLE_RATE = 16_000  # Hz, mono int16 (what webrtcvad and Whisper want)
+AUDIO_INPUT_DEVICE: str | int | None = os.getenv("JARVIS_INPUT_DEVICE") or None  # None = default mic
+VAD_AGGRESSIVENESS = 2  # webrtcvad 0..3 (3 = most aggressive at rejecting non-speech)
+VAD_FRAME_MS = 30  # webrtcvad accepts 10/20/30 ms frames
+VAD_SILENCE_MS = 800  # end the utterance after this much trailing silence
+VAD_START_TIMEOUT_S = 8.0  # give up if nobody starts speaking within this time
+VAD_MAX_UTTERANCE_S = 20.0  # hard cap on one utterance
+VAD_MIN_SPEECH_MS = 250  # shorter voiced audio is discarded as noise
+
+# --- barge-in (stop TTS when the user starts talking) ---
+BARGE_IN = os.getenv("JARVIS_BARGE_IN", "1").lower() not in ("0", "false", "no", "off")
+BARGE_IN_RMS = 1500  # int16 RMS a frame must exceed (keeps speaker echo from triggering)
+BARGE_IN_FRAMES = 8  # consecutive loud+voiced 30 ms frames needed (~240 ms)
+BARGE_IN_GRACE_S = 0.4  # ignore the mic right after playback starts
+
+# --- playback / TTS ---
+AUDIO_PLAYERS = ("ffplay", "mpv", "paplay")  # first one found by `which` is used
+TTS_RATE = "+0%"  # edge-tts speaking rate
+TTS_DEFAULT_LANG = "en"
+
+# --- voice loop ---
+HOTKEY_PTT = os.getenv("JARVIS_HOTKEY", "<ctrl>+<alt>+j")  # press to talk (toggle)
+VOICE_MAX_TOKENS = 200
