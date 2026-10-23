@@ -44,3 +44,31 @@ def test_wav_encoder_header_and_length(tmp_path):
     assert (r["pcmFmt"], r["ch"], r["rate"], r["byteRate"], r["bits"]) == (1, 1, 16000, 32000, 16)
     assert 0 < r["first"] <= 32767  # averaged (2, -2, ...) window stays in range
     assert r["same"] is True
+
+
+INSERT_SCRIPT = """
+import { insertAtCursor as f } from "./voice.mjs";
+console.log(JSON.stringify([
+  f("", null, null, " hello "),                 // empty box
+  f("open", null, null, "the file"),            // no caret yet: append with a space
+  f("open  now", 5, 5, "it"),                   // caret between spaces: no extra spaces
+  f("copy to", 4, 4, "this"),                   // caret glued to words: spaces both sides
+  f("say WORD here", 4, 8, "text"),             // replaces the selection
+  f("keep", 2, 2, "   "),                        // empty transcription: untouched
+]));
+"""
+
+
+@pytest.mark.skipif(NODE is None, reason="node not installed")
+def test_insert_at_cursor(tmp_path):
+    shutil.copy(FRONTEND / "voice.js", tmp_path / "voice.mjs")
+    (tmp_path / "t.mjs").write_text(INSERT_SCRIPT)
+    out = subprocess.run([NODE, "t.mjs"], cwd=tmp_path, capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    r = json.loads(out.stdout)
+    assert r[0] == {"value": "hello", "caret": 5}
+    assert r[1] == {"value": "open the file", "caret": 13}
+    assert r[2] == {"value": "open it now", "caret": 7}
+    assert r[3] == {"value": "copy this to", "caret": 9}
+    assert r[4] == {"value": "say text here", "caret": 8}
+    assert r[5] == {"value": "keep", "caret": 2}

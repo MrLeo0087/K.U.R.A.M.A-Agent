@@ -1,8 +1,9 @@
 // KURAMA UI controller. Talks to the Jarvis backend ONLY through the HTTP API (api.js).
 import { Api } from "./api.js";
 import { loadSettings, saveSettings } from "./config.js";
+import { Dust } from "./dust.js";
 import { Orb } from "./orb.js";
-import { Conversation, Mic, Player, Recorder, SentenceSplitter, audioCtx } from "./voice.js";
+import { Conversation, Mic, Player, Recorder, SentenceSplitter, audioCtx, insertAtCursor } from "./voice.js";
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -15,6 +16,8 @@ if (params.get("wallpaper") === "1") document.body.classList.add("wallpaper");
 // ---------- orb ----------
 const orb = new Orb($("orb-canvas"), { halo: document.querySelector("#orb .halo"), lowPower: lowPowerOn(), reducedMotion });
 document.body.classList.toggle("low-power", lowPowerOn());
+const dust = new Dust($("bg-dust"), { orbEl: $("orb"), lowPower: lowPowerOn() });
+if (params.get("dust") !== "0") orb.attach(dust); // one loop drives the orb and the background field (?dust=0: off)
 orb.start();
 
 // ---------- voice plumbing ----------
@@ -28,6 +31,8 @@ const conv = new Conversation(mic, player, {
   onAutoOff: () => { mic.stop(); setMode("text"); toast("Conversation turned off after 2 minutes of silence."); },
 });
 orb.levelFn = () => (player.playing ? player.level() : mic.open ? mic.level() : 0);
+orb.bandsFn = (n) => (player.playing ? player.bands(n) : mic.open ? mic.bands(n) : null);
+orb.waveFn = (n) => (mic.open ? mic.wave(n) : null);
 
 let mode = "text"; // text | mic | conv
 let recording = false;
@@ -42,6 +47,17 @@ let paused = false; // wallpaper covered by a window (window.kuramaPause)
 let pendingConfirm = null; // conversation mode: confirmation answered by voice
 const bubbles = new Map(); // confirm id -> bubble
 const FORCE_ORB = params.get("debug") === "1" ? params.get("orb") : null; // ?debug=1&orb=thinking (visual checks)
+const FORCE_MODE = params.get("debug") === "1" ? { text: "text", mic: "mic", chat: "conv", conv: "conv" }[params.get("mode")] || null : null; // &mode=text|mic|chat
+let dictLang = null; // language of text dictated into the box (mic mode), used when it is sent
+let caretKnown = false; // the user has placed the caret in the box (else dictation appends)
+const alive = () => !lowPowerOn() && !reducedMotion && !paused && !document.hidden; // small CSS flourishes allowed
+// restart a one-shot CSS animation by alternating two classes that use identical keyframes
+function retrigger(node, a, b) {
+  if (!node || !alive()) return;
+  const on = node.classList.contains(a);
+  node.classList.remove(on ? a : b);
+  node.classList.add(on ? b : a);
+}
 
 function orbState() {
   if (player.playing) return "speaking";
@@ -55,11 +71,11 @@ function stateText(st) {
   if (online === null) return "Connecting…";
   if (st === "speaking") return mode === "conv" ? "Speaking — talk over me to interrupt" : "Speaking — click the orb to stop";
   if (st === "listening") {
-    if (recording) return `Recording ${recSecs}s — click the mic to send`;
+    if (recording) return `Recording ${recSecs}s — click the mic to stop · Esc cancels`;
     return conv.state === "capturing" ? "Hearing you…" : "Listening — speak anytime";
   }
   if (st === "thinking") return sttBusy ? "Transcribing…" : "Thinking…";
-  if (mode === "mic") return "Mic ready — click the mic to talk";
+  if (mode === "mic") return "Mic ready — click the mic to dictate into the box";
   return "Voice off — type below";
 }
 
@@ -68,8 +84,12 @@ const CHIP = { idle: "Ready", listening: "Listening", thinking: "Thinking…", s
 function updateState() {
   const st = orbState();
   orb.setState(FORCE_ORB || st);
-  document.body.dataset.state = performance.now() < errUntil ? "error" : st;
-  $("voice-state").textContent = stateText(st);
+  const om = FORCE_MODE || (mode === "conv" && conv.on ? "conv" : mode === "mic" ? "mic" : "text");
+  orb.setMode(om);
+  if (document.body.dataset.mode !== om) { document.body.dataset.mode = om; $("composer").querySelector(".modes").dataset.mode = om; }
+  document.body.dataset.state = performance.now() < errUntil ? "error" : FORCE_ORB || st;
+  const vs = $("voice-state"), txt = stateText(st);
+  if (vs.textContent !== txt) { vs.textContent = txt; retrigger(vs, "fl-a", "fl-b"); }
   const chip = $("chat-state");
   chip.className = "chat-state " + (online === false ? "bad" : st === "thinking" ? "busy" : st === "idle" ? (online ? "ok" : "") : "live");
   chip.lastElementChild.textContent = online === false ? "Offline" : online === null ? "Connecting" : CHIP[st];
@@ -123,14 +143,40 @@ async function toggleMic() {
     setMode("mic");
     return;
   }
+  // stop -> transcribe -> insert into the box at the caret; never auto-send (the user may add a pasted path)
   recording = false;
   clearInterval(recTimer);
   const blob = await recorder.stop();
   mic.stop();
   setMode("mic");
   if (!blob || blob.size < 1200) { toast("Didn't catch anything."); return; }
-  const r = await transcribe(blob);
-  if (r?.text) sendChat(r.text, { voice: true, lang: r.lang, speak: S.voiceReplies });
+  const composer = $("composer");
+  composer.classList.add("transcribing");
+  input.placeholder = "Transcribing…";
+  let r = null;
+  try { r = await transcribe(blob); } finally { composer.classList.remove("transcribing"); setMode(mode); }
+  if (r?.text) dictate(r.text, r.lang);
+}
+
+function cancelRecording() {
+  if (!recording) return;
+  recording = false;
+  clearInterval(recTimer);
+  recorder.cancel();
+  mic.stop();
+  updateState();
+  toast("Recording cancelled.");
+}
+
+function dictate(text, lang) {
+  const { value, caret } = insertAtCursor(input.value, caretKnown ? input.selectionStart : null, caretKnown ? input.selectionEnd : null, text);
+  input.value = value;
+  autosize();
+  input.focus();
+  input.setSelectionRange(caret, caret);
+  caretKnown = true;
+  dictLang = lang || dictLang;
+  orb.poke(0.8);
 }
 
 async function toggleConv() {
@@ -385,7 +431,8 @@ async function sendChat(text, { voice = false, lang = null, speak = false } = {}
 // composer
 const input = $("input");
 function autosize() { input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight + 2, 140) + "px"; }
-input.addEventListener("input", autosize);
+input.addEventListener("input", () => { autosize(); caretKnown = true; orb.poke(0.3); });
+for (const ev of ["focus", "mouseup", "keyup", "select"]) input.addEventListener(ev, () => { caretKnown = true; });
 input.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); $("composer").requestSubmit(); }
 });
@@ -396,9 +443,14 @@ $("composer").addEventListener("submit", (e) => {
   if (!t) return;
   input.value = "";
   autosize();
+  const dictated = dictLang !== null;
+  const lang = (mode === "mic" && dictLang) || S.lang;
+  dictLang = null;
+  caretKnown = false;
   const speak = mode === "conv" ? conv.on : mode === "mic" && S.voiceReplies;
   if (speak) audioCtx();
-  sendChat(t, { voice: speak, lang: S.lang, speak });
+  orb.poke(1);
+  sendChat(t, { voice: speak || dictated, lang, speak });
 });
 $("m-text").onclick = () => { setMode("text"); input.focus(); };
 $("m-mic").onclick = () => toggleMic();
@@ -406,6 +458,7 @@ $("m-conv").onclick = () => toggleConv();
 $("btn-clear").onclick = () => { log.innerHTML = ""; log.append(welcome()); };
 $("orb").onclick = () => { if (player.active) player.stop(); else if (busy) abortChat(); updateState(); };
 document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && recording) { e.preventDefault(); cancelRecording(); return; } // cancel, insert nothing
   if (e.key === "Escape" && !document.querySelector("dialog[open]")) {
     if (player.active) player.stop();
     else if (busy) abortChat();
@@ -435,10 +488,25 @@ log.append(welcome());
 
 // ---------- numbers: set only when the shown text changes (no per-frame tweening: every animated frame
 // costs real CPU in WebKitGTK, and this page runs all day) ----------
+// Numbers ease to the new value in a few coarse steps (6 text updates, only when the value changed) and
+// flash softly; low power / reduced motion / paused set the text directly.
 function tweenTo(id, value, decimals = 0) {
   const node = $(id);
   const t = value == null || Number.isNaN(value) ? "–" : Number(value).toFixed(decimals);
-  if (node.textContent !== t) node.textContent = t;
+  if (node.textContent === t && !node._tw) return;
+  clearTimeout(node._tw); node._tw = 0;
+  const from = parseFloat(node.textContent);
+  if (!alive() || t === "–" || Number.isNaN(from)) { node.textContent = t; return; }
+  if (Math.abs(Number(value) - from) >= 5) retrigger(node, "nf-a", "nf-b"); // flash only on real jumps (CPU)
+  const to = Number(value);
+  let i = 0;
+  const stepFn = () => {
+    i++;
+    const e = 1 - Math.pow(1 - i / 6, 3);
+    node.textContent = i >= 6 ? t : (from + (to - from) * e).toFixed(decimals);
+    node._tw = i >= 6 ? 0 : setTimeout(stepFn, 70);
+  };
+  stepFn();
 }
 
 // ---------- sparklines (redrawn once per sample) ----------
@@ -453,6 +521,8 @@ class Spark {
   push(values) {
     values.forEach((v, i) => { const d = this.series[i].data; d.push(v || 0); d.shift(); });
     this.draw();
+    if (this.c.clientWidth) this.c.style.setProperty("--step", (this.c.clientWidth / (this.points - 1)).toFixed(1) + "px");
+    // no per-sample slide: each CSS animation forces full-window repaints in WebKitGTK (no GPU)
   }
   draw() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -477,9 +547,15 @@ class Spark {
       const g = ctx.createLinearGradient(0, 0, 0, h);
       g.addColorStop(0, s.fill); g.addColorStop(1, "rgba(0,0,0,0)");
       ctx.fillStyle = g; ctx.fill();
-      const [lx, ly] = pts[pts.length - 1]; // live dot
-      ctx.fillStyle = s.color;
-      ctx.beginPath(); ctx.arc(lx - 1.5, ly, 2, 0, Math.PI * 2); ctx.fill();
+      const [lx, ly] = pts[pts.length - 1]; // live dot with a soft glow
+      const hg = ctx.createRadialGradient(lx - 2, ly, 0, lx - 2, ly, 9);
+      hg.addColorStop(0, s.fill.replace(/[\d.]+\)$/, "0.9)")); hg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = hg;
+      ctx.beginPath(); ctx.arc(lx - 2, ly, 9, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#fff";
+      ctx.beginPath(); ctx.arc(lx - 2, ly, 1.3, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = s.color; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(lx - 2, ly, 3.2, 0, Math.PI * 2); ctx.stroke();
     }
   }
 }
@@ -522,6 +598,7 @@ function renderStatus(s) {
   setConn(true);
   const cpu = s.cpu || {};
   tweenTo("cpu", cpu.percent ?? 0);
+  $("cpu-metric").style.setProperty("--glow", (0.12 + Math.min(1, (cpu.percent || 0) / 100) * 0.7).toFixed(2));
   cpuSpark.push([cpu.percent ?? 0]);
   $("cpu-freq").textContent = cpu.freq_ghz ? `${cpu.freq_ghz.toFixed(2)} GHz` : `${cpu.count ?? "?"} cores`;
   $("cpu-temp").textContent = cpu.temp_c != null ? `${Math.round(cpu.temp_c)} °C` : "– °C";
@@ -543,7 +620,7 @@ function renderStatus(s) {
   $("bat-row").hidden = !bat;
   if (bat) {
     tweenTo("battery", bat.percent);
-    setBar("battery-bar", bat.percent, !bat.plugged && bat.percent <= 20 ? "low" : "");
+    setBar("battery-bar", bat.percent, !bat.plugged && bat.percent <= 20 ? "low" : bat.plugged && bat.percent < 99 ? "chg" : "");
     $("charging").hidden = !bat.plugged;
     $("battery-time").textContent = bat.plugged ? (bat.percent >= 99 ? "Full · plugged in" : "Charging")
       : bat.secs_left != null ? `${fmtDur(bat.secs_left)} left` : "On battery";
@@ -598,6 +675,8 @@ function renderProcs() {
   if (!list.length) return;
   const max = Math.max(0.1, ...list.map((p) => (procSort === "cpu" ? p.cpu : p.rss_mb)));
   const ul = $("procs");
+  const order = procSort + list.map((p) => p.pid).join(",");
+  if (ul.dataset.order !== order) { ul.dataset.order = order; retrigger(ul, "ro-a", "ro-b"); } // rows slide in on reorder
   ul.dataset.sort = procSort;
   ul.innerHTML = list.map((p) => {
     const v = procSort === "cpu" ? p.cpu : p.rss_mb;
@@ -642,12 +721,42 @@ function startStatus() {
   }
 }
 
+// ---------- weather card (Nepalgunj; fetched on load, then every 10 min) ----------
+const WX_SVG = {
+  sun: '<svg viewBox="0 0 32 32"><g class="wx-rays"><path d="M16 3v4M16 25v4M3 16h4M25 16h4M6.8 6.8l2.8 2.8M22.4 22.4l2.8 2.8M6.8 25.2l2.8-2.8M22.4 9.6l2.8-2.8"/></g><circle cx="16" cy="16" r="5.5"/></svg>',
+  moon: '<svg viewBox="0 0 32 32"><circle class="wx-glow" cx="16" cy="16" r="11"/><path d="M20.5 22.5A8.5 8.5 0 0 1 13 8a8.5 8.5 0 1 0 10.5 13.2 8.4 8.4 0 0 1-3 1.3z"/></svg>',
+  cloud: '<svg viewBox="0 0 32 32"><path class="wx-cloud" d="M9 23h14a5 5 0 0 0 .4-10A7 7 0 0 0 10 13.5 4.8 4.8 0 0 0 9 23z"/></svg>',
+  rain: '<svg viewBox="0 0 32 32"><path d="M9 19h14a5 5 0 0 0 .4-10A7 7 0 0 0 10 9.5 4.8 4.8 0 0 0 9 19z"/><path class="wx-drop" d="M11 22l-1 3"/><path class="wx-drop d2" d="M16 22l-1 3"/><path class="wx-drop d3" d="M21 22l-1 3"/></svg>',
+};
+function wxKind(it) {
+  const c = Number(it.code);
+  if (c >= 51 && c <= 67 || c >= 80 && c <= 82 || c >= 95) return "rain";
+  if (c <= 1) return it.is_day === false ? "moon" : "sun";
+  return "cloud";
+}
+async function loadWeather() {
+  let it = null;
+  try { it = (await api.fetchWeather()).items?.[0] || null; } catch { it = null; }
+  const ok = !!it && !it.error && it.temp_c != null;
+  $("wx-place").textContent = (it?.place || "Nepalgunj").toUpperCase();
+  if (ok) tweenTo("wx-temp", it.temp_c, 0); else $("wx-temp").textContent = "--";
+  $("wx-desc").textContent = ok ? it.desc || "" : "unavailable";
+  $("wx-sub").textContent = ok ? `Feels ${Math.round(it.feels_c)}° · ${Math.round(it.humidity)}% · ${Math.round(it.wind_kmh)} km/h` : "";
+  const k = ok ? wxKind(it) : "cloud", ic = $("wx-icon");
+  if (alive() || ic.dataset.k !== k) { ic.dataset.k = k; ic.innerHTML = WX_SVG[k]; } // re-insert = replay the one-shot animation
+}
+loadWeather();
+setInterval(loadWeather, 600000);
+
 // ---------- clock (ticks every second, aligned to the second) ----------
 let clockTimer = 0;
 function tick() {
   const now = new Date();
   const parts = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }).split(" ");
-  $("clock-hm").textContent = parts[0];
+  const [hh, mm] = parts[0].split(":");
+  $("clock-h").textContent = hh;
+  $("clock-m").textContent = mm ?? "";
+  $("clock-colon").classList.toggle("off", alive() && now.getSeconds() % 2 === 1);
   $("clock-ap").textContent = parts[1] || "";
   $("clock-s").textContent = String(now.getSeconds()).padStart(2, "0");
   $("date").textContent = now.toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" });
@@ -661,7 +770,21 @@ function applyActivity() {
   document.body.classList.toggle("paused", idle);
   orb.pause(paused);
   if (idle) { stopStatus(); stopClock(); } else { if (!clockTimer) tick(); if (!es && !pollTimer) startStatus(); }
+  syncAmbient();
 }
+
+// ---------- ambient flourishes: one rare one-shot CSS effect every ~7-13 s (nothing runs in between) ----------
+let ambTimer = 0;
+function ambient() {
+  ambTimer = 0;
+  if (!alive()) return;
+  const cards = [...document.querySelectorAll(".layout .card")];
+  if (Math.random() < 0.75 && cards.length) pulseClass(cards[Math.floor(Math.random() * cards.length)], "shine", 2000);
+  else pulseClass(document.querySelector(".name"), "flick", 800);
+  ambTimer = setTimeout(ambient, 7000 + Math.random() * 6000);
+}
+function pulseClass(node, cls, ms) { if (!node) return; node.classList.add(cls); setTimeout(() => node.classList.remove(cls), ms); }
+function syncAmbient() { clearTimeout(ambTimer); ambTimer = alive() ? setTimeout(ambient, 3000) : 0; }
 window.kuramaPause = (on) => { paused = !!on; applyActivity(); return paused; };
 document.addEventListener("visibilitychange", applyActivity);
 
@@ -697,7 +820,9 @@ $("set-form").addEventListener("submit", (e) => {
   S.lang = $("set-lang").value;
   saveSettings(S);
   orb.setLowPower(S.lowPower);
+  dust.setLowPower(S.lowPower);
   document.body.classList.toggle("low-power", S.lowPower);
+  syncAmbient();
   online = null;
   startStatus();
   checkHealth();
@@ -780,7 +905,13 @@ setMode("text");
 tick();
 if (params.get("paused") === "1") window.kuramaPause(true); // start paused (testing)
 checkHealth().then(startStatus);
-if (FORCE_ORB) orb.levelFn = () => 0.35 + 0.3 * Math.sin(performance.now() / 180); // fake audio level for visual checks
+if (FORCE_ORB) { // fake audio for visual checks
+  orb.levelFn = () => 0.35 + 0.3 * Math.sin(performance.now() / 180);
+  const fb = new Float32Array(24), fw = new Float32Array(64);
+  orb.bandsFn = (n) => { const t = performance.now() / 1000; for (let i = 0; i < n; i++) fb[i] = Math.max(0, 0.75 - i / n * 0.6 + 0.25 * Math.sin(t * 7 + i * 1.3)); return fb; };
+  orb.waveFn = (n) => { const t = performance.now() / 1000; for (let i = 0; i < n; i++) fw[i] = 0.25 * Math.sin(i * 0.9 + t * 11) * Math.sin(i * 0.23 + t * 3); return fw; };
+}
+syncAmbient();
 if (params.get("debug") === "1" && params.get("demo") === "1") { // static sample conversation (visual checks only)
   addUser("open youtube and write a 1000-word essay about Nepal");
   const b = new BotBubble();

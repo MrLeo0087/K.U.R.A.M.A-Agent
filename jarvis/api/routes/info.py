@@ -103,3 +103,46 @@ def _tools() -> dict:
             description="First call imports every tool module (a few hundred ms).")
 async def tools():
     return await run_in_threadpool(_tools)
+
+
+_wx_cache: dict = {}
+
+
+def _weather_now(place: str) -> dict:
+    """Current conditions for one place (Open-Meteo, free; cached WEATHER_CACHE_S)."""
+    from jarvis.core import config
+    from jarvis.tools.general import _geo
+
+    hit = _wx_cache.get(place.lower())
+    if hit and time.time() - hit[0] < config.WEATHER_CACHE_S:
+        return hit[1]
+    geo = _geo.geocode(place)
+    if not geo:
+        return {"place": place, "error": "not found"}
+    cur = _geo.get_json("https://api.open-meteo.com/v1/forecast", {
+        "latitude": geo["lat"], "longitude": geo["lon"], "timezone": "auto", "wind_speed_unit": "kmh",
+        "current": "temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,is_day",
+    }).get("current", {})
+    out = {"place": place.split(",")[0].strip(), "temp_c": cur.get("temperature_2m"),
+           "feels_c": cur.get("apparent_temperature"), "humidity": cur.get("relative_humidity_2m"),
+           "wind_kmh": cur.get("wind_speed_10m"), "code": cur.get("weather_code"),
+           "desc": _geo.describe(cur.get("weather_code")), "is_day": bool(cur.get("is_day", 1))}
+    _wx_cache[place.lower()] = (time.time(), out)
+    return out
+
+
+@router.get("/weather", summary="Current weather for the UI card (default: config.UI_WEATHER_PLACES)")
+async def weather_now(place: str = Query("", description="city, e.g. 'Nepalgunj, Nepal'")):
+    from jarvis.core import config
+
+    places = [place] if place.strip() else list(config.UI_WEATHER_PLACES)
+
+    def run():
+        res = []
+        for p in places:
+            try:
+                res.append(_weather_now(p.strip()))
+            except Exception as e:  # network down: the card just shows "--"
+                res.append({"place": p.split(",")[0].strip(), "error": type(e).__name__})
+        return res
+    return {"items": await run_in_threadpool(run)}

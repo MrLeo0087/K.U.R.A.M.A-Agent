@@ -348,3 +348,14 @@ def test_server_shim_runs_api(monkeypatch):
     assert ran["app"].state.settings.warm_on_start is False and ran["hardened"]
     ran.clear()
     assert server.main(["--host", "0.0.0.0", "--port", "8124"]) == 2 and "host" not in ran  # no token: refuse
+
+
+def test_weather_card(client, monkeypatch):
+    from jarvis.api.routes import info
+    from jarvis.tools.general import _geo
+    info._wx_cache.clear()
+    monkeypatch.setattr(_geo, "geocode", lambda p: {"lat": 28.05, "lon": 81.62, "name": "Nepalgunj"})
+    monkeypatch.setattr(_geo, "get_json", lambda u, q: {"current": {"temperature_2m": 31.2, "weather_code": 0,
+                                                                    "is_day": 1}})
+    items = client.get("/api/v1/weather").json()["items"]
+    assert items[0]["place"] == "Nepalgunj" and items[0]["temp_c"] == 31.2 and items[0]["desc"]

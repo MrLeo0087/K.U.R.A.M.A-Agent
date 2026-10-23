@@ -14,14 +14,21 @@
 <body data-state="idle">
   <div class="bg-grid" aria-hidden="true"></div>
   <div class="bg-glow" aria-hidden="true"></div>
+  <canvas id="bg-dust" class="bg-dust" aria-hidden="true"></canvas>
 
   <div class="layout">
     <!-- left: clock, processes, Jarvis -->
     <section class="col left" aria-label="Clock and processes">
       <header class="clock-block">
-        <div class="clock" role="timer" aria-live="off"><span id="clock-hm">--:--</span><span class="clock-side"><span id="clock-ap"></span><span id="clock-s" class="sec">00</span></span></div>
+        <div class="clock" role="timer" aria-live="off"><span id="clock-hm"><span id="clock-h">--</span><span id="clock-colon" class="colon">:</span><span id="clock-m">--</span></span><span class="clock-side"><span id="clock-ap"></span><span id="clock-s" class="sec">00</span></span></div>
         <div id="date" class="date"></div>
       </header>
+
+      <div class="card weather-card" id="weather" aria-label="Weather">
+        <span id="wx-icon" class="wx-icon" aria-hidden="true"></span>
+        <div class="wx-main"><div id="wx-place" class="label">NEPALGUNJ</div><div class="wx-temp"><b id="wx-temp">--</b><span>°C</span></div></div>
+        <div class="wx-side"><div id="wx-desc">–</div><small id="wx-sub"></small></div>
+      </div>
 
       <div class="card procs-card">
         <div class="card-title">Top processes <span id="procs-count" class="muted-right"></span></div>
@@ -75,7 +82,7 @@
             <button type="button" id="m-text" aria-pressed="true" aria-label="Text mode" title="Text · Enter to send">
               <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6.5" width="18" height="11" rx="2.5"/><path d="M7 10.5h.01M10 10.5h.01M13 10.5h.01M16 10.5h.01M8 14h8"/></svg>
             </button>
-            <button type="button" id="m-mic" aria-pressed="false" aria-label="Mic: click to record, click again to send" aria-keyshortcuts="Alt+M" title="Mic · click to record, click again to send (Alt+M)">
+            <button type="button" id="m-mic" aria-pressed="false" aria-label="Mic: click to record, click again to type the words into the box (Esc cancels)" aria-keyshortcuts="Alt+M" title="Mic · click to dictate, click again to insert the text — Enter sends (Alt+M · Esc cancels)">
               <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>
             </button>
             <button type="button" id="m-conv" aria-pressed="false" aria-label="Conversation mode: hands-free, click again to stop" aria-keyshortcuts="Alt+C" title="Conversation · hands-free voice chat (Alt+C)">
@@ -95,7 +102,7 @@
     <section class="col right" aria-label="Performance">
       <div class="card perf">
         <div class="card-title">Performance <span id="uptime" class="muted-right"></span></div>
-        <div class="metric">
+        <div class="metric cpu-metric" id="cpu-metric">
           <div class="metric-head"><span class="label">CPU</span><span class="big"><b id="cpu">0</b>%</span></div>
           <canvas id="cpu-spark" class="spark"></canvas>
           <div class="sub"><span id="cpu-freq">– GHz</span><span id="cpu-load">load –</span><span id="cpu-temp">– °C</span></div>

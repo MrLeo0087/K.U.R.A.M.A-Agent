@@ -185,6 +185,7 @@ ASSISTANT_NAMES = ("jarvis", "kurama")  # wake/address words stripped from comma
 HOME_PLACE = os.getenv("JARVIS_HOME_PLACE", "Kathmandu")  # default for weather
 HTTP_TIMEOUT_S = 5.0
 WEATHER_CACHE_S = 600  # weather results are reused for 10 min
+UI_WEATHER_PLACES = tuple(os.getenv("JARVIS_UI_WEATHER", "Nepalgunj, Nepal").split(";"))  # UI weather card
 GEO_CACHE_S = 86_400  # geocoder results are reused for a day
 # --- P5b desktop controls ---
 VOLUME_STEP = 10  # "volume up" without a number

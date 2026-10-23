@@ -16,6 +16,38 @@ function rmsOf(analyser, buf) {
   return Math.sqrt(s / buf.length);
 }
 
+// Spectrum for the orb: max of log-spaced FFT bins up to ~5 kHz (speech), 0..1, into a reused array.
+function bandsOf(analyser, bytes, out) {
+  analyser.getByteFrequencyData(bytes);
+  const hz = analyser.context.sampleRate / analyser.fftSize;
+  const lo = 2, hi = Math.max(lo + out.length, Math.min(bytes.length, Math.round(5000 / hz)));
+  for (let i = 0; i < out.length; i++) {
+    const a = Math.floor(lo * Math.pow(hi / lo, i / out.length));
+    const b = Math.max(a + 1, Math.floor(lo * Math.pow(hi / lo, (i + 1) / out.length)));
+    let m = 0;
+    for (let j = a; j < b && j < bytes.length; j++) if (bytes[j] > m) m = bytes[j];
+    out[i] = Math.max(0, (m / 255 - 0.25) / 0.75);
+  }
+  return out;
+}
+
+// ---------- dictation: put transcribed text into the message box without sending ----------
+// Pure (unit-tested in tests/test_frontend_js.py): insert `text` at the selection [selStart, selEnd)
+// (replacing any selected text; null = append at the end), adding a separating space where it would
+// otherwise glue onto neighbouring words. Returns the new value and the caret (end of inserted text).
+export function insertAtCursor(value, selStart, selEnd, text) {
+  value = value || "";
+  text = (text || "").trim();
+  const n = value.length;
+  const s = Math.max(0, Math.min(n, selStart ?? n));
+  const e = Math.max(s, Math.min(n, selEnd ?? s));
+  if (!text) return { value, caret: e };
+  const before = value.slice(0, s), after = value.slice(e);
+  const pre = before && !/\s$/.test(before) ? " " : "";
+  const post = after && !/^\s/.test(after) ? " " : "";
+  return { value: before + pre + text + post + after, caret: before.length + pre.length + text.length };
+}
+
 // ---------- WAV encoding (pure; unit-tested with Node in tests/test_frontend_js.py) ----------
 // Downsample Float32 PCM to `outRate` mono (box filter: averages the samples of each output step) and
 // encode it as 16-bit PCM WAV. /api/v1/stt accepts audio/wav, so no MediaRecorder is needed anywhere
@@ -122,6 +154,19 @@ export class Mic {
 
   rms() { return this.stream ? rmsOf(this.analyser, this.buf) : 0; }
   level() { return Math.min(1, this.rms() * 9); }
+  bands(n) {
+    if (!this.stream) return null;
+    if (!this._bands || this._bands.length !== n) { this._bands = new Float32Array(n); this._bytes = new Uint8Array(this.analyser.frequencyBinCount); }
+    return bandsOf(this.analyser, this._bytes, this._bands);
+  }
+  wave(n) { // n evenly spaced samples of the current time-domain buffer
+    if (!this.stream) return null;
+    if (!this._wave || this._wave.length !== n) this._wave = new Float32Array(n);
+    this.analyser.getFloatTimeDomainData(this.buf);
+    const step = this.buf.length / n;
+    for (let i = 0; i < n; i++) this._wave[i] = this.buf[Math.floor(i * step)];
+    return this._wave;
+  }
 }
 
 // ---------- recorder (PCM -> 16 kHz mono WAV) ----------
@@ -217,6 +262,12 @@ export class Player {
   level() {
     if (this.src?.el) return 0.35 + 0.25 * Math.sin(performance.now() / 160); // <audio> fallback: no analyser
     return this.src && this.analyser ? Math.min(1, rmsOf(this.analyser, this.buf) * 5) : 0;
+  }
+
+  bands(n) { // null for the <audio> fallback (the orb then derives bars from level())
+    if (!this.src || this.src.el || !this.analyser) return null;
+    if (!this._bands || this._bands.length !== n) { this._bands = new Float32Array(n); this._bytes = new Uint8Array(this.analyser.frequencyBinCount); }
+    return bandsOf(this.analyser, this._bytes, this._bands);
   }
 
   enqueue(text, lang, gen = this.gen) {
