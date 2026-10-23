@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#02060f">
+  <title>KURAMA · Jarvis</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 29 9 22 3 19l4-3-3-4 4-1-1-9 7 6h4l7-6-1 9 4 1-3 4 4 3-6 3z' fill='none' stroke='%233ef2ff' stroke-width='2'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+  <!-- Optional, for hosting this folder elsewhere: <script>window.KURAMA_CONFIG = {apiBase: "http://127.0.0.1:8000"}</script> -->
+  <script type="module" src="app.js"></script>
+</head>
+<body data-state="idle">
+  <div class="bg" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 29 9 22 3 19l4-3-3-4 4-1-1-9 7 6h4l7-6-1 9 4 1-3 4 4 3-6 3z"/><path d="M11 16l3 1M21 16l-3 1" class="eyes"/></svg>
+      <div>
+        <h1>KURAMA</h1>
+        <p>JARVIS · HOLOGRAPHIC INTERFACE</p>
+      </div>
+    </div>
+    <div class="top-right">
+      <span id="conn" class="pill" role="status">connecting…</span>
+      <time id="clock" class="clock"></time>
+      <button id="btn-info" class="icon-btn" type="button" aria-label="Tools, memory, jobs and alerts" title="Tools · Memory · Jobs · Alerts">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>
+      </button>
+      <button id="btn-settings" class="icon-btn" type="button" aria-label="Settings" title="Settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- left: laptop vitals -->
+    <section class="col-left" aria-label="Laptop status">
+      <div class="panel">
+        <h2><span class="dot"></span>System <small id="sys-up"></small></h2>
+        <div class="cpu">
+          <svg class="ring" viewBox="0 0 100 100" aria-hidden="true">
+            <circle class="ring-bg" cx="50" cy="50" r="42"/>
+            <circle id="cpu-ring" class="ring-fg" cx="50" cy="50" r="42" stroke-dasharray="263.89" stroke-dashoffset="263.89"/>
+          </svg>
+          <div class="cpu-txt"><b id="cpu-val">–</b><span>CPU</span><small id="cpu-sub"></small></div>
+        </div>
+        <div class="metric"><label>RAM</label><div id="ram-bar" class="bar"><i></i><span>–</span></div></div>
+        <div class="metric"><label>Swap</label><div id="swap-bar" class="bar"><i></i><span>–</span></div></div>
+        <div class="metric"><label>Disk</label><div id="disk-bar" class="bar"><i></i><span>–</span></div></div>
+        <div class="metric" id="bat-row" hidden><label>Battery</label><div id="bat-bar" class="bar"><i></i><span>–</span></div></div>
+      </div>
+      <div class="panel">
+        <h2><span class="dot amber"></span>Heavy processes <small id="procs-count"></small></h2>
+        <div class="seg" role="group" aria-label="Sort processes by">
+          <button type="button" data-sort="rss" aria-pressed="true">Memory</button>
+          <button type="button" data-sort="cpu" aria-pressed="false">CPU</button>
+        </div>
+        <ol id="procs" class="procs"><li class="empty">–</li></ol>
+      </div>
+    </section>
+
+    <!-- centre: hologram -->
+    <section class="hero" aria-label="KURAMA hologram">
+      <div class="holo-wrap">
+        <canvas id="holo" aria-hidden="true"></canvas>
+        <span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span>
+        <div class="hud-top">KYŪBI · NINE-TAILED CORE</div>
+        <div class="hud-state" aria-live="polite"><span class="pulse"></span><span id="state-label">STANDING BY</span></div>
+      </div>
+      <div class="tiles">
+        <div class="tile"><label>Jarvis RAM</label><b><span id="t-rss">–</span><small> MB</small></b><small id="t-rss-sub"></small></div>
+        <div class="tile"><label>Tokens today</label><b id="t-tokens">–</b><small id="t-tokens-sub"></small></div>
+        <button type="button" class="tile" id="tile-jobs" aria-label="Background jobs"><label>Jobs</label><b id="t-jobs">–</b><small id="t-jobs-sub"></small></button>
+        <button type="button" class="tile" id="tile-alerts" aria-label="Alerts"><label>Alerts</label><b id="t-alerts">–</b><small id="t-alerts-sub"></small></button>
+      </div>
+    </section>
+
+    <!-- right: chat -->
+    <section class="col-chat panel" aria-label="Chat">
+      <div class="chat-head">
+        <h2><span class="dot"></span>Comms</h2>
+        <button id="btn-clear" class="link-btn" type="button">Clear</button>
+      </div>
+      <div id="log" class="log" role="log" aria-live="polite" aria-relevant="additions"></div>
+      <form id="composer" class="composer" autocomplete="off">
+        <div class="modes" role="group" aria-label="Input mode">
+          <button type="button" id="m-text" class="mode" aria-pressed="true" aria-label="Text mode" title="Text (Enter to send)">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h1M9 10h1M12 10h1M15 10h1M18 10h0M7 14h10"/></svg>
+          </button>
+          <button type="button" id="m-mic" class="mode" aria-pressed="false" aria-label="Mic: click to record, click again to send" aria-keyshortcuts="Alt+M" title="Mic: click to record, click again to send (Alt+M)">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+          </button>
+          <button type="button" id="m-conv" class="mode" aria-pressed="false" aria-label="Conversation mode: hands-free, click again to stop" aria-keyshortcuts="Alt+C" title="Conversation: hands-free voice chat (Alt+C)">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h2M7 8v8M11 5v14M15 8v8M19 10v4M21 12h0"/></svg>
+          </button>
+        </div>
+        <textarea id="input" rows="1" placeholder="Message KURAMA…" aria-label="Message"></textarea>
+        <button type="submit" id="send" class="send" aria-label="Send">
+          <svg class="i-send" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12 20 4l-5 16-3-7z"/></svg>
+          <svg class="i-stop" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+        </button>
+      </form>
+      <div id="voice-hint" class="hint"></div>
+    </section>
+  </main>
+
+  <dialog id="settings" aria-labelledby="set-title">
+    <form id="set-form" method="dialog">
+      <h2 id="set-title">Settings</h2>
+      <label>API base URL
+        <input id="set-api" type="url" placeholder="(same origin)" spellcheck="false">
+      </label>
+      <label>API token <small>(only if the server sets JARVIS_API_TOKEN; stored in this browser)</small>
+        <input id="set-token" type="password" autocomplete="off" spellcheck="false">
+      </label>
+      <label class="check"><input id="set-voice" type="checkbox"> Speak replies in Mic mode <small>(Conversation mode always speaks)</small></label>
+      <label class="check"><input id="set-low" type="checkbox"> Low-power hologram (static glow)</label>
+      <label>Language
+        <select id="set-lang">
+          <option value="auto">Auto-detect</option>
+          <option value="en">English</option>
+          <option value="ne">नेपाली (Nepali)</option>
+          <option value="hi">हिन्दी (Hindi)</option>
+        </select>
+      </label>
+      <p id="set-msg" class="note" role="status"></p>
+      <div class="row">
+        <button type="button" id="set-test" class="btn">Test connection</button>
+        <span class="grow"></span>
+        <button value="cancel" class="btn ghost" formnovalidate>Cancel</button>
+        <button value="save" class="btn primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="info" aria-labelledby="info-title">
+    <form method="dialog" class="info-head">
+      <h2 id="info-title">Jarvis</h2>
+      <div class="tabs" role="tablist">
+        <button type="button" role="tab" data-tab="tools" aria-selected="true">Tools</button>
+        <button type="button" role="tab" data-tab="memory" aria-selected="false">Memory</button>
+        <button type="button" role="tab" data-tab="jobs" aria-selected="false">Jobs</button>
+        <button type="button" role="tab" data-tab="alerts" aria-selected="false">Alerts</button>
+      </div>
+      <button class="icon-btn" value="close" aria-label="Close">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </form>
+    <div id="info-body" class="info-body" role="tabpanel"></div>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

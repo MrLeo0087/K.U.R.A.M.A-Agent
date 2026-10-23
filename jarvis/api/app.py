@@ -1,0 +1,105 @@
+"""Jarvis API app factory + runner.
+
+    python -m jarvis.api [--host H] [--port P] [--no-warm]     (python -m jarvis.server is a shim)
+
+Routers (all under /api/v1, OpenAPI docs at /docs):
+  chat    POST /chat (SSE), POST /confirm
+  voice   POST /stt, POST /tts (audio/mpeg stream)
+  info    GET /health, /status, /status/stream (SSE), /jobs, /alerts, /profile, /tools;
+          POST /jobs/{id}/cancel, /alerts/read
+Laptop-local (must stay on the laptop in a future server split): /status*, and the agent's
+desktop-control tools reached through /chat. Everything else can run in a container.
+
+The frontend (frontend/) is plain static files that only call this API; serving it at / is a
+convenience (JARVIS_SERVE_FRONTEND=1, default) - it works the same from any static host.
+"""
+from __future__ import annotations
+
+import argparse
+import contextlib
+import logging
+import sys
+import threading
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from starlette.staticfiles import StaticFiles
+
+from jarvis.api import settings as settings_mod
+from jarvis.api.routes import chat, info, voice
+from jarvis.api.security import Guard
+from jarvis.api.settings import Settings
+from jarvis.api.status import StatusCollector
+from jarvis.api.turns import Engine
+
+log = logging.getLogger("jarvis.api")
+
+
+class _Frontend(StaticFiles):
+    """Static files with revalidation, so an edited frontend shows up on reload."""
+
+    def file_response(self, *args, **kwargs):
+        resp = super().file_response(*args, **kwargs)
+        resp.headers["Cache-Control"] = "no-cache"
+        return resp
+
+
+def create_app(settings: Settings | None = None) -> FastAPI:
+    s = settings or settings_mod.from_env()
+    engine = Engine(s)
+
+    @contextlib.asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        if s.warm_on_start:
+            threading.Thread(target=engine.warm, name="jarvis-warm", daemon=True).start()
+        yield
+
+    app = FastAPI(title="Jarvis (KURAMA) API", version=info.API_VERSION, lifespan=lifespan,
+                  description="Backend for the KURAMA holographic UI. Optional bearer token "
+                              "(JARVIS_API_TOKEN); SSE endpoints also accept ?token=.")
+    app.state.settings = s
+    app.state.engine = engine
+    app.state.status = StatusCollector(s, engine)
+    for r in (chat.router, voice.router, info.router):
+        app.include_router(r)
+
+    # Guard first, CORS last = CORS outermost: preflights answered, and 401/403 still carry CORS headers.
+    app.add_middleware(Guard, settings=s)
+    app.add_middleware(CORSMiddleware, allow_origins=s.cors_origins, allow_credentials=False,
+                       allow_methods=["GET", "POST", "OPTIONS"], allow_headers=["Authorization", "Content-Type"],
+                       expose_headers=["X-Voice"], max_age=600)
+
+    if s.serve_frontend and (s.frontend_dir / "index.html").is_file():
+        app.mount("/", _Frontend(directory=str(s.frontend_dir), html=True), name="frontend")
+    else:
+        @app.get("/", include_in_schema=False)
+        async def root():
+            return JSONResponse({"name": "Jarvis API", "docs": "/docs", "health": "/api/v1/health"})
+    return app
+
+
+def parse_args(argv: list[str] | None = None, prog: str = "python -m jarvis.api") -> argparse.Namespace:
+    env = settings_mod.from_env()
+    ap = argparse.ArgumentParser(prog=prog, description="Jarvis API + KURAMA UI")
+    ap.add_argument("--host", default=env.host, help="bind address (default JARVIS_API_HOST or 127.0.0.1)")
+    ap.add_argument("--port", type=int, default=env.port, help="port (default JARVIS_API_PORT or 8000)")
+    ap.add_argument("--no-warm", action="store_true", help="don't preload the agent after startup")
+    return ap.parse_args(argv)
+
+
+def main(argv: list[str] | None = None, prog: str = "python -m jarvis.api") -> int:
+    args = parse_args(argv, prog)
+    s = settings_mod.from_env(host=args.host, port=args.port)
+    if args.no_warm:
+        s.warm_on_start = False
+    if not s.loopback and not s.token and not s.allow_no_token:
+        print("Refusing to listen on a non-loopback address without JARVIS_API_TOKEN "
+              "(the API can control this computer). Set a token, or JARVIS_API_ALLOW_NO_TOKEN=1.",
+              file=sys.stderr)
+        return 2
+    import uvicorn
+    shown = "127.0.0.1" if s.host in ("0.0.0.0", "::") else s.host
+    print(f"Jarvis API + KURAMA UI: http://{shown}:{s.port}  (docs: /docs)", flush=True)
+    uvicorn.run(create_app(s), host=s.host, port=s.port, log_level=s.log_level, access_log=False)
+    return 0
