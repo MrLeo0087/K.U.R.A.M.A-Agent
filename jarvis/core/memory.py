@@ -799,6 +799,35 @@ ASK_PROMPT = ("Answer the question using only the context from the user's own fi
               "sentences) and cite file paths like path:lines. If the context does not answer it, say so.")
 
 
+# P7b: "what is this project about / what does this repo do" -> the project's own overview docs
+# (retrieval ranks random code chunks for such broad questions).
+_OVERVIEW_Q = re.compile(r"\b(?:about|overview|purpose|summar|describe|what does (?:this|the|my|our) "
+                         r"(?:project|repo|repository|code|codebase|app) do|what is (?:this|the|my|our) "
+                         r"(?:project|repo|repository|codebase|app)\b)", re.I)
+_OVERVIEW_SCOPE = re.compile(r"\b(?:project|repo|repository|codebase|code base|code|app|jarvis)\b", re.I)
+
+
+def is_overview_question(question: str) -> bool:
+    return bool(_OVERVIEW_Q.search(question) and _OVERVIEW_SCOPE.search(question))
+
+
+def overview_context(limit: int | None = None) -> str:
+    """Heads of config.OVERVIEW_DOCS (README/CLAUDE/PROGRESS) that exist, within ASK_CONTEXT_CHARS."""
+    limit = limit or config.ASK_CONTEXT_CHARS
+    docs = [config.ROOT / d for d in config.OVERVIEW_DOCS if (config.ROOT / d).is_file()]
+    if not docs:
+        return ""
+    each = max(300, limit // len(docs))
+    parts = []
+    for d in docs:
+        try:
+            text = re.sub(r"\s+", " ", d.read_text(errors="replace")[: each * 2]).strip()
+        except OSError:
+            continue
+        parts.append(f"[{d.name}]\n{text[:each]}")
+    return "\n\n".join(parts)[:limit]
+
+
 def ask(question: str) -> dict:
     """{answer, cached, hits, context_chars}. One fast-tier call unless the answer is cached."""
     from jarvis.core import llm
@@ -806,10 +835,11 @@ def ask(question: str) -> dict:
     idx = get_index()
     if config.ASK_CACHE and (hit := idx.cached_answer(question)):
         return {"answer": hit, "cached": True, "hits": [], "context_chars": 0}
-    hits = idx.search(question, k=config.ASK_K)
-    if not hits:
+    ctx = overview_context() if is_overview_question(question) else ""
+    hits = [] if ctx else idx.search(question, k=config.ASK_K)
+    if not hits and not ctx:
         return {"answer": "", "cached": False, "hits": [], "context_chars": 0}
-    ctx = build_context(hits)
+    ctx = ctx or build_context(hits)
     msgs = [{"role": "system", "content": ASK_PROMPT},
             {"role": "user", "content": f"Context:\n{ctx}\n\nQuestion: {question}"}]
     answer = str(llm.chat(msgs, tier="fast", purpose="ask_knowledge", max_tokens=config.ASK_MAX_TOKENS)).strip()

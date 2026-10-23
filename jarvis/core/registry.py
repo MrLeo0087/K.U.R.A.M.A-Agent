@@ -186,7 +186,8 @@ class Registry:
     _discovered: bool = False
 
     def tool(self, _func: Callable | None = None, *, name: str | None = None,
-             group: str = "general", safety: str = "safe", description: str = "") -> Callable:
+             group: str = "general", safety: str = "safe", description: str = "",
+             max_chars: int | None = None) -> Callable:
         if safety not in SAFETY_LEVELS:
             raise ValueError(f"safety must be one of {SAFETY_LEVELS}, got {safety!r}")
 
@@ -196,7 +197,8 @@ class Registry:
                 func=func, name=name or func.__name__,
                 description=(description or summary or func.__name__).strip(),
                 args_schema=build_parameters(func, arg_docs),
-                metadata={"group": group, "safety": safety, "module": func.__module__})
+                metadata={"group": group, "safety": safety, "module": func.__module__,
+                          **({"max_chars": max_chars} if max_chars else {})})
             old = self.tools.get(t.name)
             if old and (old.metadata or {}).get("module") != func.__module__:
                 log.warning("tool %s from %s replaces the one from %s", t.name, func.__module__,
@@ -282,7 +284,7 @@ class Registry:
         except Exception as e:
             log.exception("tool %s failed", name)
             return ToolResult(False, truncate(f"error: {type(e).__name__}: {e}"), f"{type(e).__name__}: {e}")
-        return ToolResult(True, truncate(_to_text(out)))
+        return ToolResult(True, truncate(_to_text(out), (t.metadata or {}).get("max_chars")))
 
 
 REGISTRY = Registry()

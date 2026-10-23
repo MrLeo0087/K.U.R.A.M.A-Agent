@@ -18,7 +18,7 @@ log = logging.getLogger("jarvis.router")
 @dataclass
 class Route:
     groups: list[str] = field(default_factory=list)
-    method: str = "chat"  # rules | classifier | chat
+    method: str = "chat"  # rules | classifier | chat | meta | fastpath
     reasoning: bool = False
     latency_ms: int = 0
 
@@ -97,6 +97,44 @@ def needs_reasoning(text: str) -> bool:
     return bool(rx.search(text.lower()))
 
 
+# Obvious small talk: no tools and no request_tools meta-tool (cheap regex, 0 tokens).
+_SMALL = (r"hi+|hello+|hey+|yo|namaste|namaskar|नमस्ते|नमस्कार|good (?:morning|afternoon|evening|night)|"
+          r"thanks?(?: you)?(?: so much| a lot| very much)?|thank you|thx|ty|ok(?:ay)?|cool|nice|great|"
+          r"awesome|perfect|bye|goodbye|good ?bye|see you(?: later)?|sorry|how are you(?: doing)?(?: today)?|"
+          r"how(?:'s| is) it going|what'?s up|sup|how do you do|nice to meet you|who are you|"
+          r"what(?:'s| is) your name|yes|no|yeah|yep|nope|sure|dhanyabad|dhanyavad|dhanyavaad|धन्यवाद|"
+          r"शुक्रिया|kasto cha|k cha|कस्तो छ|के छ|कैसे हो|आप कैसे हैं|thik cha|ठीक छ|haha|lol")
+_SMALL_TALK = re.compile(r"^(?:[\s,!.?]*(?:(?:hey\s+)?(?:jarvis|kurama)|" + _SMALL + r")\b)+[\s,!.?]*$", re.I)
+
+
+def is_small_talk(text: str) -> bool:
+    return bool(_SMALL_TALK.match(text.strip()))
+
+
+# "who is X" / "what is X" with no other match -> web (not "what is the time / your name / this").
+_WEB_QUESTION = re.compile(
+    r"^\s*(?:(?:hey\s+)?(?:jarvis|kurama)[\s,]+)?(?:(?:can|could)\s+you\s+tell\s+me\s+|do\s+you\s+know\s+|tell\s+me\s+)?"
+    r"(?:who|what)(?:\s+(?:is|was|are|were)|'s|'re)\s+(?!(?:the\s+)?(?:time|date|day|weather|your|you|my|me|"
+    r"this|that|it|up|i)\b)[^\d\s(]", re.I)
+_EXPLICIT_WEB = re.compile(r"\b(?:google|web|internet|online|wikipedia|wiki|news|headlines|who (?:is|was)|"
+                           r"duckduckgo)\b", re.I)
+_LOCAL_GROUPS = frozenset(("files", "knowledge", "memory", "git", "dev", "usage", "jobs", "clipboard",
+                           "windows", "apps", "system", "watch"))
+_PROJECT_Q = re.compile(r"\b(?:what|explain|describe|summari[sz]e|tell me about|overview|purpose|how does)\b"
+                        r".*\b(?:this|the|my|our)\s+(?:project|repo|repository|codebase|code\s*base|code)\b", re.I)
+
+
+def refine(text: str, groups: list[str]) -> list[str]:
+    """Cheap post-rules: "search my notes" / "latest commit" stay local (drop web unless the text says
+    google/web/news...); "what is this project about" -> knowledge only."""
+    if "web" in groups and len(groups) > 1 and _LOCAL_GROUPS.intersection(groups) \
+            and not _EXPLICIT_WEB.search(text):
+        groups = [g for g in groups if g != "web"]
+    if "knowledge" in groups and len(groups) > 1 and _PROJECT_Q.search(text):
+        groups = ["knowledge"]
+    return groups
+
+
 CLASSIFIER_PROMPT = (
     "Pick the tool groups needed to handle the user's request. Groups:\n{groups}\n"
     "Reply with only the group names, comma-separated (at most {n}), or 'none' if it is "
@@ -128,7 +166,9 @@ def route(text: str, log_it: bool = True) -> Route:
     matched = rule_groups(text)
     if matched:
         r.method = "rules"
-        r.groups = site_over_apps(text, [g for g in matched if g in available])
+        r.groups = refine(text, site_over_apps(text, [g for g in matched if g in available]))
+    elif "web" in available and _WEB_QUESTION.search(text):
+        r.method, r.groups = "rules", ["web"]
     elif available and looks_like_command(text):
         r.method = "classifier"
         groups, reasoning = classify(text, available)

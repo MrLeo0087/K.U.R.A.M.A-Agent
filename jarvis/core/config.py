@@ -224,7 +224,9 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
             "doctor", "env doctor", "environment doctor", "environment check", "my environment",
             "dev environment", "python version", "virtualenv", "project", "new project", "fastapi",
             "langgraph", "data science"),
-    "web": ("search", "news", "google", "look up", "lookup", "browse", "website"),
+    "web": ("search", "search for", "news", "google", "look up", "lookup", "browse", "website", "wikipedia",
+            "wiki", "who is", "who was", "who are", "latest", "headlines", "search the web", "search online",
+            "on the internet", "read this page", "read the page", "web page", "webpage", "खोज", "ढूंढ"),
     "memory": ("remember", "recall", "note", "notes", "last time", "yesterday", "remind",
                "what did i tell you", "forget", "yaad", "याद", "सम्झ", "talk about", "talked about",
                "we discussed", "did we discuss", "our conversation", "about me", "know about me",
@@ -233,7 +235,9 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
                   "what does my code", "docs", "documentation", "codebase", "code base", "my codebase",
                   "codebase question", "in my project", "in the project", "in this repo", "in the repo",
                   "my repo", "index folder", "index my", "index the", "knowledge", "in the code",
-                  "where is the code", "which function", "which module"),
+                  "where is the code", "which function", "which module", "this project", "this repo", "this codebase",
+                  "this code", "my code", "project about", "repo about", "what does this repo",
+                  "what does this project", "explain my code", "explain this code", "explain the code"),
     "usage": ("token", "tokens", "token usage", "api usage", "api cost", "groq usage", "how much did i spend",
               "cost", "budget", "digest", "daily digest", "daily summary", "summary of my day", "my day",
               "टोकन"),
@@ -268,13 +272,25 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
     "media": "music and video playback (play, pause, next, previous, what's playing)",
     "git": "git status, log, diff, commit and branches",
     "dev": "tests, new projects, Python environment checks",
-    "web": "web search, news",
+    "web": "search the web (DuckDuckGo/SearXNG), Wikipedia summaries of people/topics, read a web page",
     "memory": "notes the user dictates, facts about the user (profile), past conversations/sessions",
     "knowledge": "search or ask questions about the user's own code, docs and notes (RAG); index a folder",
     "usage": "LLM token usage, budget and API cost; daily digest of the day's activity",
     "browser": "open a website or URL in the browser",
     "jobs": "long writing jobs (essays, articles, reports) and background job status/cancel",
 }
+# Tiny glosses for the request_tools meta-tool (sent on every unmatched turn, so each word costs):
+# "" = the group name says it all.
+TOOL_GROUP_GLOSS: dict[str, str] = {
+    "general": "time, date", "weather": "", "files": "find, move, delete", "system": "RAM, CPU, disk, battery",
+    "watch": "process, log", "automation": "n8n, watchdog", "audio": "volume, mic", "display": "brightness",
+    "screen": "screenshot", "power": "lock, suspend", "clipboard": "", "speech": "read aloud", "windows": "",
+    "apps": "", "media": "music", "git": "", "dev": "tests, Python env",
+    "web": "search, Wikipedia, page", "memory": "notes, past chats",
+    "knowledge": "project code, docs", "usage": "token cost", "browser": "open site",
+    "jobs": "long writing",
+}
+
 # Words that suggest multi-step reasoning (router asks for the smart tier).
 REASONING_KEYWORDS = ("explain why", "compare", "analyze", "analyse", "step by step", "debug",
                       "figure out", "plan my", "pros and cons")
@@ -396,6 +412,7 @@ KNOWLEDGE_SNIPPET_CHARS = 200
 ASK_K = 4
 ASK_CONTEXT_CHARS = 1500  # context sent to the fast tier by ask_knowledge
 ASK_MAX_TOKENS = 400
+OVERVIEW_DOCS = ("README.md", "CLAUDE.md", "PROGRESS.md")  # P7b: "what is this project about" context
 ASK_CACHE = True  # normalized question -> answer, cleared whenever the index changes
 # Sessions + tiered memory
 SESSION_IDLE_S = 4 * 3600.0  # a turn after this much silence starts a new session (fresh context)
@@ -415,3 +432,14 @@ MODEL_PRICES: dict[str, dict[str, float]] = {}
 DIGEST_TIME = os.getenv("JARVIS_DIGEST_TIME", "21:00")
 DIGEST_USE_LLM = False  # True: one fast-tier call to polish the template
 DIGEST_INTERVAL_S = 60.0
+
+
+# --- P7b freedom + web ---
+SEARXNG_URL = os.getenv("SEARXNG_URL", "").rstrip("/")  # e.g. http://localhost:8888 (JSON format enabled)
+WEB_TIMEOUT_S = 6.0
+WEB_CACHE_S = 600  # search / wikipedia results reused for 10 min
+WEB_SEARCH_MAX_CHARS = 800
+WEB_PAGE_MAX_BYTES = 2_000_000  # read_webpage stops downloading past this
+WEB_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) Jarvis/1.0 (personal assistant)"
+META_TOOLS = os.getenv("JARVIS_META_TOOLS", "1").lower() not in ("0", "false", "no", "off")  # request_tools
+META_REFUSAL_RETRY = True  # a tool-less "I can't" answer is retried once with request_tools bound

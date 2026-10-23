@@ -15,6 +15,10 @@ rolling summary). A turn after config.SESSION_IDLE_S of silence starts a new ses
 context. User facts are captured by regex each turn (0 tokens); profile facts are injected into
 the system prompt only on personal turns (<= ~60 tokens); end_session() runs at most one
 fast-tier fact extraction per session.
+
+Freedom (P7b): a turn the router could not place (and that is not small talk) binds only the compact
+request_tools meta-tool (meta.py); calling it binds the chosen groups' tools for the next round.
+A tool-less "I can't" answer is retried once with the meta-tool bound. Both log method="meta".
 """
 from __future__ import annotations
 
@@ -28,7 +32,8 @@ from typing import Annotated, Any, Callable, Iterator, TypedDict
 from langchain_core.messages import (AIMessage, BaseMessage, HumanMessage, SystemMessage,
                                      ToolMessage)
 
-from jarvis.core import config, fastpath, jobs, llm, planner, profile, registry, router, safety, store
+from jarvis.core import (config, fastpath, jobs, llm, meta, planner, profile, registry, router, safety,
+                         store)
 
 log = logging.getLogger("jarvis.agent")
 
@@ -79,6 +84,8 @@ class AgentState(TypedDict, total=False):
     task: dict  # one fanned-out task (Send payload)
     idx: int
     results: Annotated[list, operator.add]  # fan-out results, merged by the join node
+    retried: bool  # P7b: the refusal retry already happened this turn
+    again: bool  # P7b: llm -> llm (refusal retry with request_tools bound)
 
 
 def job_started_text(job_id: int, title: str, kind: str, lang: str | None) -> str:
@@ -116,8 +123,9 @@ class Agent:
         g.add_node("llm", self._llm_node)
         g.add_node("tools", self._tools_node)
         g.add_edge("route", "llm")
-        g.add_conditional_edges("llm", lambda s: "tools" if s.get("pending") else END,
-                                {"tools": "tools", END: END})
+        g.add_conditional_edges(
+            "llm", lambda s: "tools" if s.get("pending") else ("llm" if s.get("again") else END),
+            {"tools": "tools", "llm": "llm", END: END})
         g.add_edge("tools", "llm")
         if not planned:
             g.add_edge(START, "route")
@@ -215,12 +223,30 @@ class Agent:
 
     def _route_node(self, state: AgentState) -> dict:
         r = router.route(state["user_text"])
-        tools = registry.schemas_for(r.groups) if r.groups else []
+        tools: list[Any] = registry.schemas_for(r.groups) if r.groups else []
         tier = "smart" if (len(r.groups) > 1 or r.reasoning) else "fast"
         if tier == "fast" and not tools and state.get("mode") == "voice":
             tier = "voice"  # plain spoken chat: lowest time-to-first-token model
-        self.last.update(route=r, tier=tier, tools_sent=[t.name for t in tools])
-        return {"groups": r.groups, "tools": tools, "tier": tier, "rounds": 0, "pending": []}
+        if not tools and self._meta_ok(state["user_text"]):
+            tools = [meta.schema()]  # freedom: the model may pull any group (~150 tokens)
+            self.last["meta_tokens"] = meta.estimate_tokens()
+        self.last.update(route=r, tier=tier, tools_sent=[meta.tool_name(t) for t in tools])
+        return {"groups": r.groups, "tools": tools, "tier": tier, "rounds": 0, "pending": [],
+                "retried": False, "again": False}
+
+    @staticmethod
+    def _meta_ok(text: str) -> bool:
+        return config.META_TOOLS and bool(registry.groups()) and not router.is_small_talk(text)
+
+    def _retry_ok(self, state: AgentState) -> bool:
+        """Refusal retry allowed: not done yet, no real tool used this turn, not small talk."""
+        if state.get("retried") or not config.META_REFUSAL_RETRY:
+            return False
+        if any(not meta.is_meta(t) for t in state.get("tools") or []):
+            return False
+        if any(isinstance(m, ToolMessage) and m.name != meta.NAME for m in state["messages"]):
+            return False
+        return self._meta_ok(state["user_text"])
 
     def _llm_node(self, state: AgentState) -> dict:
         tools = state.get("tools") or None
@@ -232,13 +258,14 @@ class Agent:
         if tools and last_round:
             kw["tool_choice"] = "none"
         msgs = state["messages"]
+        hold = self._retry_ok(state)  # stream: hold the first sentence back until it is not "I can't"
         try:
-            reply = self._chat(msgs, kw, state.get("stream", False))
+            reply = self._chat(msgs, kw, state.get("stream", False), hold)
         except llm.LLMError as e:
             if not tools or "tool" not in str(e).lower() or kw.get("tool_choice") == "none":
                 raise
             log.warning("tool call generation failed, retrying without tools: %s", e)
-            reply = self._chat(msgs, {**kw, "tool_choice": "none"}, state.get("stream", False))
+            reply = self._chat(msgs, {**kw, "tool_choice": "none"}, state.get("stream", False), hold)
         ai = reply.message or AIMessage(content=reply.text)
         calls = [] if last_round else list(ai.tool_calls)
         bad = [] if last_round else list(getattr(ai, "invalid_tool_calls", None) or [])
@@ -248,9 +275,24 @@ class Agent:
             msg = AIMessage(content=reply.text, tool_calls=calls, invalid_tool_calls=bad)
             return {"messages": msgs + [msg], "pending": calls + bad}
         answer = reply.text.strip() or (TOO_MANY_ROUNDS if ai.tool_calls else NO_ANSWER)
-        return {"messages": msgs + [AIMessage(content=answer)], "pending": [], "answer": answer}
+        if hold and not last_round and meta.looks_like_refusal(answer):
+            log.info("tool-less refusal, retrying once with %s: %r", meta.NAME, answer[:80])
+            self._log_meta(state["user_text"], [])
+            self.last["meta_retry"] = True
+            return {"messages": msgs + [SystemMessage(content=meta.HINT)], "tools": [meta.schema()],
+                    "pending": [], "retried": True, "again": True, "rounds": rounds + 1,
+                    "tier": "fast" if state.get("tier") == "voice" else state.get("tier", "fast")}
+        return {"messages": msgs + [AIMessage(content=answer)], "pending": [], "answer": answer,
+                "again": False}
 
-    def _chat(self, msgs: list[BaseMessage], kw: dict, stream: bool) -> llm.Reply:
+    @staticmethod
+    def _log_meta(text: str, groups: list[str]) -> None:
+        try:
+            store.log_routing(text, groups, "meta", 0)
+        except Exception as e:
+            log.warning("could not log meta routing: %s", e)
+
+    def _chat(self, msgs: list[BaseMessage], kw: dict, stream: bool, hold: bool = False) -> llm.Reply:
         if not stream:
             return llm.chat(msgs, **kw)
         from langgraph.config import get_stream_writer
@@ -258,6 +300,7 @@ class Agent:
         writer = get_stream_writer()
         gen = llm.chat(msgs, stream=True, **kw)
         parts: list[str] = []
+        held = hold  # buffer until the first sentence shows it is not a refusal
         while True:
             if self._abort.is_set():  # consumer went away (barge-in): stop generating
                 gen.close()
@@ -265,16 +308,44 @@ class Agent:
             try:
                 delta = next(gen)
             except StopIteration as stop:
-                return stop.value or llm.Reply("".join(parts), "", [])
+                text = "".join(parts)
+                if held and not meta.looks_like_refusal(text):
+                    writer(text)
+                return stop.value or llm.Reply(text, "", [])
             parts.append(delta)
-            writer(delta)
+            if not held:
+                writer(delta)
+                continue
+            text = "".join(parts)
+            if len(text) >= 80 or (len(text) >= 12 and re.search(r"[.!?।]\s", text)):
+                if meta.looks_like_refusal(text):
+                    gen.close()  # will be retried with request_tools; never spoken
+                    return llm.Reply(text, "", [])
+                held = False
+                writer(text)
 
     def _tools_node(self, state: AgentState) -> dict:
-        allowed = {t.name for t in state.get("tools") or []}
+        allowed = {meta.tool_name(t) for t in state.get("tools") or []}
         confirm = self.confirm or safety.get_confirm(state.get("mode", "text"))
         out: list[BaseMessage] = []
+        update: dict = {}
         for tc in state.get("pending") or []:
             name, args = tc.get("name") or "", tc.get("args")
+            if name == meta.NAME and name in allowed:
+                groups = meta.pick(args)
+                if groups:
+                    tools = registry.schemas_for(groups)
+                    tier = "smart" if len(groups) > 1 or state.get("tier") == "smart" else "fast"
+                    update = {"tools": tools, "groups": groups, "tier": tier}
+                    content = meta.LOADED.format(groups=", ".join(groups))
+                    self._log_meta(state["user_text"], groups)
+                    self.last.update(route=router.Route(groups, "meta", False, 0), tier=tier,
+                                     tools_sent=[t.name for t in tools])
+                else:
+                    content = f"error: unknown groups; choose from {', '.join(registry.groups())}"
+                self.last.setdefault("tools", []).append({"name": name, "ok": bool(groups)})
+                out.append(ToolMessage(content=content, tool_call_id=tc["id"], name=name))
+                continue
             if name not in allowed:
                 content = f"error: tool {name!r} is not available for this request"
                 store.log_tool(name, args, False, 0, safety="unknown", error="not routed",
@@ -286,7 +357,7 @@ class Agent:
             self.last.setdefault("tools", []).append({"name": name, "ok": ok})
             out.append(ToolMessage(content=content, tool_call_id=tc["id"], name=name))
         return {"messages": state["messages"] + out, "pending": [],
-                "rounds": state.get("rounds", 0) + 1}
+                "rounds": state.get("rounds", 0) + 1, **update}
 
     # --- history ---
     def _messages(self, user_text: str, mode: str, lang: str | None) -> list[BaseMessage]:

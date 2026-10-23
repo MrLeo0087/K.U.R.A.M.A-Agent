@@ -6,7 +6,7 @@ from __future__ import annotations
 from jarvis.core.registry import tool
 
 
-@tool(group="knowledge", safety="safe", description="Answer a question about the user's own code, docs or notes, citing file paths.")
+@tool(group="knowledge", safety="safe", description="Answer a question about the user's own code, docs or notes (also 'what is this project about'), citing file paths.")
 def ask_knowledge(question: str) -> str:
     """Ask the codebase / notes.
 
@@ -19,7 +19,7 @@ def ask_knowledge(question: str) -> str:
     question = (question or "").strip()
     if not question:
         return "error: ask a question"
-    if memory.get_index().count_chunks() == 0:
+    if memory.get_index().count_chunks() == 0 and not memory.is_overview_question(question):
         return empty_index_reply()
     try:
         res = memory.ask(question)

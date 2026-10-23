@@ -1,0 +1,83 @@
+"""Freedom routing (P7b): the `request_tools` meta-tool.
+
+When the router finds no group and the message is not small talk, the agent binds ONE compact
+meta-tool whose description lists every tool group with a 3-6 word gloss. If the model calls it,
+the agent binds those groups' real tools for the next round. A tool-less answer that reads like
+"I can't / no tool" is retried once with the meta-tool bound.
+"""
+from __future__ import annotations
+
+import json
+import re
+
+from jarvis.core import config, registry
+
+NAME = "request_tools"
+HINT = ("Tool groups are available through request_tools. If one fits the user's request, call it "
+        "now; if none fits, reply in one short sentence that Jarvis can't do that yet.")
+LOADED = "Loaded tools for: {groups}. Call the right tool now."
+_cache: dict[tuple[str, ...], dict] = {}
+
+# Inability phrasing (en/hi/ne), checked on the first ~240 chars of a tool-less answer.
+_REFUSAL = re.compile(
+    r"\b(?:i\s+(?:don'?t|do not)\s+have\s+(?:a\s+way|any\s+way|access|the\s+ability|real[- ]time|live|"
+    r"internet|browsing|tools?)|i\s+(?:can'?t|cannot|can not|am unable|'m unable|am not able|'m not able)|"
+    r"no\s+(?:tool|way to|access to)|unable to|not able to|i\s+(?:don'?t|do not)\s+know|"
+    r"i\s+have\s+no\s+(?:way|access|tool)|beyond my (?:capabilities|abilities)|as an ai)"
+    r"|मैं नहीं|नहीं कर सकत|नहीं बता सकत|सक्दिन|सक्दैन|थाहा छैन|पता नहीं", re.I)
+
+
+def looks_like_refusal(text: str) -> bool:
+    return bool(_REFUSAL.search((text or "")[:240]))
+
+
+def gloss(group: str) -> str:
+    if group in config.TOOL_GROUP_GLOSS:
+        return config.TOOL_GROUP_GLOSS[group]
+    return " ".join(config.TOOL_GROUP_DESCRIPTIONS.get(group, group).split()[:4]).rstrip(",;")
+
+
+def schema(groups: list[str] | None = None) -> dict:
+    """OpenAI-format tool dict (cached per group set). Group names live only in the description (no enum:
+    it would repeat all 23 names); pick() validates. About 150 prompt tokens."""
+    avail = tuple(sorted(groups if groups is not None else registry.groups()))
+    if avail not in _cache:
+        listing = ", ".join(f"{g}({gl})" if (gl := gloss(g)) else g for g in avail)
+        _cache[avail] = {"type": "function", "function": {
+            "name": NAME,
+            "description": f"Load tool groups: {listing}",
+            "parameters": {"type": "object", "properties": {
+                "groups": {"type": "array", "items": {"type": "string"},
+                           "description": f"1-{config.ROUTER_MAX_GROUPS} groups"},
+                "reason": {"type": "string"}},
+                "required": ["groups", "reason"]}}}
+    return _cache[avail]
+
+
+def estimate_tokens(groups: list[str] | None = None) -> int:
+    return len(json.dumps(schema(groups), ensure_ascii=False)) // 4 + 1
+
+
+def tool_name(t: object) -> str:
+    """Name of a LangChain tool or an OpenAI-format dict."""
+    if isinstance(t, dict):
+        return (t.get("function") or {}).get("name", "")
+    return getattr(t, "name", "")
+
+
+def is_meta(t: object) -> bool:
+    return tool_name(t) == NAME
+
+
+def pick(args: object) -> list[str]:
+    """Valid, de-duplicated groups from a request_tools call (at most ROUTER_MAX_GROUPS)."""
+    raw = args.get("groups") if isinstance(args, dict) else None
+    if isinstance(raw, str):
+        raw = [x for x in re.split(r"[,\s]+", raw) if x]
+    avail = set(registry.groups())
+    out: list[str] = []
+    for g in raw or []:
+        g = str(g).strip().lower()
+        if g in avail and g not in out:
+            out.append(g)
+    return out[: config.ROUTER_MAX_GROUPS]
