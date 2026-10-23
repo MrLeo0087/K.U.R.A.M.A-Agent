@@ -4,6 +4,7 @@ Status legend: [ ] todo · [~] in progress · [x] done · [h] done, needs human 
 
 ## Workflow (user rule, 2026-10-23)
 Build ONE phase at a time. After each phase: commit, give the user exact test steps, then STOP and wait for their OK ("works" / "continue"). Never auto-start the next phase. Fixes the user reports for a phase come first.
+UPDATE 2026-10-23 (after P7c): the user said "continue build this project now, complete it now", so it's continuous mode for the remaining phases (P8a→P12). Build, verify, commit, post a short status with test steps, and go straight to the next phase. Still stop for secrets, sudo/apt, destructive actions, or if the user interrupts with fixes (fixes come first).
 
 ## Phases
 - [x] P0 Bootstrap: git, .gitignore, .env.example, CLAUDE.md, PROGRESS.md
@@ -17,12 +18,12 @@ Build ONE phase at a time. After each phase: commit, give the user exact test st
 - [x] P6 Background core (user said continue): Long-Process/Training Run Watcher (daemon pattern, Telegram alerts), Crash Watchdog, Resource Guard, Telegram Remote Control, n8n Bridge
 - [x] P7 Memory/RAG: RAG over code+notes (fastembed ONNX + FAISS-cpu/SQLite), Session Recall, API Cost/Token Tracker, Daily Digest
 - [x] P7b Freedom + web (user request 2026-10-23): web search (DuckDuckGo via ddgs, Wikipedia API, optional SearXNG) plus page reading. "Freedom" tool choice: a request_tools meta-tool lets the LLM pull any tool group when keywords miss. Dynamic tool creation: the LLM writes a small Python tool on the fly, it's checked (AST allowlist), run sandboxed (subprocess, rlimits, timeout), risky ones need confirmation, and successful ones are saved as reusable skills. Basic dark-theme HTML test UI (FastAPI + SSE) to chat with the backend.
-- [h] P7c User requests 2026-10-23 (after P7b):
+- [x] P7c User requests 2026-10-23 (after P7b):
   (1) Toolsmith, user chose option A with refinements. When no tool fits, Jarvis first ASKS "Should I make a small tool for this?" and creates one only on yes. Generated code is shown, checked (AST allowlist) and sandboxed. Sensitive tasks (files/shell/system/network writes, anything personal) need a second yes before running; simple pure tasks run after the first yes. Reusable tools are saved as skills; one-off tools are deleted after running.
   (2) Friendlier, polite, non-technical tone for general conversation.
   (3) Telegram: send a file by path ("send /path/x.pdf to telegram") and send generated content ("write a poem and send it to Telegram").
   (4) Dependent tasks: the planner must detect dependencies ("create a folder X, then make main.py in it") and run those steps in order (only independent tasks run in parallel). Needs file tools: make_folder, write_file (confirm on overwrite), move/copy, delete to trash (confirm).
-- [ ] P8a Dev-quality 1: Dependency Doctor, Secrets Auditor, Pre-commit Gate, Repo Hygiene, Auto Code Reviewer
+- [~] P8a Dev-quality 1: Dependency Doctor, Secrets Auditor, Pre-commit Gate, Repo Hygiene, Auto Code Reviewer
 - [ ] P8b Dev-quality 2: Docstring/Type Hint Generator, Notebook to Script, Requirements Generator, Config Diff Tracker, Benchmark Table Builder
 - [ ] P8c Dev-quality 3: Checkpoint Cleaner, Dataset Sanity Checker, Env Snapshot, Flaky Test Detector, Semantic Code Search
 - [ ] P9a General rest: DND, Night Light, Auto Dark/Light, Wallpaper, Kill Unresponsive App, Global Hotkey Macros, Smart Focus Mode, Notification Mirror, Battery tools, Play Saved Playlist, YouTube Control
