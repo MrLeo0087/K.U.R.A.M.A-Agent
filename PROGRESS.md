@@ -4,7 +4,7 @@ Status legend: [ ] todo · [~] in progress · [x] done · [h] done, needs human 
 
 ## Phases
 - [x] P0 Bootstrap: git, .gitignore, .env.example, CLAUDE.md, PROGRESS.md
-- [ ] P1 Core: config.py (model IDs + voices, verify Groq models endpoint), Groq client (streaming, retry/backoff 429/5xx, 70b→8b fallback, token budget), SQLite logging (tool calls, tokens, routing latency), terminal text chat loop
+- [x] P1 Core: config.py (model IDs + voices, verify Groq models endpoint), Groq client (streaming, retry/backoff 429/5xx, 70b→8b fallback, token budget), SQLite logging (tool calls, tokens, routing latency), terminal text chat loop
 - [ ] P2 Voice I/O: mic capture, webrtcvad, Groq Whisper STT (turbo → large-v3, auto lang), edge-tts sentence streaming (<~1 s first sentence), barge-in, push-to-talk hotkey (pynput, X11), `python -m jarvis.core.tts "text"`
 - [ ] P3 Agent: LangGraph router + tool registry (decorator, auto JSON schema, one file per tool), tool-group router, safety levels (safe/confirm/blocked), confirmation flow, SQLite action log
 - [ ] P3-STOP: human end-to-end test with real Groq key (text chat + one voice reply)
@@ -36,7 +36,12 @@ DROPPED, do not build: Custom Object/Error-State Detector, Voice Cloning (Coqui/
 - P0: No docs/roadmap.md exists, so tools are built from the phase list above.
 - P0: System has Python 3.12.3, rg, fdfind (Ubuntu name for fd), xdotool, wmctrl, xclip, pactl, brightnessctl, ffmpeg.
 
+- P1: Groq retired llama-3.3-70b-versatile, llama-3.1-8b-instant and llama-4-scout (all return 404, checked 2026-10-23). config.py now uses LLM_DEFAULT=openai/gpt-oss-120b, LLM_FAST=openai/gpt-oss-20b and LLM_VISION=qwen/qwen3.8-27b. CLAUDE.md still names the old Llama models; config.py is the source of truth. gpt-oss models are sent reasoning_effort=low and include_reasoning=False.
+- P1: The LLM client uses the Groq SDK directly (groq 1.7.0), not langchain-groq. A retry-after over 20 s skips to the fallback model. When the budget is exhausted on every model, the cheapest model is still tried and Groq enforces the real limit. Daily budgets are about 90% of the free tier.
+- P1: The database is data/jarvis.db with tables llm_calls, tool_calls, routing and messages. Peak RAM of the text chat is 44 MB. First streamed reply arrived in 0.86 s.
+
 ## Known issues
+- P1: The vision model's request settings have not been tried with a real call yet; verify in P10.
 - (none yet)
 
 ## Human actions needed

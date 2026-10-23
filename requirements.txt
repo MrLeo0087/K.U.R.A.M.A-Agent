@@ -1,0 +1,6 @@
+# P1 Core (CPU only, no torch/GPU deps)
+groq==1.7.0
+python-dotenv==1.2.4
+psutil==7.2.2
+# dev
+pytest==9.1.1
