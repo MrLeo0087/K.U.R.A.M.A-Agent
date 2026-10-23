@@ -1,41 +1,41 @@
 #!/usr/bin/env bash
-# Show the KURAMA holographic UI as a "live wallpaper": a borderless full-screen app window that stays
-# BEHIND all other windows, on every workspace, and out of the taskbar/alt-tab.
-#   scripts/kurama-wallpaper.sh          start (also starts the API server if it isn't running)
-#   scripts/kurama-wallpaper.sh stop     close the wallpaper window (server keeps running)
+# KURAMA live wallpaper: a native GTK + WebKit window (scripts/kurama_wallpaper.py) that stays BEHIND all
+# windows, on every workspace, out of the taskbar/alt-tab, and pauses itself while a maximized window covers it.
+#   scripts/kurama-wallpaper.sh            start (also starts the API server if it isn't running)
+#   scripts/kurama-wallpaper.sh --window   open it as a normal window instead (testing)
+#   scripts/kurama-wallpaper.sh stop       close the wallpaper (the API keeps running)
+# Reach it with Super+D (show desktop); the chat is clickable.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 PORT="${JARVIS_API_PORT:-8000}"
-URL="http://127.0.0.1:${PORT}/?lowpower=1"
-PROFILE="${HOME}/.cache/kurama-wallpaper-profile"   # separate browser profile = its own small process
-TITLE="KURAMA"
+URL="${KURAMA_UI_URL:-http://127.0.0.1:${PORT}/?lowpower=0&wallpaper=1}"
+PY=/usr/bin/python3
+SCRIPT="scripts/kurama_wallpaper.py"
 
 if [[ "${1:-}" == "stop" ]]; then
-  pkill -f -- "--user-data-dir=${PROFILE}" 2>/dev/null && echo "wallpaper closed" || echo "not running"
+  pkill -f -- "python3 [^ ]*kurama_[w]allpaper.py" 2>/dev/null && echo "wallpaper closed" || echo "not running"
   exit 0
 fi
 
-for b in wmctrl xdotool; do command -v "$b" >/dev/null || { echo "need $b: sudo apt install $b"; exit 1; }; done
-BROWSER="$(command -v brave-browser || command -v google-chrome || command -v chromium || true)"
-[[ -n "$BROWSER" ]] || { echo "need a Chromium-based browser (brave-browser / google-chrome / chromium)"; exit 1; }
+[[ -x "$PY" ]] || { echo "need the system python3 at $PY"; exit 1; }
+"$PY" -c "import gi; gi.require_version('Gtk','3.0'); gi.require_version('WebKit2','4.1')" 2>/dev/null \
+  || { echo "need GTK WebKit: sudo apt install python3-gi gir1.2-webkit2-4.1 (optional: gir1.2-wnck-3.0)"; exit 1; }
+command -v curl >/dev/null || { echo "need curl: sudo apt install curl"; exit 1; }
+
+WINDOW=""
+[[ "${1:-}" == "--window" ]] && WINDOW="--window"
+if [[ -z "$WINDOW" ]] && pgrep -f -- "python3 [^ ]*kurama_[w]allpaper.py" >/dev/null; then
+  echo "KURAMA wallpaper is already running (stop: scripts/kurama-wallpaper.sh stop)"; exit 0
+fi
 
 # 1) API server (skip if already up)
+mkdir -p data/logs
 if ! curl -fs "http://127.0.0.1:${PORT}/api/v1/health" >/dev/null 2>&1; then
-  mkdir -p data/logs
   nohup venv/bin/python -m jarvis.server --port "$PORT" >> data/logs/server.log 2>&1 &
   for _ in $(seq 1 30); do curl -fs "http://127.0.0.1:${PORT}/api/v1/health" >/dev/null 2>&1 && break; sleep 1; done
 fi
 
-# 2) app-mode window (no tabs/URL bar); low-power flags keep it light
-nohup "$BROWSER" --app="$URL" --user-data-dir="$PROFILE" --no-first-run --disable-extensions \
-  --disable-background-networking --renderer-process-limit=1 --class="$TITLE" >/dev/null 2>&1 &
-
-# 3) wait for the window, then pin it behind everything, on all workspaces, full screen, no taskbar
-for _ in $(seq 1 40); do
-  WID="$(wmctrl -lx | awk -v c="$TITLE" 'tolower($3) ~ tolower(c) {print $1; exit}')"
-  [[ -n "$WID" ]] && break; sleep 0.5
-done
-[[ -n "${WID:-}" ]] || { echo "window not found (it may still open; run again to pin it)"; exit 1; }
-wmctrl -i -r "$WID" -b add,below,sticky,skip_taskbar,skip_pager
-wmctrl -i -r "$WID" -b add,fullscreen
-echo "KURAMA wallpaper is running (stop: scripts/kurama-wallpaper.sh stop)"
+# 2) the GTK wallpaper window (keeps retrying the page if the API is still starting)
+[[ -f data/logs/wallpaper.log && $(stat -c %s data/logs/wallpaper.log) -gt 1048576 ]] && mv -f data/logs/wallpaper.log data/logs/wallpaper.log.1
+nohup "$PY" "$SCRIPT" --url "$URL" $WINDOW >> data/logs/wallpaper.log 2>&1 &
+echo "KURAMA wallpaper is running${WINDOW:+ (window mode)} (stop: scripts/kurama-wallpaper.sh stop)"

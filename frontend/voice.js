@@ -1,6 +1,6 @@
 // Browser-side voice: microphone (with the browser's echo cancellation), recorder, sentence splitter,
 // a sentence-by-sentence TTS player (fetches /tts, decodes, plays gaplessly through an AnalyserNode so
-// the hologram can pulse with the voice), and the Conversation-mode VAD loop with barge-in.
+// the orb can pulse with the voice), and the Conversation-mode VAD loop with barge-in.
 
 let _ctx = null;
 export function audioCtx() {
@@ -16,31 +16,107 @@ function rmsOf(analyser, buf) {
   return Math.sqrt(s / buf.length);
 }
 
+// ---------- WAV encoding (pure; unit-tested with Node in tests/test_frontend_js.py) ----------
+// Downsample Float32 PCM to `outRate` mono (box filter: averages the samples of each output step) and
+// encode it as 16-bit PCM WAV. /api/v1/stt accepts audio/wav, so no MediaRecorder is needed anywhere
+// (WebKitGTK, used by the wallpaper window, has none).
+export function downsample(pcm, inRate, outRate = 16000) {
+  if (outRate >= inRate) return pcm;
+  const ratio = inRate / outRate;
+  const out = new Float32Array(Math.floor(pcm.length / ratio));
+  for (let i = 0; i < out.length; i++) {
+    const a = Math.floor(i * ratio), b = Math.min(pcm.length, Math.floor((i + 1) * ratio));
+    let s = 0;
+    for (let j = a; j < b; j++) s += pcm[j];
+    out[i] = b > a ? s / (b - a) : 0;
+  }
+  return out;
+}
+
+export function encodeWav(pcm, inRate, outRate = 16000) {
+  const data = downsample(pcm, inRate, outRate);
+  const rate = Math.min(inRate, outRate);
+  const buf = new ArrayBuffer(44 + data.length * 2);
+  const v = new DataView(buf);
+  const str = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  str(0, "RIFF"); v.setUint32(4, 36 + data.length * 2, true); str(8, "WAVE");
+  str(12, "fmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  str(36, "data"); v.setUint32(40, data.length * 2, true);
+  for (let i = 0, o = 44; i < data.length; i++, o += 2) {
+    const s = Math.max(-1, Math.min(1, data[i]));
+    v.setInt16(o, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+  }
+  return buf;
+}
+
 // ---------- microphone ----------
+// One getUserMedia stream feeds an AnalyserNode (levels / VAD) and a PCM tap (AudioWorklet, or a
+// ScriptProcessorNode where worklets are missing). The tap only keeps samples while a Recorder listens.
+const TAP_WORKLET = `class KuramaTap extends AudioWorkletProcessor {
+  constructor() { super(); this.buf = new Float32Array(4096); this.n = 0; }
+  process(inputs) {
+    const ch = inputs[0] && inputs[0][0];
+    if (ch) for (let i = 0; i < ch.length; i++) {
+      this.buf[this.n++] = ch[i];
+      if (this.n === this.buf.length) { this.port.postMessage(this.buf.slice(0)); this.n = 0; }
+    }
+    return true;
+  }
+}
+registerProcessor("kurama-tap", KuramaTap);`;
+let _tapModule = null;
+
 export class Mic {
-  constructor() { this.stream = null; }
+  constructor() { this.stream = null; this.sinks = new Set(); }
   get open() { return !!this.stream; }
 
   async start() {
     if (this.stream) return;
     if (!navigator.mediaDevices?.getUserMedia) {
-      throw new Error("Microphone needs a secure page (https or localhost).");
+      throw new Error(window.isSecureContext === false
+        ? "Microphone needs a secure page: open http://127.0.0.1:8000 (or https)."
+        : "Microphone not available in this window — open http://127.0.0.1:8000 in a browser, or update the wallpaper app.");
     }
-    this.stream = await navigator.mediaDevices.getUserMedia({
+    const stream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
     });
     const ctx = audioCtx();
-    this.src = ctx.createMediaStreamSource(this.stream);
+    this.src = ctx.createMediaStreamSource(stream);
     this.analyser = ctx.createAnalyser();
     this.analyser.fftSize = 1024;
     this.buf = new Float32Array(this.analyser.fftSize);
     this.src.connect(this.analyser);
+    this.mute = ctx.createGain();
+    this.mute.gain.value = 0; // taps must reach the destination to be pulled; silently
+    this.mute.connect(ctx.destination);
+    const feed = (chunk) => { for (const s of this.sinks) s(chunk); };
+    try {
+      if (!ctx.audioWorklet || typeof AudioWorkletNode === "undefined") throw new Error("no worklet");
+      if (!_tapModule) {
+        const url = URL.createObjectURL(new Blob([TAP_WORKLET], { type: "application/javascript" }));
+        _tapModule = ctx.audioWorklet.addModule(url).finally(() => URL.revokeObjectURL(url));
+      }
+      await _tapModule;
+      this.tap = new AudioWorkletNode(ctx, "kurama-tap", { numberOfInputs: 1, numberOfOutputs: 1, channelCount: 1 });
+      this.tap.port.onmessage = (e) => feed(e.data);
+    } catch {
+      _tapModule = null;
+      this.tap = ctx.createScriptProcessor(4096, 1, 1);
+      this.tap.onaudioprocess = (e) => { if (this.sinks.size) feed(new Float32Array(e.inputBuffer.getChannelData(0))); };
+    }
+    this.src.connect(this.tap);
+    this.tap.connect(this.mute);
+    this.rate = ctx.sampleRate;
+    this.stream = stream;
   }
 
   stop() {
     if (!this.stream) return;
     this.stream.getTracks().forEach((t) => t.stop());
-    try { this.src.disconnect(); } catch { /* ignore */ }
+    for (const n of [this.src, this.tap, this.mute]) { try { n.disconnect(); } catch { /* ignore */ } }
+    if (this.tap?.port) this.tap.port.onmessage = null;
+    this.tap = null;
     this.stream = null;
   }
 
@@ -48,35 +124,35 @@ export class Mic {
   level() { return Math.min(1, this.rms() * 9); }
 }
 
-// ---------- recorder ----------
-const MIME = ["audio/webm;codecs=opus", "audio/ogg;codecs=opus", "audio/webm", "audio/mp4"];
-
+// ---------- recorder (PCM -> 16 kHz mono WAV) ----------
 export class Recorder {
-  constructor(mic) { this.mic = mic; this.mr = null; this.t0 = 0; }
-  get active() { return !!this.mr && this.mr.state === "recording"; }
+  constructor(mic) { this.mic = mic; this.on = false; this.t0 = 0; this.chunks = []; this.sink = (c) => this.chunks.push(c); }
+  get active() { return this.on; }
 
   start() {
-    const mime = MIME.find((m) => window.MediaRecorder?.isTypeSupported?.(m));
     this.chunks = [];
-    this.mr = new MediaRecorder(this.mic.stream, mime ? { mimeType: mime } : undefined);
-    this.mr.ondataavailable = (e) => { if (e.data && e.data.size) this.chunks.push(e.data); };
-    this.mr.start(250);
+    this.on = true;
+    this.mic.sinks.add(this.sink);
     this.t0 = performance.now();
   }
 
   stop() {
-    return new Promise((resolve) => {
-      const mr = this.mr;
-      if (!mr || mr.state === "inactive") return resolve(null);
-      mr.onstop = () => resolve(new Blob(this.chunks, { type: (mr.mimeType || "audio/webm").split(";")[0] }));
-      mr.stop();
-      this.mr = null;
-    });
+    if (!this.on) return Promise.resolve(null);
+    this.on = false;
+    this.mic.sinks.delete(this.sink);
+    const n = this.chunks.reduce((a, c) => a + c.length, 0);
+    if (!n) return Promise.resolve(null);
+    const pcm = new Float32Array(n);
+    let o = 0;
+    for (const c of this.chunks) { pcm.set(c, o); o += c.length; }
+    this.chunks = [];
+    return Promise.resolve(new Blob([encodeWav(pcm, this.mic.rate || 48000)], { type: "audio/wav" }));
   }
 
   cancel() {
-    if (this.mr && this.mr.state !== "inactive") { this.mr.onstop = null; this.mr.stop(); }
-    this.mr = null;
+    this.on = false;
+    this.mic.sinks.delete(this.sink);
+    this.chunks = [];
   }
 }
 
@@ -138,7 +214,10 @@ export class Player {
     return ctx;
   }
 
-  level() { return this.src && this.analyser ? Math.min(1, rmsOf(this.analyser, this.buf) * 5) : 0; }
+  level() {
+    if (this.src?.el) return 0.35 + 0.25 * Math.sin(performance.now() / 160); // <audio> fallback: no analyser
+    return this.src && this.analyser ? Math.min(1, rmsOf(this.analyser, this.buf) * 5) : 0;
+  }
 
   enqueue(text, lang, gen = this.gen) {
     if (gen !== this.gen || !text || !text.trim()) return;
@@ -149,8 +228,18 @@ export class Player {
   _fetch(item) {
     item.ctrl = new AbortController();
     const ctx = this._ensure();
+    const asBlob = (ab) => ({ blob: new Blob([ab], { type: "audio/mpeg" }) });
     item.p = this.api.tts(item.text, item.lang, item.ctrl.signal)
-      .then((ab) => ctx.decodeAudioData(ab))
+      .then((ab) => {
+        if (this.noDecode) return asBlob(ab);
+        const copy = ab.slice(0); // decodeAudioData detaches its input
+        // Web Audio decode (gapless + analyser); if this engine can't decode mp3 (some WebKitGTK builds),
+        // fall back to a plain <audio> element per sentence from then on.
+        return new Promise((res, rej) => {
+          const p = ctx.decodeAudioData(ab, res, rej);
+          if (p && p.then) p.then(res, rej);
+        }).then((buffer) => ({ buffer }), () => { this.noDecode = true; return asBlob(copy); });
+      })
       .catch((e) => { if (e.name !== "AbortError") console.warn("tts failed:", e.message); return null; });
   }
 
@@ -160,11 +249,13 @@ export class Player {
     this._starting = true;
     const gen = this.gen;
     const item = this.items[0];
-    const buffer = await item.p;
+    const got = await item.p;
     this._starting = false;
     if (gen !== this.gen) return;
     this.items.shift();
-    if (!buffer) { if (this.items.length) this._pump(); else this.onIdle(); return; }
+    if (!got) { if (this.items.length) this._pump(); else this.onIdle(); return; }
+    if (got.blob) { this._playElement(got.blob); return; }
+    const buffer = got.buffer;
     const ctx = this._ensure();
     const src = ctx.createBufferSource();
     src.buffer = buffer;
@@ -177,6 +268,22 @@ export class Player {
     this.src = src;
     src.start();
     this.onStart();
+  }
+
+  _playElement(blob) {
+    const url = URL.createObjectURL(blob);
+    const el = new Audio(url);
+    const handle = { el, stop: () => { el.pause(); done(); } };
+    const done = () => {
+      el.onended = el.onerror = null;
+      URL.revokeObjectURL(url);
+      if (this.src !== handle) return;
+      this.src = null;
+      if (this.items.length) this._pump(); else this.onIdle();
+    };
+    el.onended = el.onerror = done;
+    this.src = handle;
+    el.play().then(() => this.onStart(), done);
   }
 
   stop() {

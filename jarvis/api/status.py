@@ -41,6 +41,9 @@ class StatusCollector:
         self._ncpu = psutil.cpu_count() or 1
         psutil.cpu_percent(None)  # prime the interval-less counters
         self._me.cpu_percent(None)
+        self._net_prev: tuple[float, int, int] | None = None  # (monotonic, rx bytes, tx bytes)
+        self._temp: float | None = None
+        self._temp_ts = -1e9
 
     # --- pieces ---
     def _processes(self) -> dict:
@@ -60,6 +63,44 @@ class StatusCollector:
                        "by_cpu": sorted(rows, key=lambda r: r["cpu"], reverse=True)[:5], "count": len(rows)}
         self._procs_ts = now
         return self._procs
+
+    @staticmethod
+    def _freq_ghz() -> float | None:
+        with contextlib.suppress(Exception):
+            f = psutil.cpu_freq()
+            if f and f.current:
+                return _round(f.current / 1000, 2)
+        return None
+
+    def _temp_c(self) -> float | None:
+        """CPU package temperature; hwmon reads are cached for 10 s (they are the slowest part)."""
+        now = time.monotonic()
+        if now - self._temp_ts < 10:
+            return self._temp
+        self._temp_ts, self._temp = now, None
+        with contextlib.suppress(Exception):
+            temps = psutil.sensors_temperatures() or {}
+            for key in ("coretemp", "k10temp", "zenpower", "cpu_thermal", "acpitz"):
+                vals = [t.current for t in temps.get(key, []) if t.current and t.current > 0]
+                if vals:
+                    self._temp = _round(max(vals) if key != "coretemp" else vals[0])
+                    break
+        return self._temp
+
+    def _net(self) -> dict:
+        """Bytes/s since the previous snapshot (all interfaces except loopback)."""
+        rx = tx = 0
+        with contextlib.suppress(Exception):
+            for nic, c in psutil.net_io_counters(pernic=True).items():
+                if nic != "lo":
+                    rx += c.bytes_recv
+                    tx += c.bytes_sent
+        now = time.monotonic()
+        prev, self._net_prev = self._net_prev, (now, rx, tx)
+        if prev is None or now - prev[0] <= 0:
+            return {"rx_bps": 0, "tx_bps": 0}
+        dt = now - prev[0]
+        return {"rx_bps": max(0, int((rx - prev[1]) / dt)), "tx_bps": max(0, int((tx - prev[2]) / dt))}
 
     def _jarvis(self) -> dict:
         eng = self.engine
@@ -100,7 +141,9 @@ class StatusCollector:
         out: dict[str, Any] = {
             "ts": time.time(),
             "cpu": {"percent": _round(psutil.cpu_percent(None)), "count": self._ncpu,
-                    "load": [_round(x, 2) for x in os.getloadavg()] if hasattr(os, "getloadavg") else []},
+                    "load": [_round(x, 2) for x in os.getloadavg()] if hasattr(os, "getloadavg") else [],
+                    "freq_ghz": self._freq_ghz(), "temp_c": self._temp_c()},
+            "net": self._net(),
             "ram": {"total_gb": _round(vm.total / _GB, 2), "used_gb": _round((vm.total - vm.available) / _GB, 2),
                     "available_gb": _round(vm.available / _GB, 2), "percent": _round(vm.percent)},
             "swap": {"total_gb": _round(sw.total / _GB, 2), "used_gb": _round(sw.used / _GB, 2),
@@ -117,7 +160,9 @@ class StatusCollector:
         with contextlib.suppress(Exception):
             bat = psutil.sensors_battery()
             if bat is not None:
-                out["battery"] = {"percent": _round(bat.percent), "plugged": bool(bat.power_plugged)}
+                secs = bat.secsleft if isinstance(bat.secsleft, int) and bat.secsleft >= 0 else None
+                out["battery"] = {"percent": _round(bat.percent), "plugged": bool(bat.power_plugged),
+                                  "secs_left": None if bat.power_plugged else secs}
         if percpu:
             out["cpu"]["per_core"] = [_round(x) for x in psutil.cpu_percent(None, percpu=True)]
         self._jarvis_data(out)

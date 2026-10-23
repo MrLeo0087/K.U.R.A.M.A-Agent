@@ -43,6 +43,7 @@ export class Api {
   tools() { return this.request("/api/v1/tools"); }
   profile() { return this.request("/api/v1/profile"); }
   jobs() { return this.request("/api/v1/jobs?limit=20"); }
+  cancelJob(id) { return this.request(`/api/v1/jobs/${encodeURIComponent(id)}/cancel`, { method: "POST", body: {} }); }
   alerts() { return this.request("/api/v1/alerts?limit=20"); }
   alertsRead() { return this.request("/api/v1/alerts/read", { method: "POST", body: {} }); }
 

@@ -207,6 +207,10 @@ def test_status_shape(client, monkeypatch, tmp_path):
     for k in ("cpu", "ram", "swap", "disk", "processes", "jarvis", "uptime", "workers", "jobs", "alerts", "tokens"):
         assert k in s
     assert 0 <= s["cpu"]["percent"] <= 100 and len(s["cpu"]["per_core"]) == s["cpu"]["count"]
+    assert {"freq_ghz", "temp_c"} <= set(s["cpu"])
+    assert s["cpu"]["freq_ghz"] is None or s["cpu"]["freq_ghz"] > 0
+    assert s["cpu"]["temp_c"] is None or isinstance(s["cpu"]["temp_c"], float)
+    assert s["net"]["rx_bps"] >= 0 and s["net"]["tx_bps"] >= 0
     assert s["ram"]["total_gb"] > 0 and set(s["ram"]) >= {"used_gb", "percent"}
     assert len(s["processes"]["by_rss"]) <= 5 and {"pid", "name", "rss_mb", "cpu"} <= set(s["processes"]["by_rss"][0])
     assert s["jarvis"]["rss_mb"] > 0 and s["jarvis"]["busy"] is False
@@ -214,6 +218,22 @@ def test_status_shape(client, monkeypatch, tmp_path):
     assert s["alerts"]["unread"] == 1 and s["alerts"]["recent"][0]["level"] == "warn"
     assert s["workers"]["workers"]["battery"]["state"] == "running"
     assert "today" in s["tokens"]
+
+
+def test_status_net_rate_is_a_delta(client, monkeypatch):
+    from collections import namedtuple
+
+    from jarvis.api import status as status_mod
+    nic = namedtuple("nic", "bytes_recv bytes_sent")
+    counters = iter([{"lo": nic(10**9, 10**9), "wlan0": nic(1000, 500)},
+                     {"lo": nic(2 * 10**9, 2 * 10**9), "wlan0": nic(3000, 1500)}])
+    clock = iter([100.0, 102.0])
+    monkeypatch.setattr(status_mod.psutil, "net_io_counters", lambda pernic=False: next(counters))
+    monkeypatch.setattr(status_mod.time, "monotonic", lambda: next(clock))
+    col = status_mod.StatusCollector.__new__(status_mod.StatusCollector)
+    col._net_prev = None
+    assert col._net() == {"rx_bps": 0, "tx_bps": 0}
+    assert col._net() == {"rx_bps": 1000, "tx_bps": 500}  # loopback ignored, per second
 
 
 def test_jobs_alerts_profile(client):
@@ -302,7 +322,7 @@ def test_frontend_served_when_enabled(client):
     r = client.get("/")
     assert r.status_code == 200 and r.headers["content-type"].startswith("text/html")
     assert "app.js" in r.text and "KURAMA" in r.text
-    for f in ("app.js", "holo.js", "voice.js", "api.js", "config.js", "styles.css"):
+    for f in ("app.js", "orb.js", "voice.js", "api.js", "config.js", "styles.css"):
         assert client.get("/" + f).status_code == 200, f
     assert client.get("/docs").status_code == 200 and client.get("/openapi.json").status_code == 200
 
@@ -311,7 +331,7 @@ def test_frontend_not_served_when_disabled(make):
     client = make(serve_frontend=False)
     r = client.get("/")
     assert r.status_code == 200 and "text/html" not in r.headers["content-type"] and r.json()["docs"] == "/docs"
-    assert client.get("/holo.js").status_code == 404
+    assert client.get("/orb.js").status_code == 404
 
 
 def test_server_shim_runs_api(monkeypatch):
