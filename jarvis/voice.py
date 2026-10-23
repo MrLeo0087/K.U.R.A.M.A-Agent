@@ -12,7 +12,7 @@ import itertools
 import threading
 from typing import Iterable, Iterator
 
-from jarvis.core import agent, audio, config, hotkey, llm, safety, store, stt, tts
+from jarvis.core import agent, audio, config, hotkey, jobs, llm, safety, store, stt, tts
 
 LANG_NAMES = agent.LANG_NAMES
 QUIT = {"q", "quit", "exit", "/q", "/quit", "/exit"}
@@ -33,6 +33,23 @@ class VoiceLoop:
         self.agent = agent.Agent(confirm=self.confirm)
         self.agent.warm()  # LangChain/LangGraph setup at startup, not on the first turn
         safety.set_confirm_hook("voice", self.confirm)
+        jobs.set_mode("voice")  # finished background jobs are queued and spoken when idle
+
+    def announce_jobs(self) -> bool:
+        """Speak one queued job announcement if Jarvis is idle (not listening/thinking/speaking)."""
+        if self.state != "idle" or self.trigger.is_set():
+            return False
+        item = jobs.ANNOUNCER.pop()
+        if item is None:
+            return False
+        text, lang = item
+        self.state = "speaking"
+        print(f"jarvis> {text}", flush=True)
+        try:
+            self.speaker.speak(text, lang=lang or self.lang)
+        finally:
+            self.state = "idle"
+        return True
 
     # --- spoken confirmation (called from the agent's tool node) ---
     def confirm(self, prompt: str) -> bool:
@@ -157,7 +174,7 @@ class VoiceLoop:
             while not self.quit.is_set():
                 if not again:
                     while not self.trigger.wait(0.5):
-                        pass
+                        self.announce_jobs()
                     if self.quit.is_set():
                         break
                 self.trigger.clear()
@@ -172,6 +189,7 @@ class VoiceLoop:
             print()
         finally:
             self.speaker.stop()
+            jobs.shutdown()
             if self._hk:
                 self._hk.stop()
         return 0

@@ -125,7 +125,7 @@ def test_round_limit_forces_answer(fake):
 
 def test_multi_group_uses_smart_tier(fake):
     calls = fake(AIMessage(content="Sure."))
-    agent.Agent().run("delete the file x and tell me the time")
+    agent.Agent(use_planner=False).run("delete the file x and tell me the time")
     assert calls[0]["model"] == config.LLM_DEFAULT and len(calls[0]["tools"]) == 2
 
 

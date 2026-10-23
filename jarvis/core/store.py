@@ -31,6 +31,10 @@ CREATE TABLE IF NOT EXISTS routing (
 CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY, ts REAL NOT NULL, role TEXT, text TEXT
 );
+CREATE TABLE IF NOT EXISTS jobs (
+    id INTEGER PRIMARY KEY, title TEXT, kind TEXT, status TEXT, request TEXT, created REAL,
+    finished REAL, output_path TEXT, error TEXT, tokens INTEGER DEFAULT 0, progress TEXT
+);
 """
 
 _lock = threading.RLock()
@@ -153,3 +157,47 @@ def tool_call_counts(since_ts: float | None = None) -> dict[str, int]:
     rows = _exec("SELECT tool, COUNT(*) FROM tool_calls WHERE ts>=? GROUP BY tool ORDER BY 2 DESC",
                  (since_ts or 0.0,))
     return {r[0]: int(r[1]) for r in rows}
+
+
+# --- background jobs ---
+JOB_FIELDS = ("title", "kind", "status", "request", "created", "finished", "output_path", "error",
+              "tokens", "progress")
+
+
+def job_insert(title: str, kind: str, request: str = "", status: str = "queued") -> int:
+    with _lock:
+        if _conn is None:
+            init()
+        cur = _conn.execute("INSERT INTO jobs(title,kind,status,request,created,tokens,progress) "  # type: ignore[union-attr]
+                            "VALUES (?,?,?,?,?,0,'')", (title, kind, status, request, time.time()))
+        return int(cur.lastrowid)
+
+
+def job_update(job_id: int, **fields: Any) -> None:
+    cols = [k for k in fields if k in JOB_FIELDS]
+    if not cols:
+        return
+    _exec(f"UPDATE jobs SET {', '.join(c + '=?' for c in cols)} WHERE id=?",
+          tuple(fields[c] for c in cols) + (job_id,))
+
+
+def job_get(job_id: int) -> dict | None:
+    rows = _exec("SELECT * FROM jobs WHERE id=?", (job_id,))
+    return dict(rows[0]) if rows else None
+
+
+def jobs_list(limit: int = 10, statuses: tuple[str, ...] | None = None) -> list[dict]:
+    if statuses:
+        marks = ",".join("?" * len(statuses))
+        rows = _exec(f"SELECT * FROM jobs WHERE status IN ({marks}) ORDER BY id DESC LIMIT ?",
+                     (*statuses, limit))
+    else:
+        rows = _exec("SELECT * FROM jobs ORDER BY id DESC LIMIT ?", (limit,))
+    return [dict(r) for r in rows]
+
+
+def tokens_for_purpose(prefix: str) -> int:
+    """Total tokens of llm_calls whose purpose starts with prefix (e.g. a job's 'job7:')."""
+    rows = _exec("SELECT COALESCE(SUM(total_tokens),0) FROM llm_calls WHERE purpose LIKE ?",
+                 (prefix.replace("%", "") + "%",))
+    return int(rows[0][0])

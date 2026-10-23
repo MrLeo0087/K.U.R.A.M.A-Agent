@@ -32,6 +32,7 @@ def _pattern(words: tuple[str, ...]) -> re.Pattern:
 _RULES: dict[str, re.Pattern] = {}
 _REASONING: re.Pattern | None = None
 _COMMAND: re.Pattern | None = None
+_URL = re.compile(r"https?://|(?<![\w@])(?:www\.)?[a-z0-9-]+\.(?:com|org|net|io|ai|dev|np|in|edu|gov|co)\b")
 
 
 def _compiled() -> tuple[dict[str, re.Pattern], re.Pattern, re.Pattern]:
@@ -51,6 +52,8 @@ def rule_groups(text: str) -> list[str]:
     rules, _, _ = _compiled()
     low = text.lower()
     hits = {g: len(p.findall(low)) for g, p in rules.items()}
+    if config.ROUTER_URL_GROUP and _URL.search(low):  # "open example.com" / "https://..."
+        hits[config.ROUTER_URL_GROUP] = hits.get(config.ROUTER_URL_GROUP, 0) + 1
     return [g for g, n in sorted(hits.items(), key=lambda kv: -kv[1]) if n]
 
 

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import sys
 
-from jarvis.core import agent, config, llm, store
+from jarvis.core import agent, config, jobs, llm, store
 
 QUIT = {"/quit", "/exit", "/q"}
 
@@ -23,6 +23,7 @@ def main(argv: list[str] | None = None) -> int:
     tty = sys.stdin.isatty()
     bot = agent.Agent()  # confirmations use safety's terminal prompt in text mode
     bot.warm()
+    jobs.set_mode("text")  # finished background jobs print "[job #N done] ..."
     if tty:
         print(f"Jarvis text chat ({config.LLM_FAST} / {config.LLM_DEFAULT}, tools on). /quit to exit.")
     while True:
@@ -56,6 +57,10 @@ def main(argv: list[str] | None = None) -> int:
             store.add_message("assistant", "".join(parts).strip())
         except Exception:
             pass
+    active = jobs.get_manager().active() if jobs._manager else []
+    if active:
+        print(f"[cancelling {len(active)} background job(s); partial output stays in data/outputs]")
+    jobs.shutdown()
     return 0
 
 

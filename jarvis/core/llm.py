@@ -27,7 +27,7 @@ from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import AIMessage, BaseMessage, convert_to_messages
 from langchain_groq import ChatGroq
 
-from jarvis.core import budget, config, store
+from jarvis.core import budget, config, ratelimit, store
 
 log = logging.getLogger("jarvis.llm")
 
@@ -64,8 +64,21 @@ def get_client() -> Any:
     if _client is None:
         if not config.GROQ_API_KEY:
             raise LLMError("GROQ_API_KEY missing: add it to .env")
-        _client = groq.Groq(api_key=config.GROQ_API_KEY, max_retries=0, timeout=config.LLM_TIMEOUT_S)
+        http = groq.DefaultHttpxClient(event_hooks={"response": [_rate_headers]})
+        _client = groq.Groq(api_key=config.GROQ_API_KEY, max_retries=0, timeout=config.LLM_TIMEOUT_S,
+                            http_client=http)
     return _client
+
+
+def _rate_headers(response: Any) -> None:
+    """httpx response hook: feed Groq's x-ratelimit-* headers to the rate limiter."""
+    try:
+        if "x-ratelimit-remaining-tokens" not in response.headers:
+            return
+        model = json.loads(response.request.content or b"{}").get("model", "")
+        ratelimit.update_from_headers(model, response.headers)
+    except Exception as e:  # never break a request over bookkeeping
+        log.debug("rate header hook failed: %s", e)
 
 
 def set_client(client: Any) -> None:
@@ -336,38 +349,61 @@ def to_messages(messages: Sequence[Any]) -> list[BaseMessage]:
 # --- public API ---
 def chat(messages: Sequence[Any], tier: str = "fast", stream: bool = False, tools: Sequence | None = None,
          purpose: str = "", max_tokens: int | None = None, temperature: float | None = None,
-         **extra: Any) -> Reply | Iterator[str]:
+         priority: str | None = None, **extra: Any) -> Reply | Iterator[str]:
     """Chat on Groq via ChatGroq. tier: "fast" | "smart" | "voice" | "vision".
-    tools: LangChain tools (or OpenAI-format dicts); extra may hold tool_choice."""
+    tools: LangChain tools (or OpenAI-format dicts); extra may hold tool_choice.
+    priority: "interactive" | "background" for the rate limiter (default: the thread's context)."""
     models = _chain(tier)
     msgs = to_messages(messages)
+    rate = (priority or ratelimit.current_priority(), _estimate_prompt(msgs),
+            max_tokens or config.LLM_MAX_TOKENS)
     if stream:
-        return _stream(models, msgs, tools, purpose, max_tokens, temperature, extra)
-    return _complete(models, msgs, tools, purpose, max_tokens, temperature, extra)
+        return _stream(models, msgs, tools, purpose, max_tokens, temperature, extra, rate)
+    return _complete(models, msgs, tools, purpose, max_tokens, temperature, extra, rate)
 
 
-def _complete(models, msgs, tools, purpose, max_tokens, temperature, extra) -> Reply:
+def _acquire(model: str, rate: tuple) -> ratelimit.Ticket:
+    priority, prompt_est, max_tok = rate
+    return ratelimit.acquire(model, prompt_est + max_tok, priority)
+
+
+def _settle(ticket: ratelimit.Ticket, reply: Reply | None, rate: tuple) -> None:
+    if reply is None:
+        used = 0  # failed request: refund (a 429's headers already set the real level)
+    elif reply.estimated:
+        used = rate[1] + _estimate_tokens(reply.text)
+    else:
+        used = reply.prompt_tokens + reply.completion_tokens
+    ratelimit.settle(ticket, used)
+
+
+def _complete(models, msgs, tools, purpose, max_tokens, temperature, extra, rate) -> Reply:
     last: Exception | None = None
     for _, model, retries in _plan(models):
         for attempt in range(retries + 1):
+            ticket = _acquire(model, rate)
             try:
                 msg = _bound(model, tools, max_tokens, temperature, extra).invoke(
                     msgs, config=_cfg(purpose))
             except Exception as e:
                 last = e
+                _settle(ticket, None, rate)
                 if _on_error(e, model, attempt, retries):
                     continue
                 break
-            return _reply(msg, model)
+            reply = _reply(msg, model)
+            _settle(ticket, reply, rate)
+            return reply
     raise LLMError(f"all models failed ({', '.join(models)}): {last}") from last
 
 
-def _stream(models, msgs, tools, purpose, max_tokens, temperature, extra):
+def _stream(models, msgs, tools, purpose, max_tokens, temperature, extra, rate):
     last: Exception | None = None
     for _, model, retries in _plan(models):
         for attempt in range(retries + 1):
             acc = None
             started = False
+            ticket = _acquire(model, rate)
             try:
                 for chunk in _bound(model, tools, max_tokens, temperature, extra).stream(
                         msgs, config=_cfg(purpose)):
@@ -382,8 +418,40 @@ def _stream(models, msgs, tools, purpose, max_tokens, temperature, extra):
                 last = e
                 if started:
                     raise LLMError(f"{model}: stream broke mid-reply: {e}") from e
+                _settle(ticket, None, rate)
                 if _on_error(e, model, attempt, retries):
                     continue
                 break
-            return _reply(acc, model)
+            reply = _reply(acc, model)
+            _settle(ticket, reply, rate)
+            return reply
     raise LLMError(f"all models failed ({', '.join(models)}): {last}") from last
+
+
+def structured(messages: Sequence[Any], schema: type, tier: str = "fast", purpose: str = "",
+               max_tokens: int | None = None, priority: str | None = None) -> Any:
+    """with_structured_output(schema) on the tier's chain (no retries: callers have a fallback).
+    Returns the parsed Pydantic object; raises LLMError when every model failed."""
+    msgs = to_messages(messages)
+    rate = (priority or ratelimit.current_priority(), _estimate_prompt(msgs),
+            max_tokens or config.LLM_MAX_TOKENS)
+    last: Exception | None = None
+    for _, model, _retries in _plan(_chain(tier)):
+        ticket = _acquire(model, rate)
+        try:
+            base = model_for(model)
+            if "max_tokens" in type(base).model_fields:
+                base = base.model_copy(update={"max_tokens": rate[2]})
+            out = base.with_structured_output(schema, include_raw=True).invoke(msgs, config=_cfg(purpose))
+        except Exception as e:
+            last = e
+            _settle(ticket, None, rate)
+            log.warning("structured output failed on %s: %s", model, e)
+            continue
+        _settle(ticket, _reply(out.get("raw"), model), rate)
+        if out.get("parsed") is None:
+            last = out.get("parsing_error") or ValueError("no structured output")
+            log.warning("structured output unparsable on %s: %s", model, last)
+            continue
+        return out["parsed"]
+    raise LLMError(f"structured output failed ({tier}): {last}") from last

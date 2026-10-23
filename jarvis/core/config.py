@@ -37,6 +37,8 @@ TIER_CHAIN: dict[str, list[str]] = {
     "fast": [LLM_FAST],
     "vision": [LLM_VISION],
     "voice": list(dict.fromkeys([LLM_VOICE, LLM_FAST])),
+    # Background writer jobs: smart model only (never falls back onto the fast/voice models' TPM).
+    "writer": [LLM_DEFAULT],
 }
 # Extra per-model request params. gpt-oss models are reasoning models: keep reasoning
 # short and hidden so replies stay fast and token-cheap.
@@ -129,6 +131,7 @@ AGENT_MAX_TOKENS = 400
 AGENT_SUMMARY_BATCH_TURNS = 3  # fold this many old turns into the rolling summary at once
 CONFIRM_TIMEOUT_S = 20.0  # unanswered confirmations are denied
 ROUTER_MAX_GROUPS = 3
+ROUTER_URL_GROUP = "browser"  # group for messages containing a URL/domain
 # Keyword rules: group -> words/phrases (matched on word boundaries, case-insensitive).
 ROUTER_RULES: dict[str, tuple[str, ...]] = {
     "general": ("time", "date", "day is it", "clock", "what day", "o'clock", "baje",
@@ -146,6 +149,11 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
             "pip", "requirements", "repo", "lint", "dependency", "dependencies", "notebook"),
     "web": ("search", "weather", "news", "google", "look up", "lookup", "browse", "website"),
     "memory": ("remember", "recall", "note", "notes", "last time", "yesterday", "remind"),
+    "browser": ("url", "link", "website", "web site", "site", "youtube", "gmail", "github",
+                "chatgpt", "open google", "www", "http", "https"),
+    "jobs": ("job", "jobs", "background", "working on", "progress", "job status", "cancel",
+             "stop writing", "essay status", "essay", "article", "story", "report", "write a",
+             "लेख", "निबंध"),
 }
 # Descriptions offered to the fast classifier when no rule matched.
 TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
@@ -157,6 +165,8 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
     "dev": "git, tests, projects, Python environments",
     "web": "web search, weather, news",
     "memory": "notes and recalling past conversations",
+    "browser": "open a website or URL in the browser",
+    "jobs": "long writing jobs (essays, articles, reports) and background job status/cancel",
 }
 # Words that suggest multi-step reasoning (router asks for the smart tier).
 REASONING_KEYWORDS = ("explain why", "compare", "analyze", "analyse", "step by step", "debug",
@@ -172,3 +182,23 @@ SHELL_ALLOWLIST = ("ls", "cat", "head", "tail", "wc", "grep", "rg", "fdfind", "f
                    "du", "free", "uptime", "whoami", "date", "echo", "pwd", "which", "python3",
                    "pytest", "pip", "xdotool", "wmctrl", "xrandr", "xclip", "pactl", "amixer",
                    "brightnessctl", "upower", "gsettings", "loginctl", "notify-send")
+
+# --- Multitasking (P3b-2): planner, background jobs, rate limiter ---
+PLANNER_MAX_TASKS = 4
+PLANNER_MAX_TOKENS = 300
+LONG_JOB_MIN_WORDS = 150  # writing requests at least this long run as background jobs
+WORDS_PER_LINE = 12  # "a 1000-line essay" ~ 12 words per line
+WRITER_DEFAULT_WORDS = 600  # essay/article/report without an explicit length
+WRITER_MAX_WORDS = 12_000
+WRITER_WORDS_PER_SECTION = 500
+WRITER_SECTION_MAX_TOKENS = 1500
+WRITER_TIER = "writer"
+OUTPUTS_DIR = Path(os.getenv("JARVIS_OUTPUTS_DIR", str(DATA_DIR / "outputs")))
+JOBS_MAX_WORKERS = int(os.getenv("JARVIS_JOBS_MAX_WORKERS", "2"))
+JOBS_NOTIFY = os.getenv("JARVIS_JOBS_NOTIFY", "1").lower() not in ("0", "false", "no", "off")
+# Groq free tier per model. Per-model overrides: MODEL_LIMITS[model] = {"tpm": ..., "rpm": ...}.
+MODEL_TPM = int(os.getenv("JARVIS_MODEL_TPM", "8000"))
+MODEL_RPM = int(os.getenv("JARVIS_MODEL_RPM", "30"))
+MODEL_LIMITS: dict[str, dict[str, int]] = {}
+RATE_BACKGROUND_RESERVE = 0.3  # share of TPM/RPM background jobs must leave free for interactive
+RATE_INTERACTIVE_MAX_WAIT_S = 3.0  # interactive calls wait at most this long, then go anyway
