@@ -2,6 +2,9 @@
 
 Status legend: [ ] todo · [~] in progress · [x] done · [h] done, needs human test · [b] blocked
 
+## Workflow (user rule, 2026-10-23)
+Build ONE phase at a time. After each phase: commit, give the user exact test steps, then STOP and wait for their OK ("works" / "continue"). Never auto-start the next phase. Fixes the user reports for a phase come first.
+
 ## Phases
 - [x] P0 Bootstrap: git, .gitignore, .env.example, CLAUDE.md, PROGRESS.md
 - [x] P1 Core: config.py (model IDs + voices, verify Groq models endpoint), Groq client (streaming, retry/backoff 429/5xx, 70b→8b fallback, token budget), SQLite logging (tool calls, tokens, routing latency), terminal text chat loop
@@ -9,7 +12,7 @@ Status legend: [ ] todo · [~] in progress · [x] done · [h] done, needs human 
 - [x] P3 Agent: LangGraph router + tool registry (decorator, auto JSON schema, one file per tool), tool-group router, safety levels (safe/confirm/blocked), confirmation flow, SQLite action log
 - [x] P3-STOP: human end-to-end test with real Groq key passed (2026-10-23). User: "working very good".
 - [x] P3b LangChain + multitasking (user request 2026-10-23): migrate LLM calls to ChatGroq and tools to langchain_core tools, keeping groups, safety, logging and token rules. Add a multi-task decomposer, a parallel LangGraph fan-out (Send), a background job manager (outputs under data/outputs/, announced when done), a per-model TPM rate limiter, and job status/cancel tools.
-- [ ] P4 Interactive core: Project Scaffolder, Environment Doctor (CPU-only), Smart File Search (rg/fd), Git Assistant, Test Runner
+- [h] P4 Interactive core: Project Scaffolder, Environment Doctor (CPU-only), Smart File Search (rg/fd), Git Assistant, Test Runner
 - [ ] P5 General core (X11): Volume, Media, Mic Mute, Brightness, Open/Close/Focus App, Window Snap, Workspace Launcher, Sleep/Lock, Screenshot, Clipboard, TTS Replies, Startup Greeting
 - [ ] P6 Background core: Long-Process/Training Run Watcher (daemon pattern, Telegram alerts), Crash Watchdog, Resource Guard, Telegram Remote Control, n8n Bridge
 - [ ] P7 Memory/RAG: RAG over code+notes (fastembed ONNX + FAISS-cpu/SQLite), Session Recall, API Cost/Token Tracker, Daily Digest
@@ -53,6 +56,7 @@ DROPPED, do not build: Custom Object/Error-State Detector, Voice Cloning (Coqui/
   Result: from the agent call to the first audio bytes reaching the player is 0.47–0.65 s for short replies and about 1.1 s for long ones. Each clip was checked by speech-to-text (no stale audio). Groq's Orpheus TTS is faster but English-only and needs terms accepted in the Groq console; not used.
 - P3b-1: Migrated to LangChain. ChatGroq per model (langchain-groq 1.1.3, langchain-core 1.7.0). groq was downgraded to 0.37.1, because langchain-groq needs groq<1; real Whisper verified working on it. Our retry/backoff and tier fallback are kept, with max_retries=0 on ChatGroq. A UsageLogger callback writes every attempt to SQLite. Tools are StructuredTools from our @tool decorator, with group and safety in metadata; bind_tools gets only the routed groups. Our own tool node goes through safety.py. Agent.warm() runs at startup (0.64 s). Prompt tokens: plain chat 180, tool round 225/264. RAM 77 MB. Bench (scripts/bench_latency.py) first audio: short en 0.51 s, long 1.2–1.4 s, ne 0.64–0.77 s.
 - P3b-2: Multitasking. planner.py runs regex multi-intent detection (en/hi/ne) and calls the fast model's structured output only when flagged; single requests cost zero extra tokens. agent.py adds a plan node and a LangGraph Send fan-out. Quick tasks run concurrently, long tasks go to the JobManager (jobs.py, 2 workers, SQLite `jobs` table, cancel, notify-send plus a spoken announcement when idle). The join reply needs no LLM call. ratelimit.py keeps a per-model TPM/RPM bucket, reads Groq headers, and holds a 30% reserve for interactive calls. writer.py works outline → sections (≤1500 tokens each) on the "writer" chain (gpt-oss-120b only) and writes to data/outputs/. New tools: write_document, list_jobs, cancel_job, job_result, open_url. New router groups: browser and jobs; "job status" is a keyword, bare "status" is not. Quitting cancels jobs and keeps the partial file. A repo-scan job runs the agent with confirmations denied. Smoke: "300-word essay + open YouTube" replied in 1.8 s, and the essay (312 words, 1,087 tokens) finished 1.5 s later. The planner call cost 229+79 tokens. A 1000-line essay is ~12k words / ~16k tokens, about 3 min when paced. 98 tests.
+- P4: Nine tools in jarvis/tools/interactive/: scaffold_project (confirm), env_doctor, find_files (fdfind/rg), git_status, git_log, git_diff_summary, git_commit (confirm; auto-message sends only --stat plus ≤1500 chars of diff), git_branch (confirm; create/switch only), run_tests (>30 s runs as a background job). _proc.py runs allowlisted subprocesses with a timeout, and its git runner refuses push, reset, clean, rebase, --force, --hard and -D. The "git" group (5 tools) was split from "dev" (3 tools) to save tokens: env_doctor prompt went 717→447 tokens, git_status 776→541. Peak RAM 127 MB in a 3-question run. 107 tests.
 
 ## Known issues
 - P2: Nepali auto-detect is unreliable (Whisper says Hindi). Workaround: JARVIS_STT_LANG=ne. Possible fix in P12: switch the hint by voice command ("speak Nepali").

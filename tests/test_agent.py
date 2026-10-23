@@ -10,7 +10,7 @@ from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, Too
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from langchain_core.utils.function_calling import convert_to_openai_tool
 
-from jarvis.core import agent, config, llm, store
+from jarvis.core import agent, config, llm, registry, store
 
 
 class FakeChat(BaseChatModel):
@@ -126,7 +126,7 @@ def test_round_limit_forces_answer(fake):
 def test_multi_group_uses_smart_tier(fake):
     calls = fake(AIMessage(content="Sure."))
     agent.Agent(use_planner=False).run("delete the file x and tell me the time")
-    assert calls[0]["model"] == config.LLM_DEFAULT and len(calls[0]["tools"]) == 2
+    assert calls[0]["model"] == config.LLM_DEFAULT and len(calls[0]["tools"]) == len(registry.schemas_for(["files", "general"]))
 
 
 def test_history_window_and_summary(fake, monkeypatch):
