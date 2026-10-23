@@ -25,7 +25,9 @@ SYSTEM_PROMPT = (
     "Use a tool only when needed to answer or act, and never invent tool results. "
     "If a tool is declined or fails, say so briefly. If you do not know something, say so."
 )
-VOICE_SUFFIX = " Your reply is spoken: keep it to 1-2 short sentences. The user spoke {lang}; reply in {lang}."
+VOICE_SUFFIX = (" Your reply is spoken aloud: plain sentences, no markdown or lists. Default to 1-2 short "
+                "sentences; if the user asks to explain or for detail, give up to 6 sentences. "
+                "The user spoke {lang}; reply in {lang}.")
 SUMMARY_SUFFIX = " Earlier conversation (summary): {summary}"
 SUMMARY_PROMPT = (
     "Update the running summary of a chat between a user and the assistant Jarvis. "
@@ -85,6 +87,8 @@ class Agent:
         r = router.route(state["user_text"])
         schemas = registry.schemas_for(r.groups) if r.groups else []
         tier = "smart" if (len(r.groups) > 1 or r.reasoning) else "fast"
+        if tier == "fast" and not schemas and state.get("mode") == "voice":
+            tier = "voice"  # plain spoken chat: lowest time-to-first-token model
         self.last.update(route=r, tier=tier, tools_sent=[s["function"]["name"] for s in schemas])
         return {"groups": r.groups, "tools": schemas, "tier": tier, "rounds": 0, "pending": []}
 

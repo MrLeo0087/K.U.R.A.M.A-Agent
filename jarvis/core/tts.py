@@ -3,7 +3,7 @@
 speak_stream(deltas, lang) runs three stages in parallel so the first sentence is heard while
 the LLM is still writing the rest:
   1. splitter thread  : reads LLM deltas, cuts complete sentences (. ! ? । newline)
-  2. synth thread     : edge-tts per sentence, in order, pushes mp3 chunks to a queue
+  2. synth thread     : edge-tts, up to TTS_PARALLEL sentences at once, chunks forwarded in order
   3. player (worker)  : one ffplay/mpv process fed through stdin, so playback is gapless
 stop() interrupts everything at once (barge-in).
 
@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import logging
 import queue
 import re
 import sys
@@ -21,6 +22,8 @@ import time
 from typing import AsyncIterator, Callable, Iterable
 
 from jarvis.core import config
+
+log = logging.getLogger(__name__)
 
 _DONE = object()
 
@@ -53,6 +56,7 @@ class SentenceSplitter:
 
     def __init__(self) -> None:
         self.buf = ""
+        self.emitted = 0
 
     def feed(self, delta: str) -> list[str]:
         self.buf += delta
@@ -70,6 +74,17 @@ class SentenceSplitter:
                 out.append(cand)
                 start = pos
         self.buf = self.buf[start:]
+        # Speak sooner: cut the very first chunk at a clause (", ; :") once it is long enough,
+        # and never let a run-on sentence grow past TTS_MAX_CHUNK_CHARS before synthesis.
+        limit = config.TTS_FIRST_CHUNK_CHARS if not (out or self.emitted) else config.TTS_MAX_CHUNK_CHARS
+        if len(self.buf) > limit:
+            cut = max(self.buf.rfind(p, 0, len(self.buf)) for p in (", ", "; ", ": ", " - ", "، "))
+            if cut < limit // 2 and len(self.buf) > config.TTS_MAX_CHUNK_CHARS:
+                cut = self.buf.rfind(" ", 0, config.TTS_MAX_CHUNK_CHARS)
+            if cut >= limit // 2:
+                out.append(self.buf[:cut + 1].strip())
+                self.buf = self.buf[cut + 1:]
+        self.emitted += len(out)
         return out
 
     def flush(self) -> str | None:
@@ -89,13 +104,34 @@ def voice_for(lang: str | None) -> str:
 
 
 async def edge_synth(text: str, voice: str, rate: str | None = None) -> AsyncIterator[bytes]:
-    """Stream mp3 chunks for one sentence from edge-tts."""
+    """Stream mp3 chunks for one sentence from edge-tts (warm pooled socket when possible)."""
+    if config.TTS_WARM_SOCKETS:
+        from jarvis.core.edge_pool import get_pool
+
+        got = False
+        try:
+            async for chunk in get_pool().synth(text, voice, rate):
+                got = True
+                yield chunk
+            return
+        except Exception as e:
+            if got:
+                raise
+            log.debug("warm edge socket failed (%s); using a fresh connection", e)
     import edge_tts
 
     comm = edge_tts.Communicate(text, voice, rate=rate or config.TTS_RATE)
     async for ev in comm.stream():
         if ev.get("type") == "audio" and ev.get("data"):
             yield ev["data"]
+
+
+def prewarm() -> None:
+    """Open warm edge-tts sockets in the background (call when listening starts)."""
+    if config.TTS_WARM_SOCKETS:
+        from jarvis.core.edge_pool import get_pool
+
+        get_pool().prewarm()
 
 
 def warm() -> None:
@@ -215,35 +251,64 @@ class Speaker:
 
     def _synth_loop(self, voice: str, sentences: queue.Queue, audio: queue.Queue,
                     stop: threading.Event) -> None:
-        loop = asyncio.new_event_loop()
-        try:
-            while not stop.is_set():
-                s = sentences.get()
-                if s is _DONE:
+        from jarvis.core.edge_pool import get_pool
+
+        try:  # run on the pool's long-lived loop so warm sockets can be reused across replies
+            get_pool().run(self._pipeline(voice, sentences, audio, stop))
+        except Exception as e:
+            self.error = e
+        finally:
+            audio.put(_DONE)
+
+    async def _pipeline(self, voice: str, sentences: queue.Queue, audio: queue.Queue,
+                        stop: threading.Event) -> None:
+        """Up to TTS_PARALLEL edge-tts requests in flight (hides each ~1 s connection setup
+        behind the previous sentence's playback); chunks are forwarded strictly in order."""
+        loop = asyncio.get_running_loop()
+        order: asyncio.Queue = asyncio.Queue()
+        slots = asyncio.Semaphore(max(1, config.TTS_PARALLEL))
+
+        async def produce() -> None:
+            while True:
+                s = await loop.run_in_executor(None, sentences.get)
+                if s is _DONE or stop.is_set():
                     break
                 text = clean_for_speech(s)
                 if not text:
                     continue
-                try:
-                    loop.run_until_complete(self._synth_one(text, voice, audio, stop))
-                except Exception as e:  # network hiccup: skip this sentence, keep going
-                    self.error = e
-        finally:
-            loop.close()
-            audio.put(_DONE)
+                await slots.acquire()
+                q: asyncio.Queue = asyncio.Queue()
+                asyncio.ensure_future(self._synth_one(text, voice, q, stop, slots))
+                await order.put(q)
+            await order.put(None)
 
-    async def _synth_one(self, text: str, voice: str, audio: queue.Queue,
-                         stop: threading.Event) -> None:
+        async def forward() -> None:
+            while (q := await order.get()) is not None:
+                while (chunk := await q.get()) is not None:
+                    if not stop.is_set():
+                        audio.put(chunk)
+
+        await asyncio.gather(produce(), forward())
+
+    async def _synth_one(self, text: str, voice: str, out: asyncio.Queue,
+                         stop: threading.Event, slots: asyncio.Semaphore) -> None:
         agen = self.synth(text, voice)
         try:
             async for chunk in agen:
                 if stop.is_set():
                     return
-                audio.put(chunk)
+                await out.put(chunk)
+        except Exception as e:  # network hiccup: skip this sentence, keep going
+            self.error = e
         finally:
             aclose = getattr(agen, "aclose", None)
             if aclose:
-                await aclose()
+                try:
+                    await aclose()
+                except Exception:
+                    pass
+            await out.put(None)
+            slots.release()
 
 
 _default: Speaker | None = None

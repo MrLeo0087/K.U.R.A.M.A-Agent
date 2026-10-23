@@ -86,3 +86,55 @@ def test_stop_interrupts():
     assert player.got_first.wait(2)
     sp.stop()
     assert player.stopped and not sp.is_speaking and closed.wait(2)
+
+
+def test_first_chunk_cut_at_clause_and_runon_cap():
+    sp = tts.SentenceSplitter()
+    first = sp.feed("An engine burns fuel and air inside its cylinders, which pushes the pistons")
+    assert first == ["An engine burns fuel and air inside its cylinders,"]
+    # later chunks wait for a real sentence end unless they run on past TTS_MAX_CHUNK_CHARS
+    assert sp.feed(" down and turns the crankshaft") == []
+    long = sp.feed(" and " + "then more words " * 15)
+    assert long and all(len(c) <= config.TTS_MAX_CHUNK_CHARS for c in long)
+
+
+def test_parallel_synth_keeps_order():
+    import asyncio
+
+    async def slow_first(text, voice):
+        await asyncio.sleep(0.3 if text.startswith("One") else 0.0)
+        yield text.encode()
+
+    player = FakePlayer()
+    sp = tts.Speaker(synth=slow_first, player_factory=lambda: player)
+    sp.speak_stream(["One. Two. Three."], lang="en")
+    assert b"".join(player.writes) == b"One.Two.Three."
+
+
+def test_edge_synth_falls_back_when_warm_socket_fails(monkeypatch):
+    import asyncio
+    import sys
+    import types
+
+    from jarvis.core import edge_pool
+
+    class BrokenPool:
+        async def synth(self, text, voice, rate=None):
+            raise ConnectionError("socket closed")
+            yield b""  # pragma: no cover
+
+    class FakeCommunicate:
+        def __init__(self, text, voice, rate=None):
+            self.text = text
+
+        async def stream(self):
+            yield {"type": "audio", "data": b"fresh:" + self.text.encode()}
+
+    monkeypatch.setattr(config, "TTS_WARM_SOCKETS", True)
+    monkeypatch.setattr(edge_pool, "get_pool", lambda: BrokenPool())
+    monkeypatch.setitem(sys.modules, "edge_tts", types.SimpleNamespace(Communicate=FakeCommunicate))
+
+    async def collect():
+        return [c async for c in tts.edge_synth("hi", "v")]
+
+    assert asyncio.run(collect()) == [b"fresh:hi"]

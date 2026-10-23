@@ -26,20 +26,24 @@ TELEGRAM_CHAT_ID: str = os.getenv("TELEGRAM_CHAT_ID", "")
 LLM_DEFAULT = "openai/gpt-oss-120b"  # "smart" tier: reasoning / multi-tool
 LLM_FAST = "openai/gpt-oss-20b"  # "fast" tier: chat, routing, summaries
 LLM_VISION = "qwen/qwen3.8-27b"  # screen / image tasks
+# Spoken chat without tools: qwen with thinking off starts in ~0.2 s vs ~0.5 s for gpt-oss.
+LLM_VOICE = os.getenv("JARVIS_LLM_VOICE", "qwen/qwen3.8-27b")
 
-TIERS: dict[str, str] = {"smart": LLM_DEFAULT, "fast": LLM_FAST, "vision": LLM_VISION}
+TIERS: dict[str, str] = {"smart": LLM_DEFAULT, "fast": LLM_FAST, "vision": LLM_VISION,
+                         "voice": LLM_VOICE}
 # Fallback chain per tier (first entry is preferred).
 TIER_CHAIN: dict[str, list[str]] = {
     "smart": [LLM_DEFAULT, LLM_FAST],
     "fast": [LLM_FAST],
     "vision": [LLM_VISION],
+    "voice": list(dict.fromkeys([LLM_VOICE, LLM_FAST])),
 }
 # Extra per-model request params. gpt-oss models are reasoning models: keep reasoning
 # short and hidden so replies stay fast and token-cheap.
 MODEL_PARAMS: dict[str, dict] = {
     LLM_DEFAULT: {"reasoning_effort": "low", "include_reasoning": False},
     LLM_FAST: {"reasoning_effort": "low", "include_reasoning": False},
-    LLM_VISION: {},
+    LLM_VISION: {"reasoning_effort": "none"},  # qwen3 thinking mode is slow; off by default
 }
 
 # --- STT (Groq Whisper) ---
@@ -106,6 +110,11 @@ BARGE_IN_GRACE_S = 0.4  # ignore the mic right after playback starts
 # --- playback / TTS ---
 AUDIO_PLAYERS = ("ffplay", "mpv", "paplay")  # first one found by `which` is used
 TTS_RATE = "+0%"  # edge-tts speaking rate
+TTS_PARALLEL = 2  # edge-tts requests in flight (prefetch the next sentence while one plays)
+TTS_WARM_SOCKETS = os.getenv("JARVIS_TTS_WARM", "1").lower() not in ("0", "false", "no", "off")
+TTS_WS_MAX_IDLE_S = 90.0  # drop pooled edge sockets idle longer than this
+TTS_FIRST_CHUNK_CHARS = 40  # cut the first chunk at a clause after this many chars (speak sooner)
+TTS_MAX_CHUNK_CHARS = 180  # split run-on sentences at a clause/space beyond this
 TTS_DEFAULT_LANG = "en"
 
 # --- voice loop ---

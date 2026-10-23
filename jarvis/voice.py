@@ -84,6 +84,7 @@ class VoiceLoop:
         self.cancel.clear()
         self.state = "listening"
         print("[listening...]", flush=True)
+        tts.prewarm()  # open edge-tts sockets while the user talks
         try:
             wav = audio.record(stop_event=self.cancel,
                                on_speech_start=lambda: print("[speech]", flush=True))
