@@ -12,7 +12,7 @@ import itertools
 import threading
 from typing import Iterable, Iterator
 
-from jarvis.core import agent, audio, config, hotkey, jobs, llm, safety, store, stt, tts
+from jarvis.core import agent, audio, config, greeting, hotkey, jobs, llm, safety, store, stt, tts
 
 LANG_NAMES = agent.LANG_NAMES
 QUIT = {"q", "quit", "exit", "/q", "/quit", "/exit"}
@@ -29,6 +29,7 @@ class VoiceLoop:
         self.cancel = threading.Event()  # end the current recording now
         self.quit = threading.Event()
         self._hk: hotkey.HotkeyListener | None = None
+        self._greeter: tts.Speaker | None = None  # startup greeting (own speaker, stoppable)
         self.lang = config.TTS_DEFAULT_LANG
         self.agent = agent.Agent(confirm=self.confirm)
         self.agent.warm()  # LangChain/LangGraph setup at startup, not on the first turn
@@ -72,7 +73,20 @@ class VoiceLoop:
         return ok
 
     # --- input events (hotkey thread / stdin thread) ---
+    def greet(self, text: str) -> None:
+        """Speak the startup greeting unless the user already started talking (greeting thread)."""
+        if self.state != "idle" or self.trigger.is_set():
+            return
+        print(f"jarvis> {text}", flush=True)
+        sp = self._greeter = tts.Speaker()
+        try:
+            sp.speak(text, lang=config.TTS_DEFAULT_LANG)
+        finally:
+            self._greeter = None
+
     def press(self) -> None:
+        if self._greeter is not None:
+            self._greeter.stop()  # the hotkey cuts the greeting short
         if self.state == "listening":
             self.cancel.set()
         elif self.state == "speaking":
@@ -169,6 +183,7 @@ class VoiceLoop:
         cut = "talk over Jarvis" if config.BARGE_IN else (f"press {key}" if key else "press Enter")
         print(f"Jarvis voice ({config.LLM_FAST}). {how} to talk; {cut} to interrupt; "
               f"q + Enter or Ctrl+C to quit.")
+        greeting.start(self.greet)  # background thread: the hotkey is already live
         again = False
         try:
             while not self.quit.is_set():

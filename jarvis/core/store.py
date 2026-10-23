@@ -38,6 +38,9 @@ CREATE TABLE IF NOT EXISTS jobs (
 CREATE TABLE IF NOT EXISTS notes (
     id INTEGER PRIMARY KEY, text TEXT NOT NULL, created REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS clipboard (
+    id INTEGER PRIMARY KEY, text TEXT NOT NULL, created REAL NOT NULL
+);
 """
 
 _lock = threading.RLock()
@@ -241,3 +244,20 @@ def notes_clear() -> int:
         if _conn is None:
             init(_path)
         return int(_conn.execute("DELETE FROM notes").rowcount)  # type: ignore[union-attr]
+
+
+# --- clipboard history (only text Jarvis itself copied) ---
+def clip_add(text: str, keep: int | None = None) -> int:
+    keep = int(keep or config.CLIPBOARD_HISTORY_MAX)
+    with _lock:
+        if _conn is None:
+            init(_path)
+        cur = _conn.execute("INSERT INTO clipboard(text,created) VALUES (?,?)", (text, time.time()))  # type: ignore[union-attr]
+        _conn.execute("DELETE FROM clipboard WHERE id NOT IN "  # type: ignore[union-attr]
+                      "(SELECT id FROM clipboard ORDER BY id DESC LIMIT ?)", (keep,))
+        return int(cur.lastrowid)
+
+
+def clip_recent(limit: int = 5) -> list[dict]:
+    """Newest first."""
+    return [dict(r) for r in _exec("SELECT * FROM clipboard ORDER BY id DESC LIMIT ?", (int(limit),))]

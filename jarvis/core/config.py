@@ -144,6 +144,26 @@ HOME_PLACE = os.getenv("JARVIS_HOME_PLACE", "Kathmandu")  # default for weather
 HTTP_TIMEOUT_S = 5.0
 WEATHER_CACHE_S = 600  # weather results are reused for 10 min
 GEO_CACHE_S = 86_400  # geocoder results are reused for a day
+# --- P5b desktop controls ---
+VOLUME_STEP = 10  # "volume up" without a number
+VOLUME_MAX = 100  # never above 100% (pactl allows boosting; it distorts)
+BRIGHTNESS_STEP = 10
+BRIGHTNESS_MIN = 5  # never dim below this: a black screen is hard to undo by voice
+SNAP_PANEL_OFFSET = 32  # GNOME top bar height, used when wmctrl reports no usable work area
+SCREENSHOT_DIR = Path(os.getenv("JARVIS_SCREENSHOT_DIR", str(Path.home() / "Pictures" / "Screenshots")))
+SCREENSHOT_TOOLS = ("gnome-screenshot", "scrot")  # first one found (and working) is used
+CLIPBOARD_READ_MAX = 500  # chars of clipboard text returned to the LLM
+CLIPBOARD_HISTORY_MAX = 50  # rows kept of text Jarvis itself copied
+READ_ALOUD_MAX_CHARS = 3000
+GREETING = os.getenv("JARVIS_GREETING", "1").lower() not in ("0", "false", "no", "off")
+GREETING_WEATHER = True  # include a weather one-liner for HOME_PLACE (network, in a thread)
+# Named sets of apps (spoken names, see tools/general/_apps.py) and sites/URLs to open together.
+WORKSPACES: dict[str, dict[str, list[str]]] = {
+    "coding": {"apps": ["vs code", "terminal"], "urls": ["github"]},
+    "study": {"apps": ["text editor"], "urls": ["youtube", "wikipedia"]},
+    "research": {"apps": [], "urls": ["google", "wikipedia", "chatgpt"]},
+    "writing": {"apps": ["text editor"], "urls": ["claude"]},
+}
 # Keyword rules: group -> words/phrases (matched on word boundaries, case-insensitive).
 ROUTER_RULES: dict[str, tuple[str, ...]] = {
     "general": ("time", "date", "day is it", "clock", "what day", "o'clock", "baje",
@@ -154,13 +174,26 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
     "files": ("file", "files", "folder", "folders", "directory", "delete", "remove", "rename",
               "move file", "copy file", "trash", "locate", "named", "grep", "ripgrep", "where is",
               "which file", "codebase", "code base", "in my code", "containing", "फाइल", "मिटाओ", "मेटाउ"),
-    "system": ("volume", "mute", "unmute", "brightness", "battery", "cpu", "ram", "wifi",
-               "bluetooth", "lock", "sleep", "shutdown", "reboot", "screenshot", "clipboard",
-               "night light", "dark mode", "wallpaper", "do not disturb"),
-    "apps": ("open", "close", "launch", "focus", "window", "app", "application", "snap",
-             "workspace", "kill", "minimize", "maximize", "browser", "terminal"),
-    "media": ("play", "pause", "resume", "music", "song", "next track", "previous track",
-              "playlist", "youtube", "spotify", "गाना"),
+    "system": ("battery", "cpu", "ram", "wifi", "bluetooth", "night light", "dark mode", "wallpaper",
+               "do not disturb"),
+    "audio": ("volume", "mute", "unmute", "louder", "quieter", "sound", "speaker", "speakers", "mic",
+              "microphone", "audio", "awaz", "awaaz", "awaj", "aawaj", "bolume", "आवाज", "आवाज़", "भोल्युम", "माइक"),
+    "display": ("brightness", "brighter", "dimmer", "dim the screen", "screen brightness", "backlight",
+                "चमक", "ब्राइटनेस"),
+    "screen": ("screenshot", "screenshots", "screen shot", "screen capture", "capture the screen",
+               "capture screen", "स्क्रीनशॉट"),
+    "power": ("lock", "lock screen", "sleep", "suspend", "shutdown", "shut down", "reboot", "restart",
+              "power off", "लॉक"),
+    "clipboard": ("clipboard", "clip board", "copy", "copied", "paste", "क्लिपबोर्ड"),
+    "speech": ("read aloud", "read out", "read it out", "read this", "read that", "say aloud",
+               "speak this", "read the clipboard", "read clipboard", "padh ke sunao", "पढ़कर सुनाओ",
+               "पढेर सुनाउ"),
+    "windows": ("window", "windows", "snap", "minimize", "minimise", "maximize", "maximise",
+                "left half", "right half", "tile", "restore window"),
+    "apps": ("open", "close", "launch", "focus", "app", "application", "workspace", "kill", "browser",
+             "terminal"),
+    "media": ("play", "pause", "resume", "unpause", "music", "song", "next track", "previous track",
+              "next song", "previous song", "skip", "playing", "playlist", "गाना", "गीत"),
     "git": ("git", "commit", "branch", "repo", "repository", "git status", "git log", "diff",
             "staged", "checkout", "changes", "uncommitted"),
     "dev": ("pytest", "run tests", "test suite", "scaffold", "venv", "pip", "requirements", "lint",
@@ -182,9 +215,16 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
     "general": "time and date (any city or country), simple utilities",
     "weather": "current weather and up to 3-day forecast for any place",
     "files": "find files by name or content; delete, move or rename files and folders",
-    "system": "volume, brightness, battery, power, screenshots, clipboard",
-    "apps": "open, close, focus or arrange apps and windows",
-    "media": "music and video playback",
+    "system": "battery, wifi, bluetooth, night light, dark mode, wallpaper",
+    "audio": "speaker volume, mute, microphone mute",
+    "display": "screen brightness",
+    "screen": "take a screenshot (full screen, window or area)",
+    "power": "lock the screen, sleep/suspend (shutdown and restart are blocked)",
+    "clipboard": "read or write the clipboard, clipboard history",
+    "speech": "read text or the clipboard aloud",
+    "windows": "snap, maximize, minimize, restore or list windows",
+    "apps": "open, close or focus apps; launch a named workspace of apps and sites",
+    "media": "music and video playback (play, pause, next, previous, what's playing)",
     "git": "git status, log, diff, commit and branches",
     "dev": "tests, new projects, Python environment checks",
     "web": "web search, news",

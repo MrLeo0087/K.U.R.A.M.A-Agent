@@ -1,7 +1,8 @@
 """Zero-token fast path: high-confidence regex intents that call one tool directly and answer
 from a template, with no LLM call. Anything not matched exactly returns None (normal LLM path).
 
-Intents: local/world time, weather, remember <x>, recall all/last, open <app or site>.
+Intents: local/world time, weather, remember <x>, recall all/last, open <app or site>, and (P5b)
+volume, mute, mic mute, media play/pause/next/previous, brightness, screenshot, lock screen.
 English plus common romanized/Devanagari Hindi and Nepali. Disable with config.FASTPATH=False.
 """
 from __future__ import annotations
@@ -20,7 +21,7 @@ I = re.I
 
 @dataclass
 class Intent:
-    name: str  # time | weather | remember | recall | open
+    name: str  # time | weather | remember | recall | open | volume | brightness | mute | mic | media | screenshot | lock
     tool: str
     group: str
     args: dict = field(default_factory=dict)
@@ -128,6 +129,106 @@ _BAD_TARGET = re.compile(r"(?:\band\b|\bthen\b|,|\bnew\b|\btab\b|\bfile\b|\bfold
                          r"\bcommand\b|\bscript\b|^(?:a|an|it|this|that)\b)", I)
 
 
+# --- desktop controls (P5b) ---
+_N = r"(?P<n>\d{1,3})"
+_PCT = r"(?: ?%| percent| pratishat| प्रतिशत)?"
+_BY = r"(?: by (?P<n>\d{1,2})(?: ?%| percent)?)?"
+_UP_HI = r"(?:badhao|badha do|badhau|badhaunu|barhao|बढ़ाओ|बढाओ|बढ़ा दो|बढाउ|बढाऊ|बढाइदेउ)"
+_DOWN_HI = r"(?:kam karo|kam kar do|ghatao|ghatau|ghataunu|कम करो|कम कर दो|घटाओ|घटाउ|घटाऊ|घटाइदेउ)"
+_DO_HI = r"(?:karo|kar do|gara|garnu|garideu|करो|कर दो|गर|गर्नु|गरिदेउ)"
+_VOL = r"(?:the )?(?:volume|sound)"
+_VOL_HI = r"(?:awaz|awaaz|awaj|awaaj|volume|आवाज़|आवाज|भोल्युम)"
+_BRI = r"(?:the )?(?:screen )?brightness"
+_BRI_HI = r"(?:brightness|ब्राइटनेस|चमक)"
+LEVELS = {  # name -> (tool, group, {action: patterns})
+    "volume": ("volume", "audio", {
+        "set": _rx(r"(?:set|change|put|turn) " + _VOL + r"(?: level)? (?:to|at) " + _N + _PCT,
+                   r"(?:volume|sound)(?: level)? (?:to |at )?" + _N + _PCT,
+                   _VOL_HI + " " + _N + _PCT + " " + _DO_HI),
+        "up": _rx(r"(?:turn|bump|crank) up " + _VOL + _BY, r"(?:turn|bump|crank) " + _VOL + " up" + _BY,
+                  r"(?:increase|raise) " + _VOL + _BY, r"(?:volume|sound) up" + _BY, r"(?:make it )?louder",
+                  _VOL_HI + " " + _UP_HI),
+        "down": _rx(r"turn down " + _VOL + _BY, r"turn " + _VOL + " down" + _BY,
+                    r"(?:decrease|lower|reduce) " + _VOL + _BY, r"(?:volume|sound) down" + _BY,
+                    r"(?:make it )?(?:quieter|softer)", _VOL_HI + " " + _DOWN_HI),
+        "get": _rx(r"what(?:'s| is) the (?:current )?volume(?: level)?(?: now)?", r"(?:current )?volume level"),
+    }),
+    "brightness": ("brightness", "display", {
+        "set": _rx(r"(?:set|change|put|turn) " + _BRI + r"(?: level)? (?:to|at) " + _N + _PCT,
+                   r"(?:screen )?brightness(?: level)? (?:to |at )?" + _N + _PCT,
+                   _BRI_HI + " " + _N + _PCT + " " + _DO_HI),
+        "up": _rx(r"(?:turn|bump) up " + _BRI + _BY, r"(?:turn|bump) " + _BRI + " up" + _BY,
+                  r"(?:increase|raise) " + _BRI + _BY, r"(?:screen )?brightness up" + _BY,
+                  r"(?:make (?:the |my )?screen brighter|brighten (?:the |my )?screen)", _BRI_HI + " " + _UP_HI),
+        "down": _rx(r"turn down " + _BRI + _BY, r"turn " + _BRI + " down" + _BY,
+                    r"(?:decrease|lower|reduce) " + _BRI + _BY, r"(?:screen )?brightness down" + _BY,
+                    r"(?:make (?:the |my )?screen dimmer|dim (?:the |my )?screen)", _BRI_HI + " " + _DOWN_HI),
+        "get": _rx(r"what(?:'s| is) the (?:current |screen )?brightness(?: level)?(?: now)?"),
+    }),
+}
+_MEDIA_OBJ = r"(?: (?:the |my )?(?:music|song|video|playback|track|player|media|it))?"
+_SONG = r"(?:song|track|video)"
+_SONG_HI = r"(?:gaana|gana|geet|song|track|गाना|गीत)"
+SWITCHES = [  # (intent name, tool, group, args, patterns); first full match wins
+    ("mic", "mic_mute", "audio", {"action": "mute"}, _rx(
+        r"(?:mute|turn off|switch off|disable) (?:the |my )?(?:mic|microphone)", r"(?:mic|microphone) (?:off|mute)",
+        r"(?:mic|माइक) (?:band karo|band kar do|बंद करो|बन्द गर|बन्द गरिदेउ)")),
+    ("mic", "mic_mute", "audio", {"action": "unmute"}, _rx(
+        r"(?:unmute|turn on|switch on|enable) (?:the |my )?(?:mic|microphone)", r"(?:mic|microphone) on",
+        r"(?:mic|माइक) (?:chalu karo|on karo|चालू करो|खोल)")),
+    ("mute", "mute_audio", "audio", {"action": "mute"}, _rx(
+        r"mute(?: (?:the |my )?(?:sound|audio|volume|speakers?|computer|pc|laptop|everything))?",
+        r"(?:awaz|awaaz|आवाज़|आवाज) (?:band karo|band kar do|बंद करो|बन्द गर|बन्द गरिदेउ)")),
+    ("mute", "mute_audio", "audio", {"action": "unmute"}, _rx(
+        r"unmute(?: (?:the |my )?(?:sound|audio|volume|speakers?|computer|pc|laptop|everything))?",
+        r"(?:awaz|awaaz|आवाज़|आवाज) (?:chalu karo|wapas lao|चालू करो|फेरि चालू गर)")),
+    ("media", "media_control", "media", {"action": "pause"}, _rx(
+        r"pause" + _MEDIA_OBJ, r"stop (?:the |my )?(?:music|song|playback|video)",
+        _SONG_HI + r" (?:roko|rok do|रोको|रोक दो|रोक|रोकिदेउ)")),
+    ("media", "media_control", "media", {"action": "play"}, _rx(
+        r"play", r"(?:resume|unpause)" + _MEDIA_OBJ, r"continue (?:playing|the (?:music|song|video))")),
+    ("media", "media_control", "media", {"action": "next"}, _rx(
+        r"(?:play |go to |skip to )?(?:the )?next " + _SONG, r"skip(?: this| the)? " + _SONG,
+        r"(?:agla|agla wala|arko|aarko|अगला|अर्को) " + _SONG_HI)),
+    ("media", "media_control", "media", {"action": "previous"}, _rx(
+        r"(?:play |go to |go back to )?(?:the )?previous " + _SONG, r"go back (?:a|one) " + _SONG,
+        r"(?:pichla|pichhla|aghillo|पिछला|अघिल्लो) " + _SONG_HI)),
+    ("media", "media_control", "media", {"action": "status"}, _rx(
+        r"what(?:'s| is) (?:playing|this song)(?: now| right now)?", r"what song is (?:this|playing)(?: now)?")),
+    ("screenshot", "screenshot", "screen", {"mode": "window"}, _rx(
+        r"(?:take|grab|capture) (?:a )?(?:screenshot|screen shot) of (?:this|the|my)(?: current| active)? window",
+        r"(?:screenshot|screen shot) (?:of )?(?:this|the)(?: current| active)? window")),
+    ("screenshot", "screenshot", "screen", {"mode": "full"}, _rx(
+        r"(?:take|grab|capture) (?:a |the )?(?:screenshot|screen shot|screen capture)"
+        r"(?: of (?:the |my )?(?:whole |entire |full )?screen)?(?: now)?",
+        r"screenshot(?: now)?", r"capture (?:the |my )?(?:whole |entire |full )?screen",
+        r"(?:ek )?(?:screenshot|स्क्रीनशॉट|स्क्रिनसट) (?:lo|le lo|lelo|khicho|kheecho|kheech lo|liu|linu|"
+        r"लो|ले लो|लेलो|खिचो|खिच्नु|लिनु|लेउ)")),
+    ("lock", "lock_screen", "power", {}, _rx(
+        r"lock (?:the |my |this )?(?:screen|computer|pc|laptop|desktop|system|machine)(?: now)?",
+        r"(?:screen|computer|laptop|स्क्रीन|स्क्रिन|कम्प्युटर|कंप्यूटर) (?:lock|लॉक|लक) " + _DO_HI)),
+]
+
+
+def _system_intent(t: str) -> Intent | None:
+    for name, (tool, group, actions) in LEVELS.items():
+        for action, pats in actions.items():
+            if m := _full(pats, t):
+                n = m.groupdict().get("n")
+                args: dict = {"action": action}
+                if action == "set":
+                    if n is None or not 0 <= int(n) <= 100:
+                        return None  # "volume to 150": let the LLM ask
+                    args["level"] = int(n)
+                elif n is not None:
+                    args["step"] = int(n)
+                return Intent(name, tool, group, args, name)
+    for name, tool, group, args, pats in SWITCHES:
+        if _full(pats, t):
+            return Intent(name, tool, group, dict(args), name)
+    return None
+
+
 def _full(patterns: list[re.Pattern], text: str) -> re.Match | None:
     for p in patterns:
         if m := p.fullmatch(text):
@@ -191,6 +292,8 @@ def match(text: str) -> Intent | None:
         if not note or text.rstrip().endswith("?") or _CHATTY.match(note):
             return None
         return Intent("remember", "remember", "memory", {"text": note}, note)
+    if sysi := _system_intent(t):
+        return sysi
     if m := _full(OPEN, t):
         return _open_intent(m.group("target").strip(" ,"), m.group("verb").lower())
     return None
@@ -224,7 +327,36 @@ _T = {
                  "ne": "माफ गर्नुहोस्, {x} नामको ठाउँ भेटिएन।"},
     "failed": {"en": "Sorry, that didn't work: {x}", "hi": "माफ़ कीजिए, यह नहीं हुआ: {x}",
                "ne": "माफ गर्नुहोस्, भएन: {x}"},
+    "volume": {"en": "Volume is at {x}%.", "hi": "आवाज़ {x}% पर है।", "ne": "भोल्युम {x}% मा छ।"},
+    "brightness": {"en": "Brightness is at {x}%.", "hi": "ब्राइटनेस {x}% पर है।", "ne": "ब्राइटनेस {x}% मा छ।"},
+    "muted": {"en": "Sound muted.", "hi": "आवाज़ बंद कर दी।", "ne": "आवाज बन्द गरें।"},
+    "unmuted": {"en": "Sound is back on.", "hi": "आवाज़ चालू कर दी।", "ne": "आवाज फेरि चालू भयो।"},
+    "mic_muted": {"en": "Microphone muted.", "hi": "माइक बंद कर दिया।", "ne": "माइक बन्द गरें।"},
+    "mic_unmuted": {"en": "Microphone is on.", "hi": "माइक चालू कर दिया।", "ne": "माइक चालू गरें।"},
+    "paused": {"en": "Paused.", "hi": "रोक दिया।", "ne": "रोकें।"},
+    "playing": {"en": "Playing.", "hi": "चला रहा हूँ।", "ne": "बजाउँदैछु।"},
+    "next": {"en": "Next track.", "hi": "अगला गाना।", "ne": "अर्को गीत।"},
+    "previous": {"en": "Previous track.", "hi": "पिछला गाना।", "ne": "अघिल्लो गीत।"},
+    "screenshot": {"en": "Screenshot saved in your Screenshots folder.",
+                   "hi": "स्क्रीनशॉट Screenshots फ़ोल्डर में सेव हो गया।", "ne": "स्क्रिनसट Screenshots फोल्डरमा सेभ भयो।"},
+    "lock": {"en": "Locking the screen.", "hi": "स्क्रीन लॉक कर रहा हूँ।", "ne": "स्क्रिन लक गर्दैछु।"},
 }
+_SYSTEM = {"volume", "brightness", "mute", "mic", "media", "screenshot", "lock"}
+
+
+def _render_system(intent: Intent, out: str, lang: str) -> str:
+    if intent.name in ("volume", "brightness"):
+        m = re.search(r"(\d+)%", out)
+        return _say(intent.name, lang, m.group(1)) if m else out
+    if intent.name in ("mute", "mic"):
+        key = "unmuted" if "unmuted" in out else "muted"
+        return _say(key if intent.name == "mute" else "mic_" + key, lang, "")
+    if intent.name == "media":
+        action = intent.args.get("action")
+        if action == "status":
+            return out[:1].upper() + out[1:].rstrip(".") + "."
+        return _say({"pause": "paused", "play": "playing"}.get(action, action), lang, "")
+    return _say(intent.name, lang, "")  # screenshot / lock
 _TIME_OUT = re.compile(r"^(?:(?P<where>.+?): )?(?P<day>\w+), (?P<date>\d+ \w+ \d+), (?P<hm>\d\d:\d\d)")
 
 
@@ -249,6 +381,8 @@ def render(intent: Intent, ok: bool, output: str, lang: str) -> str:
         if lang == "ne":
             return f"{where + 'मा ' if where else ''}अहिले {hm} बज्यो, {m.group('day')}, {m.group('date')}।"
         return f"It's {hm} on {m.group('day')}, {m.group('date')}{' in ' + where if where else ''}."
+    if intent.name in _SYSTEM:
+        return _render_system(intent, out, lang)
     if intent.name == "remember":
         return _say("remember", lang, intent.label)
     if intent.name == "open":
