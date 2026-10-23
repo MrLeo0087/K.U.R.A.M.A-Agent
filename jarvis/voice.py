@@ -10,9 +10,10 @@ import argparse
 import sys
 import itertools
 import threading
+import time
 from typing import Iterable, Iterator
 
-from jarvis.core import agent, audio, config, greeting, hotkey, jobs, llm, safety, store, stt, tts
+from jarvis.core import agent, audio, config, greeting, hotkey, jobs, llm, notify, safety, store, stt, tts
 
 LANG_NAMES = agent.LANG_NAMES
 QUIT = {"q", "quit", "exit", "/q", "/quit", "/exit"}
@@ -35,12 +36,13 @@ class VoiceLoop:
         self.agent.warm()  # LangChain/LangGraph setup at startup, not on the first turn
         safety.set_confirm_hook("voice", self.confirm)
         jobs.set_mode("voice")  # finished background jobs are queued and spoken when idle
+        self._alert_check = 0.0  # last look at the alerts table (worker alerts are spoken when idle)
 
     def announce_jobs(self) -> bool:
         """Speak one queued job announcement if Jarvis is idle (not listening/thinking/speaking)."""
         if self.state != "idle" or self.trigger.is_set():
             return False
-        item = jobs.ANNOUNCER.pop()
+        item = jobs.ANNOUNCER.pop() or self._pending_alert()
         if item is None:
             return False
         text, lang = item
@@ -51,6 +53,15 @@ class VoiceLoop:
         finally:
             self.state = "idle"
         return True
+
+    def _pending_alert(self) -> tuple[str, str] | None:
+        """A background-worker alert (SQLite, written by notify()) to speak; checked every few seconds."""
+        now = time.monotonic()
+        if now - self._alert_check < config.ALERT_ANNOUNCE_CHECK_S:
+            return None
+        self._alert_check = now
+        line = notify.pop_spoken_alert()
+        return (line, "en") if line else None
 
     # --- spoken confirmation (called from the agent's tool node) ---
     def confirm(self, prompt: str) -> bool:

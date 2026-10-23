@@ -9,13 +9,13 @@ from __future__ import annotations
 import logging
 import re
 import select
-import shlex
 import sys
 import time
 from typing import Any, Callable
 
 from jarvis.core import config, registry, store
 from jarvis.core.registry import ToolResult
+from jarvis.core.shellcheck import check_shell  # noqa: F401  (re-exported)
 
 log = logging.getLogger("jarvis.safety")
 
@@ -33,7 +33,6 @@ NO_WORDS = {
     "हैन", "होईन", "नाइ", "पर्दैन",
 }
 _TOKEN = re.compile(r"[^\s,.!?।॥;:\"'()]+")
-_SHELL_META = re.compile(r"[;&|`<>]|\$\(|\$\{|\n")
 
 
 def parse_yes_no(text: str | None) -> bool | None:
@@ -96,26 +95,7 @@ def describe(tool: registry.BaseTool, args: dict) -> str:
     return f"Should I {what}{f' ({shown})' if shown else ''}?"
 
 
-# --- shell allowlist (for later shell tools) ---
-def check_shell(cmd: str | list[str]) -> tuple[bool, str]:
-    """(allowed, reason). Only allowlisted binaries; no sudo, pipes, redirects or chaining."""
-    if isinstance(cmd, str):
-        if _SHELL_META.search(cmd):
-            return False, "shell operators (; & | ` < > $()) are not allowed"
-        try:
-            argv = shlex.split(cmd)
-        except ValueError as e:
-            return False, f"cannot parse command: {e}"
-    else:
-        argv = list(cmd)
-    if not argv:
-        return False, "empty command"
-    binary = argv[0].rsplit("/", 1)[-1]
-    if binary in ("sudo", "su", "doas", "pkexec"):
-        return False, f"{binary} is never allowed"
-    if binary not in config.SHELL_ALLOWLIST:
-        return False, f"{binary} is not in the shell allowlist"
-    return True, "ok"
+# --- shell allowlist: lives in shellcheck.py (stdlib only, used by daemons too) ---
 
 
 # --- the gate ---

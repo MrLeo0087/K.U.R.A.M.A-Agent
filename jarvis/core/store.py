@@ -41,6 +41,18 @@ CREATE TABLE IF NOT EXISTS notes (
 CREATE TABLE IF NOT EXISTS clipboard (
     id INTEGER PRIMARY KEY, text TEXT NOT NULL, created REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS alerts (
+    id INTEGER PRIMARY KEY, ts REAL NOT NULL, title TEXT, text TEXT, level TEXT, source TEXT,
+    announced INTEGER DEFAULT 0, channels TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_alerts_pending ON alerts(announced, ts);
+CREATE TABLE IF NOT EXISTS watches (
+    id INTEGER PRIMARY KEY, kind TEXT, target TEXT, label TEXT, patterns TEXT, status TEXT,
+    created REAL, finished REAL, state TEXT, result TEXT
+);
+CREATE TABLE IF NOT EXISTS kv (
+    key TEXT PRIMARY KEY, value TEXT, ts REAL
+);
 """
 
 _lock = threading.RLock()
@@ -261,3 +273,93 @@ def clip_add(text: str, keep: int | None = None) -> int:
 def clip_recent(limit: int = 5) -> list[dict]:
     """Newest first."""
     return [dict(r) for r in _exec("SELECT * FROM clipboard ORDER BY id DESC LIMIT ?", (int(limit),))]
+
+
+# --- alerts (P6: notify() writes, the idle voice loop announces) ---
+def alert_add(title: str, text: str, level: str = "info", source: str = "", channels: str = "") -> int:
+    with _lock:
+        if _conn is None:
+            init(_path)
+        cur = _conn.execute("INSERT INTO alerts(ts,title,text,level,source,announced,channels) "  # type: ignore[union-attr]
+                            "VALUES (?,?,?,?,?,0,?)", (time.time(), title, text, level, source, channels))
+        return int(cur.lastrowid)
+
+
+def alerts_pending(limit: int = 5, levels: tuple[str, ...] | None = None) -> list[dict]:
+    """Unannounced alerts, oldest first."""
+    if levels:
+        marks = ",".join("?" * len(levels))
+        rows = _exec(f"SELECT * FROM alerts WHERE announced=0 AND level IN ({marks}) ORDER BY id LIMIT ?",
+                     (*levels, limit))
+    else:
+        rows = _exec("SELECT * FROM alerts WHERE announced=0 ORDER BY id LIMIT ?", (limit,))
+    return [dict(r) for r in rows]
+
+
+def alerts_mark_announced(ids: list[int] | None = None, older_than: float | None = None) -> None:
+    if ids:
+        _exec(f"UPDATE alerts SET announced=1 WHERE id IN ({','.join('?' * len(ids))})", tuple(ids))
+    if older_than is not None:
+        _exec("UPDATE alerts SET announced=1 WHERE announced=0 AND ts<?", (older_than,))
+
+
+def alerts_recent(limit: int = 10) -> list[dict]:
+    return [dict(r) for r in _exec("SELECT * FROM alerts ORDER BY id DESC LIMIT ?", (limit,))]
+
+
+# --- watches (P6 process / log watcher; persist across restarts) ---
+WATCH_FIELDS = ("status", "finished", "state", "result", "label")
+
+
+def watch_add(kind: str, target: str, label: str = "", patterns: str = "", state: Any = None) -> int:
+    with _lock:
+        if _conn is None:
+            init(_path)
+        cur = _conn.execute("INSERT INTO watches(kind,target,label,patterns,status,created,state,result) "  # type: ignore[union-attr]
+                            "VALUES (?,?,?,?,'active',?,?,'')",
+                            (kind, target, label, patterns, time.time(), json.dumps(state or {})))
+        return int(cur.lastrowid)
+
+
+def watch_update(watch_id: int, **fields: Any) -> None:
+    cols = [k for k in fields if k in WATCH_FIELDS]
+    if not cols:
+        return
+    vals = tuple(json.dumps(fields[c]) if c == "state" and not isinstance(fields[c], str) else fields[c]
+                 for c in cols)
+    _exec(f"UPDATE watches SET {', '.join(c + '=?' for c in cols)} WHERE id=?", vals + (watch_id,))
+
+
+def _watch_row(r: sqlite3.Row) -> dict:
+    d = dict(r)
+    try:
+        d["state"] = json.loads(d.get("state") or "{}")
+    except ValueError:
+        d["state"] = {}
+    return d
+
+
+def watch_get(watch_id: int) -> dict | None:
+    rows = _exec("SELECT * FROM watches WHERE id=?", (watch_id,))
+    return _watch_row(rows[0]) if rows else None
+
+
+def watches_list(statuses: tuple[str, ...] | None = None, limit: int = 50) -> list[dict]:
+    if statuses:
+        marks = ",".join("?" * len(statuses))
+        rows = _exec(f"SELECT * FROM watches WHERE status IN ({marks}) ORDER BY id DESC LIMIT ?",
+                     (*statuses, limit))
+    else:
+        rows = _exec("SELECT * FROM watches ORDER BY id DESC LIMIT ?", (limit,))
+    return [_watch_row(r) for r in rows]
+
+
+# --- tiny key/value (e.g. the Telegram update offset) ---
+def kv_get(key: str, default: str | None = None) -> str | None:
+    rows = _exec("SELECT value FROM kv WHERE key=?", (key,))
+    return rows[0][0] if rows else default
+
+
+def kv_set(key: str, value: str) -> None:
+    _exec("INSERT INTO kv(key,value,ts) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, "
+          "ts=excluded.ts", (key, value, time.time()))

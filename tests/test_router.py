@@ -20,8 +20,9 @@ def test_keyword_rules(no_llm):
 
 
 def test_rules_drop_groups_without_tools(no_llm):
-    r = router.route("how is my battery")  # 'system' has no tools yet
+    r = router.route("look up the latest news")  # 'web' has no tools yet
     assert (r.groups, r.method) == ([], "rules")
+    assert router.route("how is my system doing").groups == ["system"]  # P6: resource_status
     assert router.route("open firefox").groups == ["apps"]
 
 

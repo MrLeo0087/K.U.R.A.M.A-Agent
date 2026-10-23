@@ -21,6 +21,8 @@ load_dotenv(ROOT / ".env")
 GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
 TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID: str = os.getenv("TELEGRAM_CHAT_ID", "")
+TELEGRAM_MAX_AGE_S = 120  # ignore Telegram messages sent more than this long before the bot started
+JARVIS_INBOUND_TOKEN: str = os.getenv("JARVIS_INBOUND_TOKEN", "")  # n8n inbound bridge; unset = disabled
 
 # --- LLM models (Groq) ---
 LLM_DEFAULT = "openai/gpt-oss-120b"  # "smart" tier: reasoning / multi-tool
@@ -191,7 +193,9 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
               "move file", "copy file", "trash", "locate", "named", "grep", "ripgrep", "where is",
               "which file", "codebase", "code base", "in my code", "containing", "फाइल", "मिटाओ", "मेटाउ"),
     "system": ("battery", "cpu", "ram", "wifi", "bluetooth", "night light", "dark mode", "wallpaper",
-               "do not disturb"),
+               "do not disturb", "system doing", "my system", "system status", "system health",
+               "resources", "resource usage", "memory usage", "ram usage", "disk", "disk space", "swap",
+               "storage", "workers", "computer doing", "laptop doing", "सिस्टम", "रैम", "डिस्क", "मेमोरी"),
     "audio": ("volume", "mute", "unmute", "louder", "quieter", "sound", "speaker", "speakers", "mic",
               "microphone", "audio", "awaz", "awaaz", "awaj", "aawaj", "bolume", "आवाज", "आवाज़", "भोल्युम", "माइक"),
     "display": ("brightness", "brighter", "dimmer", "dim the screen", "screen brightness", "backlight",
@@ -225,6 +229,12 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
                "what did i tell you", "forget", "yaad", "याद", "सम्झ"),
     "browser": ("url", "link", "website", "web site", "site", "youtube", "gmail", "github",
                 "chatgpt", "open google", "www", "http", "https"),
+    "watch": ("watch", "watches", "watching", "monitor", "keep an eye", "tell me when", "notify me when",
+              "alert me", "let me know when", "training run", "training", "log file", "tail the log",
+              "finishes", "nazar", "नजर", "निगरानी", "हेरिरहनु", "ध्यान राख"),
+    "automation": ("n8n", "workflow", "webhook", "automation", "trigger", "watchdog", "auto restart",
+                   "auto-restart", "keep alive", "keep it running", "if it crashes", "crashed", "crashes",
+                   "वर्कफ्लो", "स्वचालन"),
     "jobs": ("job", "jobs", "background", "working on", "progress", "job status", "cancel",
              "stop writing", "essay status", "essay", "article", "story", "report", "write a",
              "लेख", "निबंध"),
@@ -234,7 +244,9 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
     "general": "time and date (any city or country), simple utilities",
     "weather": "current weather and up to 3-day forecast for any place",
     "files": "find files by name or content; delete, move or rename files and folders",
-    "system": "battery, wifi, bluetooth, night light, dark mode, wallpaper",
+    "system": "system resources (RAM, swap, CPU, disk, Jarvis memory) and background workers status",
+    "watch": "watch a process/PID until it exits or tail a training log and alert on errors/progress",
+    "automation": "trigger n8n workflows; crash watchdog (auto-restart dev servers) targets and status",
     "audio": "speaker volume, mute, microphone mute",
     "display": "screen brightness",
     "screen": "take a screenshot (full screen, window or area)",
@@ -264,7 +276,63 @@ COMMAND_VERBS = ("open", "close", "start", "stop", "run", "show", "set", "turn",
 SHELL_ALLOWLIST = ("ls", "cat", "head", "tail", "wc", "grep", "rg", "fdfind", "find", "git", "df",
                    "du", "free", "uptime", "whoami", "date", "echo", "pwd", "which", "python3",
                    "pytest", "pip", "xdotool", "wmctrl", "xrandr", "xclip", "pactl", "amixer",
-                   "brightnessctl", "upower", "gsettings", "loginctl", "notify-send")
+                   "brightnessctl", "upower", "gsettings", "loginctl", "notify-send",
+                   "n8n", "uvicorn")  # P6: dev servers the crash watchdog may keep alive
+
+# --- Background core (P6): python -m jarvis.workers ---
+WORKERS_ENABLED: tuple[str, ...] = tuple(
+    w.strip() for w in os.getenv("JARVIS_WORKERS", "process_watch,resource_guard,crash_watchdog,"
+                                 "telegram_bot,n8n_inbound").split(",") if w.strip())
+WORKER_MIN_INTERVAL_S = 5.0  # no daemon polls faster than this
+WORKER_MAX_BACKOFF_S = 300.0  # error backoff cap (interval * 2^errors)
+WORKER_LOG_BYTES = 1_000_000  # rotating log per worker: ~1 MB x 3
+WORKER_LOG_BACKUPS = 3
+WORKERS_STATUS_PATH = DATA_DIR / "workers.json"  # PID + per-worker state, read by tools
+# notify(): desktop + Telegram + SQLite alerts (spoken by the idle voice loop)
+NOTIFY_DESKTOP = os.getenv("JARVIS_NOTIFY_DESKTOP", "1").lower() not in ("0", "false", "no", "off")
+NOTIFY_DEDUPE_S = 60.0  # identical (title, text) within this window is sent once
+NOTIFY_TELEGRAM_PER_MIN = 20  # Telegram rate limit (Bot API allows ~30/s; we stay polite)
+ALERT_ANNOUNCE_MAX_AGE_S = 3600.0  # older unannounced alerts are not spoken
+ALERT_ANNOUNCE_CHECK_S = 5.0  # the voice loop looks for new alerts at most this often
+ALERT_SPOKEN_LEVELS = ("info", "warning", "error")  # levels the idle voice loop speaks
+# Process / training-run watcher
+PROCESS_WATCH_INTERVAL_S = 5.0
+LOG_WATCH_ERROR_PATTERN = (r"Traceback|Error|(?i:nan loss|loss[ :=]+nan)|CUDA|Killed|OOM|"
+                           r"(?i:out of memory)")
+LOG_WATCH_EPOCH_PATTERN = r"(?i)\bepoch\b\s*[:=#]?\s*(\d+)"
+LOG_WATCH_DONE_PATTERN = r"(?i)\b(done|finished|completed)\b"
+LOG_WATCH_ALERT_COOLDOWN_S = 60.0  # one error alert per watch per minute (matches are summarized)
+LOG_WATCH_READ_MAX = 256_000  # bytes read per tick per log
+LOG_WATCH_TAIL_LINES = 8  # last lines included in alerts / list_watches
+# Crash watchdog: targets come ONLY from here plus data/watchdog_targets.json (add_watchdog_target,
+# confirm-level, allowlist-checked). Example: {"name": "n8n", "command": "n8n start", "cwd": "~",
+# "match": "n8n"}  ("match" = adopt an already-running process whose command line contains it).
+WATCHDOG_TARGETS: list[dict[str, str]] = []
+WATCHDOG_TARGETS_FILE = DATA_DIR / "watchdog_targets.json"
+WATCHDOG_INTERVAL_S = 10.0
+WATCHDOG_BACKOFF_BASE_S = 5.0  # restart delay 5, 10, 20, ... s
+WATCHDOG_BACKOFF_MAX_S = 600.0
+WATCHDOG_MAX_RESTARTS_PER_HOUR = 5
+WATCHDOG_STABLE_S = 600.0  # running this long resets the backoff
+# Resource guard (thresholds in percent unless noted)
+RESOURCE_GUARD_INTERVAL_S = 15.0
+RAM_ALERT_PCT = 90.0
+SWAP_ALERT_PCT = 80.0
+CPU_ALERT_PCT = 90.0  # 5-minute average
+DISK_ALERT_PCT = 90.0  # "/" and the home filesystem
+JARVIS_CORE_MAX_MB = 600.0  # CLAUDE.md caps
+JARVIS_TOTAL_MAX_MB = 1500.0
+RESOURCE_HYSTERESIS_PCT = 5.0  # must fall this far below a threshold to count as recovered
+RESOURCE_REALERT_S = 1800.0  # still high: alert again after 30 min
+# Telegram remote control (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID from .env; skipped when empty)
+TELEGRAM_POLL_TIMEOUT_S = 6  # long-poll seconds (short so Ctrl+C stops the workers quickly)
+TELEGRAM_CONFIRM_TIMEOUT_S = 60.0  # "Reply yes/no": no answer in time means no
+TELEGRAM_MAX_REPLY_CHARS = 3500
+# n8n bridge
+N8N_WEBHOOKS: dict[str, str] = {}  # workflow name -> webhook URL, e.g. {"backup": "http://localhost:5678/webhook/backup"}
+N8N_TIMEOUT_S = 10.0
+N8N_INBOUND_PORT = int(os.getenv("JARVIS_INBOUND_PORT", "8765"))  # 127.0.0.1 only
+N8N_INBOUND_MAX_BYTES = 64_000
 
 # --- Multitasking (P3b-2): planner, background jobs, rate limiter ---
 PLANNER_MAX_TASKS = 4
