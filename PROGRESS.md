@@ -25,10 +25,11 @@ UPDATE 2026-10-23 (during P8b): the user asked to stop after P8b and let them ch
   (3) Telegram: send a file by path ("send /path/x.pdf to telegram") and send generated content ("write a poem and send it to Telegram").
   (4) Dependent tasks: the planner must detect dependencies ("create a folder X, then make main.py in it") and run those steps in order (only independent tasks run in parallel). Needs file tools: make_folder, write_file (confirm on overwrite), move/copy, delete to trash (confirm).
 - [x] P8a Dev-quality 1: Dependency Doctor, Secrets Auditor, Pre-commit Gate, Repo Hygiene, Auto Code Reviewer
-- [h] P8b Dev-quality 2: Docstring/Type Hint Generator, Notebook to Script, Requirements Generator, Config Diff Tracker, Benchmark Table Builder
-- [ ] P8c Dev-quality 3: Checkpoint Cleaner, Dataset Sanity Checker, Env Snapshot, Flaky Test Detector, Semantic Code Search
-- [ ] P9a General rest: DND, Night Light, Auto Dark/Light, Wallpaper, Kill Unresponsive App, Global Hotkey Macros, Smart Focus Mode, Notification Mirror, Battery tools, Play Saved Playlist, YouTube Control
-- [ ] P9b Background rest: CPU/RAM-aware Job Scheduler, Auto-Resume, Anomaly Detector, Metrics HUD (CPU, RAM, token budget), Cloud/API Cost Tracker
+- [x] P8b Dev-quality 2: Docstring/Type Hint Generator, Notebook to Script, Requirements Generator, Config Diff Tracker, Benchmark Table Builder
+- FINAL SCOPE (user, 2026-10-23): "filter out, only build what's actually useful, finish the project usable, fast". Build P9a (general), P9b (scheduler/reminders/auto-resume), wake word (hey/hello Jarvis → wake, "sleep Jarvis" → sleep; free Python speech recognition, no extra model), and P12 essentials (README, autostart scripts, private data perms). DEFERRED (not built now): P8c, P10 except wake word, all of P11, hotkey macros, notification mirror, anomaly detector, metrics HUD (the web UI status panel covers it), piper offline TTS, speaker ID.
+- [-] P8c Dev-quality 3 (deferred): Checkpoint Cleaner, Dataset Sanity Checker, Env Snapshot, Flaky Test Detector, Semantic Code Search
+- [~] P9a General rest: DND, Night Light, Auto Dark/Light, Wallpaper, Kill Unresponsive App, Global Hotkey Macros, Smart Focus Mode, Notification Mirror, Battery tools, Play Saved Playlist, YouTube Control
+- [~] P9b Background rest: CPU/RAM-aware Job Scheduler, Auto-Resume, Anomaly Detector, Metrics HUD (CPU, RAM, token budget), Cloud/API Cost Tracker
 - [ ] P10 External (one at a time, lazy): Wake-Word (openwakeword), Webcam Mouse (MediaPipe 320x240 ~15 fps), Screen-Watching Agent (mss + Tesseract), Gesture Media, Face Lock/Away, Network/Rate-limit Monitor, Auto Screen-Recording on Error, Live Handwriting OCR, Real-Time Voice Command Parsing
 - [ ] P11 Advanced agents: Refactor Agent, Auto-PR Agent, Voice-to-Code Dictation, Self-Healing Pipeline Agent, Experiment Designer (optuna), optional Local LLM Fallback (Ollama 1.5–3B, on demand)
 - [ ] P12 Hardening: <2.5 s to first spoken word, RAM profiling vs 1.5 GB cap, piper offline TTS fallback, tests, README, systemd --user autostart
