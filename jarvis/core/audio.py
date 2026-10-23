@@ -96,15 +96,19 @@ class Endpointer:
         self.timed_out = False
         self.done = False
         self.speech_frames = 0
-        self._silent_run = 0
+        self._end_window: collections.deque[bool] = collections.deque(maxlen=self.silence_frames)
         self._seen = 0
+        # adaptive noise gate: noisy laptop mics fool webrtcvad into "speech" ~90% of the time,
+        # so a frame only counts as speech if it is also clearly louder than the room floor
+        self._ambient: collections.deque[float] = collections.deque(maxlen=60)
+        self.noise_floor: float | None = None
         self.on_speech_start: Callable[[], None] | None = None
 
     def push(self, frame: bytes) -> bool:
         if self.done:
             return True
         self._seen += 1
-        speech = bool(self.vad.is_speech(frame, self.sample_rate))
+        speech = self._is_speech(frame)
         if not self.triggered:
             self._preroll.append(frame)
             self._window.append(speech)
@@ -119,14 +123,26 @@ class Endpointer:
                 self.timed_out = self.done = True
             return self.done
         self._voiced.append(frame)
+        self._end_window.append(speech)
         if speech:
             self.speech_frames += 1
-            self._silent_run = 0
-        else:
-            self._silent_run += 1
-        if self._silent_run >= self.silence_frames or len(self._voiced) >= self.max_frames:
+        w = self._end_window
+        quiet = len(w) == w.maxlen and sum(w) <= config.VAD_END_SPEECH_RATIO * w.maxlen
+        if quiet or len(self._voiced) >= self.max_frames:
             self.done = True
         return self.done
+
+    def _is_speech(self, frame: bytes) -> bool:
+        level = rms(frame)
+        if not self.triggered:  # learn the room floor before the user speaks
+            self._ambient.append(level)
+            if len(self._ambient) >= 5:
+                lv = sorted(self._ambient)
+                # 20th percentile is robust to clicks; the cap stops early speech being learned
+                self.noise_floor = min(lv[len(lv) // 5], config.VAD_FLOOR_CAP)
+        floor = self.noise_floor if self.noise_floor is not None else 0.0
+        gate = max(config.VAD_MIN_RMS, floor * config.VAD_NOISE_RATIO)
+        return level >= gate and bool(self.vad.is_speech(frame, self.sample_rate))
 
     @property
     def speech_ms(self) -> int:

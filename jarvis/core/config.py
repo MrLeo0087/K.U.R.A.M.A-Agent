@@ -88,13 +88,17 @@ AUDIO_SAMPLE_RATE = 16_000  # Hz, mono int16 (what webrtcvad and Whisper want)
 AUDIO_INPUT_DEVICE: str | int | None = os.getenv("JARVIS_INPUT_DEVICE") or None  # None = default mic
 VAD_AGGRESSIVENESS = 2  # webrtcvad 0..3 (3 = most aggressive at rejecting non-speech)
 VAD_FRAME_MS = 30  # webrtcvad accepts 10/20/30 ms frames
-VAD_SILENCE_MS = 800  # end the utterance after this much trailing silence
+VAD_SILENCE_MS = int(os.getenv("JARVIS_VAD_SILENCE_MS", "900"))  # end when this window is ~all quiet
+VAD_END_SPEECH_RATIO = 0.2  # "quiet" = at most this share of the window is speech
+VAD_MIN_RMS = float(os.getenv("JARVIS_VAD_MIN_RMS", "900"))  # absolute speech energy floor
+VAD_NOISE_RATIO = 3.0  # speech must be this many times louder than the learned room floor
+VAD_FLOOR_CAP = 800.0  # learned floor never exceeds this (talking right after the hotkey)
 VAD_START_TIMEOUT_S = 8.0  # give up if nobody starts speaking within this time
-VAD_MAX_UTTERANCE_S = 20.0  # hard cap on one utterance
+VAD_MAX_UTTERANCE_S = 15.0  # hard cap on one utterance
 VAD_MIN_SPEECH_MS = 250  # shorter voiced audio is discarded as noise
 
 # --- barge-in (stop TTS when the user starts talking) ---
-BARGE_IN = os.getenv("JARVIS_BARGE_IN", "1").lower() not in ("0", "false", "no", "off")
+BARGE_IN = os.getenv("JARVIS_BARGE_IN", "0").lower() not in ("0", "false", "no", "off")
 BARGE_IN_RMS = 1500  # int16 RMS a frame must exceed (keeps speaker echo from triggering)
 BARGE_IN_FRAMES = 8  # consecutive loud+voiced 30 ms frames needed (~240 ms)
 BARGE_IN_GRACE_S = 0.4  # ignore the mic right after playback starts
@@ -107,3 +111,55 @@ TTS_DEFAULT_LANG = "en"
 # --- voice loop ---
 HOTKEY_PTT = os.getenv("JARVIS_HOTKEY", "<ctrl>+<alt>+j")  # press to talk (toggle)
 VOICE_MAX_TOKENS = 200
+
+# --- agent (P3) ---
+TOOL_PACKAGES = ("interactive", "general", "external")  # jarvis/tools/<pkg>/<one file per tool>
+TOOL_OUTPUT_MAX_CHARS = 800  # tool results are truncated to this before going back to the LLM
+AGENT_MAX_TOOL_ROUNDS = 4  # llm -> tools loops per request, then the model must answer
+AGENT_MAX_TOKENS = 400
+AGENT_SUMMARY_BATCH_TURNS = 3  # fold this many old turns into the rolling summary at once
+CONFIRM_TIMEOUT_S = 20.0  # unanswered confirmations are denied
+ROUTER_MAX_GROUPS = 3
+# Keyword rules: group -> words/phrases (matched on word boundaries, case-insensitive).
+ROUTER_RULES: dict[str, tuple[str, ...]] = {
+    "general": ("time", "date", "day is it", "clock", "what day", "o'clock", "baje",
+                "kitne baje", "kati bajyo", "bajyo", "samay", "समय", "बजे", "बज्यो", "तारीख", "मिति"),
+    "files": ("file", "files", "folder", "folders", "directory", "delete", "remove", "rename",
+              "move file", "copy file", "trash", "फाइल", "मिटाओ", "मेटाउ"),
+    "system": ("volume", "mute", "unmute", "brightness", "battery", "cpu", "ram", "wifi",
+               "bluetooth", "lock", "sleep", "shutdown", "reboot", "screenshot", "clipboard",
+               "night light", "dark mode", "wallpaper", "do not disturb"),
+    "apps": ("open", "close", "launch", "focus", "window", "app", "application", "snap",
+             "workspace", "kill", "minimize", "maximize", "browser", "terminal"),
+    "media": ("play", "pause", "resume", "music", "song", "next track", "previous track",
+              "playlist", "youtube", "spotify", "गाना"),
+    "dev": ("git", "commit", "branch", "pytest", "run tests", "test suite", "scaffold", "venv",
+            "pip", "requirements", "repo", "lint", "dependency", "dependencies", "notebook"),
+    "web": ("search", "weather", "news", "google", "look up", "lookup", "browse", "website"),
+    "memory": ("remember", "recall", "note", "notes", "last time", "yesterday", "remind"),
+}
+# Descriptions offered to the fast classifier when no rule matched.
+TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
+    "general": "time, date and simple utilities",
+    "files": "find, delete, move or rename files and folders",
+    "system": "volume, brightness, battery, power, screenshots, clipboard",
+    "apps": "open, close, focus or arrange apps and windows",
+    "media": "music and video playback",
+    "dev": "git, tests, projects, Python environments",
+    "web": "web search, weather, news",
+    "memory": "notes and recalling past conversations",
+}
+# Words that suggest multi-step reasoning (router asks for the smart tier).
+REASONING_KEYWORDS = ("explain why", "compare", "analyze", "analyse", "step by step", "debug",
+                      "figure out", "plan my", "pros and cons")
+# Imperative openers: a message with no rule match that starts like this goes to the classifier.
+COMMAND_VERBS = ("open", "close", "start", "stop", "run", "show", "set", "turn", "make", "create",
+                 "delete", "remove", "check", "find", "play", "pause", "take", "give", "launch",
+                 "kill", "install", "send", "search", "list", "move", "copy", "rename", "switch",
+                 "increase", "decrease", "lower", "raise", "enable", "disable", "save", "get",
+                 "fetch", "read", "write", "lock", "mute", "change", "go")
+# Binaries a future shell tool may run (anything else is refused). sudo is never allowed.
+SHELL_ALLOWLIST = ("ls", "cat", "head", "tail", "wc", "grep", "rg", "fdfind", "find", "git", "df",
+                   "du", "free", "uptime", "whoami", "date", "echo", "pwd", "which", "python3",
+                   "pytest", "pip", "xdotool", "wmctrl", "xrandr", "xclip", "pactl", "amixer",
+                   "brightnessctl", "upower", "gsettings", "loginctl", "notify-send")

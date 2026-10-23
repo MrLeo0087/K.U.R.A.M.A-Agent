@@ -6,7 +6,7 @@ Status legend: [ ] todo · [~] in progress · [x] done · [h] done, needs human 
 - [x] P0 Bootstrap: git, .gitignore, .env.example, CLAUDE.md, PROGRESS.md
 - [x] P1 Core: config.py (model IDs + voices, verify Groq models endpoint), Groq client (streaming, retry/backoff 429/5xx, 70b→8b fallback, token budget), SQLite logging (tool calls, tokens, routing latency), terminal text chat loop
 - [h] P2 Voice I/O: mic capture, webrtcvad, Groq Whisper STT (turbo → large-v3, auto lang), edge-tts sentence streaming (<~1 s first sentence), barge-in, push-to-talk hotkey (pynput, X11), `python -m jarvis.core.tts "text"`
-- [ ] P3 Agent: LangGraph router + tool registry (decorator, auto JSON schema, one file per tool), tool-group router, safety levels (safe/confirm/blocked), confirmation flow, SQLite action log
+- [x] P3 Agent: LangGraph router + tool registry (decorator, auto JSON schema, one file per tool), tool-group router, safety levels (safe/confirm/blocked), confirmation flow, SQLite action log
 - [ ] P3-STOP: human end-to-end test with real Groq key (text chat + one voice reply)
 - [ ] P4 Interactive core: Project Scaffolder, Environment Doctor (CPU-only), Smart File Search (rg/fd), Git Assistant, Test Runner
 - [ ] P5 General core (X11): Volume, Media, Mic Mute, Brightness, Open/Close/Focus App, Window Snap, Workspace Launcher, Sleep/Lock, Screenshot, Clipboard, TTS Replies, Startup Greeting
@@ -41,12 +41,14 @@ DROPPED, do not build: Custom Object/Error-State Detector, Voice Cloning (Coqui/
 - P1: The database is data/jarvis.db with tables llm_calls, tool_calls, routing and messages. Peak RAM of the text chat is 44 MB. First streamed reply arrived in 0.86 s.
 - P2: Push-to-talk is a toggle on Ctrl+Alt+J (HOTKEY_PTT or env JARVIS_HOTKEY). Enter also works, and q+Enter quits. Barge-in is energy-gated by BARGE_IN_RMS=1500. Playback uses ffplay. Peak RAM of the tts command is 51 MB. Edge-tts first audio arrives in 1.0 to 1.4 s, which is network-bound.
 - P2: Real STT round trip (edge-tts audio → Groq) takes 0.47 s. Hindi is perfect. Nepali is auto-detected as Hindi and turbo garbles it, while large-v3 with language=ne is accurate. Added STT_LANGUAGE_HINT (env JARVIS_STT_LANG=ne) and STT_PREFER_FALLBACK_LANGS=("ne",), which tries large-v3 first.
+- P2 fix (after the human test): the laptop mic made webrtcvad call about 90% of quiet-room frames "speech", so turns never ended (6–7 s delay), and speaker echo (RMS 5k–20k) set off barge-in. The endpointer now gates on energy: a learned 20th-percentile noise floor capped at VAD_FLOOR_CAP=800, speech counted only above max(VAD_MIN_RMS=900, 3×floor), and the turn ends when ≤20% of the last 900 ms is speech. Barge-in by voice now defaults to off (JARVIS_BARGE_IN=1 turns it on), and the hotkey interrupts instead. Tunable through JARVIS_VAD_SILENCE_MS and JARVIS_VAD_MIN_RMS.
+- P3: langgraph is pinned at 1.2.16 and pulls langchain-core but no torch. It's imported lazily on the first request. Peak RAM of `python -m jarvis` is 77 MB. Tool groups are general, files, system, apps, media, dev, web and memory. Keyword rules route in about 3 ms; the 8b classifier fallback takes about 800 ms. The router skips groups that have no tools yet. Plain chat sends no tool schemas (210 vs 225 prompt tokens). The tool_calls table gained outcome and result columns, with automatic migration. A confirm tool asks [y/N] in text mode or "Say yes or no" in voice mode (accepts yes, haan, ho, हो, हाँ); an unanswered confirm is denied after 20 s. Dummy tools: get_time (safe) and dummy_delete (confirm).
 
 ## Known issues
 - P2: Nepali auto-detect is unreliable (Whisper says Hindi). Workaround: JARVIS_STT_LANG=ne. Possible fix in P12: switch the hint by voice command ("speak Nepali").
-- P2: Needs a human test of the live mic, the pynput hotkey and barge-in echo (BARGE_IN_RMS may need tuning).
+- P2: Voice barge-in on laptop speakers needs echo cancellation (PipeWire module-echo-cancel) or headphones. Until then it's off and the hotkey interrupts.
 - P1: The vision model's request settings have not been tried with a real call yet; verify in P10.
 - (none yet)
 
 ## Human actions needed
-- (none yet)
+- P3-STOP: run the end-to-end test with the real Groq key. In text, run `venv/bin/python -m jarvis`, ask "what time is it?", then say "delete the file /tmp/x" and answer n. In voice, run `venv/bin/python -m jarvis --voice`, press Ctrl+Alt+J and ask a question. Then say "continue".

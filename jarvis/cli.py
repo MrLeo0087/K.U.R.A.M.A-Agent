@@ -1,18 +1,12 @@
-"""Terminal text chat: `python -m jarvis`. Fast tier, streamed output, last 6 turns of history."""
+"""Terminal text chat: `python -m jarvis`. LangGraph agent (router + tools), streamed output.
+
+`python -m jarvis --voice` starts the voice loop instead.
+"""
 from __future__ import annotations
 
 import sys
-from collections import deque
 
-from jarvis.core import config, llm, store
-
-SYSTEM_PROMPT = (
-    "You are Jarvis, a concise, friendly assistant running on the user's Ubuntu laptop. "
-    "Reply in 1-2 short sentences unless asked for more detail. "
-    "Answer in the user's language (English, Hindi or Nepali). "
-    "Plain text only: no markdown, lists or emojis, since replies may be spoken aloud. "
-    "If you do not know something, say so briefly."
-)
+from jarvis.core import agent, config, llm, store
 
 QUIT = {"/quit", "/exit", "/q"}
 
@@ -27,9 +21,9 @@ def main(argv: list[str] | None = None) -> int:
         print("GROQ_API_KEY missing: add it to .env", file=sys.stderr)
         return 1
     tty = sys.stdin.isatty()
-    history: deque[dict] = deque(maxlen=config.HISTORY_TURNS * 2)
+    bot = agent.Agent()  # confirmations use safety's terminal prompt in text mode
     if tty:
-        print(f"Jarvis text chat ({config.LLM_FAST}). /quit to exit.")
+        print(f"Jarvis text chat ({config.LLM_FAST} / {config.LLM_DEFAULT}, tools on). /quit to exit.")
     while True:
         try:
             line = input("you> " if tty else "").strip()
@@ -40,11 +34,11 @@ def main(argv: list[str] | None = None) -> int:
             continue
         if line.lower() in QUIT:
             break
-        msgs = [{"role": "system", "content": SYSTEM_PROMPT}, *history, {"role": "user", "content": line}]
-        print("jarvis> ", end="", flush=True)
         parts: list[str] = []
         try:
-            for delta in llm.chat(msgs, tier="fast", stream=True, purpose="cli_chat", max_tokens=400):
+            for delta in bot.stream(line, mode="text"):
+                if not parts:
+                    print("jarvis> ", end="", flush=True)
                 parts.append(delta)
                 print(delta, end="", flush=True)
         except llm.LLMError as e:
@@ -53,12 +47,12 @@ def main(argv: list[str] | None = None) -> int:
         except KeyboardInterrupt:
             print(" [stopped]")
         print()
-        reply = "".join(parts).strip()
-        history.append({"role": "user", "content": line})
-        history.append({"role": "assistant", "content": reply})
+        tools = bot.last.get("tools") or []
+        if tools and tty:
+            print(f"[tools: {', '.join(t['name'] + ('' if t['ok'] else ' (failed)') for t in tools)}]")
         try:
             store.add_message("user", line)
-            store.add_message("assistant", reply)
+            store.add_message("assistant", "".join(parts).strip())
         except Exception:
             pass
     return 0

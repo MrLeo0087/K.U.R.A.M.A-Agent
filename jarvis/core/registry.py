@@ -1,0 +1,276 @@
+"""Tool registry: `@tool(...)` on a plain function -> OpenAI/Groq function-calling schema.
+
+One file = one tool under jarvis/tools/{interactive,general,external}/. `discover()` imports
+them all (pkgutil walk); the module-level helpers use the default registry and discover lazily.
+"""
+from __future__ import annotations
+
+import importlib
+import inspect
+import json
+import logging
+import pkgutil
+import re
+import types
+import typing
+from dataclasses import dataclass, field
+from typing import Any, Callable, Literal, Union, get_args, get_origin
+
+from jarvis.core import config
+
+log = logging.getLogger("jarvis.registry")
+
+SAFETY_LEVELS = ("safe", "confirm", "blocked")
+_JSON_TYPES = {str: "string", int: "integer", float: "number", bool: "boolean"}
+
+
+class ToolError(Exception):
+    """Unknown tool or bad arguments."""
+
+
+@dataclass
+class Tool:
+    name: str
+    func: Callable[..., Any]
+    group: str
+    safety: str
+    description: str
+    parameters: dict
+    module: str = ""
+
+    @property
+    def schema(self) -> dict:
+        return {"type": "function", "function": {
+            "name": self.name, "description": self.description, "parameters": self.parameters}}
+
+
+@dataclass
+class ToolResult:
+    ok: bool
+    output: str
+    error: str = ""
+
+
+# --- schema building ---
+def _parse_doc(doc: str | None) -> tuple[str, dict[str, str]]:
+    """First docstring line and Google-style `Args:` descriptions."""
+    if not doc:
+        return "", {}
+    lines = inspect.cleandoc(doc).splitlines()
+    summary = lines[0].strip() if lines else ""
+    args: dict[str, str] = {}
+    in_args, current = False, None
+    for line in lines[1:]:
+        stripped = line.strip()
+        if re.match(r"^(Args|Arguments|Parameters):\s*$", stripped):
+            in_args = True
+            continue
+        if not in_args:
+            continue
+        if re.match(r"^[A-Z][A-Za-z ]*:\s*$", stripped):  # next section (Returns:, Raises:)
+            break
+        m = re.match(r"^(\w+)\s*(?:\([^)]*\))?\s*:\s*(.*)$", stripped)
+        if m and not line.startswith(" " * 8):
+            current = m.group(1)
+            args[current] = m.group(2).strip()
+        elif current and stripped:
+            args[current] = f"{args[current]} {stripped}".strip()
+    return summary, args
+
+
+def _unwrap_optional(tp: Any) -> tuple[Any, bool]:
+    origin = get_origin(tp)
+    if origin in (Union, types.UnionType):
+        args = [a for a in get_args(tp) if a is not type(None)]
+        if len(args) < len(get_args(tp)):
+            return (args[0] if len(args) == 1 else Union[tuple(args)]), True
+    return tp, False
+
+
+def type_schema(tp: Any) -> dict:
+    """JSON schema for one annotation (str/int/float/bool/Literal/list[...]/Optional)."""
+    tp, _ = _unwrap_optional(tp)
+    origin = get_origin(tp)
+    if tp in _JSON_TYPES:
+        return {"type": _JSON_TYPES[tp]}
+    if origin is Literal:
+        values = list(get_args(tp))
+        kinds = {_JSON_TYPES.get(type(v), "string") for v in values}
+        out: dict = {"enum": values}
+        if len(kinds) == 1:
+            out["type"] = kinds.pop()
+        return out
+    if tp in (list, tuple) or origin in (list, tuple):
+        args = get_args(tp)
+        return {"type": "array", "items": type_schema(args[0]) if args else {"type": "string"}}
+    if tp is dict or origin is dict:
+        return {"type": "object"}
+    return {"type": "string"}
+
+
+def build_parameters(func: Callable, arg_docs: dict[str, str] | None = None) -> dict:
+    sig = inspect.signature(func)
+    try:
+        hints = typing.get_type_hints(func)
+    except Exception:
+        hints = {}
+    props: dict[str, dict] = {}
+    required: list[str] = []
+    for name, p in sig.parameters.items():
+        if p.kind in (p.VAR_POSITIONAL, p.VAR_KEYWORD) or name.startswith("_"):
+            continue
+        tp = hints.get(name, str if p.default is p.empty else type(p.default))
+        prop = type_schema(tp)
+        if arg_docs and arg_docs.get(name):
+            prop["description"] = arg_docs[name]
+        props[name] = prop
+        if p.default is p.empty and not _unwrap_optional(tp)[1]:
+            required.append(name)
+    out: dict = {"type": "object", "properties": props}
+    if required:
+        out["required"] = required
+    return out
+
+
+def _coerce(value: Any, tp: Any) -> Any:
+    """Light coercion for values models send as strings ("3" -> 3, "true" -> True)."""
+    tp, _ = _unwrap_optional(tp)
+    if value is None:
+        return None
+    try:
+        if tp is bool and isinstance(value, str):
+            return value.strip().lower() in ("1", "true", "yes", "y", "on")
+        if tp in (int, float) and isinstance(value, str):
+            return tp(value)
+        if tp is int and isinstance(value, float) and value.is_integer():
+            return int(value)
+        if (tp is list or get_origin(tp) is list) and isinstance(value, str):
+            return [value]
+    except (TypeError, ValueError):
+        pass
+    return value
+
+
+def truncate(text: str, limit: int | None = None) -> str:
+    limit = limit or config.TOOL_OUTPUT_MAX_CHARS
+    return text if len(text) <= limit else text[: limit - 15].rstrip() + " ...[truncated]"
+
+
+def _to_text(result: Any) -> str:
+    if result is None:
+        return "done"
+    if isinstance(result, str):
+        return result
+    try:
+        return json.dumps(result, ensure_ascii=False, default=str)
+    except (TypeError, ValueError):
+        return str(result)
+
+
+# --- registry ---
+@dataclass
+class Registry:
+    tools: dict[str, Tool] = field(default_factory=dict)
+    packages: tuple[str, ...] = ("jarvis.tools",)
+    _discovered: bool = False
+
+    def tool(self, _func: Callable | None = None, *, name: str | None = None,
+             group: str = "general", safety: str = "safe", description: str = "") -> Callable:
+        if safety not in SAFETY_LEVELS:
+            raise ValueError(f"safety must be one of {SAFETY_LEVELS}, got {safety!r}")
+
+        def deco(func: Callable) -> Callable:
+            summary, arg_docs = _parse_doc(func.__doc__)
+            t = Tool(name=name or func.__name__, func=func, group=group, safety=safety,
+                     description=(description or summary or func.__name__).strip(),
+                     parameters=build_parameters(func, arg_docs), module=func.__module__)
+            old = self.tools.get(t.name)
+            if old and old.module != t.module:
+                log.warning("tool %s from %s replaces the one from %s", t.name, t.module, old.module)
+            self.tools[t.name] = t
+            func.tool = t  # type: ignore[attr-defined]
+            return func
+
+        return deco(_func) if callable(_func) else deco
+
+    def discover(self, subpackages: tuple[str, ...] | None = None) -> list[str]:
+        """Import every module under <package>.<sub> for each tool sub-package."""
+        imported: list[str] = []
+        for base in self.packages:
+            for sub in subpackages or config.TOOL_PACKAGES:
+                pkg_name = f"{base}.{sub}"
+                try:
+                    pkg = importlib.import_module(pkg_name)
+                except ImportError as e:
+                    log.warning("tool package %s not importable: %s", pkg_name, e)
+                    continue
+                for info in pkgutil.walk_packages(pkg.__path__, prefix=f"{pkg_name}."):
+                    try:
+                        importlib.import_module(info.name)
+                        imported.append(info.name)
+                    except Exception as e:  # one broken tool must not kill the others
+                        log.error("failed to load tool module %s: %s", info.name, e)
+        self._discovered = True
+        return imported
+
+    def _ensure(self) -> None:
+        if not self._discovered:
+            self.discover()
+
+    def get(self, name: str) -> Tool | None:
+        self._ensure()
+        return self.tools.get(name)
+
+    def groups(self) -> list[str]:
+        self._ensure()
+        return sorted({t.group for t in self.tools.values()})
+
+    def schemas_for(self, groups: list[str] | tuple[str, ...]) -> list[dict]:
+        self._ensure()
+        wanted = set(groups)
+        return [t.schema for t in self.tools.values() if t.group in wanted]
+
+    def parse_args(self, tool: Tool, args: Any) -> dict:
+        if args is None or args == "":
+            args = {}
+        if isinstance(args, str):
+            try:
+                args = json.loads(args)
+            except json.JSONDecodeError as e:
+                raise ToolError(f"arguments are not valid JSON: {e}") from e
+        if not isinstance(args, dict):
+            raise ToolError("arguments must be a JSON object")
+        try:
+            hints = typing.get_type_hints(tool.func)
+        except Exception:
+            hints = {}
+        props = tool.parameters.get("properties", {})
+        clean = {k: _coerce(v, hints.get(k, Any)) for k, v in args.items() if k in props}
+        missing = [k for k in tool.parameters.get("required", []) if k not in clean]
+        if missing:
+            raise ToolError(f"missing required argument(s): {', '.join(missing)}")
+        return clean
+
+    def call(self, name: str, args: Any = None) -> ToolResult:
+        """Run a tool (no safety checks: use jarvis.core.safety.execute for that)."""
+        t = self.get(name)
+        if t is None:
+            return ToolResult(False, f"error: unknown tool {name!r}", "unknown tool")
+        try:
+            out = t.func(**self.parse_args(t, args))
+        except ToolError as e:
+            return ToolResult(False, f"error: {e}", str(e))
+        except Exception as e:
+            log.exception("tool %s failed", name)
+            return ToolResult(False, truncate(f"error: {type(e).__name__}: {e}"), f"{type(e).__name__}: {e}")
+        return ToolResult(True, truncate(_to_text(out)))
+
+
+REGISTRY = Registry()
+
+tool = REGISTRY.tool
+discover = REGISTRY.discover
+get = REGISTRY.get
+groups = REGISTRY.groups
+schemas_for = REGISTRY.schemas_for
+call = REGISTRY.call

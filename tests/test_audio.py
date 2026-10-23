@@ -34,13 +34,14 @@ def test_endpointing_start_and_trailing_silence():
     frames = [SILENCE] * 20 + [SPEECH] * 30 + [SILENCE] * 40
     end = feed(ep, frames)
     assert started == [True] and ep.triggered and not ep.timed_out
-    # stops after 800 ms (26 frames) of silence, not at the end of the input
-    assert end == 20 + 30 + 800 // 30 - 1
+    # stops once the 800 ms window (26 frames) is <= 20% speech: 21 silent frames
+    quiet = 26 - int(audio.config.VAD_END_SPEECH_RATIO * 26)
+    assert end == 20 + 30 + quiet - 1
     wav = ep.wav()
     with wave.open(io.BytesIO(wav)) as wf:
         assert (wf.getframerate(), wf.getnchannels(), wf.getsampwidth()) == (16000, 1, 2)
         # pre-roll (4 silent + 6 voiced frames, trigger at 6/8) + 24 more speech + silence tail
-        assert wf.getnframes() * 2 == FB * (10 + 24 + 26)
+        assert wf.getnframes() * 2 == FB * (10 + 24 + quiet)
 
 
 def test_endpointing_timeout_short_blip_and_max_length():
@@ -70,3 +71,15 @@ def test_player_cmd(monkeypatch):
     cmd = audio.player_cmd()
     assert cmd[:3] == ["ffplay", "-nodisp", "-autoexit"] and cmd[-1] == "-"
     assert audio.player_cmd("/tmp/x.mp3")[-1] == "/tmp/x.mp3"
+
+
+def test_noise_gate_ignores_room_noise_under_a_fooled_vad():
+    class Fooled:  # webrtcvad on a noisy laptop mic: says "speech" for almost everything
+        def is_speech(self, f, sr):
+            return True
+    hum = b"\x58\x02" * (FB // 2)  # RMS 600: steady room noise
+    ep = make(vad=Fooled())
+    feed(ep, [hum] * 30)
+    assert not ep.triggered
+    end = feed(ep, [SPEECH] * 30 + [hum] * 40)
+    assert ep.triggered and end is not None and end < 30 + 26 and ep.wav() is not None

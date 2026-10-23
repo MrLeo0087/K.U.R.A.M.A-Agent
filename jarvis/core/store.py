@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS llm_calls (
 CREATE INDEX IF NOT EXISTS idx_llm_ts ON llm_calls(ts);
 CREATE TABLE IF NOT EXISTS tool_calls (
     id INTEGER PRIMARY KEY, ts REAL NOT NULL, tool TEXT, args TEXT, ok INTEGER,
-    latency_ms INTEGER, safety TEXT, error TEXT
+    latency_ms INTEGER, safety TEXT, error TEXT, outcome TEXT, result TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_tool_ts ON tool_calls(ts);
 CREATE TABLE IF NOT EXISTS routing (
@@ -50,8 +50,17 @@ def init(db_path: str | Path | None = None) -> Path:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA synchronous=NORMAL")
         conn.executescript(_SCHEMA)
+        _migrate(conn)
         _conn = conn
         return _path
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Add columns introduced after P1 to existing databases."""
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(tool_calls)")}
+    for col in ("outcome", "result"):
+        if col not in cols:
+            conn.execute(f"ALTER TABLE tool_calls ADD COLUMN {col} TEXT")
 
 
 def close() -> None:
@@ -84,10 +93,13 @@ def log_llm(model: str, purpose: str, prompt_tokens: int, completion_tokens: int
 
 
 def log_tool(tool: str, args: Any, ok: bool, latency_ms: int, safety: str = "safe",
-             error: str = "") -> None:
-    _exec("INSERT INTO tool_calls(ts,tool,args,ok,latency_ms,safety,error) VALUES (?,?,?,?,?,?,?)",
+             error: str = "", outcome: str = "", result: str = "") -> None:
+    """Action log. outcome: allowed | denied | blocked | error (empty for legacy callers)."""
+    _exec("INSERT INTO tool_calls(ts,tool,args,ok,latency_ms,safety,error,outcome,result) "
+          "VALUES (?,?,?,?,?,?,?,?,?)",
           (time.time(), tool, json.dumps(args, default=str)[:2000], int(bool(ok)),
-           int(latency_ms), safety, (error or "")[:500]))
+           int(latency_ms), safety, (error or "")[:500], outcome or ("allowed" if ok else "error"),
+           (result or "")[:1000]))
 
 
 def log_routing(query: str, groups: list[str], method: str, latency_ms: int) -> None:
@@ -121,6 +133,20 @@ def tokens_by_model_today() -> dict[str, int]:
     rows = _exec("SELECT model, SUM(total_tokens) FROM llm_calls WHERE ts>=? GROUP BY model",
                  (_today_start(),))
     return {r[0]: int(r[1] or 0) for r in rows}
+
+
+def recent_tool_calls(n: int = 20) -> list[dict]:
+    """Last n tool calls, newest first."""
+    rows = _exec("SELECT ts,tool,args,ok,latency_ms,safety,error,outcome,result FROM tool_calls "
+                 "ORDER BY id DESC LIMIT ?", (int(n),))
+    return [dict(r) for r in rows]
+
+
+def recent_routing(n: int = 20) -> list[dict]:
+    """Last n routing decisions, newest first (groups decoded)."""
+    rows = _exec("SELECT ts,query,groups,method,latency_ms FROM routing ORDER BY id DESC LIMIT ?",
+                 (int(n),))
+    return [{**dict(r), "groups": json.loads(r["groups"] or "[]")} for r in rows]
 
 
 def tool_call_counts(since_ts: float | None = None) -> dict[str, int]:

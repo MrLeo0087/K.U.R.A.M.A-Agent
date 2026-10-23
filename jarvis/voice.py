@@ -1,27 +1,20 @@
 """Voice loop: `python -m jarvis --voice`.
 
 hotkey (toggle, default Ctrl+Alt+J) or Enter -> record with VAD -> Groq Whisper STT ->
-llm.chat stream (fast tier, short voice prompt) -> sentence-streamed edge-tts -> barge-in.
+LangGraph agent stream (router + tools, spoken yes/no confirmations) -> sentence-streamed edge-tts -> barge-in.
 Talking over Jarvis (or pressing the hotkey) stops playback and starts listening again.
 """
 from __future__ import annotations
 
 import argparse
 import sys
+import itertools
 import threading
-from collections import deque
 from typing import Iterable, Iterator
 
-from jarvis.core import audio, config, hotkey, llm, store, stt, tts
+from jarvis.core import agent, audio, config, hotkey, llm, safety, store, stt, tts
 
-LANG_NAMES = {"en": "English", "ne": "Nepali (Devanagari script)", "hi": "Hindi (Devanagari script)"}
-
-VOICE_PROMPT = (
-    "You are Jarvis, a friendly voice assistant on the user's Ubuntu laptop. "
-    "Your reply is spoken aloud: answer in 1 to 2 short sentences, plain text only, "
-    "no markdown, lists, code or emojis. If unsure, say so briefly. "
-    "The user spoke {lang}; reply in {lang}."
-)
+LANG_NAMES = agent.LANG_NAMES
 QUIT = {"q", "quit", "exit", "/q", "/quit", "/exit"}
 
 
@@ -31,12 +24,34 @@ class VoiceLoop:
         self.barge_in = config.BARGE_IN if barge_in is None else barge_in
         self.speaker = tts.Speaker()
         tts.warm()
-        self.history: deque[dict] = deque(maxlen=config.HISTORY_TURNS * 2)
         self.state = "idle"  # idle | listening | thinking | speaking
         self.trigger = threading.Event()  # start listening
         self.cancel = threading.Event()  # end the current recording now
         self.quit = threading.Event()
         self._hk: hotkey.HotkeyListener | None = None
+        self.lang = config.TTS_DEFAULT_LANG
+        self.agent = agent.Agent(confirm=self.confirm)
+        safety.set_confirm_hook("voice", self.confirm)
+
+    # --- spoken confirmation (called from the agent's tool node) ---
+    def confirm(self, prompt: str) -> bool:
+        """Ask by TTS, record the answer, STT, parse yes/no. Silence or unclear means no."""
+        question = f"{prompt} Say yes or no."
+        print(f"jarvis> {question}", flush=True)
+        try:
+            tts.Speaker().speak(question, lang=self.lang)  # own speaker: main stream untouched
+            wav = audio.record(max_s=min(6.0, config.CONFIRM_TIMEOUT_S),
+                               on_speech_start=lambda: print("[speech]", flush=True))
+            if not wav:
+                print("[no answer: not doing it]")
+                return False
+            tr = stt.transcribe(wav)
+        except (audio.AudioError, stt.STTError) as e:
+            print(f"[confirm failed: {e}]")
+            return False
+        ok = safety.parse_yes_no(tr.text) is True
+        print(f"you({tr.lang})> {tr.text}   [{'yes' if ok else 'no'}]", flush=True)
+        return ok
 
     # --- input events (hotkey thread / stdin thread) ---
     def press(self) -> None:
@@ -86,18 +101,20 @@ class VoiceLoop:
             print("[nothing heard]")
             return False
         print(f"you({tr.lang})> {tr.text}   [stt {tr.latency_ms} ms, {tr.model}]")
-        sys_prompt = VOICE_PROMPT.format(lang=LANG_NAMES.get(tr.lang, "English"))
-        msgs = [{"role": "system", "content": sys_prompt}, *self.history,
-                {"role": "user", "content": tr.text}]
+        self.lang = tr.lang
         parts: list[str] = []
-        self.state = "speaking"
         monitor = audio.BargeInMonitor(on_speech=self.speaker.stop) if self.barge_in else None
         try:
-            gen = llm.chat(msgs, tier="fast", stream=True, purpose="voice_chat",
-                           max_tokens=config.VOICE_MAX_TOKENS)
-            if monitor:
-                monitor.start()
-            self.speaker.speak_stream(self._printing(gen, parts), lang=tr.lang)
+            gen = self.agent.stream(tr.text, mode="voice", lang=tr.lang)
+            # Pull the first delta here: routing, tool rounds and spoken confirmations run before
+            # TTS playback and the barge-in mic monitor start, so they never fight over the mic.
+            first = next(gen, None)
+            self.state = "speaking"
+            if first is not None:
+                if monitor:
+                    monitor.start()
+                self.speaker.speak_stream(self._printing(itertools.chain([first], gen), parts),
+                                          lang=tr.lang)
         except llm.LLMError as e:
             print(f"[llm error] {e}")
         finally:
@@ -111,8 +128,6 @@ class VoiceLoop:
         if self.speaker.first_audio_s is not None:
             print(f"[first audio {self.speaker.first_audio_s:.2f}s]")
         reply = "".join(parts).strip()
-        self.history.append({"role": "user", "content": tr.text})
-        self.history.append({"role": "assistant", "content": reply})
         try:
             store.add_message("user", tr.text)
             store.add_message("assistant", reply)
@@ -132,7 +147,8 @@ class VoiceLoop:
         if sys.stdin.isatty():
             threading.Thread(target=self._stdin_reader, name="stdin", daemon=True).start()
         how = f"press {key} (or Enter)" if key else "press Enter"
-        print(f"Jarvis voice ({config.LLM_FAST}). {how} to talk; talk over Jarvis to interrupt; "
+        cut = "talk over Jarvis" if config.BARGE_IN else (f"press {key}" if key else "press Enter")
+        print(f"Jarvis voice ({config.LLM_FAST}). {how} to talk; {cut} to interrupt; "
               f"q + Enter or Ctrl+C to quit.")
         again = False
         try:
