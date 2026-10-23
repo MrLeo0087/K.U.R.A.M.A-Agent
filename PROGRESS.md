@@ -7,7 +7,8 @@ Status legend: [ ] todo · [~] in progress · [x] done · [h] done, needs human 
 - [x] P1 Core: config.py (model IDs + voices, verify Groq models endpoint), Groq client (streaming, retry/backoff 429/5xx, 70b→8b fallback, token budget), SQLite logging (tool calls, tokens, routing latency), terminal text chat loop
 - [h] P2 Voice I/O: mic capture, webrtcvad, Groq Whisper STT (turbo → large-v3, auto lang), edge-tts sentence streaming (<~1 s first sentence), barge-in, push-to-talk hotkey (pynput, X11), `python -m jarvis.core.tts "text"`
 - [x] P3 Agent: LangGraph router + tool registry (decorator, auto JSON schema, one file per tool), tool-group router, safety levels (safe/confirm/blocked), confirmation flow, SQLite action log
-- [ ] P3-STOP: human end-to-end test with real Groq key (text chat + one voice reply)
+- [x] P3-STOP: human end-to-end test with real Groq key passed (2026-10-23). User: "working very good".
+- [ ] P3b LangChain + multitasking (user request 2026-10-23): migrate LLM calls to ChatGroq and tools to langchain_core tools, keeping groups, safety, logging and token rules. Add a multi-task decomposer, a parallel LangGraph fan-out (Send), a background job manager (outputs under data/outputs/, announced when done), a per-model TPM rate limiter, and job status/cancel tools.
 - [ ] P4 Interactive core: Project Scaffolder, Environment Doctor (CPU-only), Smart File Search (rg/fd), Git Assistant, Test Runner
 - [ ] P5 General core (X11): Volume, Media, Mic Mute, Brightness, Open/Close/Focus App, Window Snap, Workspace Launcher, Sleep/Lock, Screenshot, Clipboard, TTS Replies, Startup Greeting
 - [ ] P6 Background core: Long-Process/Training Run Watcher (daemon pattern, Telegram alerts), Crash Watchdog, Resource Guard, Telegram Remote Control, n8n Bridge
