@@ -86,13 +86,20 @@ def test_noise_gate_and_greeting_once(monkeypatch):
 
     from jarvis.api.app import create_app
     from jarvis.api.routes import info
-    from jarvis.core import greeting
     from tests.test_api import BASE, settings
     monkeypatch.setattr(info, "_greeted", {"done": False})
-    monkeypatch.setattr(greeting, "build", lambda: "Good morning, it's 9:00 AM. Ready when you are.")
     c = TestClient(create_app(settings()), base_url=BASE)
     first = c.get("/api/v1/greeting").json()["text"]
-    assert first.startswith("Good morning, it's 9:00 AM. KURAMA is online.") and c.get("/api/v1/greeting").json()["text"] == ""
+    assert " sir, " in first and len(first.split()) <= 10 and ":" not in first  # short, no clock
+    assert c.get("/api/v1/greeting").json()["text"] == ""  # once per start
+
+
+def test_wake_phrases():
+    from jarvis.core import wake
+    for t in ("wake up kurama", "wake off kurama", "wake up now kurama", "wake kurama", "kurama wake up", "hey kurama"):
+        assert wake.match_wake(t).command == "", t
+    assert wake.match_wake("wake up kurama open youtube").command == "open youtube"
+    assert wake.match_wake("I need to wake up early") is None
 
 
 def test_wake_service_publishes_wake(monkeypatch):

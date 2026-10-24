@@ -102,6 +102,24 @@ class WakeHit:
 
 
 LEAD_FILLERS = {"uh", "um", "umm", "so", "oh", "ok", "okay", "and", "hmm", "hm", "ah", "arey", "are"}
+# "wake up KURAMA", "wake up now KURAMA", "wake KURAMA", and how Whisper often hears it ("wake off", "woke up")
+WAKE_VERBS = {"wake", "wakeup", "woke", "awake", "wakey", "weak", "utha", "utho", "uth", "उठ", "उठो", "उठ्नु"}
+WAKE_PARTS = {"up", "off", "of", "op", "app", "now", "please", "jao", "na", "ja"}
+
+
+def _wake_lead(words: list[str], i: int) -> int:
+    """Number of words at words[i] forming a wake call ("wake", "wake up", "wake up now", ...), or 0."""
+    if i >= len(words) or words[i] not in WAKE_VERBS:
+        return 0
+    n = 1
+    while i + n < len(words) and words[i + n] in WAKE_PARTS and n < 4:
+        n += 1
+    return n
+
+
+def _only_wake(cmd: str) -> bool:
+    w = normalize(cmd).split()
+    return bool(w) and _wake_lead(w, 0) == len(w)
 
 
 def _tokens(text: str) -> tuple[list[str], list[str], list[int]]:
@@ -134,14 +152,17 @@ def match_wake(text: str, name_alone: bool | None = None) -> WakeHit | None:
     for start in range(min(2, len(w))):
         if start == 1 and w[0] not in LEAD_FILLERS:  # only "uh hey jarvis", "so jarvis ..."
             break
-        if _is_greet(w[start]):
-            n = _name_at(w, start + 1)
+        lead = _wake_lead(w, start) or (1 if _is_greet(w[start]) else 0)
+        if lead:
+            n = _name_at(w, start + lead)
             if n:
-                return WakeHit(_rest(toks, owner, start + 1 + n), text)
+                cmd = _rest(toks, owner, start + lead + n)
+                return WakeHit("" if _only_wake(cmd) else cmd, text)
         if name_alone:
             n = _name_at(w, start, CANON, 0.85)  # only the real name may lead a command
             if n:
-                return WakeHit(_rest(toks, owner, start + n), text)
+                cmd = _rest(toks, owner, start + n)  # "KURAMA wake up" = just waking
+                return WakeHit("" if _only_wake(cmd) else cmd, text)
     if name_alone and len(w) <= 2:
         n = _name_at(w, 0)
         if n == len(w):

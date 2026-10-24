@@ -192,6 +192,7 @@ function dictate(text, lang) {
 
 async function toggleConv() {
   audioCtx();
+  if (asleep) { wakeUp(""); return; } // the talk button wakes KURAMA up
   if (mode === "conv" && conv.on) { setMode("text"); return; }
   if (recording) setMode("text");
   mode = "conv";
@@ -1201,7 +1202,8 @@ const SLEEP_RE = /^(?:ok(?:ay)?[,\s]+)?(?:(?:now\s+)?(?:go\s+to\s+)?sleep(?:\s+n
 const WAKE_NAMES = ["kurama", "karama", "corama", "kuruma", "kurma", "koorama", "kurrama", "करामा", "कुरामा"];
 function wakeRest(text) { // null = no wake phrase; else what came after it ("wake up kurama, open youtube" -> "open youtube")
   const names = [...WAKE_NAMES, botName.toLowerCase()].map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
-  const m = text.match(new RegExp(`(?:wake\\s*up|wakeup|hey|hello|hi|ok(?:ay)?|utho?|उठ\\S*)?[\\s,]*(?:${names})\\b[\\s,!.]*(?:wake\\s*up)?[\\s,!.]*`, "i"));
+  const lead = "(?:(?:wake|woke|wakey|awake)(?:\\s*(?:up|off|of|now|please)){0,3}|hey|hello|hi|ok(?:ay)?|utho?|उठ\\S*)";
+  const m = text.match(new RegExp(`${lead}?[\\s,]*(?:${names})\\b[\\s,!.]*(?:(?:wake|woke)(?:\\s*(?:up|off|now)){0,2})?[\\s,!.]*`, "i"));
   if (!m) return null;
   const said = m[0].toLowerCase();
   if (!/wake|hey|hello|hi\b|ok|uth|उठ/.test(said) && text.trim().split(/\s+/).length > 3) return null; // "...kurama..." mid-sentence
@@ -1224,7 +1226,8 @@ async function sleepListen() { // asleep: the API's cheap listener, or (fallback
   for (let i = 0; player.active && i < 120; i++) await new Promise((r) => setTimeout(r, 250)); // never hear our own goodbye
   if (!asleep) return;
   if (serverWake) {
-    if (conv.on) { conv.stop(); mic.stop(); setMode("text"); }
+    if (conv.on) { conv.stop(); mic.stop(); }
+    mode = "conv"; setMode("conv"); // talk mode stays selected while asleep
     wakeEvents();
     try { await api.wakeSleep(); updateState(); return; } catch { serverWake = false; }
   }
@@ -1255,7 +1258,7 @@ async function wakeUp(rest) {
 function startListening() { // boot: asleep, waiting for the wake word
   if (MINI || !S.wakeListen || asleep || conv.on) return;
   asleep = true;
-  updateState();
+  mode = "conv"; setMode("conv"); // talk mode is the default
   sleepListen();
 }
 const STOP_RE = /\b(?:stop|wait|enough|quiet|shut\s*up|pause|cancel|hold\s+on|be\s+quiet|ruk\S*|bas|chup|band\s+karo|pugyo|rok\S*)\b|रुक\S*|बस|चुप|पुग्यो|रोक\S*/i;
@@ -1423,11 +1426,10 @@ async function bootVoice() { // first load after KURAMA starts: say hello, then 
   let g = "";
   try { g = (await api.greeting()).text || ""; } catch { /* no greeting */ }
   if (!g) { startListening(); return; }
-  const tail = S.wakeListen ? ` Say wake up ${botName} when you need me.` : "";
   const b = new BotBubble();
-  b.append(g + tail);
+  b.append(g);
   b.finish();
-  if (!S.mute) { audioCtx(); player.enqueue(g + tail); }
+  if (!S.mute) { audioCtx(); player.enqueue(g); }
   startListening(); // waits until the greeting has been spoken
 }
 if (FORCE_ORB) { // fake audio for visual checks

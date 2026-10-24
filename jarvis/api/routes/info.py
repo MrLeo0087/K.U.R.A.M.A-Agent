@@ -216,6 +216,8 @@ async def device_info():
 
 # ---------- greeting: the first dashboard load after KURAMA starts says hello (once per start) ----------
 _greeted = {"done": False}
+GREETING_ASKS = ("how are you?", "what are we doing today?", "what's the plan today?", "I'm ready when you are.",
+                 "good to see you. What are we working on?")
 
 
 @router.get("/greeting", summary="A spoken hello, only on the first call after KURAMA starts")
@@ -224,12 +226,14 @@ async def greeting():
         return {"text": ""}
     _greeted["done"] = True
 
-    def build() -> str:
-        from jarvis.core import greeting as g
-        from jarvis.core import identity
-        text = g.build()
-        first, _, rest = text.partition(". ")
-        return f"{first}. {identity.name()} is online. {rest}".strip()
+    def build() -> str:  # short and natural: no clock, no weather, no instructions
+        import random
+        from datetime import datetime
+
+        h = datetime.now().hour
+        hello = "Good morning sir" if 5 <= h < 12 else "Good afternoon sir" if h < 17 else \
+            "Good evening sir" if h < 22 else "Hello sir"
+        return f"{hello}, {random.choice(GREETING_ASKS)}"
     try:
         return {"text": await run_in_threadpool(build)}
     except Exception as e:  # a greeting must never break the page
