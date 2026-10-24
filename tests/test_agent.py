@@ -164,3 +164,14 @@ def test_stale_turn_close_does_not_cut_next_turn(fake):
     old.close()  # used to set the shared abort flag and cut the new reply after one word
     assert (first + "".join(new)).strip() == "I am doing well, thanks."
     assert [m.content for m in a.history if isinstance(m, AIMessage)] == ["I am doing well, thanks."]  # cut-off not kept
+
+
+def test_refusal_on_a_task_offers_the_toolsmith(fake, monkeypatch):
+    from jarvis.core import toolsmith
+    seen = []
+    monkeypatch.setattr(toolsmith, "handle", lambda task, **k: seen.append(task) or "The user said no, so no tool was made or run.")
+    fake(AIMessage(content="I don't have a way to check that right now."),  # the request_tools retry first
+         AIMessage(content="Sorry, I can't do that."), AIMessage(content="Okay, no problem."))
+    a = agent.Agent()
+    out = a.run("check my unread telegram messages")
+    assert seen == ["check my unread telegram messages"] and out == "Okay, no problem."

@@ -63,9 +63,10 @@ def test_consent_in_users_language(gen):
 
 def test_pure_tool_runs_after_one_yes_and_one_off_is_removed(gen):
     calls = gen(spec())
-    res, asked = run_make("how many days until 1 January 2027", [True])
+    res, asked = run_make("how many days until 1 January 2027", [True, False])  # yes build, no save
     assert res.ok and res.output.startswith("Result: 70 days"), res.output
-    assert len(asked) == 1 and len(calls) == 1
+    assert len(asked) == 2 and len(calls) == 1 and asked[1].endswith(toolsmith.SAVE_ASK["en"])
+    assert "Used once and removed" in res.output
     assert not list(config.SKILLS_DIR.glob("*")) if config.SKILLS_DIR.exists() else True
     assert not list(config.SANDBOX_DIR.glob("*"))
 
@@ -109,17 +110,17 @@ def test_sensitive_needs_ask_twice_and_show_commands(gen, monkeypatch):
 
 def test_personal_task_asks_twice_even_when_pure(gen):
     gen(spec())
-    res, asked = run_make("check my password strength", [True, True])
-    assert len(asked) == 2 and res.output.startswith("Result:")
+    res, asked = run_make("check my password strength", [True, True, False])
+    assert len(asked) == 3 and res.output.startswith("Result:")
 
 
 def test_wallpaper_skill_saved_with_dry_run_commands(gen, monkeypatch):
     monkeypatch.setattr(toolsmith, "DRY_RUN_CMDS", True)
     gen(spec(code=WALL, needs=("system",), name="wallpaper_skill", reusable=True, arg="/home/u/a.jpg",
              summary="Changes your desktop wallpaper."))
-    res, asked = run_make("change my wallpaper", [True, True])
+    res, asked = run_make("change my wallpaper", [True, True, True])
     assert "[dry run] would run: gsettings set org.gnome.desktop.background picture-uri-dark" in res.output
-    assert "Saved as skill 'wallpaper_skill'" in res.output
+    assert "Saved as tool 'wallpaper_skill'" in res.output
     meta = toolsmith.load_meta("wallpaper_skill")
     assert meta["sensitive"] and "shell" in meta["needs"] and "system" in meta["needs"]
     t = registry.get("wallpaper_skill")
@@ -129,8 +130,8 @@ def test_wallpaper_skill_saved_with_dry_run_commands(gen, monkeypatch):
 
 def test_reusable_saved_then_reused_with_zero_generation(gen, monkeypatch):
     calls = gen(spec(reusable=True))
-    res, _ = run_make("how many days until 1 January 2027", [True])
-    assert "Saved as skill 'days_until'" in res.output and len(calls) == 1
+    res, _ = run_make("how many days until 1 January 2027", [True, True])
+    assert "Saved as tool 'days_until'" in res.output and len(calls) == 1
     assert (config.SKILLS_DIR / "days_until.py").exists()
     t = registry.get("days_until")
     assert registry.group_of(t) == "skills" and registry.safety_of(t) == "safe"
@@ -151,7 +152,7 @@ def test_reusable_saved_then_reused_with_zero_generation(gen, monkeypatch):
 def test_sensitive_skill_asks_before_reuse(gen, monkeypatch):
     monkeypatch.setattr(toolsmith, "DRY_RUN_CMDS", True)
     gen(spec(code=WALL, needs=("system",), name="wallpaper_skill", reusable=True))
-    run_make("change my wallpaper", [True, True])
+    run_make("change my wallpaper", [True, True, True])
     asked = []
     out = safety.execute("use_skill", {"name": "wallpaper_skill", "arg": "/x.jpg"},
                          confirm=lambda p: asked.append(p) or False)

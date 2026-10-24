@@ -203,6 +203,7 @@ WORKSPACE_SKIP_TOOLS = ("read_webpage", "search_knowledge", "ask_knowledge", "re
 TOOL_BACKGROUND_AFTER_S = float(os.getenv("KURAMA_TOOL_BG_AFTER_S", "6"))
 TOOL_NO_BACKGROUND = ("start_job", "generate_image", "write_document", "resume_job", "cancel_job", "make_tool",
                       "focus_timer", "gesture_control", "power_off", "suspend_computer")
+TOOLSMITH_OFFER = True  # a refusal on a real task always offers to build a tool (asks first)
 AGENT_MAX_TOOL_ROUNDS = 4  # llm -> tools loops per request, then the model must answer
 AGENT_MAX_TOKENS = 400
 AGENT_SUMMARY_BATCH_TURNS = 3  # fold this many old turns into the rolling summary at once

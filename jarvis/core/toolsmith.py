@@ -10,7 +10,7 @@ handle(task) flow:
      showing the plain summary and, for shell, the exact commands.
   6. Sandbox run: `python -I` runner, cwd data/sandbox/<id>/, rlimits, audit hook, 15 s wall timeout,
      stripped env. One retry on error with the (capped) traceback.
-  7. reusable -> data/skills/<name>.py + .json, registered as a tool in group "skills" (LRU 20);
+  7. Ask "save this tool for next time?": yes -> data/skills/<name>.py + .json, a tool in group "skills" (LRU 20);
      one-off -> sandbox folder and code deleted.
 """
 from __future__ import annotations
@@ -62,9 +62,12 @@ BANNED_NAMES = {"eval", "exec", "compile", "__import__", "open", "globals", "loc
 BANNED_ATTRS = {"format_map", "mro", "system", "popen", "modules", "load_module", "exec_module"}
 _FRAME_ATTR = re.compile(r"^(?:f|gi|cr|ag|tb|co)_")
 
-CONSENT = {"en": "I don't have a tool for that. Should I make a small one to do it?",
-           "hi": "मेरे पास इसके लिए कोई टूल नहीं है। क्या मैं इसके लिए एक छोटा टूल बना दूँ?",
-           "ne": "मसँग यसको लागि टुल छैन। के म यसको लागि एउटा सानो टुल बनाऊँ?"}
+CONSENT = {"en": "I don't have a tool for that yet, but I can create one. Should I create a tool for it?",
+           "hi": "मेरे पास इसके लिए अभी कोई टूल नहीं है, पर मैं बना सकता हूँ। क्या मैं इसके लिए टूल बना दूँ?",
+           "ne": "मसँग यसको लागि अहिले टुल छैन, तर म बनाउन सक्छु। के म यसको लागि टुल बनाऊँ?"}
+SAVE_ASK = {"en": "Done. Should I save this tool for next time?",
+            "hi": "हो गया। क्या यह टूल आगे के लिए सेव कर दूँ?",
+            "ne": "भयो। यो टुल पछिको लागि सेभ गरूँ?"}
 SECOND = {"en": "The tool will: {summary}{cmds} Is it okay to run it?",
           "hi": "यह टूल यह करेगा: {summary}{cmds} क्या इसे चलाऊँ?",
           "ne": "यो टुलले यो गर्छ: {summary}{cmds} चलाऊँ?"}
@@ -330,6 +333,8 @@ def handle(task: str, user_text: str | None = None, lang: str | None = None) -> 
     """The make_tool flow. Returns text for the agent's LLM (<= ~800 chars)."""
     global last_tokens
     full = user_text or task
+    if user_text and len(user_text.split()) < 8 and task.lower() not in user_text.lower():
+        full = f"{task} (the user said: {user_text})"  # "can you create such tool": the task is in `task`
     lang = _lang(full, lang)
     hit = find_skill(task + " " + (user_text or ""))
     if hit:
@@ -388,11 +393,18 @@ def handle(task: str, user_text: str | None = None, lang: str | None = None) -> 
     log.info("toolsmith %s: %d generation tokens, ok=%s, reusable=%s", spec.name, last_tokens, res.ok, spec.reusable)
     if not res.ok:
         return f"The tool failed ({res.error[:150]}). Tell the user kindly it didn't work."
-    note = ""
-    if spec.reusable:
+    # the result first, then the user decides: keep the tool for next time, or use it once and drop it
+    if safety.ask(f"{_short(res.output)} {SAVE_ASK.get(lang, SAVE_ASK['en'])}"):
         meta = save_skill(spec, full, needs, chk)
-        note = f" (Saved as skill '{meta['name']}' for next time.)"
+        note = f" (Saved as tool '{meta['name']}' for next time.)"
+    else:
+        note = " (Used once and removed, as the user asked.)"
     return f"Result: {res.output[:700]}{note}"
+
+
+def _short(text: str, n: int = 160) -> str:
+    t = " ".join((text or "").split())
+    return t if len(t) <= n else t[:n].rsplit(" ", 1)[0] + "..."
 
 
 # --- skills (saved reusable tools) ---

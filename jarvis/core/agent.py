@@ -347,8 +347,26 @@ class Agent:
             return {"messages": msgs + [SystemMessage(content=hint)], "tools": retry_tools,
                     "pending": [], "retried": True, "again": True, "rounds": rounds + 1,
                     "tier": "fast" if state.get("tier") == "voice" else state.get("tier", "fast")}
+        if not last_round and self._smith_ok(state, answer):  # "I can't" on a real task: offer to build a tool
+            call = {"name": "make_tool", "args": {"task": state["user_text"]}, "id": f"smith_{rounds}"}
+            smith = [t for t in registry.schemas_for(["toolsmith"]) if t.name == "make_tool"]
+            return {"messages": msgs + [AIMessage(content="", tool_calls=[call])], "pending": [call],
+                    "tools": list(tools or []) + smith}
         return {"messages": msgs + [AIMessage(content=answer)], "pending": [], "answer": answer,
                 "again": False}
+
+    @staticmethod
+    def _smith_ok(state: AgentState, answer: str) -> bool:
+        """The model refused a real task and no tool was built this turn: the toolsmith asks the user (always the
+        same flow: 'I don't have a tool for that, should I make one?' -> build -> run -> 'save it?')."""
+        text = state["user_text"]
+        if not config.TOOLSMITH_OFFER or not meta.looks_like_refusal(answer) or router.is_small_talk(text):
+            return False
+        if not (router.looks_like_command(text) or state.get("groups")):
+            return False
+        if any(isinstance(m, ToolMessage) and m.name == "make_tool" for m in state["messages"]):
+            return False
+        return any(t.name == "make_tool" for t in registry.schemas_for(["toolsmith"]))
 
     @staticmethod
     def _log_meta(text: str, groups: list[str]) -> None:
