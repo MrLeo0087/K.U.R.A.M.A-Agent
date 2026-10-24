@@ -52,6 +52,7 @@ let online = null;
 let errUntil = 0;
 let paused = false; // wallpaper covered by a window (window.kuramaPause)
 let pendingConfirm = null; // conversation mode: confirmation answered by voice
+let asleep = false; // talk mode, waiting for "wake up KURAMA" (only talk mode sleeps and wakes)
 let openConfirm = null; // a yes/no card is waiting: typed or spoken "yes"/"no" answers it (never aborts the turn)
 const bubbles = new Map(); // confirm id -> bubble
 const FORCE_ORB = params.get("debug") === "1" ? params.get("orb") : null; // ?debug=1&orb=thinking (visual checks)
@@ -128,6 +129,7 @@ function abortChat() { chatCtrl?.abort(); }
 
 // ---------- modes ----------
 function setMode(m) {
+  if (m !== "conv" && asleep) { asleep = false; api.wakeAwake().catch(() => {}); } // sleep/wake is talk mode only
   if (mode === "conv" && m !== "conv" && conv.on) { conv.stop(); player.stop(); mic.stop(); }
   if (mode === "mic" && m !== "mic" && recording) { recording = false; recorder.cancel(); mic.stop(); clearInterval(recTimer); }
   mode = m;
@@ -393,7 +395,7 @@ async function answerConfirm(id, yes) {
 async function sendChat(text, { voice = false, lang = null, speak = false } = {}) {
   text = (text || "").trim();
   if (!text) return;
-  if (SLEEP_RE.test(text) && S.wakeListen) { addUser(text, voice); goSleep(); return; } // KURAMA sleeps, not the laptop
+  if (SLEEP_RE.test(text) && mode === "conv" && S.wakeListen) { addUser(text, voice); goSleep(); return; } // talk mode sleeps
   if (busy) { // e.g. a barge-in utterance while the previous turn is still closing
     abortChat();
     for (let i = 0; busy && i < 40; i++) await new Promise((r) => setTimeout(r, 50));
@@ -1210,7 +1212,6 @@ function wakeRest(text) { // null = no wake phrase; else what came after it ("wa
   if (!/wake|hey|hello|hi\b|ok|uth|उठ/.test(said) && text.trim().split(/\s+/).length > 3) return null; // "...kurama..." mid-sentence
   return text.slice(m.index + m[0].length).replace(/^[\s,.!?]+/, "");
 }
-let asleep = false; // waiting for "wake up KURAMA"
 let wakeES = null, serverWake = true; // the API listens while asleep (cheap); false = it can't (no mic there)
 function wakeEvents() {
   if (wakeES) return;
