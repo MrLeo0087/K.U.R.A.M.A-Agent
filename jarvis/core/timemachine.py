@@ -124,7 +124,7 @@ def resolve(project: str = "") -> Path:
             raise TMError(str(e)) from None
     best, when = None, 0.0
     for p in projects():
-        t = float(store.kv_get(f"tm_last:{p}") or 0)
+        t = last_activity(p)
         if t > when:
             best, when = p, t
     if best is None:
@@ -133,6 +133,31 @@ def resolve(project: str = "") -> Path:
 
 
 # ---------------------------------------------------------------- snapshots
+def _changed_files(project: Path) -> list[str]:
+    if (project / ".git").exists():
+        cp = subprocess.run(["git", "-C", str(project), "status", "--porcelain", "-uall", "--no-renames"],
+                            capture_output=True, text=True, timeout=30)
+        return [ln[3:].strip().strip('"') for ln in cp.stdout.splitlines() if len(ln) > 3]
+    return [str(f.relative_to(project)) for f in project.rglob("*")
+            if f.is_file() and not any(part in ("venv", ".venv", "node_modules", "__pycache__", ".git")
+                                       for part in f.parts)][:5000]
+
+
+def last_activity(project: Path) -> float:
+    """When you last edited a file there (uncommitted changes; else the last commit)."""
+    best = 0.0
+    for n in _changed_files(project):
+        try:
+            best = max(best, (project / n).stat().st_mtime)
+        except OSError:
+            continue
+    if not best and (project / ".git").exists():
+        out = subprocess.run(["git", "-C", str(project), "log", "-1", "--format=%ct"], capture_output=True,
+                             text=True, timeout=10).stdout.strip()
+        best = float(out or 0)
+    return best
+
+
 def changed_since(project: Path, since: float) -> bool:
     """Any file in the project (git status, .gitignore respected) modified after `since`?"""
     if (project / ".git").exists():
@@ -219,16 +244,23 @@ def history(project: Path, path: str = "", n: int = 12) -> str:
 
 
 def diff(project: Path, when: str, path: str = "", max_chars: int = 3000) -> str:
-    c = commit_at(project, when)
+    note = ""
+    try:
+        c = commit_at(project, when)
+    except TMError as e:
+        if "no snapshot that old" not in str(e):
+            raise
+        c = _git(project, "rev-list", "--max-parents=0", "HEAD").stdout.split()[-1]
+        note = "(Snapshots only go back to the first one, so this is everything since then.)\n"
     snapshot(project, "before compare")
     stamp = _git(project, "show", "-s", "--format=%cd", "--date=format:%a %H:%M", c).stdout.strip()
     stat = _git(project, "diff", "--stat", c, "HEAD", *(["--", path] if path else [])).stdout.strip()
     if not stat:
-        return f"Nothing changed in {project.name}{' / ' + path if path else ''} since {stamp}."
+        return note + f"Nothing changed in {project.name}{' / ' + path if path else ''} since {stamp}."
     patch = _git(project, "diff", "-U2", c, "HEAD", *(["--", path] if path else [])).stdout
     if len(patch) > max_chars:
         patch = patch[:max_chars] + "\n...[more]"
-    return f"Changes in {project.name} since {stamp}:\n{stat}\n\n{patch}"
+    return note + f"Changes in {project.name} since {stamp}:\n{stat}\n\n{patch}"
 
 
 def restore(project: Path, path: str, when: str) -> str:

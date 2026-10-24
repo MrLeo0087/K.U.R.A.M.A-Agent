@@ -60,7 +60,7 @@ def test_worker_diff_history_restore_undo(proj):
     assert "Put back train.py" in registry.call("time_machine", {"action": "undo"}).output
     assert "0.001" in (proj / "train.py").read_text()
     assert "myproj" in registry.call("time_machine", {"action": "list"}).output
-    assert "no snapshot that old" in registry.call("time_machine", {"action": "changes", "when": "10 years ago"}).output
+    assert "only go back to the first one" in registry.call("time_machine", {"action": "changes", "when": "10 years ago"}).output
 
 
 def test_where_was_i_facts_and_summary(proj, monkeypatch):
