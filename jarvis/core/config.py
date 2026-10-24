@@ -241,7 +241,7 @@ ROUTER_EXAMPLES: dict[str, tuple[str, ...]] = {
             "undo my changes to this file", "where was I", "what was I working on", "resume my project"),
     "dev": ("run the test suite", "start a new python project", "check my python setup and venv",
             "what does this error mean", "fix this traceback", "why does my code crash with this exception",
-            "I fixed that error by"),
+            "I fixed that error by", "check my dataset for problems before training", "is my data balanced"),
     "codequality": ("review my code changes", "scan the repo for leaked passwords", "check my dependencies"),
     "filesearch": ("where is that pdf I downloaded", "find my file named report", "what is inside this folder"),
     "files": ("create a folder", "move this file to documents", "delete this file", "rename the file"),
@@ -472,7 +472,8 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
     "media": "music and video playback (play, pause, next, previous, what's playing), YouTube, playlists, hand-gesture media control (camera)",
     "git": "git status, log, diff, commit and branches; code time machine (automatic snapshots: what changed since "
            "a time, restore a file); where was I (resume a project)",
-    "dev": "tests, new projects, Python environment checks, explain an error/traceback and remember the fix",
+    "dev": "tests, new projects, Python environment checks, explain an error/traceback and remember the fix, "
+           "check a dataset (CSV/images) before training",
     "codequality": "dependency doctor (unpinned/outdated/vulnerable/unused), secrets scan, pre-commit gate, "
                    "repo hygiene, AI code review of a diff/file/commit",
     "devutils": "notebook (.ipynb) to .py script, generate requirements.txt from imports, config file snapshots/diff",
