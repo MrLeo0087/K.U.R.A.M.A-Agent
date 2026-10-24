@@ -6,7 +6,8 @@ from jarvis.core.registry import tool
 from jarvis.tools.general import _tg
 
 
-@tool(group="telegram", safety="confirm", description="Send a text message to the user's Telegram.")
+# safe: only ever goes to the owner's own chat (TELEGRAM_CHAT_ID)
+@tool(group="telegram", safety="safe", description="Send a text message to the user's Telegram.")
 def send_message_telegram(text: str) -> str:
     """Send text to the user's Telegram chat.
 

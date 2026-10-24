@@ -1269,6 +1269,7 @@ async function bargeCheck(blob) { // something was said while KURAMA was talking
   const t = (r?.text || "").trim();
   if (!t) return;
   if (pendingConfirm && (YES.test(t) || NO.test(t))) { player.stop(); addUser(t, true); answerConfirm(pendingConfirm, !NO.test(t) && YES.test(t)); return; }
+  if (openConfirm) return; // a question is waiting: anything but yes/no must not cancel it
   if (STOP_RE.test(t) && t.split(/\s+/).length <= 4) { player.stop(); if (!openConfirm) abortChat(); updateState(); maybeResume(); return; }
   const words = t.toLowerCase().match(/\p{L}+/gu) || [];
   const said = (player.said || []).join(" ").toLowerCase();

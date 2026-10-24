@@ -121,3 +121,21 @@ def test_wake_service_publishes_wake(monkeypatch):
         return await asyncio.wait_for(q.get(), 3)
     ev = asyncio.run(run())
     assert ev == {"type": "wake", "heard": "hey kurama", "command": "open youtube", "lang": "en"}
+
+
+def test_simple_action_answers_without_second_llm_call(monkeypatch):
+    from langchain_core.messages import AIMessage
+
+    from jarvis.core import agent, llm
+    calls = []
+
+    def fake_chat(msgs, **kw):
+        calls.append(kw.get("tools"))
+        msg = AIMessage(content="", tool_calls=[{"name": "open_url", "args": {"target": "youtube"}, "id": "c1"}])
+        return llm.Reply("", "m", [], message=msg) if hasattr(llm.Reply, "message") else None
+    monkeypatch.setattr(llm, "chat", fake_chat)
+    from jarvis.tools.general import open_url
+    monkeypatch.setattr(open_url, "_open", lambda url: None)
+    a = agent.Agent(use_planner=False, persist=False)
+    out = a.run("could you bring up youtube for me in the browser")
+    assert len(calls) == 1 and "youtube" in out.lower()  # one LLM call; the reply came from the template

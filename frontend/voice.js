@@ -453,8 +453,8 @@ export class Conversation {
       if (this.asleep && this.started && now - this.capT0 > 5000) { this.listen(); return; } // long talk: not a wake phrase
       if (this.started && (this.silenceMs >= this.END_SILENCE_MS || now - this.capT0 > this.MAX_UTTERANCE_MS)) {
         this._end();
-      } else if (!this.started && now - this.rec.t0 > this.RESTART_IDLE_MS) {
-        this.rec.cancel(); this.rec.start();
+      } else if (!this.started && !this.speechMs && now - this.rec.t0 > this.RESTART_IDLE_MS) {
+        this.rec.cancel(); this.rec.start(); // only in real silence: never cut off the start of a word
       }
       if (!this.asleep && !this.started && now - this.lastSpeech > this.AUTO_OFF_MS) { this.lastSpeech = now; this.cb.onAutoOff?.(); }
     } else if (this.player.playing && !this.asleep) {

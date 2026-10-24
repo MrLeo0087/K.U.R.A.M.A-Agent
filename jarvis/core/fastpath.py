@@ -44,8 +44,9 @@ def refresh_names() -> None:
     global _NAMES, _LEAD, _TRAIL
     from jarvis.core import identity
     _NAMES = "|".join(map(re.escape, identity.names()))
-    _LEAD = re.compile(r"^\s*(?:(?:hey|hi|ok|okay|yo)[\s,]+)?(?:(?:" + _NAMES + r")\b[\s,!.:]*)?(?:please\s+)?"
-                       r"(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?)?", I)
+    _LEAD = re.compile(r"^\s*(?:(?:hey|hi|ok|okay|yo|so|now|then|alright|well|um+|uh+|hmm+|and|also|actually|just|"
+                       r"kindly)\b[\s,.!]*)*(?:(?:" + _NAMES + r")\b[\s,!.:]*)?(?:(?:now|so|okay|ok)\b[\s,]*)*"
+                       r"(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?(?:just\s+)?)?", I)
     _TRAIL = re.compile(r"(?:[\s,]+(?:please|" + _NAMES + r"))*[\s?.!।॥]*$", I)
 
 

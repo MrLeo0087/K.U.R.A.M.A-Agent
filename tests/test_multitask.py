@@ -168,7 +168,7 @@ def test_long_task_goes_to_job_manager_and_returns_at_once(respond, monkeypatch)
     t0 = time.monotonic()
     answer = agent.Agent().run("write a 300-word essay about Nepal and open YouTube")
     assert time.monotonic() - t0 < 1.0
-    assert answer.startswith("YouTube is open.") and 'writing "essay about Nepal"' in answer
+    assert answer.lower().startswith(("youtube is open.", "sure, opening youtube.")) and 'writing "essay about Nepal"' in answer
     assert opened == ["https://www.youtube.com"]
     job = jobs.get_manager().list()[0]
     assert job.status in ("queued", "running") and job.title == "essay about Nepal"

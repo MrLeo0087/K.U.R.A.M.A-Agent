@@ -176,6 +176,11 @@ VOICE_MAX_TOKENS = 200
 TOOL_PACKAGES = ("interactive", "general", "external")  # jarvis/tools/<pkg>/<one file per tool>
 TOOL_OUTPUT_MAX_CHARS = 800  # tool results are truncated to this before going back to the LLM
 # Workspace card: tool results with this many lines (or longer than TOOL_OUTPUT_MAX_CHARS) are shown there in full
+# Simple actions answer themselves with the fast path's templates: no second LLM call just to say "done"
+# (tool -> fast-path intent used to word the reply; None = fixed sentence below)
+DIRECT_REPLY_TOOLS = {"open_url": "open", "open_app": "open", "volume": "volume", "brightness": "brightness",
+                      "media_control": "media", "mute_audio": "mute", "mic_mute": "mic", "lock_screen": "lock",
+                      "screenshot": "screenshot", "send_message_telegram": None}
 WORKSPACE_MIN_LINES = 8
 WORKSPACE_SHOW_ALL = ("list_folder",)  # results the user wants to see in full, to pick from
 TOOL_OUTPUT_FULL_CHARS = 3500  # the user asked for everything ("the whole list"): the LLM gets this much

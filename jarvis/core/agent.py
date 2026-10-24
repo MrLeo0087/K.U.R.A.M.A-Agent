@@ -134,7 +134,7 @@ class Agent:
         g.add_conditional_edges(
             "llm", lambda s: "tools" if s.get("pending") else ("llm" if s.get("again") else END),
             {"tools": "tools", "llm": "llm", END: END})
-        g.add_edge("tools", "llm")
+        g.add_conditional_edges("tools", lambda s: END if s.get("answer") else "llm", {"llm": "llm", END: END})
         if not planned:
             g.add_edge(START, "route")
             return g.compile()
@@ -307,10 +307,14 @@ class Agent:
             try:
                 reply = self._chat(msgs, nxt, state.get("stream", False), hold)
             except llm.LLMError as e2:
-                if "tools" not in nxt or "tool" not in str(e2).lower():
+                if "tool" not in str(e2).lower():
                     raise
-                reply = self._chat(msgs, {k: v for k, v in kw.items() if k not in ("tools", "tool_choice")},
-                                   state.get("stream", False), hold)
+                if "tools" in nxt:
+                    reply = self._chat(msgs, {k: v for k, v in kw.items() if k not in ("tools", "tool_choice")},
+                                       state.get("stream", False), hold)
+                else:  # it insists on calling tools: answer with what the tools already said
+                    done = [str(m.content) for m in msgs if isinstance(m, ToolMessage)][-2:]
+                    reply = llm.Reply(" ".join(done)[:400] or NO_ANSWER, "", [])
         ai = reply.message or AIMessage(content=reply.text)
         calls = [] if last_round else list(ai.tool_calls)
         bad = [] if last_round else list(getattr(ai, "invalid_tool_calls", None) or [])
@@ -396,7 +400,10 @@ class Agent:
                 self.last.setdefault("tools", []).append({"name": name, "ok": bool(groups)})
                 out.append(ToolMessage(content=content, tool_call_id=tc["id"], name=name))
                 continue
-            if name not in allowed:
+            denied = self.last.setdefault("denied", [])
+            if name in denied:  # never ask the same thing twice in one turn (no yes/no loops)
+                content, ok = "The user already declined this. Don't call it again; say it wasn't done.", False
+            elif name not in allowed:
                 content = f"error: tool {name!r} is not available for this request"
                 store.log_tool(name, args, False, 0, safety="unknown", error="not routed",
                                outcome="error", result=content)
@@ -410,10 +417,37 @@ class Agent:
                                           "jobs": self.last.setdefault("jobs", []),
                                           "request": state.get("request") or state["user_text"]})
                 content, ok = res.output, res.ok
+                if content.startswith("The user declined"):
+                    denied.append(name)
             self.last.setdefault("tools", []).append({"name": name, "ok": ok})
             out.append(ToolMessage(content=content, tool_call_id=tc["id"], name=name))
+        direct = self._direct_reply(state, out)
+        if direct:
+            return {"messages": state["messages"] + out, "pending": [], "answer": direct,
+                    "rounds": state.get("rounds", 0) + 1, **update}
         return {"messages": state["messages"] + out, "pending": [],
                 "rounds": state.get("rounds", 0) + 1, **update}
+
+    def _direct_reply(self, state: AgentState, results: list[ToolMessage]) -> str:
+        """Every call this round was a simple action that worked: word the reply from the fast path's templates
+        instead of a second LLM call (about half the tokens of a "open YouTube" turn)."""
+        calls = {tc["id"]: tc for tc in state.get("pending") or []}
+        if not results or any(m.name not in config.DIRECT_REPLY_TOOLS for m in results):
+            return ""
+        lang = state.get("lang") or "en"
+        said = []
+        for m in results:
+            text = str(m.content)
+            if text.lower().startswith(("error", "the user", "refused")):
+                return ""  # something went wrong: let the model explain it
+            intent = config.DIRECT_REPLY_TOOLS[m.name]
+            if intent is None:
+                said.append("Done, I sent it to your Telegram.")
+                continue
+            args = (calls.get(m.tool_call_id) or {}).get("args") or {}
+            label = str(args.get("target") or args.get("name") or "")
+            said.append(fastpath.render(fastpath.Intent(intent, m.name, "", args, label), True, text, lang))
+        return " ".join(fastpath.merge_opens(said)).strip()
 
     # --- history ---
     def _messages(self, user_text: str, mode: str, lang: str | None) -> list[BaseMessage]:
