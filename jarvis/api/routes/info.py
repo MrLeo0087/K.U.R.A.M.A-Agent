@@ -217,7 +217,7 @@ async def device_info():
 # ---------- greeting: the first dashboard load after KURAMA starts says hello (once per start) ----------
 _greeted = {"done": False}
 GREETING_ASKS = ("how are you?", "what are we doing today?", "what's the plan today?", "I'm ready when you are.",
-                 "good to see you. What are we working on?")
+                 "what are we working on?")
 
 
 @router.get("/greeting", summary="A spoken hello, only on the first call after KURAMA starts")

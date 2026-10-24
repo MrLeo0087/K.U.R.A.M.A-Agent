@@ -347,6 +347,9 @@ export class Player {
     };
     this.src = src;
     src.start();
+    // watchdog: if the audio engine never reports the end (suspended device), don't stay "Speaking" forever
+    setTimeout(() => { if (this.src === src) { try { src.stop(); } catch { /* ended */ } src.onended?.(); } },
+      (buffer.duration + 2) * 1000);
     this.onStart();
   }
 

@@ -79,7 +79,7 @@ function orbState() {
 function stateText(st) {
   if (online === false) return "Offline — check the API in settings";
   if (online === null) return "Connecting…";
-  if (asleep || conv.state === "sleeping") return `Sleeping — say “wake up ${botName}”`;
+  if (asleep || conv.state === "sleeping") return `Talk mode — say “hey ${botName}” to start`;
   if (st === "speaking") return mode === "conv" ? "Speaking — say “stop” to interrupt" : "Speaking — click the orb to stop";
   if (st === "listening") {
     if (recording) return `Recording ${recSecs}s — click the mic to stop · Esc cancels`;
@@ -95,7 +95,7 @@ const CHIP = { idle: "Ready", listening: "Listening", thinking: "Thinking…", s
 function updateState() {
   const st = orbState();
   orb.setState(FORCE_ORB || st);
-  const om = FORCE_MODE || (mode === "conv" && conv.on ? "conv" : mode === "mic" ? "mic" : "text");
+  const om = FORCE_MODE || (mode === "conv" && (conv.on || asleep) ? "conv" : mode === "mic" ? "mic" : "text"); // asleep = still talk mode
   orb.setMode(om);
   if (document.body.dataset.mode !== om) { document.body.dataset.mode = om; $("composer").querySelector(".modes").dataset.mode = om; }
   document.body.dataset.state = performance.now() < errUntil ? "error" : FORCE_ORB || st;
@@ -194,9 +194,9 @@ function dictate(text, lang) {
 
 async function toggleConv() {
   audioCtx();
-  if (asleep) { wakeUp(""); return; } // the talk button wakes KURAMA up
-  if (mode === "conv" && conv.on) { setMode("text"); return; }
+  if (mode === "conv" && (conv.on || asleep)) { setMode("text"); return; } // talk button again: leave talk mode
   if (recording) setMode("text");
+  if (!MINI && S.wakeListen) { startListening(); return; } // talk mode starts asleep: "hey KURAMA" starts it
   mode = "conv";
   try { await conv.start(); } catch (e) { toast(micError(e)); flashError(); setMode("text"); return; }
   setMode("conv");
@@ -1202,7 +1202,7 @@ function announceJob(r) {
 // ---------- wake word + sleep: talk mode is on by default and asleep; "wake up KURAMA" wakes it,
 // "sleep now" (or 2 quiet minutes) puts it back to sleep. Asleep, only short phrases are transcribed.
 const SLEEP_RE = /^(?:ok(?:ay)?[,\s]+)?(?:(?:now\s+)?(?:go\s+to\s+)?sleep(?:\s+now)?|(?:kurama[,\s]+)?(?:go\s+)?(?:to\s+)?sleep(?:\s+kurama)?|good\s*night(?:\s+kurama)?|so\s+jao|सो\s*जाओ|सुत\S*)[\s.!।]*$/i;
-const WAKE_NAMES = ["kurama", "karama", "corama", "kuruma", "kurma", "koorama", "kurrama", "करामा", "कुरामा"];
+const WAKE_NAMES = ["kurama", "karama", "corama", "kuruma", "kurma", "koorama", "kurrama", "jarvis", "करामा", "कुरामा"];
 function wakeRest(text) { // null = no wake phrase; else what came after it ("wake up kurama, open youtube" -> "open youtube")
   const names = [...WAKE_NAMES, botName.toLowerCase()].map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
   const lead = "(?:(?:wake|woke|wakey|awake)(?:\\s*(?:up|off|of|now|please)){0,3}|hey|hello|hi|ok(?:ay)?|utho?|उठ\\S*)";
@@ -1248,6 +1248,8 @@ async function sleepListen() { // asleep: the API's cheap listener, or (fallback
 function goSleep(quiet = false) {
   if (asleep) return;
   asleep = true;
+  if (conv.on) conv.sleep(true); // from now on only the wake phrase counts, even before the API takes over
+  abortChat();
   player.stop();
   if (!quiet && !S.mute) player.enqueue(`Okay, going to sleep. Say wake up ${botName} when you need me.`);
   updateState();

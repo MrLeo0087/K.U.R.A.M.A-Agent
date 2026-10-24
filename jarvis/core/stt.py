@@ -38,8 +38,20 @@ def is_hallucination(text: str) -> bool:
     norm = re.sub(r"[^\w\s]", " ", text.lower()).split()
     if " ".join(norm) in _HALLUCINATIONS or _HALLUCINATION_RE.search(text):
         return True
-    vocab = set(re.sub(r"[^\w\s]", " ", (config.STT_PROMPT or "").lower()).split())
-    return len(norm) >= 3 and vocab and sum(w in vocab for w in norm) / len(norm) >= 0.8
+    prompt = re.sub(r"[^\w\s]", " ", (config.STT_PROMPT or "").lower()).split()
+    vocab = set(prompt)
+    if len(norm) >= 3 and vocab and sum(w in vocab for w in norm) / len(norm) >= 0.8:
+        return True
+    # "Kurama, VS Code, Brave, YouTube, and ...": 3+ prompt words in the prompt's own order = an echo, not speech
+    dedup = [w for i, w in enumerate(norm) if i == 0 or w != norm[i - 1]]
+    for i in range(len(dedup)):
+        for j in range(len(prompt)):
+            k = 0
+            while i + k < len(dedup) and j + k < len(prompt) and dedup[i + k] == prompt[j + k]:
+                k += 1
+            if k >= 3:
+                return True
+    return False
 
 
 class STTError(RuntimeError):
@@ -55,6 +67,7 @@ class Transcript:
     duration_s: float = 0.0
     latency_ms: int = 0
     logprob: float | None = None  # mean segment avg_logprob (confidence), when available
+    no_speech: float | None = None  # mean segment no_speech_prob, when available
 
     def __str__(self) -> str:
         return self.text
@@ -98,12 +111,9 @@ def _no_speech(result) -> float | None:
     return sum(vals) / len(vals) if vals else None
 
 
-def is_noise(text: str, no_speech: float | None, logprob: float | None) -> bool:
-    """Background noise that Whisper turned into words: it says "probably not speech", or it is very unsure about
-    a short phrase. Real commands are clear and usually longer."""
-    if no_speech is not None and no_speech > config.STT_NO_SPEECH_MAX:
-        return True
-    return logprob is not None and logprob < config.STT_MIN_LOGPROB and len(text.split()) <= 4
+def is_noise(t: "Transcript") -> bool:
+    """Background noise that Whisper turned into words: the auto-detect pass says "probably not speech"."""
+    return t.no_speech is not None and t.no_speech > config.STT_NO_SPEECH_MAX
 
 
 def _one(wav: bytes, language: str | None, models: list[str]) -> Transcript:
@@ -119,7 +129,14 @@ def _one(wav: bytes, language: str | None, models: list[str]) -> Transcript:
         if language:
             kwargs["language"] = language
         try:
-            result = client.audio.transcriptions.create(**kwargs)
+            try:
+                result = client.audio.transcriptions.create(**kwargs)
+            except Exception as e:  # free tier: 20 requests/min per model; wait the few seconds it asks for, once
+                wait = re.search(r"try again in ([\d.]+)s", str(e)) if type(e).__name__ == "RateLimitError" else None
+                if not wait or float(wait.group(1)) > 5:
+                    raise
+                time.sleep(float(wait.group(1)) + 0.2)
+                result = client.audio.transcriptions.create(**kwargs)
         except Exception as e:
             last = e
             ms = int((time.monotonic() - t0) * 1000)
@@ -134,13 +151,13 @@ def _one(wav: bytes, language: str | None, models: list[str]) -> Transcript:
         store.log_llm(model, "stt", 0, 0, ms, True, audio_s=audio_s)
         text = result if isinstance(result, str) else (_field(result, "text", "") or "")
         text = text.strip()
-        if is_hallucination(text) or (not isinstance(result, str)
-                                        and is_noise(text, _no_speech(result), _logprob(result))):
+        if is_hallucination(text):
             text = ""
         raw = language or _field(result, "language", "") or ""
         dur = _field(result, "duration", None) or wav_duration(wav)
         return Transcript(fix_text(text), map_language(raw), model, raw, float(dur), ms,
-                          None if isinstance(result, str) else _logprob(result))
+                          None if isinstance(result, str) else _logprob(result),
+                          None if isinstance(result, str) else _no_speech(result))
     raise STTError(f"all STT models failed ({', '.join(models)}): {last}") from last
 
 
@@ -199,7 +216,8 @@ def transcribe(wav: bytes, language: str | None = None) -> Transcript:
         models = turbo_first[::-1] if language in config.STT_PREFER_FALLBACK_LANGS else turbo_first
         return _one(wav, language, models)
     if not config.STT_DUAL:
-        return _one(wav, None, turbo_first)
+        t = _one(wav, None, turbo_first)
+        return _gate(t, t)
     from concurrent.futures import ThreadPoolExecutor
 
     with ThreadPoolExecutor(max_workers=2) as ex:
@@ -213,6 +231,21 @@ def transcribe(wav: bytes, language: str | None = None) -> Transcript:
             ne = f_ne.result()
         except STTError:
             ne = None
+    if auto.raw_lang.strip().lower() not in LANG_MAP and not (ne and ne.text):
+        try:  # Whisper guessed a language we don't speak (Portuguese, Slovak...) on accented English
+            en = _one(wav, "en", turbo_first)
+            if en.text:
+                return _gate(en, auto)
+        except STTError:
+            pass
     best = choose(auto, ne)
     best.latency_ms = max(auto.latency_ms, ne.latency_ms if ne else 0)
+    return _gate(best, auto)
+
+
+def _gate(best: Transcript, auto: Transcript) -> Transcript:
+    """Noise check on the final pick only (gating each pass threw away the good one)."""
+    if best.text and is_noise(auto):
+        log.info("dropped as noise (no_speech %.2f): %r", auto.no_speech or 0, best.text[:60])
+        best.text = ""
     return best

@@ -79,9 +79,8 @@ def test_whisper_hallucinations_and_unspoken_text():
 
 
 def test_noise_gate_and_greeting_once(monkeypatch):
-    assert stt.is_noise("uh huh", 0.8, -0.2)  # Whisper says: probably no speech
-    assert stt.is_noise("the the", 0.1, -1.6)  # very unsure short phrase
-    assert not stt.is_noise("open youtube and play some music", 0.1, -0.5)
+    assert stt.is_noise(stt.Transcript("uh huh", "en", "m", no_speech=0.8))  # Whisper says: probably no speech
+    assert not stt.is_noise(stt.Transcript("open youtube", "en", "m", no_speech=0.1))
     from fastapi.testclient import TestClient
 
     from jarvis.api.app import create_app

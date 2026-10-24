@@ -69,7 +69,6 @@ STT_DUAL = os.getenv("JARVIS_STT_DUAL", "1").lower() not in ("0", "false", "no",
 STT_EN_MIN_LOGPROB = -0.6  # auto "English" below this confidence is treated as suspicious
 # Whisper vocabulary hint (biases spelling of names/apps; tested not to break hi/ne detection).
 STT_NO_SPEECH_MAX = 0.6  # Whisper's no_speech_prob above this: background noise, not a command
-STT_MIN_LOGPROB = -1.0  # a short phrase (<= 4 words) Whisper is this unsure about is dropped as noise
 STT_PROMPT = os.getenv("JARVIS_STT_PROMPT",
                        "Kurama, KURAMA, VS Code, Brave, YouTube, GitHub, Nepalgunj, Kathmandu, Pokhara.")
 # Common mishearings fixed after transcription (regex, case-insensitive, word-bounded).
@@ -137,7 +136,7 @@ BARGE_IN_GRACE_S = 0.4  # ignore the mic right after playback starts
 # "Hey KURAMA" wake word (P12): webrtcvad + noise gate find short bursts; only those are sent to the
 # free Google Web Speech recognizer (SpeechRecognition, no key), Groq Whisper if Google fails.
 WAKE_ENABLED = os.getenv("JARVIS_WAKE", "1").lower() not in ("0", "false", "no", "off")
-WAKE_ENGINE = os.getenv("JARVIS_WAKE_ENGINE", "google")  # google | groq
+WAKE_ENGINE = os.getenv("JARVIS_WAKE_ENGINE", "groq")  # groq (Whisper: hears "KURAMA" right) | google
 WAKE_GOOGLE_LANG = os.getenv("JARVIS_WAKE_LANG", "en-IN")
 WAKE_GOOGLE_TIMEOUT_S = 4.0
 WAKE_GOOGLE_RETRY_S = 60.0  # after a Google failure (offline), use Groq for this long

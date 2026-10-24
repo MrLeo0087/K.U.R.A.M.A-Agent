@@ -130,9 +130,9 @@ def test_google_falls_back_to_groq_and_backs_off():
     assert calls[-2:] == ["g", "q"]
 
 
-def test_google_unknown_is_not_failure():
-    r = wake.WakeRecognizer("google", google=lambda p: "", groq=lambda p: pytest.fail("no fallback"))
-    assert r.text(b"x") == ""
+def test_google_unknown_gets_a_second_opinion():
+    r = wake.WakeRecognizer("google", google=lambda p: "", groq=lambda p: "hey kurama")
+    assert r.text(b"x") == "hey kurama" and r.last_engine == "groq"  # noisy room: Whisper hears it
 
 
 def test_groq_engine_and_total_failure():

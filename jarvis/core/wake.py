@@ -33,7 +33,8 @@ log = logging.getLogger(__name__)
 GREETS = ("hey", "hi", "hello", "ok", "okay", "hay", "hai", "hei", "hallo", "helo", "yo", "oye",
           "ay", "ey", "he", "namaste", "हे", "हाय", "हेलो")
 CANONICAL = {"kurama": ("kurama", "कुरामा")}
-MISHEARD = {"kurama": ("karama", "corama", "kuruma", "ku rama", "koorama", "करामा", "kurma", "kurrama")}
+MISHEARD = {"kurama": ("karama", "corama", "kuruma", "ku rama", "koorama", "करामा", "kurma", "kurrama", "corona",
+                       "koroma", "carama", "karuma", "jarvis")}  # "jarvis": the owner's old habit still wakes it
 VARIANTS: tuple[str, ...] = ()
 CANON: tuple[str, ...] = ()
 
@@ -351,7 +352,10 @@ class WakeRecognizer:
         if self.engine == "google" and self.clock() >= self._google_down_until:
             try:
                 self.last_engine = "google"
-                return self._google_fn(pcm)
+                heard = self._google_fn(pcm)
+                if heard:
+                    return heard
+                # nothing intelligible to Google (common with fan/room noise): Whisper is much better in noise
             except Exception as e:  # offline, HTTP error, timeout
                 log.info("google wake check failed (%s); using groq", e)
                 self._google_down_until = self.clock() + config.WAKE_GOOGLE_RETRY_S
@@ -359,6 +363,13 @@ class WakeRecognizer:
             self.last_engine = "groq"
             return self._groq_fn(pcm)
         except Exception as e:
+            if self.engine == "groq":  # Whisper busy (rate limit) or offline: Google is the backup
+                try:
+                    self.last_engine = "google"
+                    return self._google_fn(pcm)
+                except Exception as e2:
+                    log.warning("wake check failed: %s / %s", e, e2)
+                    return None
             log.warning("wake check failed: %s", e)
             return None
 
