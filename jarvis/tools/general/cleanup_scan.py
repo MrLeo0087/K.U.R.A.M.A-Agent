@@ -1,4 +1,6 @@
-"""cleanup_scan: find what fills the disk (big folders, old downloads, caches, trash); read-only (safe)."""
+"""cleanup_scan: the old disk report.
+
+No longer a tool of its own: `disk_cleaner` replaced it (old name kept as an alias)."""
 from __future__ import annotations
 
 import os
@@ -7,7 +9,6 @@ import subprocess
 import time
 from pathlib import Path
 
-from jarvis.core.registry import tool
 
 
 def _size(p: Path) -> int:
@@ -26,8 +27,6 @@ def _gb(n: int) -> str:
     return f"{n / 1024 ** 3:.1f} GB" if n >= 1024 ** 3 else f"{n / 1024 ** 2:.0f} MB"
 
 
-@tool(group="daily", safety="safe", max_chars=1200,
-      description="Find what is using disk space (biggest folders, old downloads, cache, trash) and how much can be freed.")
 def cleanup_scan(path: str = "~") -> str:
     """Disk cleanup report (deletes nothing).
 

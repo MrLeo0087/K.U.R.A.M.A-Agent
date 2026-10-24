@@ -487,7 +487,8 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
     "jobs": "long writing jobs (essays, articles, reports) and background job status/cancel/resume",
     "schedule": "reminders and scheduled commands at a time or repeating; list or cancel them",
     "image": "generate a picture or drawing from a description",
-    "daily": "calculator, unit and currency conversion, disk cleanup scan",
+    "daily": "calculator, unit and currency conversion, disk space cleaner (ML caches, old checkpoints, old venvs, "
+             "duplicates, trash)",
     "self": "about the assistant itself (abilities, outputs/data locations, limits, how it works), which tool "
             "fits a task, guidance when the user is stuck, change the assistant's name",
 }
@@ -576,6 +577,8 @@ PHONE_INBOX = os.getenv("KURAMA_PHONE_INBOX", "~/Downloads/Phone")  # files sent
 WEBWATCH_EVERY_MIN = 60  # website watcher: default check interval
 WEBWATCH_MIN_EVERY_MIN = 10  # never more often (be polite to the site)
 WEBWATCH_FAIL_ALERT = 5  # say so when a watched page fails this many times in a row
+CHECKPOINT_AGE_DAYS = 30  # disk cleaner: older checkpoints (not the newest in a folder) can go
+VENV_AGE_DAYS = 90  # disk cleaner: venvs of projects untouched this long
 COLAB_POLL_S = 60.0  # how often KURAMA checks for Colab pings (only while a Colab run is active)
 COLAB_SILENT_MIN = 25  # no ping for this long = the Colab runtime probably disconnected
 COLAB_PROGRESS_EVERY_S = 300  # the notebook sends progress at most this often (ntfy.sh free limits)
