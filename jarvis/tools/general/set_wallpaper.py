@@ -2,6 +2,7 @@
 config.WALLPAPER_DIRS; sets both picture-uri and picture-uri-dark (light and dark mode). Safe."""
 from __future__ import annotations
 
+import json
 import random
 from pathlib import Path
 from typing import Literal
@@ -36,8 +37,20 @@ def images() -> list[Path]:
     return sorted(seen.values(), key=lambda p: str(p).lower())
 
 
+# The live wallpaper (scripts/kurama_wallpaper.py) puts a dashboard snapshot on the GNOME desktop for an instant
+# login and keeps the real wallpaper here.
+SNAP_DIR = Path.home() / ".local/share/kurama"
+SNAP_URI = (SNAP_DIR / "desktop.png").as_uri()
+REAL_WALLPAPER = SNAP_DIR / "real-wallpaper.json"
+
+
 def current() -> Path | None:
     uri = _desk.gs_get(_desk.BG, "picture-uri") or ""
+    if uri == SNAP_URI:
+        try:
+            uri = json.loads(REAL_WALLPAPER.read_text()).get("picture-uri", "")
+        except (OSError, ValueError):
+            return None
     if not uri.startswith("file://"):
         return None
     return Path(unquote(urlparse(uri).path))

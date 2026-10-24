@@ -13,6 +13,11 @@ the wallpaper costs ~0 CPU while you work. The page stays clickable: chat works 
 Minimize (the button in the chat header) hides the dashboard panels and shows mini KURAMA: a small round
 button that floats above every app (drag it anywhere, right-click for a menu). Clicking it opens a small
 chat-only panel (same page with ?mini=1: text, mic and conversation mode) over whatever you are using.
+
+Instant start: a snapshot of the dashboard is saved in ~/.local/share/kurama (on the home drive, readable at
+login) and used as the GNOME desktop background, so the desktop already looks like KURAMA from the first
+frame; the window then shows the same snapshot until the live page has loaded, so nothing flashes. Your
+real wallpaper is remembered (real-wallpaper.json) and put back by `kurama-wallpaper.sh stop`.
 """
 from __future__ import annotations
 
@@ -32,7 +37,7 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 gi.require_version("WebKit2", "4.1")
 gi.require_foreign("cairo")
-from gi.repository import Gdk, GLib, Gtk, WebKit2  # noqa: E402
+from gi.repository import Gdk, GdkPixbuf, Gio, GLib, Gtk, WebKit2  # noqa: E402
 
 try:  # libwnck tells us when windows cover the desktop
     gi.require_version("Wnck", "3.0")
@@ -47,6 +52,10 @@ STATE_FILE = Path(__file__).resolve().parent.parent / "data" / "mini.json"  # mi
 BUBBLE = 56  # floating button size (px)
 PANEL_W, PANEL_H = 400, 600  # mini chat panel
 PANEL_KEEP_S = 180  # a hidden panel is closed after this long (frees its page); reopening restores the chat
+SNAP_DIR = Path.home() / ".local/share/kurama"  # same paths in jarvis/tools/general/set_wallpaper.py
+SNAP = SNAP_DIR / "desktop.png"
+REAL_WALLPAPER = SNAP_DIR / "real-wallpaper.json"
+SNAP_FIRST_S, SNAP_EVERY_S = 8, 600  # after the page is up (boot animation done), then every 10 min
 WEB_MEM_MB = int(os.getenv("KURAMA_WP_MEM_MB", "320"))  # web process memory budget (WebKit's default: 3 GB)
 
 
@@ -140,6 +149,35 @@ def message_text(res) -> str:
         return ""
 
 
+class DesktopBackground:
+    """GNOME's own background = our latest dashboard snapshot, so a fresh login shows KURAMA at once. The
+    wallpaper the user (or KURAMA) sets is kept in real-wallpaper.json; the API reads it from there."""
+
+    KEYS = ("picture-uri", "picture-uri-dark")
+
+    def __init__(self) -> None:
+        try:
+            self.gs = Gio.Settings.new("org.gnome.desktop.background")
+        except Exception:
+            self.gs = None
+            return
+        self.snap_uri = SNAP.as_uri()
+        self.gs.connect("changed::picture-uri", lambda *_: GLib.idle_add(self.claim))
+
+    def claim(self) -> bool:
+        """A new wallpaper was set: remember it as the real one, then show our snapshot again."""
+        if self.gs is None or not SNAP.is_file():
+            return False
+        cur = {k: self.gs.get_string(k) for k in self.KEYS}
+        if cur["picture-uri"] != self.snap_uri:
+            with contextlib.suppress(OSError):
+                REAL_WALLPAPER.write_text(json.dumps({**cur, "picture-options": self.gs.get_string("picture-options")}))
+            for k in self.KEYS:
+                self.gs.set_string(k, self.snap_uri)
+            self.gs.set_string("picture-options", "zoom")
+        return False
+
+
 def run_js(view, code: str) -> None:
     if hasattr(view, "evaluate_javascript"):  # WebKitGTK >= 2.40
         view.evaluate_javascript(code, -1, None, None, None, None, None)
@@ -177,7 +215,21 @@ class Wallpaper:
         self.view.connect("load-changed", self.on_load)
         self.view.connect("decide-policy", self.on_policy)
         self.view.load_uri(url)
-        self.win.add(self.view)
+        self.loaded = False  # the live page is up (else the snapshot cover stays)
+        self.failed = False  # the current load attempt failed
+        self.cover = None
+        self.bg = None
+        root = Gtk.Overlay()
+        root.add(self.view)
+        if not as_window and SNAP.is_file():  # last look of the dashboard until the live page is ready
+            with contextlib.suppress(Exception):
+                display = Gdk.Display.get_default()
+                geo = (display.get_primary_monitor() or display.get_monitor(0)).get_geometry()
+                pix = GdkPixbuf.Pixbuf.new_from_file_at_scale(str(SNAP), geo.width, geo.height, False)
+                self.cover = Gtk.Image.new_from_pixbuf(pix)
+                root.add_overlay(self.cover)
+                GLib.timeout_add_seconds(60, self.uncover)  # never hide a page that can't load forever
+        self.win.add(root)
 
         if as_window:
             self.win.set_default_size(1440, 900)
@@ -199,20 +251,67 @@ class Wallpaper:
                 GLib.timeout_add(CHECK_MS, self.check_covered)
         self.win.connect("destroy", Gtk.main_quit)
         self.win.show_all()
+        if not as_window:
+            self.bg = DesktopBackground()
+            self.bg.claim()
         if self.state.get("minimized"):
             self.minimize()
 
     # The API may start after us at login: keep retrying until the page loads
     def on_failed(self, *_):
-        GLib.timeout_add_seconds(3, lambda: self.view.load_uri(self.url) and False)
+        self.failed = True
+        GLib.timeout_add(1000, lambda: self.view.load_uri(self.url) and False)
         return False
 
     def on_load(self, _view, event):
+        if event == WebKit2.LoadEvent.STARTED:
+            self.failed = False
+        if event == WebKit2.LoadEvent.FINISHED and not self.failed and not self.loaded:
+            self.loaded = True
+            GLib.timeout_add(2200, self.uncover)  # after the page's boot animation, hidden under the cover
+            GLib.timeout_add_seconds(SNAP_FIRST_S, lambda: self.snapshot() and False)  # once
+            GLib.timeout_add_seconds(SNAP_EVERY_S, self.snapshot)
         if event == WebKit2.LoadEvent.FINISHED:
             if self.paused:
                 run_js(self.view, "window.kuramaPause && window.kuramaPause(true)")
             if self.mini:
                 run_js(self.view, "window.kuramaMinimized && window.kuramaMinimized(true)")
+
+    # ---------- instant start: snapshot cover + desktop background ----------
+    def uncover(self):
+        """Fade the snapshot out over the live page (~0.3 s), then drop it."""
+        c, self.cover = self.cover, None
+        if c is None:
+            return False
+        steps = iter(range(9, -1, -1))
+
+        def fade():
+            v = next(steps, None)
+            if v is None:
+                c.destroy()
+                return False
+            c.set_opacity(v / 10)
+            return True
+        GLib.timeout_add(30, fade)
+        return False
+
+    def snapshot(self):
+        """Save how the dashboard looks now (one render + PNG every 10 min; skipped in window mode)."""
+        if self.bg is None:
+            return False
+
+        def done(view, res):
+            try:
+                surface = view.get_snapshot_finish(res)
+                SNAP_DIR.mkdir(parents=True, exist_ok=True)
+                tmp = SNAP.with_suffix(".tmp.png")
+                surface.write_to_png(str(tmp))
+                os.replace(tmp, SNAP)
+                self.bg.claim()
+            except Exception as e:
+                print(f"snapshot failed: {e}", file=sys.stderr)
+        self.view.get_snapshot(WebKit2.SnapshotRegion.VISIBLE, WebKit2.SnapshotOptions.NONE, None, done)
+        return True  # keep repeating every SNAP_EVERY_S
 
     def on_permission(self, view, req):
         # microphone (audio only) for Mic/Conversation mode, only for our own page's origin

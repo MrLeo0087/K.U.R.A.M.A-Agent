@@ -207,6 +207,13 @@ async def wallpaper():
     return FileResponse(p, headers={"Cache-Control": "max-age=86400"})
 
 
+# ---------- this laptop (dashboard card): Wi-Fi, volume, brightness, battery health, next reminder ----------
+@router.get("/device", summary="This laptop at a glance (cached 15 s)")
+async def device_info():
+    from jarvis.api import device
+    return await run_in_threadpool(device.info)
+
+
 # ---------- assistant name (default KURAMA; the user can change it) ----------
 @router.get("/identity", summary="The assistant's current name")
 async def identity_get():

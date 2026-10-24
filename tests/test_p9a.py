@@ -124,6 +124,20 @@ def test_set_wallpaper(gn, tmp_path, monkeypatch):
     assert set_wallpaper(mode="random") == "Wallpaper set to a.jpg."  # anything but the current one (b)
 
 
+
+def test_wallpaper_current_behind_desktop_snapshot(gn, tmp_path, monkeypatch):
+    """The live wallpaper shows a dashboard snapshot on the GNOME desktop; current() still names the real one."""
+    from jarvis.tools.general import set_wallpaper as sw
+    real = tmp_path / "real.jpg"
+    real.write_text("x")
+    monkeypatch.setattr(sw, "REAL_WALLPAPER", tmp_path / "real-wallpaper.json")
+    sw.REAL_WALLPAPER.write_text('{"picture-uri": "%s"}' % real.as_uri())
+    gn.gs[("org.gnome.desktop.background", "picture-uri")] = f"'{sw.SNAP_URI}'"
+    assert sw.current() == real
+    sw.REAL_WALLPAPER.unlink()
+    assert sw.current() is None
+
+
 def test_battery_status(gn):
     out = battery_status()
     assert out.startswith("Battery 57%, discharging, 2.5 hours left, health 81%") and "537" in out

@@ -571,3 +571,13 @@ body.mini .messages { height: auto; flex: 1 1 auto; min-height: 0; }
 body.mini .suggest { justify-content: center; }
 body.mini .chat-head { padding: 8px 8px 8px 16px; }
 body.mini .chat-state { margin-right: 2px; }
+
+/* ---------- this laptop (left column, under KURAMA core) ---------- */
+.stats3 b small.u { font-size: 11px; color: var(--dim); margin-left: 1px; }
+.bar.thin { height: 3px; margin: 3px 12px 1px 0; }
+.dev-rows { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 0; }
+.dev-rows li { display: flex; align-items: baseline; gap: 12px; padding: 6px 0; font-size: 12.5px; border-top: 1px solid var(--line); }
+.dev-rows li span { color: var(--muted); flex: none; }
+.dev-rows li b { margin-left: auto; font-weight: 400; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
+.dev-rows li b.dim { color: var(--dim); }
+@media (max-height: 900px) { .dev-rows li:nth-child(n+3) { display: none; } }

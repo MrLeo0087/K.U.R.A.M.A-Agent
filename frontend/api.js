@@ -44,6 +44,7 @@ export class Api {
   profile() { return this.request("/api/v1/profile"); }
   jobs() { return this.request("/api/v1/jobs?limit=20"); }
   fetchWeather() { return this.request("/api/v1/weather"); }
+  device() { return this.request("/api/v1/device"); }
   identity() { return this.request("/api/v1/identity"); }
   setName(name) { return this.request("/api/v1/identity", { method: "POST", body: { name } }); }
   wallpaperInfo() { return this.request("/api/v1/wallpaper/info"); }

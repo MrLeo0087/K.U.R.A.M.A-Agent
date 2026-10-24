@@ -765,6 +765,36 @@ async function loadWeather() {
 }
 loadWeather();
 
+// ---------- this laptop: Wi-Fi, volume, brightness, battery health, next reminder (every 30 s, only while visible) ----------
+let devTimer = 0;
+async function loadDevice() {
+  clearTimeout(devTimer); devTimer = 0;
+  if (MINI || paused || minimized || document.hidden) return; // applyActivity starts it again
+  try {
+    const d = await api.device();
+    const w = d.wifi, v = d.volume, b = d.battery;
+    tweenTo("d-wifi", w ? w.signal : null);
+    setBar("d-wifi-bar", w?.signal ?? 0);
+    $("d-ssid").textContent = w ? w.ssid : d.ip ? "wired" : "offline";
+    $("d-ssid").title = w ? `Wi-Fi: ${w.ssid}` : "";
+    tweenTo("d-vol", v ? v.percent : null);
+    setBar("d-vol-bar", v && !v.muted ? v.percent : 0);
+    $("d-vol-sub").textContent = v ? (v.muted ? "muted" : "speaker") : "–";
+    tweenTo("d-bri", d.brightness);
+    setBar("d-bri-bar", d.brightness ?? 0);
+    $("d-bat").textContent = b ? `${b.health}%${b.cycles ? ` · ${b.cycles} cycles` : ""}` : "–";
+    $("d-ip").textContent = d.ip || "offline";
+    $("d-sys").textContent = [d.model, d.os].filter(Boolean).join(" · ") || d.host || "–";
+    $("d-sys").title = `${d.host} · ${d.model} · ${d.os} · Linux ${d.kernel}`;
+    const n = d.next, nb = $("d-next");
+    nb.textContent = n ? `${new Date(n.at * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · ${n.text}` : "nothing scheduled";
+    nb.classList.toggle("dim", !n);
+    nb.title = n ? n.text : "";
+    $("dev-up").textContent = "up " + fmtDur(d.uptime_s);
+  } catch { /* API still starting: try again next round */ }
+  devTimer = setTimeout(loadDevice, 30000);
+}
+
 // ---------- workspace: the newest picture / poem / essay, shown big (outputs from /api/v1/outputs + long replies) ----------
 const ws = { items: [], cur: -1, seen: new Set(), loaded: false };
 const wsTitle = (name) => name.replace(/^.*\//, "").replace(/^\d{8}-\d{4,6}-?/, "").replace(/\.[a-z0-9]+$/i, "").replace(/[-_]+/g, " ").trim() || name;
@@ -1042,7 +1072,8 @@ function applyActivity() {
   const idle = paused || document.hidden;
   document.body.classList.toggle("paused", idle);
   orb.pause(paused || MINI);
-  if (idle || minimized) { stopStatus(); stopClock(); } else { if (!clockTimer) tick(); if (!es && !pollTimer) startStatus(); }
+  if (idle || minimized) { stopStatus(); stopClock(); clearTimeout(devTimer); devTimer = 0; }
+  else { if (!clockTimer) tick(); if (!es && !pollTimer) startStatus(); if (!devTimer) loadDevice(); }
   syncAmbient();
 }
 
@@ -1222,7 +1253,7 @@ setMode("text");
 if (MINI) { $("chat-title").textContent = botName; restoreMiniLog(); input.focus(); }
 tick();
 if (params.get("paused") === "1") window.kuramaPause(true); // start paused (testing)
-checkHealth().then(startStatus);
+checkHealth().then(() => { startStatus(); loadDevice(); });
 if (FORCE_ORB) { // fake audio for visual checks
   orb.levelFn = () => 0.35 + 0.3 * Math.sin(performance.now() / 180);
   const fb = new Float32Array(24), fw = new Float32Array(64);

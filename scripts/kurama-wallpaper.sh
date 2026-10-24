@@ -14,6 +14,14 @@ SCRIPT="scripts/kurama_wallpaper.py"
 
 if [[ "${1:-}" == "stop" ]]; then
   pkill -f -- "python3 [^ ]*kurama_[w]allpaper.py" 2>/dev/null && echo "wallpaper closed" || echo "not running"
+  # put your real wallpaper back on the GNOME desktop (the running wallpaper shows a dashboard snapshot there)
+  REAL="$HOME/.local/share/kurama/real-wallpaper.json"
+  if [[ -f "$REAL" ]] && command -v gsettings >/dev/null; then
+    "$PY" -c 'import json,subprocess,sys
+d = json.load(open(sys.argv[1]))
+for k in ("picture-uri", "picture-uri-dark", "picture-options"):
+    if d.get(k): subprocess.run(["gsettings", "set", "org.gnome.desktop.background", k, d[k]])' "$REAL" && echo "desktop wallpaper restored"
+  fi
   exit 0
 fi
 
@@ -28,14 +36,14 @@ if [[ -z "$WINDOW" ]] && pgrep -f -- "python3 [^ ]*kurama_[w]allpaper.py" >/dev/
   echo "KURAMA wallpaper is already running (stop: scripts/kurama-wallpaper.sh stop)"; exit 0
 fi
 
-# 1) API server (skip if already up)
+# 1) the GTK wallpaper window first: it shows the last dashboard snapshot at once and retries the page every
+#    second until the API answers, so the desktop never shows anything else
 mkdir -p data/logs
-if ! curl -fs "http://127.0.0.1:${PORT}/api/v1/health" >/dev/null 2>&1; then
-  nohup venv/bin/python -m jarvis.server --port "$PORT" >> data/logs/server.log 2>&1 &
-  for _ in $(seq 1 30); do curl -fs "http://127.0.0.1:${PORT}/api/v1/health" >/dev/null 2>&1 && break; sleep 1; done
-fi
-
-# 2) the GTK wallpaper window (keeps retrying the page if the API is still starting)
 [[ -f data/logs/wallpaper.log && $(stat -c %s data/logs/wallpaper.log) -gt 1048576 ]] && mv -f data/logs/wallpaper.log data/logs/wallpaper.log.1
 nohup "$PY" "$SCRIPT" --url "$URL" $WINDOW >> data/logs/wallpaper.log 2>&1 &
+
+# 2) API server in parallel (skip if already up)
+if ! curl -fs "http://127.0.0.1:${PORT}/api/v1/health" >/dev/null 2>&1; then
+  nohup venv/bin/python -m jarvis.server --port "$PORT" >> data/logs/server.log 2>&1 &
+fi
 echo "KURAMA wallpaper is running${WINDOW:+ (window mode)} (stop: scripts/kurama-wallpaper.sh stop)"
