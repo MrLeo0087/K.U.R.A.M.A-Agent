@@ -235,7 +235,9 @@ ROUTER_EXAMPLES: dict[str, tuple[str, ...]] = {
                 "warm the screen colors at night"),
     "weather": ("do I need an umbrella today", "how hot is it outside", "forecast for the weekend"),
     "general": ("what day is it", "what time is it in london"),
-    "git": ("did my changes get committed", "what branch is this", "commit my work", "show recent commits"),
+    "git": ("did my changes get committed", "what branch is this", "commit my work", "show recent commits",
+            "what did I change since it was working", "give me my file as it was two hours ago",
+            "undo my changes to this file", "where was I", "what was I working on", "resume my project"),
     "dev": ("run the test suite", "start a new python project", "check my python setup and venv",
             "what does this error mean", "fix this traceback", "why does my code crash with this exception",
             "I fixed that error by"),
@@ -383,7 +385,8 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
               "next video", "playlists", "play", "pause", "resume", "unpause", "music", "song", "next track", "previous track",
               "next song", "previous song", "skip", "playing", "playlist", "गाना", "गीत"),
     "git": ("git", "commit", "branch", "repo", "repository", "git status", "git log", "diff",
-            "staged", "checkout", "changes", "uncommitted"),
+            "staged", "checkout", "changes", "uncommitted", "time machine", "snapshot", "restore the file",
+            "as it was", "since it worked", "where was i", "what was i working on", "resume my", "pick up where"),
     "dev": ("traceback", "exception", "this error", "the error", "error mean", "i fixed", "pytest", "run tests", "test suite", "scaffold", "venv", "pip", "tests", "unit tests", "failing tests",
             "doctor", "env doctor", "environment doctor", "environment check", "my environment",
             "dev environment", "python version", "virtualenv", "project", "new project", "fastapi",
@@ -462,7 +465,8 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
     "windows": "snap, maximize, minimize, restore or list windows",
     "apps": "open, close, focus or force-kill apps; launch a named workspace of apps and sites",
     "media": "music and video playback (play, pause, next, previous, what's playing), YouTube, playlists, hand-gesture media control (camera)",
-    "git": "git status, log, diff, commit and branches",
+    "git": "git status, log, diff, commit and branches; code time machine (automatic snapshots: what changed since "
+           "a time, restore a file); where was I (resume a project)",
     "dev": "tests, new projects, Python environment checks, explain an error/traceback and remember the fix",
     "codequality": "dependency doctor (unpinned/outdated/vulnerable/unused), secrets scan, pre-commit gate, "
                    "repo hygiene, AI code review of a diff/file/commit",
@@ -518,7 +522,7 @@ SHELL_ALLOWLIST = ("ls", "cat", "head", "tail", "wc", "grep", "rg", "fdfind", "f
 # --- Background core (P6): python -m jarvis.workers ---
 WORKERS_ENABLED: tuple[str, ...] = tuple(
     w.strip() for w in os.getenv("JARVIS_WORKERS", "process_watch,resource_guard,crash_watchdog,"
-                                 "telegram_bot,daily_digest,auto_theme,scheduler").split(",") if w.strip())
+                                 "telegram_bot,daily_digest,auto_theme,scheduler,timemachine").split(",") if w.strip())
 WORKER_MIN_INTERVAL_S = 5.0  # no daemon polls faster than this
 WORKER_MAX_BACKOFF_S = 300.0  # error backoff cap (interval * 2^errors)
 WORKER_LOG_BYTES = 1_000_000  # rotating log per worker: ~1 MB x 3
@@ -552,6 +556,10 @@ TRAINING_EXPLAIN = True  # a crash gets one short LLM line (cause + fix), cached
 CMD_ALERTS = True  # report long terminal commands (needs the bash hook: "turn on command alerts")
 CMD_ALERT_MIN = 2.0  # minutes: shorter commands are not reported
 CMD_ALERT_PHONE = os.getenv("KURAMA_CMD_ALERT_PHONE", "away")  # Telegram too: always | away (screen locked) | never
+TIMEMACHINE = True  # snapshot changed projects into private shadow git repos (data/timemachine)
+TIMEMACHINE_EVERY_S = 600  # how often the timemachine worker looks for changed projects
+TIMEMACHINE_MAX_MB = 1  # bigger files are never stored (only code and text are kept anyway)
+WHERE_WAS_I_LLM = True  # "where was I?" turns the facts into 2-3 plain sentences (~400 tokens)
 COLAB_POLL_S = 60.0  # how often KURAMA checks for Colab pings (only while a Colab run is active)
 COLAB_SILENT_MIN = 25  # no ping for this long = the Colab runtime probably disconnected
 COLAB_PROGRESS_EVERY_S = 300  # the notebook sends progress at most this often (ntfy.sh free limits)

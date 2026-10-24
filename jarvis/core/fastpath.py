@@ -543,7 +543,23 @@ _CMD_ALERTS = re.compile(r"^(?:(?:turn|switch|put)\s+)?(?P<a>on|off|enable|disab
                          r"(?:long[- ])?command alerts?(?:\s+(?P<b>on|off|status))?$", I)
 
 
+_WHERE = re.compile(r"^(?:so |ok |okay )?(?:where (?:was|were) (?:i|we)(?: (?:on|with|in)(?: (?P<p>.+?))?)?|what was i "
+                    r"(?:working on|doing)(?: in (?P<p2>.+?))?|(?:resume|continue) (?:my )?(?:work|project|coding)"
+                    r"(?: on (?P<p3>.+?))?)$", I)
+_CHANGED = re.compile(r"^what (?:did i|have i) change(?:d)?(?: in (?P<p>(?!the last)\S.*?))?(?: (?:since|in the last|during the "
+                      r"last|over the last) (?P<w>.+?))?$", I)
+
+
 def _daily_intent(t: str) -> Intent | None:
+    if m := _WHERE.match(t):
+        return Intent("where", "where_was_i", "git", {"project": m.group("p") or m.group("p2") or m.group("p3") or ""})
+    if m := _CHANGED.match(t):
+        w = (m.group("w") or "1 hour").strip()
+        if re.fullmatch(r"(?:\d+|an?|one|two|few)\s+(?:min(?:ute)?s?|hours?|days?)", w, I):
+            w = re.sub(r"^(?:an?|one)\b", "1", w, flags=I) + " ago"
+        return Intent("changes", "time_machine", "git", {"action": "changes", "project": m.group("p") or "", "when": w})
+    if re.fullmatch(r"undo (?:the |that )?restore", t, I):
+        return Intent("changes", "time_machine", "git", {"action": "undo"})
     if (m := _CMD_ALERTS.match(t)) and (m.group("a") or m.group("b")):
         a = (m.group("a") or m.group("b")).lower()
         return Intent("cmdalerts", "command_alerts", "watch",

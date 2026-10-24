@@ -35,6 +35,7 @@ WORKERS: dict[str, str] = {
     "daily_digest": "jarvis.workers.daily_digest:DailyDigest",
     "auto_theme": "jarvis.workers.auto_theme:AutoTheme",  # P9a
     "scheduler": "jarvis.workers.scheduler:Scheduler",  # P9b
+    "timemachine": "jarvis.workers.timemachine:TimeMachine",
 }
 HEARTBEAT_S = 10.0
 
