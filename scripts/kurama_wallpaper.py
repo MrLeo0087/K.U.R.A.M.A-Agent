@@ -586,9 +586,7 @@ class Mini:
             self.ghost = True
             self.panel.set_opacity(0)
             self.panel.set_keep_above(False)
-            gw = self.panel.get_window()
-            if gw is not None:
-                gw.input_shape_combine_region(cairo.Region(), 0, 0)
+            self.panel.input_shape_combine_region(cairo.Region())  # empty: clicks go through
         elif self.open:
             run_js(self.view, "window.kuramaMiniShown && window.kuramaMiniShown(false)")  # stops the mic, saves the chat
             self.panel.hide()
@@ -602,9 +600,7 @@ class Mini:
             return
         self.ghost = False
         self.state = "idle"
-        gw = self.panel.get_window()
-        if gw is not None:
-            gw.input_shape_combine_region(None, 0, 0)
+        self.panel.input_shape_combine_region(None)  # clickable again (the Gdk call refuses None)
         self.panel.set_opacity(1)
         self.panel.set_keep_above(True)
         if self.caption is not None:
