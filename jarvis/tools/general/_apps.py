@@ -141,7 +141,7 @@ def find_app(name: str, apps: list[dict] | None = None) -> tuple[dict | None, in
 
 
 def launch(entry: dict) -> str:
-    """Start an app detached from Jarvis: gtk-launch <id>, falling back to gio launch <file>."""
+    """Start an app detached from KURAMA: gtk-launch <id>, falling back to gio launch <file>."""
     gtk, gio = shutil.which("gtk-launch"), shutil.which("gio")
     if gtk:
         p = subprocess.Popen([gtk, entry["id"]], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,

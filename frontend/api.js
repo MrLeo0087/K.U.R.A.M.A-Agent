@@ -1,4 +1,4 @@
-// Thin client for the Jarvis API (/api/v1/*). Everything the UI does goes through here.
+// Thin client for the KURAMA API (/api/v1/*). Everything the UI does goes through here.
 
 export class ApiError extends Error {
   constructor(status, message) { super(message); this.status = status; }
@@ -44,6 +44,8 @@ export class Api {
   profile() { return this.request("/api/v1/profile"); }
   jobs() { return this.request("/api/v1/jobs?limit=20"); }
   fetchWeather() { return this.request("/api/v1/weather"); }
+  identity() { return this.request("/api/v1/identity"); }
+  setName(name) { return this.request("/api/v1/identity", { method: "POST", body: { name } }); }
   wallpaperInfo() { return this.request("/api/v1/wallpaper/info"); }
   wallpaperUrl(v) { return this.url(`/api/v1/wallpaper?v=${encodeURIComponent(v)}`, true); }
   outputs(limit = 12) { return this.request(`/api/v1/outputs?limit=${limit}`); }

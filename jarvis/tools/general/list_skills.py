@@ -1,11 +1,11 @@
-"""list_skills (P7c): the small tools Jarvis built and saved."""
+"""list_skills (P7c): the small tools KURAMA built and saved."""
 from __future__ import annotations
 
 from jarvis.core import toolsmith
 from jarvis.core.registry import tool
 
 
-@tool(group="toolsmith", safety="safe", description="List the saved skills (small tools Jarvis built earlier).")
+@tool(group="toolsmith", safety="safe", description="List the saved skills (small tools KURAMA built earlier).")
 def list_skills() -> str:
     """List saved skills with what they do and how often they were used."""
     metas = toolsmith.list_saved()

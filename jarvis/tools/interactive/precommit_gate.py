@@ -14,7 +14,7 @@ from jarvis.core.registry import tool
 from jarvis.tools.interactive import _proc, _secrets
 
 MAX_BYTES = 5 * 1024 * 1024
-HOOK_MARK = "# installed by Jarvis precommit_gate"
+HOOK_MARK = "# installed by KURAMA precommit_gate"
 BREAKPOINT = re.compile(r"\bbreakpoint\(\)|\b(?:i?pdb|pudb)\.set_trace\(|^\s*import\s+i?pdb\b|^\s*debugger\s*;?\s*$")
 # Without a project ruff config: only real errors (syntax, undefined names, unused imports/variables).
 RUFF_DEFAULT_RULES = "E9,F63,F7,F82,F401,F811,F841"
@@ -151,7 +151,7 @@ def install(root: Path) -> str:
         if not safety.ask(f"A pre-commit hook already exists in {root.name}. Replace it (a .bak copy is kept)?"):
             return "kept the existing pre-commit hook (not replaced)"
         hook.with_suffix(".bak").write_text(hook.read_text("utf-8", "replace"), encoding="utf-8")
-    elif not safety.ask(f"Install a pre-commit hook in {root.name} that runs Jarvis's checks before each commit?"):
+    elif not safety.ask(f"Install a pre-commit hook in {root.name} that runs KURAMA's checks before each commit?"):
         return "pre-commit hook not installed"
     hook.parent.mkdir(parents=True, exist_ok=True)
     hook.write_text(hook_script(), encoding="utf-8")

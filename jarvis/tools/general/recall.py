@@ -1,5 +1,5 @@
 """recall: read back remembered notes (all, last, or matching a query) or, with which="profile", the facts
-Jarvis learned about the user (safe)."""
+KURAMA learned about the user (safe)."""
 from __future__ import annotations
 
 from typing import Literal

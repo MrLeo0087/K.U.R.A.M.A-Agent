@@ -337,7 +337,7 @@ POSITIVE = {
     "volume up": ("volume", {"action": "up"}),
     "turn the volume down by 5": ("volume", {"action": "down", "step": 5}),
     "set volume to 40": ("volume", {"action": "set", "level": 40}),
-    "Jarvis, set the volume to 70 percent please": ("volume", {"action": "set", "level": 70}),
+    "KURAMA, set the volume to 70 percent please": ("volume", {"action": "set", "level": 70}),
     "awaz badhao": ("volume", {"action": "up"}),
     "आवाज कम करो": ("volume", {"action": "down"}),
     "mute": ("mute_audio", {"action": "mute"}),

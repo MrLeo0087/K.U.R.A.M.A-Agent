@@ -1,6 +1,6 @@
 """Long-process / training-run watcher (worker "process_watch") plus the helpers its tools use.
 
-Watches live in the SQLite `watches` table, so they survive restarts of Jarvis and the workers:
+Watches live in the SQLite `watches` table, so they survive restarts of KURAMA and the workers:
   - kind "proc": a PID or process name. The matching PIDs (+ create times, so a reused PID is not
     mistaken for the original) are captured when the watch is added; when all are gone the watch
     is done and an alert reports the runtime.

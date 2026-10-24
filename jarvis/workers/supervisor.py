@@ -119,7 +119,7 @@ class Supervisor:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="python -m jarvis.workers", description="Jarvis background workers")
+    ap = argparse.ArgumentParser(prog="python -m jarvis.workers", description="KURAMA background workers")
     ap.add_argument("--only", help="comma-separated worker names (default: config.WORKERS_ENABLED)")
     ap.add_argument("--list", action="store_true", help="list workers and exit")
     ap.add_argument("--quiet", action="store_true", help="log to file only")

@@ -1,9 +1,9 @@
-"""Request guard for the Jarvis API (pure ASGI, so SSE streams pass through untouched).
+"""Request guard for the KURAMA API (pure ASGI, so SSE streams pass through untouched).
 
 The API can run tools on the laptop, so every /api request is checked:
   1. Host header allowlist (default: loopback names when bound to loopback): blocks DNS rebinding.
   2. Origin: a browser request from another site is refused unless that origin is in
-     JARVIS_CORS_ORIGINS (or is this same host). Stops random web pages from driving Jarvis.
+     JARVIS_CORS_ORIGINS (or is this same host). Stops random web pages from driving KURAMA.
   3. Content-Type: JSON endpoints need application/json and /stt needs an audio type, so a
      cross-site "simple" form/text POST can never reach the agent without a CORS preflight.
   4. Bearer token (JARVIS_API_TOKEN, optional): `Authorization: Bearer <t>` or `?token=<t>` (for

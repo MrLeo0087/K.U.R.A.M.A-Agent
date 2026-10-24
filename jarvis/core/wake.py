@@ -1,4 +1,4 @@
-"""Wake word without a wake-word model: "Hey Jarvis" to wake, "sleep Jarvis" to sleep.
+"""Wake word without a wake-word model: "Hey KURAMA" to wake, "sleep KURAMA" to sleep.
 
 SLEEPING: the mic stays open and a cheap loop (RMS + webrtcvad + the adaptive noise gate from
 audio.Endpointer) looks for short speech bursts (WAKE_BURST_MIN_S..WAKE_BURST_MAX_S). Only those
@@ -32,12 +32,22 @@ log = logging.getLogger(__name__)
 
 GREETS = ("hey", "hi", "hello", "ok", "okay", "hay", "hai", "hei", "hallo", "helo", "yo", "oye",
           "ay", "ey", "he", "namaste", "हे", "हाय", "हेलो")
-CANONICAL = {"jarvis": ("jarvis", "जार्विस", "जारविस"), "kurama": ("kurama", "कुरामा")}
-MISHEARD = {"jarvis": ("jar vis", "jervis", "jarvas", "jarvish", "javis", "jaavis", "jarbis",
-                       "service", "travis"),
-            "kurama": ("karama", "corama", "kuruma", "ku rama", "koorama", "करामा")}
-VARIANTS = tuple(v for n in CANONICAL for v in CANONICAL[n] + MISHEARD[n])
-CANON = tuple(v for n in CANONICAL for v in CANONICAL[n])
+CANONICAL = {"kurama": ("kurama", "कुरामा")}
+MISHEARD = {"kurama": ("karama", "corama", "kuruma", "ku rama", "koorama", "करामा", "kurma", "kurrama")}
+VARIANTS: tuple[str, ...] = ()
+CANON: tuple[str, ...] = ()
+
+
+def refresh_names() -> None:
+    """Wake words = "kurama" + the user's chosen name (core/identity.py); rebuilt after a rename."""
+    global VARIANTS, CANON
+    from jarvis.core import identity
+    canon = {**CANONICAL, **{n: (n,) for n in identity.names() if n not in CANONICAL}}
+    VARIANTS = tuple(v for n in canon for v in canon[n] + MISHEARD.get(n, ()))
+    CANON = tuple(v for n in canon for v in canon[n])
+
+
+refresh_names()
 
 SLEEP_PHRASES = ("sleep", "go to sleep", "go sleep", "stop listening", "bye", "bye bye", "goodbye",
                  "good bye", "so jao", "so ja", "sojao", "sut", "sutnus", "सो जाओ", "सो जा", "सुत",
@@ -67,9 +77,10 @@ def _is_greet(word: str) -> bool:
     return word in GREETS or (len(word) >= 4 and _best(word, GREETS) >= config.WAKE_MATCH_RATIO)
 
 
-def _name_at(words: list[str], i: int, options: tuple[str, ...] = VARIANTS,
+def _name_at(words: list[str], i: int, options: tuple[str, ...] | None = None,
              ratio: float | None = None) -> int:
     """Number of words (1 or 2) at words[i] that form an assistant name, or 0."""
+    options = VARIANTS if options is None else options
     ratio = config.WAKE_MATCH_RATIO if ratio is None else ratio
     if i >= len(words):
         return 0
@@ -164,7 +175,7 @@ def classify(text: str) -> str | None:
     core, named = _core(text)
     if _is(core, SLEEP_PHRASES):
         return "sleep"
-    if named and _is(core, EXIT_PHRASES):  # "shut down" alone means the computer, not Jarvis
+    if named and _is(core, EXIT_PHRASES):  # "shut down" alone means the computer, not KURAMA
         return "exit"
     if _is(core, STOP_PHRASES, 0.9):
         return "stop"
@@ -442,7 +453,7 @@ def _drain(q: queue.Queue) -> None:
 
 
 def _strip_lead(text: str) -> str:
-    """Drop leading greet/name words Whisper kept or misspelled ("Hey, Jarvis. What time...")."""
+    """Drop leading greet/name words Whisper kept or misspelled ("Hey, KURAMA. What time...")."""
     words = text.split()
     i = 0
     while i < len(words) and i < 3:
@@ -456,8 +467,8 @@ def _strip_lead(text: str) -> str:
 
 # --- "stop" while speaking ---
 class StopWatcher:
-    """While Jarvis speaks (wake mode), a short loud burst recognized as "stop" calls on_stop().
-    Long bursts (Jarvis's own voice leaking from the speakers) are ignored by length."""
+    """While KURAMA speaks (wake mode), a short loud burst recognized as "stop" calls on_stop().
+    Long bursts (KURAMA's own voice leaking from the speakers) are ignored by length."""
 
     def __init__(self, on_stop: Callable[[], None], recognizer: WakeRecognizer,
                  guard: RateGuard | None = None, stream_factory: Callable | None = None):

@@ -1,12 +1,12 @@
 """Voice loop: `python -m jarvis --voice` (wake word on by default) or `--wake` / `--no-wake`.
 
-hotkey (toggle, default Ctrl+Alt+J) or Enter or "Hey Jarvis" -> record with VAD -> Groq Whisper STT ->
+hotkey (toggle, default Ctrl+Alt+J) or Enter or "Hey KURAMA" -> record with VAD -> Groq Whisper STT ->
 LangGraph agent stream (router + tools, spoken yes/no confirmations) -> sentence-streamed edge-tts.
 
-Wake mode: SLEEPING listens only for "hey/hi/hello/ok Jarvis|Kurama" (core/wake.py: cheap VAD
+Wake mode: SLEEPING listens only for "hey/hi/hello/ok KURAMA|Kurama" (core/wake.py: cheap VAD
 bursts + free Google speech recognition). AWAKE takes turns without the hotkey until
-WAKE_IDLE_S of silence or "sleep Jarvis" / "go to sleep" / "so jao". "stop" while Jarvis speaks
-interrupts; "exit Jarvis" quits after a confirmation. The hotkey keeps working alongside.
+WAKE_IDLE_S of silence or "sleep KURAMA" / "go to sleep" / "so jao". "stop" while KURAMA speaks
+interrupts; "exit KURAMA" quits after a confirmation. The hotkey keeps working alongside.
 """
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ class VoiceLoop:
         self._recognizer = wake.WakeRecognizer()
 
     def announce_jobs(self) -> bool:
-        """Speak one queued job announcement if Jarvis is idle or asleep (not mid-turn)."""
+        """Speak one queued job announcement if KURAMA is idle or asleep (not mid-turn)."""
         if self.state not in ("idle", "sleeping") or self.trigger.is_set():
             return False
         item = jobs.ANNOUNCER.pop() or self._pending_alert()
@@ -226,9 +226,9 @@ class VoiceLoop:
             self.say(wake.ACK_TEXT.get(self.lang, "Yes?"))
 
     def sleep_until_wake(self) -> wake.WakeEvent | None:
-        """SLEEPING: block until "Hey Jarvis", the hotkey/Enter, or quit. None = hotkey/quit."""
+        """SLEEPING: block until "Hey KURAMA", the hotkey/Enter, or quit. None = hotkey/quit."""
         self.state = "sleeping"
-        print('[sleeping — say "Hey Jarvis"]', flush=True)
+        print('[sleeping — say "Hey KURAMA"]', flush=True)
         listener = wake.WakeListener(self._recognizer, self._guard, busy=self._busy_speaking)
         try:
             return listener.listen(self.trigger, idle=self.announce_jobs)
@@ -243,7 +243,7 @@ class VoiceLoop:
             return "sleep"
         if kind == "exit":
             self.lang = lang
-            return "quit" if self.confirm("Shut down Jarvis?") else "ok"
+            return "quit" if self.confirm("Shut down KURAMA?") else "ok"
         if kind == "stop":
             return "ok"  # nothing is playing: just keep listening
         text = wake.strip_wake(text)
@@ -330,11 +330,11 @@ class VoiceLoop:
             threading.Thread(target=self._stdin_reader, name="stdin", daemon=True).start()
         how = f"press {key} (or Enter)" if key else "press Enter"
         if self.wake_mode:
-            how = f'say "Hey Jarvis" or {how}'
-        cut = "talk over Jarvis" if config.BARGE_IN else (f"press {key}" if key else "press Enter")
+            how = f'say "Hey KURAMA" or {how}'
+        cut = "talk over KURAMA" if config.BARGE_IN else (f"press {key}" if key else "press Enter")
         if self.wake_mode and config.WAKE_STOP_WORD:
             cut += ' or say "stop"'
-        print(f"Jarvis voice ({config.LLM_FAST}). {how} to talk; {cut} to interrupt; "
+        print(f"KURAMA voice ({config.LLM_FAST}). {how} to talk; {cut} to interrupt; "
               f"q + Enter or Ctrl+C to quit.")
         greeting.start(self.greet)  # background thread: the hotkey is already live
         try:
@@ -354,7 +354,7 @@ class VoiceLoop:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="python -m jarvis --voice")
     ap.add_argument("--voice", action="store_true")
-    ap.add_argument("--wake", action="store_true", help='wake word mode ("Hey Jarvis"); default from config')
+    ap.add_argument("--wake", action="store_true", help='wake word mode ("Hey KURAMA"); default from config')
     ap.add_argument("--no-wake", action="store_true", help="hotkey / Enter only")
     ap.add_argument("--no-hotkey", action="store_true", help="use Enter instead of the global hotkey")
     ap.add_argument("--no-barge-in", action="store_true", help="do not watch the mic while speaking")

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start Jarvis: background workers + the voice session with the "Hey Jarvis" wake word.
+# Start KURAMA: background workers + the voice session with the "Hey KURAMA" wake word.
 #   scripts/jarvis-start.sh               workers (background) + voice (foreground)
 #   scripts/jarvis-start.sh --no-workers  voice only (workers run as the systemd --user service)
 # Logs: data/logs/voice.log and data/logs/workers.out

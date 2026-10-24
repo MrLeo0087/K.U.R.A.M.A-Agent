@@ -18,7 +18,7 @@ T_START = time.monotonic()
 from jarvis.core import agent, store, tts  # noqa: E402
 
 PROMPTS = [
-    ("en", "Hi Jarvis, how are you today?"),
+    ("en", "Hi KURAMA, how are you today?"),
     ("en", "Explain in detail how a car engine works."),
     ("ne", "तिमी को हौ?"),
 ]

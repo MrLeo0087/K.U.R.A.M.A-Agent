@@ -1,4 +1,4 @@
-"""send_message_telegram (P7c): send text (e.g. a poem Jarvis just wrote) to the user's Telegram."""
+"""send_message_telegram (P7c): send text (e.g. a poem KURAMA just wrote) to the user's Telegram."""
 from __future__ import annotations
 
 from jarvis.core import config, notify

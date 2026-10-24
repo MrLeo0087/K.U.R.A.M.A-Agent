@@ -1,4 +1,4 @@
-"""Settings for the Jarvis HTTP API (jarvis.api). Kept out of core/config.py on purpose.
+"""Settings for the KURAMA HTTP API (jarvis.api). Kept out of core/config.py on purpose.
 
 Every value comes from an environment variable so the same code runs on the laptop or, later, in a
 Docker container on a server. Old JARVIS_WEB_* names (P7b test UI) still work as fallbacks.

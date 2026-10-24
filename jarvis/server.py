@@ -1,6 +1,6 @@
 """`python -m jarvis.server [--port 8000] [--host 127.0.0.1] [--no-warm]` -> http://127.0.0.1:8000
 
-Thin shim kept for old commands/autostart entries: it runs the Jarvis API (jarvis/api, FastAPI,
+Thin shim kept for old commands/autostart entries: it runs the KURAMA API (jarvis/api, FastAPI,
 /api/v1/*, docs at /docs) which also serves the KURAMA holographic UI (frontend/) at /.
 """
 from __future__ import annotations

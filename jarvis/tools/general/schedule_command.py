@@ -1,11 +1,11 @@
-"""schedule_command: run a Jarvis command later or repeatedly (confirm: it acts unattended)."""
+"""schedule_command: run a KURAMA command later or repeatedly (confirm: it acts unattended)."""
 from __future__ import annotations
 
 from jarvis.core.registry import tool
 
 
 @tool(group="schedule", safety="confirm",
-      description="Schedule a Jarvis command to run later or repeatedly (e.g. 'weather in Kathmandu' every day at 8).")
+      description="Schedule a KURAMA command to run later or repeatedly (e.g. 'weather in Kathmandu' every day at 8).")
 def schedule_command(command: str, when: str) -> str:
     """Schedule a command.
 

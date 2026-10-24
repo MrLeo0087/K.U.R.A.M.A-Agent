@@ -17,7 +17,7 @@ from jarvis.core import config, notify, store
 from jarvis.workers.base import Worker
 
 OFFSET_KEY = "telegram_offset"
-HELP = ("I'm Jarvis. Send a question or command as text.\n"
+HELP = ("I'm KURAMA. Send a question or command as text.\n"
         "/status: system resources, watches, jobs and workers\n"
         "/jobs: background jobs\n/help: this message\n"
         "Risky actions ask 'Reply yes/no' first. Only text is supported.")
@@ -82,7 +82,7 @@ class TelegramBot(Worker):
         if chat != str(config.TELEGRAM_CHAT_ID):
             self.log.info("ignored message from chat %s", chat)
             return None
-        # never execute stale commands queued while Jarvis was off (e.g. old "hi", old "delete ...")
+        # never execute stale commands queued while KURAMA was off (e.g. old "hi", old "delete ...")
         if int(msg.get("date") or 0) < self.started - config.TELEGRAM_MAX_AGE_S:
             self.log.info("ignored stale message from %s", msg.get("date"))
             return None

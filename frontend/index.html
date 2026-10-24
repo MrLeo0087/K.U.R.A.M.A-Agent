@@ -18,7 +18,7 @@
   <canvas id="bg-dust" class="bg-dust" aria-hidden="true"></canvas>
 
   <div class="layout">
-    <!-- left: clock, processes, Jarvis -->
+    <!-- left: clock, processes, KURAMA -->
     <section class="col left" aria-label="Clock and processes">
       <header class="clock-block">
         <div class="clock" role="timer" aria-live="off"><span id="clock-hm"><span id="clock-h">--</span><span id="clock-colon" class="colon">:</span><span id="clock-m">--</span></span><span class="clock-side"><span id="clock-ap"></span><span id="clock-s" class="sec">00</span></span></div>
@@ -66,7 +66,7 @@
           <span class="card-title">Conversation</span>
           <span class="head-tools">
             <span id="chat-state" class="chat-state" role="status"><i></i><span>Connecting</span></span>
-            <button id="btn-voice" class="icon-btn" type="button" aria-pressed="true" aria-label="Jarvis voice on (click to mute)" title="Voice on · click to mute">
+            <button id="btn-voice" class="icon-btn" type="button" aria-pressed="true" aria-label="KURAMA voice on (click to mute)" title="Voice on · click to mute">
               <svg class="v-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>
               <svg class="v-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M17 9l5 6M22 9l-5 6"/></svg>
             </button>
@@ -160,7 +160,7 @@
     <div id="ws-big-view" class="ws-big-view"></div>
   </dialog>
 
-  <div id="offline" class="offline" hidden>Can't reach the Jarvis API — start it with <code>scripts/jarvis-start.sh</code> or check settings</div>
+  <div id="offline" class="offline" hidden>Can't reach the KURAMA API — start it with <code>scripts/jarvis-start.sh</code> or check settings</div>
 
   <dialog id="settings" class="drawer" aria-labelledby="set-title">
     <form id="set-form" method="dialog">
@@ -170,6 +170,9 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
         </button>
       </div>
+      <label>Assistant name <small>default KURAMA · it answers to this name</small>
+        <input id="set-name" type="text" maxlength="24" placeholder="KURAMA" spellcheck="false">
+      </label>
       <label>API base URL
         <input id="set-api" type="url" placeholder="(same origin)" spellcheck="false">
       </label>
@@ -197,7 +200,7 @@
 
   <dialog id="info" class="modal" aria-labelledby="info-title">
     <form method="dialog" class="info-head">
-      <h2 id="info-title">Jarvis</h2>
+      <h2 id="info-title">KURAMA</h2>
       <div class="seg tabs" role="tablist">
         <button type="button" role="tab" data-tab="tools" aria-selected="true">Tools</button>
         <button type="button" role="tab" data-tab="memory" aria-selected="false">Memory</button>

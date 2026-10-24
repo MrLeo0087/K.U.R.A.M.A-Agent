@@ -1,4 +1,4 @@
-// Frontend configuration. The UI only talks to the Jarvis API, so it can be served from anywhere:
+// Frontend configuration. The UI only talks to the KURAMA API, so it can be served from anywhere:
 //  - API_BASE "" = same origin (when the API serves this folder at /).
 //  - Override per deployment by defining window.KURAMA_CONFIG = {apiBase: "https://jarvis.example:8000"}
 //    in a <script> before app.js, by opening the page with ?api=<url>, or in the settings drawer.
@@ -13,7 +13,7 @@ export const DEFAULTS = Object.freeze({
   apiBase: API_BASE,
   token: "",
   voiceReplies: true, // speak replies in Mic mode (Conversation mode always speaks)
-  mute: false, // the speaker button: true = Jarvis never speaks in this UI (replies stay as text)
+  mute: false, // the speaker button: true = KURAMA never speaks in this UI (replies stay as text)
   lowPower: null, // null = follow prefers-reduced-motion
   lang: "auto", // auto | en | ne | hi
 });

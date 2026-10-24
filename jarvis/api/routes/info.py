@@ -26,7 +26,7 @@ async def health(request: Request):
             "agent_ready": st.engine.ready, "ts": time.time()}
 
 
-@router.get("/status", summary="Laptop + Jarvis status snapshot (laptop-local)")
+@router.get("/status", summary="Laptop + KURAMA status snapshot (laptop-local)")
 async def status(request: Request, percpu: bool = Query(False, description="include per-core CPU %")):
     return await run_in_threadpool(request.app.state.status.snapshot, percpu)
 
@@ -194,7 +194,7 @@ def _wallpaper_path():
 @router.get("/wallpaper/info", summary="Current desktop wallpaper (mtime changes when it changes)")
 async def wallpaper_info():
     p = await run_in_threadpool(_wallpaper_path)
-    ours = bool(p) and _outputs_dir() in p.resolve().parents  # a picture Jarvis made: the UI shows it behind the panels
+    ours = bool(p) and _outputs_dir() in p.resolve().parents  # a picture KURAMA made: the UI shows it behind the panels
     return {"set": bool(p), "kurama": ours, "name": p.name if p else "", "mtime": p.stat().st_mtime if p else 0}
 
 
@@ -205,3 +205,20 @@ async def wallpaper():
     if not p:
         return JSONResponse({"error": "no wallpaper image"}, status_code=404)
     return FileResponse(p, headers={"Cache-Control": "max-age=86400"})
+
+
+# ---------- assistant name (default KURAMA; the user can change it) ----------
+@router.get("/identity", summary="The assistant's current name")
+async def identity_get():
+    from jarvis.core import identity
+    return {"name": await run_in_threadpool(identity.name)}
+
+
+@router.post("/identity", summary="Rename the assistant (it answers to the new name from now on)")
+async def identity_set(request: Request):
+    from jarvis.core import identity
+    body = await request.json()
+    new = await run_in_threadpool(identity.set_name, str(body.get("name", "")))
+    if not new:
+        return JSONResponse({"ok": False, "error": "use 2-24 letters, one or two words"}, status_code=400)
+    return {"ok": True, "name": new}

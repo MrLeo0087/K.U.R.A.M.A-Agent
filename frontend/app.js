@@ -1,4 +1,4 @@
-// KURAMA UI controller. Talks to the Jarvis backend ONLY through the HTTP API (api.js).
+// KURAMA UI controller. Talks to the KURAMA backend ONLY through the HTTP API (api.js).
 import { Api } from "./api.js";
 import { loadSettings, saveSettings } from "./config.js";
 import { Dust } from "./dust.js";
@@ -9,6 +9,7 @@ const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const S = loadSettings();
+let botName = "KURAMA"; // the assistant's name (/api/v1/identity)
 const lowPowerOn = () => (S.lowPower === null ? reducedMotion : !!S.lowPower);
 const api = new Api(() => S);
 if (params.get("wallpaper") === "1") document.body.classList.add("wallpaper");
@@ -121,7 +122,7 @@ function setMode(m) {
   if (mode === "mic" && m !== "mic" && recording) { recording = false; recorder.cancel(); mic.stop(); clearInterval(recTimer); }
   mode = m;
   for (const [id, v] of [["m-text", "text"], ["m-mic", "mic"], ["m-conv", "conv"]]) $(id).setAttribute("aria-pressed", String(mode === v));
-  $("input").placeholder = mode === "conv" && conv.on ? "Just talk — or type here…" : mode === "mic" ? "Click the mic to talk, or type…" : "Ask KURAMA anything…";
+  $("input").placeholder = mode === "conv" && conv.on ? "Just talk — or type here…" : mode === "mic" ? "Click the mic to talk, or type…" : `Ask ${botName.toUpperCase()} anything…`;
   updateState();
 }
 
@@ -291,7 +292,7 @@ class BotBubble {
     this.root = el("div", "msg bot");
     this.root.append(el("div", "avatar", "K"));
     this.body = el("div", "body");
-    this.who = el("div", "who", `KURAMA · ${hhmm()}`);
+    this.who = el("div", "who", `${botName.toUpperCase()} · ${hhmm()}`);
     this.chips = el("div", "chips");
     this.bubble = el("div", "text", '<span class="dots" aria-label="thinking"><i></i><i></i><i></i></span>');
     this.content = el("div", "content");
@@ -410,13 +411,14 @@ async function sendChat(text, { voice = false, lang = null, speak = false } = {}
           wsFromReply(text, bot.text);
           setTimeout(loadOutputs, 800); // a tool may have just saved a file
           setTimeout(loadWall, 1500);
+          if (/\bname\b/i.test(text)) setTimeout(loadName, 500); // "change your name to ..."
           break;
       }
     }
   } catch (e) {
     if (e.name === "AbortError") bot.note("Stopped.");
     else {
-      bot.error(e.status === 401 ? "The API needs a token (open settings)." : "Can't reach Jarvis: " + e.message);
+      bot.error(e.status === 401 ? "The API needs a token (open settings)." : "Can't reach KURAMA: " + e.message);
       flashError();
       if (e.status === 401) openSettings("This API needs a token.");
       setConn(false);
@@ -888,7 +890,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "ArrowRight") wsStep(1);
 });
 
-// ---------- a wallpaper Jarvis made is drawn behind the dashboard (this window covers the real desktop) ----------
+// ---------- a wallpaper KURAMA made is drawn behind the dashboard (this window covers the real desktop) ----------
 let wallMtime = -1;
 async function loadWall() {
   try {
@@ -908,20 +910,32 @@ setInterval(loadWall, 60000);
 $("ws-close").onclick = () => $("ws-big").close();
 $("ws-big").addEventListener("click", (e) => { if (e.target === $("ws-big")) $("ws-big").close(); });
 
+// ---------- assistant name (default KURAMA; Settings or "change your name to ...") ----------
+// botName is declared at the top (used by early UI code)
+function setBotName(n) {
+  if (!n) return;
+  botName = n;
+  document.querySelector("h1.name").textContent = n.toUpperCase();
+  document.title = n.toUpperCase();
+  input.placeholder = `Ask ${n.toUpperCase()} anything…`;
+}
+function loadName() { api.identity().then((r) => setBotName(r.name)).catch(() => {}); }
+loadName();
+
 // ---------- voice on/off (speaker button) ----------
 function renderMute() {
   const b = $("btn-voice");
   b.classList.toggle("muted", !!S.mute);
   b.setAttribute("aria-pressed", String(!S.mute));
-  b.title = S.mute ? "Voice off · click to let Jarvis speak" : "Voice on · click to mute";
-  b.setAttribute("aria-label", S.mute ? "Jarvis voice off (click to unmute)" : "Jarvis voice on (click to mute)");
+  b.title = S.mute ? "Voice off · click to let KURAMA speak" : "Voice on · click to mute";
+  b.setAttribute("aria-label", S.mute ? "KURAMA voice off (click to unmute)" : "KURAMA voice on (click to mute)");
 }
 $("btn-voice").onclick = () => {
   S.mute = !S.mute;
   saveSettings(S);
   if (S.mute) player.stop();
   renderMute();
-  toast(S.mute ? "Voice off: Jarvis will reply in text only." : "Voice on.");
+  toast(S.mute ? "Voice off: KURAMA will reply in text only." : "Voice on.");
 };
 renderMute();
 setInterval(loadWeather, 600000);
@@ -969,6 +983,7 @@ document.addEventListener("visibilitychange", applyActivity);
 // ---------- settings drawer ----------
 const dlg = $("settings");
 function openSettings(msg) {
+  $("set-name").value = botName;
   $("set-api").value = S.apiBase || "";
   $("set-token").value = S.token || "";
   $("set-voice").checked = !!S.voiceReplies;
@@ -997,6 +1012,9 @@ $("set-form").addEventListener("submit", (e) => {
   S.lowPower = $("set-low").checked;
   S.lang = $("set-lang").value;
   saveSettings(S);
+  const nm = $("set-name").value.trim();
+  if (nm && nm !== botName) api.setName(nm).then((r) => { setBotName(r.name); toast(`My name is ${r.name} now.`); })
+    .catch(() => toast("That name didn't work: use 2-24 letters."));
   orb.setLowPower(S.lowPower);
   dust.setLowPower(S.lowPower);
   document.body.classList.toggle("low-power", S.lowPower);

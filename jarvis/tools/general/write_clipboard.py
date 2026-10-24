@@ -1,4 +1,4 @@
-"""write_clipboard: put text on the clipboard (xclip) and keep it in Jarvis's own history (safe)."""
+"""write_clipboard: put text on the clipboard (xclip) and keep it in KURAMA's own history (safe)."""
 from __future__ import annotations
 
 from jarvis.core import store

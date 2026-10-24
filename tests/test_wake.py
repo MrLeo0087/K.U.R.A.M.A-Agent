@@ -36,36 +36,36 @@ def feed(det, spec):
 
 
 # --- phrase matching ---
-@pytest.mark.parametrize("text", ["Hey Jarvis", "hello jarvis", "Hi Jarvis.", "OK Jarvis", "okay kurama",
-                                  "hey jar vis", "hey service", "hi travis", "hey karama", "hello corama",
-                                  "uh hey jarvis", "Jarvis", "service", "Kurama"])
+@pytest.mark.parametrize("text", ["Hey KURAMA", "hello kurama", "Hi KURAMA.", "OK KURAMA", "okay kurama",
+                                  "hey ku rama", "hey kuruma", "hi kurma", "hey karama", "hello corama",
+                                  "uh hey kurama", "KURAMA", "karama", "Kurama"])
 def test_wake_positives(text):
     hit = wake.match_wake(text, name_alone=True)
     assert hit is not None and hit.command == ""
 
 
 @pytest.mark.parametrize("text", ["hey Siri", "service charge", "the service is bad", "hello",
-                                  "I told Jarvis", "hey jar", "what time is it", ""])
+                                  "I told KURAMA", "hey jar", "what time is it", ""])
 def test_wake_negatives(text):
     assert wake.match_wake(text, name_alone=True) is None
 
 
 def test_name_alone_switch():
-    assert wake.match_wake("service", name_alone=False) is None
-    assert wake.match_wake("hey service", name_alone=False) is not None
+    assert wake.match_wake("karama", name_alone=False) is None
+    assert wake.match_wake("hey karama", name_alone=False) is not None
 
 
 def test_wake_with_command():
-    assert wake.match_wake("Hey Jarvis, what's the time?").command == "what's the time"
-    assert wake.match_wake("Jarvis open YouTube", name_alone=True).command == "open YouTube"
-    assert wake.strip_wake("hey jarvis open youtube") == "open youtube"
+    assert wake.match_wake("Hey KURAMA, what's the time?").command == "what's the time"
+    assert wake.match_wake("KURAMA open YouTube", name_alone=True).command == "open YouTube"
+    assert wake.strip_wake("hey kurama open youtube") == "open youtube"
     assert wake.strip_wake("open youtube") == "open youtube"
 
 
 @pytest.mark.parametrize("text,kind", [
-    ("sleep Jarvis", "sleep"), ("go to sleep", "sleep"), ("stop listening", "sleep"), ("bye Jarvis", "sleep"),
-    ("so jao", "sleep"), ("sut", "sleep"), ("okay jarvis you can sleep now", "sleep"),
-    ("exit Jarvis", "exit"), ("shut down Jarvis", "exit"), ("stop", "stop"), ("stop Jarvis", "stop"),
+    ("sleep KURAMA", "sleep"), ("go to sleep", "sleep"), ("stop listening", "sleep"), ("bye KURAMA", "sleep"),
+    ("so jao", "sleep"), ("sut", "sleep"), ("okay kurama you can sleep now", "sleep"),
+    ("exit KURAMA", "exit"), ("shut down KURAMA", "exit"), ("stop", "stop"), ("stop KURAMA", "stop"),
     ("shut down", None), ("put the computer to sleep", None), ("stop the music", None), ("what is sleep", None),
 ])
 def test_classify(text, kind):
@@ -119,12 +119,12 @@ def test_google_falls_back_to_groq_and_backs_off():
 
     def groq(pcm):
         calls.append("q")
-        return "hey jarvis"
+        return "hey kurama"
 
     t = [0.0]
     r = wake.WakeRecognizer("google", google=google, groq=groq, clock=lambda: t[0])
-    assert r.text(b"x") == "hey jarvis" and calls == ["g", "q"]
-    assert r.text(b"x") == "hey jarvis" and calls == ["g", "q", "q"]  # google skipped while down
+    assert r.text(b"x") == "hey kurama" and calls == ["g", "q"]
+    assert r.text(b"x") == "hey kurama" and calls == ["g", "q", "q"]  # google skipped while down
     t[0] = config.WAKE_GOOGLE_RETRY_S + 1
     r.text(b"x")
     assert calls[-2:] == ["g", "q"]
@@ -148,9 +148,9 @@ def test_google_audio_data_from_pcm(monkeypatch):
 
     def fake(self, data, language=None, **kw):
         seen["rate"], seen["width"], seen["lang"] = data.sample_rate, data.sample_width, language
-        return "hey jarvis"
+        return "hey kurama"
     monkeypatch.setattr(sr.Recognizer, "recognize_google", fake)
-    assert wake.WakeRecognizer._google(frame(1000) * 10) == "hey jarvis"
+    assert wake.WakeRecognizer._google(frame(1000) * 10) == "hey kurama"
     assert seen == {"rate": 16000, "width": 2, "lang": config.WAKE_GOOGLE_LANG}
 
 
@@ -165,28 +165,28 @@ class FakeRec:
 
 
 def test_check_wake_and_command():
-    lst = wake.WakeListener(FakeRec("hey jarvis"), wake.RateGuard(99), command_stt=lambda p: pytest.fail("x"))
+    lst = wake.WakeListener(FakeRec("hey kurama"), wake.RateGuard(99), command_stt=lambda p: pytest.fail("x"))
     ev = lst.check(wake.Burst(b"\0" * 100, 0.8))
     assert ev and ev.command == ""
-    lst = wake.WakeListener(FakeRec("hey jarvis what time"), wake.RateGuard(99),
-                            command_stt=lambda p: ("Hey Jarvis, what's the time?", "en"))
+    lst = wake.WakeListener(FakeRec("hey kurama what time"), wake.RateGuard(99),
+                            command_stt=lambda p: ("Hey KURAMA, what's the time?", "en"))
     assert lst.check(wake.Burst(b"\0" * 100, 1.5)).command == "what's the time"
-    lst = wake.WakeListener(FakeRec("hey jarvis what time"), wake.RateGuard(99), command_stt=lambda p: None)
+    lst = wake.WakeListener(FakeRec("hey kurama what time"), wake.RateGuard(99), command_stt=lambda p: None)
     assert lst.check(wake.Burst(b"\0" * 100, 1.5)).command == "what time"  # Whisper failed: Google text
 
 
 def test_check_long_burst_uses_head_then_whisper():
-    rec = FakeRec("hey jarvis")
+    rec = FakeRec("hey kurama")
     seen = []
     lst = wake.WakeListener(rec, wake.RateGuard(99),
-                            command_stt=lambda p: seen.append(len(p)) or ("Jarvis, kitchen light kaha cha?", "ne"))
+                            command_stt=lambda p: seen.append(len(p)) or ("KURAMA, kitchen light kaha cha?", "ne"))
     pcm = b"\0" * (SR * 2 * 4)  # 4 s
     ev = lst.check(wake.Burst(pcm, 4.0))
     assert ev.command == "kitchen light kaha cha" and ev.lang == "ne" and seen == [len(pcm)]
 
 
 def test_check_rate_guard_and_busy():
-    rec = FakeRec("hey jarvis")
+    rec = FakeRec("hey kurama")
     lst = wake.WakeListener(rec, wake.RateGuard(1))
     assert lst.check(wake.Burst(b"", 1.0)) is not None
     assert lst.check(wake.Burst(b"", 1.0)) is None and lst.skipped == 1 and rec.calls == 1
@@ -218,16 +218,16 @@ class FakeStream:
 
 def test_listen_end_to_end_mocked():
     frames = [frame(100)] * 20 + [frame(5000)] * 30 + [frame(100)] * 20
-    lst = wake.WakeListener(FakeRec("ok jarvis"), wake.RateGuard(99), stream_factory=FakeStream(frames),
+    lst = wake.WakeListener(FakeRec("ok kurama"), wake.RateGuard(99), stream_factory=FakeStream(frames),
                             detector=detector())
     ev = lst.listen(threading.Event())
-    assert ev is not None and ev.heard == "ok jarvis"
+    assert ev is not None and ev.heard == "ok kurama"
 
 
 def test_listen_stops_on_event():
     stop = threading.Event()
     stop.set()
-    lst = wake.WakeListener(FakeRec("hey jarvis"), stream_factory=FakeStream([]), detector=detector())
+    lst = wake.WakeListener(FakeRec("hey kurama"), stream_factory=FakeStream([]), detector=detector())
     assert lst.listen(stop) is None
 
 
@@ -278,7 +278,7 @@ def make_loop(monkeypatch):
 def test_awake_sleep_phrase_costs_no_agent(monkeypatch):
     loop = make_loop(monkeypatch)
     from jarvis.core import stt
-    heard = iter([stt.Transcript("what's the time", "en", "m"), stt.Transcript("sleep Jarvis", "en", "m")])
+    heard = iter([stt.Transcript("what's the time", "en", "m"), stt.Transcript("sleep KURAMA", "en", "m")])
     monkeypatch.setattr(loop, "listen", lambda **kw: next(heard), raising=False)
     assert loop.awake() == "sleep"
     assert loop.responded == ["what's the time"] and loop.speaker.said == ["Okay, going to sleep."]
@@ -304,13 +304,13 @@ def test_awake_exit_needs_confirm(monkeypatch):
     from jarvis.core import stt
     answers = iter([False, True])
     monkeypatch.setattr(loop, "confirm", lambda prompt: next(answers), raising=False)
-    monkeypatch.setattr(loop, "listen", lambda **kw: stt.Transcript("exit Jarvis", "en", "m"), raising=False)
+    monkeypatch.setattr(loop, "listen", lambda **kw: stt.Transcript("exit KURAMA", "en", "m"), raising=False)
     assert loop.awake() == "quit" and loop.responded == []
 
 
 def test_awake_stop_alone_is_ignored(monkeypatch):
     loop = make_loop(monkeypatch)
     from jarvis.core import stt
-    heard = iter([stt.Transcript("stop", "en", "m"), stt.Transcript("bye jarvis", "en", "m")])
+    heard = iter([stt.Transcript("stop", "en", "m"), stt.Transcript("bye kurama", "en", "m")])
     monkeypatch.setattr(loop, "listen", lambda **kw: next(heard), raising=False)
     assert loop.awake() == "sleep" and loop.responded == []

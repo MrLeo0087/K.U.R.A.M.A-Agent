@@ -255,7 +255,7 @@ def test_fast_path_reminders(monkeypatch):
     monkeypatch.setattr(config, "FASTPATH", True)
     i = fastpath.match("remind me to call mom at 5 pm")
     assert (i.tool, i.args) == ("add_reminder", {"text": "call mom", "when": "at 5 pm"})
-    i = fastpath.match("Jarvis, remind me in 10 minutes to check the oven")
+    i = fastpath.match("KURAMA, remind me in 10 minutes to check the oven")
     assert (i.tool, i.args) == ("add_reminder", {"text": "check the oven", "when": "in 10 minutes"})
     assert fastpath.match("what reminders do I have?").tool == "list_schedules"
     i = fastpath.match("cancel reminder 3")

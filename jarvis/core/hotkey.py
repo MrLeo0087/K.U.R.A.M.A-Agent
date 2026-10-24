@@ -3,7 +3,7 @@
 Mode: TOGGLE (press, don't hold). Default <ctrl>+<alt>+j (config.HOTKEY_PTT / env JARVIS_HOTKEY).
   - idle      -> press starts listening; recording stops by itself after ~0.8 s of silence
   - listening -> press ends recording now (keeps what was said)
-  - speaking  -> press interrupts Jarvis and starts listening
+  - speaking  -> press interrupts KURAMA and starts listening
 The voice loop decides what a press means; this module only parses the combo and fires a callback.
 """
 from __future__ import annotations

@@ -1,4 +1,4 @@
-"""Laptop + Jarvis status snapshot for /api/v1/status (LAPTOP-LOCAL: it describes the machine the API
+"""Laptop + KURAMA status snapshot for /api/v1/status (LAPTOP-LOCAL: it describes the machine the API
 runs on; a future server deployment needs a small "laptop agent" to report this instead).
 
 Cheap by design: psutil counters are O(1) except the process walk, which is cached for

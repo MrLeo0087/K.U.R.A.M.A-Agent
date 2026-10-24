@@ -1,6 +1,6 @@
 """focus_mode: a timed focus session: Do Not Disturb on, optional closing of config.FOCUS_CLOSE apps,
 and a timer that turns DND back off and notifies "focus session done". Safe.
-The timer lives in this process: if Jarvis exits early, DND stays on until turned off."""
+The timer lives in this process: if KURAMA exits early, DND stays on until turned off."""
 from __future__ import annotations
 
 import threading

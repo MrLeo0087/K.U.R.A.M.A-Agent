@@ -1,4 +1,4 @@
-"""Jarvis HTTP API (jarvis.api): SSE chat, web confirmations, auth, CORS/origin/host guard, status,
+"""KURAMA HTTP API (jarvis.api): SSE chat, web confirmations, auth, CORS/origin/host guard, status,
 STT/TTS, static frontend, and the jarvis.server shim. No network: fake agent, STT and edge-tts."""
 import io
 import json

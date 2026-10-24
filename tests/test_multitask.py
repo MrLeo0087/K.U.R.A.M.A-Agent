@@ -50,7 +50,7 @@ def usage(p=10, c=20):
 
 # --- planner detection ---
 @pytest.mark.parametrize("text", [
-    "what time is it?", "Hi Jarvis, how are you today?", "Explain in detail how a car engine works.",
+    "what time is it?", "Hi KURAMA, how are you today?", "Explain in detail how a car engine works.",
     "what's the difference between rice and wheat", "तिमी को हौ?", "search rock and roll",
     "अहिले कति बज्यो", "kitne baje hain?"])
 def test_single_intent_needs_no_llm(text, monkeypatch):

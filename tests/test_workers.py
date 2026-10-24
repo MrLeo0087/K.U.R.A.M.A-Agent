@@ -327,7 +327,7 @@ def test_resource_status_tool(monkeypatch):
 
 # --- Telegram remote control ---
 class FakeAgent:
-    def __init__(self, answer="Hello from Jarvis"):
+    def __init__(self, answer="Hello from KURAMA"):
         self.answer, self.calls = answer, []
 
     def run(self, text, mode="text", lang=None):
@@ -384,7 +384,7 @@ def test_telegram_status_and_help(tg, monkeypatch):
     bot = telegram_bot.TelegramBot()
     out = bot.answer("/status")
     assert "RAM 50%" in out and "Watches: none" in out and "essay about Nepal" in out and "workers" in out
-    assert bot.answer("/help").startswith("I'm Jarvis") and bot.answer("/start@JarvisBot") == telegram_bot.HELP
+    assert bot.answer("/help").startswith("I'm KURAMA") and bot.answer("/start@JarvisBot") == telegram_bot.HELP
 
 
 # --- n8n bridge ---

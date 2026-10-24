@@ -301,7 +301,7 @@ def notes_clear() -> int:
         return int(_conn.execute("DELETE FROM notes").rowcount)  # type: ignore[union-attr]
 
 
-# --- clipboard history (only text Jarvis itself copied) ---
+# --- clipboard history (only text KURAMA itself copied) ---
 def clip_add(text: str, keep: int | None = None) -> int:
     keep = int(keep or config.CLIPBOARD_HISTORY_MAX)
     with _lock:

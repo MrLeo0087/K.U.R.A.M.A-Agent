@@ -1,5 +1,5 @@
 """kill_app: force-quit an app's processes (psutil). SIGTERM, then SIGKILL after 3 s for any that are
-still alive (force=True kills at once). Never touches Jarvis, other users' or system processes
+still alive (force=True kills at once). Never touches KURAMA, other users' or system processes
 (pid < 1000, gnome-shell, Xorg, ...). name "frozen"/"this" targets the focused window's app (xdotool).
 Needs confirmation."""
 from __future__ import annotations
@@ -117,7 +117,7 @@ def kill_app(name: str, force: bool = False) -> str:
     """
     procs, label = find_targets(name)
     if not procs:
-        return f"error: no running app matches {name!r} (system and Jarvis processes are never killed)"
+        return f"error: no running app matches {name!r} (system and KURAMA processes are never killed)"
     clean, killed = stop(procs, force)
     how = f", {killed} force-killed" if killed else ""
     return f"Closed {label}: {len(procs)} process{'es' if len(procs) != 1 else ''} stopped{how}."

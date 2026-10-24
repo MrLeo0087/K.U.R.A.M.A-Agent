@@ -17,7 +17,7 @@ HEADER_RE = re.compile(r"^_{3,} (.+?) _{3,}$")
 
 
 def find_python(start: Path) -> tuple[str, Path]:
-    """(python3 to use, working dir): the nearest venv/.venv up to 4 levels up, else Jarvis's own."""
+    """(python3 to use, working dir): the nearest venv/.venv up to 4 levels up, else KURAMA's own."""
     for d in [start, *list(start.parents)[:4]]:
         for v in ("venv", ".venv"):
             py = d / v / "bin" / "python3"

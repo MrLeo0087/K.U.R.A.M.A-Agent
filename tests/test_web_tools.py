@@ -79,7 +79,7 @@ def test_wikipedia_fuzzy_fallback(monkeypatch):
     seen = []
 
     def get_json(url, params=None, headers=None):
-        assert "Jarvis" in headers["User-Agent"]
+        assert "KURAMA" in headers["User-Agent"]
         seen.append(params["action"] if params else url.rsplit("/", 1)[-1])
         if "/page/summary/" in url:
             title = url.rsplit("/", 1)[-1]

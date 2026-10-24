@@ -1,4 +1,4 @@
-"""list_jobs: what Jarvis is working on in the background (safe)."""
+"""list_jobs: what KURAMA is working on in the background (safe)."""
 from __future__ import annotations
 
 from jarvis.core.registry import tool

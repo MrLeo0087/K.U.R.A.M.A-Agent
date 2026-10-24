@@ -3,7 +3,7 @@
 A fresh edge-tts request pays ~0.5-0.8 s for TLS + websocket setup before any audio. The Edge
 read-aloud service accepts several SSML requests on one socket, so we keep TTS_PARALLEL sockets
 open on one long-lived event loop and send each sentence on a warm one (first audio ~0.4-0.7 s).
-prewarm() is called when Jarvis starts listening, so sockets are ready by the time it speaks.
+prewarm() is called when KURAMA starts listening, so sockets are ready by the time it speaks.
 
 Uses edge_tts helpers (pinned version). Any protocol error falls back to edge_tts.Communicate.
 """

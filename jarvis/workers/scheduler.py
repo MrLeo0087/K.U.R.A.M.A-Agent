@@ -1,5 +1,5 @@
 """Scheduler worker (P9b): every config.SCHEDULER_INTERVAL_S (15 s) fire due reminders / scheduled
-commands (reminders.run_due). Items missed while Jarvis was off fire once on start if < 1 h late, else
+commands (reminders.run_due). Items missed while KURAMA was off fire once on start if < 1 h late, else
 they are marked missed and the user is told. On start it also tells the user once about background
 jobs interrupted by the last quit/restart."""
 from __future__ import annotations

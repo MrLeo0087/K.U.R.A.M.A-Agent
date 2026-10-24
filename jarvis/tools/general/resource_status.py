@@ -1,11 +1,11 @@
-"""resource_status: "how's my system doing" (RAM, swap, CPU, disk, Jarvis RSS, workers) (safe)."""
+"""resource_status: "how's my system doing" (RAM, swap, CPU, disk, KURAMA RSS, workers) (safe)."""
 from __future__ import annotations
 
 from jarvis.core.registry import tool
 
 
 @tool(group="system", safety="safe",
-      description="System health: RAM, swap, CPU load, disk use, Jarvis memory, top memory hogs, workers.")
+      description="System health: RAM, swap, CPU load, disk use, KURAMA memory, top memory hogs, workers.")
 def resource_status() -> str:
     from jarvis.workers import resource_guard, status
 

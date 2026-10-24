@@ -1,6 +1,6 @@
 """Background jobs: JobManager singleton (ThreadPoolExecutor, SQLite `jobs` table, cancel events,
 progress strings, on_done callbacks) and the Announcer (text: print; voice: queue a short spoken
-line for when Jarvis is idle; plus a notify-send desktop notification when available).
+line for when KURAMA is idle; plus a notify-send desktop notification when available).
 
 Every job thread runs inside ratelimit.context("background", cancel) so its LLM calls are paced
 behind interactive replies. LLM calls use purpose "job<N>:<step>", so job tokens come from llm_calls.
@@ -23,8 +23,8 @@ from jarvis.core import config, ratelimit, store
 log = logging.getLogger("jarvis.jobs")
 
 ACTIVE = ("queued", "running")
-INTERRUPTED_QUIT = "interrupted (Jarvis quit)"
-INTERRUPTED_RESTART = "interrupted (Jarvis restarted)"
+INTERRUPTED_QUIT = "interrupted (KURAMA quit)"
+INTERRUPTED_RESTART = "interrupted (KURAMA restarted)"
 
 
 class JobCancelled(Exception):
@@ -148,7 +148,7 @@ class JobManager:
             status = "cancelled" if job.cancel_event.is_set() else "done"
         except (JobCancelled, ratelimit.Cancelled):
             status = "cancelled"
-        except Exception as e:  # a failing job must never take Jarvis down
+        except Exception as e:  # a failing job must never take KURAMA down
             log.exception("job #%d failed", job.id)
             job.error = f"{type(e).__name__}: {e}"
             status = "cancelled" if job.cancel_event.is_set() else "failed"
@@ -312,7 +312,7 @@ def notify(text: str) -> None:
     if not exe:
         return
     try:
-        subprocess.Popen([exe, "Jarvis", text], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        subprocess.Popen([exe, "KURAMA", text], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                          start_new_session=True)
     except OSError as e:
         log.debug("notify-send failed: %s", e)

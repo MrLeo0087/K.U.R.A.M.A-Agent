@@ -103,7 +103,7 @@ def desktop_send(title: str, text: str, level: str = "info") -> bool:
     if not exe:
         return False
     try:
-        subprocess.Popen([exe, "-u", _URGENCY.get(level, "normal"), "-a", "Jarvis", title, text[:500]],
+        subprocess.Popen([exe, "-u", _URGENCY.get(level, "normal"), "-a", "KURAMA", title, text[:500]],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
         return True
     except OSError as e:
@@ -127,7 +127,7 @@ def notify(title: str, text: str = "", level: str = "info", source: str = "", de
            telegram: bool = True, save: bool = True) -> list[str]:
     """Fan out one alert. Returns the channels it reached ([] when deduplicated)."""
     level = level if level in LEVELS else "info"
-    title, text = (title or "Jarvis").strip()[:120], (text or "").strip()[:3000]
+    title, text = (title or "KURAMA").strip()[:120], (text or "").strip()[:3000]
     if _duplicate(title, text):
         log.info("dedupe: %s", title)
         return []

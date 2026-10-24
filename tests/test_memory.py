@@ -376,10 +376,10 @@ def test_end_session_extracts_once(monkeypatch):
     bot.end_session()
     assert calls == []  # nothing personal and no summary -> no LLM call
     bot.run("what time is it")
-    bot.summary = "User is building Jarvis and prefers short answers."
+    bot.summary = "User is building KURAMA and prefers short answers."
     bot.end_session()
     bot.end_session()
-    assert calls == ["User is building Jarvis and prefers short answers."]
+    assert calls == ["User is building KURAMA and prefers short answers."]
 
 
 # --------------------------------------------------------------------------- token usage
@@ -471,7 +471,7 @@ def test_daily_digest_tool(monkeypatch):
 # --------------------------------------------------------------------------- fast path + routing
 @pytest.mark.parametrize("text,intent,args", [
     ("give me my daily digest", "digest", {"date": "today"}),
-    ("Jarvis, how many tokens did I use today?", "tokens", {"period": "today"}),
+    ("KURAMA, how many tokens did I use today?", "tokens", {"period": "today"}),
     ("how many tokens did I use this week", "tokens", {"period": "week"}),
     ("what did we talk about yesterday", "session", {"query": "yesterday"}),
     ("what did we discuss", "session", {"query": "last"}),

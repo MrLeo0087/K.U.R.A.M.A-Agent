@@ -29,7 +29,7 @@ def main(argv: list[str] | None = None) -> int:
     except Exception:
         pass
     if tty:
-        print(f"Jarvis text chat ({config.LLM_FAST} / {config.LLM_DEFAULT}, tools on). /quit to exit.")
+        print(f"KURAMA text chat ({config.LLM_FAST} / {config.LLM_DEFAULT}, tools on). /quit to exit.")
     while True:
         try:
             line = input("you> " if tty else "").strip()

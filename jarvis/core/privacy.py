@@ -1,4 +1,4 @@
-"""Keep Jarvis data private to this user: called first thing by every entry point.
+"""Keep KURAMA data private to this user: called first thing by every entry point.
 
 umask 077 makes every file/folder created afterwards (SQLite DBs, logs, outputs, skills) readable
 only by the owner; data/ itself is tightened to 700 if it already exists.

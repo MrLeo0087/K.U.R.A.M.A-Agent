@@ -1,4 +1,4 @@
-"""Toolsmith (P7c): when no tool fits, Jarvis offers to build a small one, but ONLY after the user says yes.
+"""Toolsmith (P7c): when no tool fits, KURAMA offers to build a small one, but ONLY after the user says yes.
 
 handle(task) flow:
   1. A saved skill that fits -> tell the agent to use it (zero generation tokens).
@@ -70,7 +70,7 @@ SECOND = {"en": "The tool will: {summary}{cmds} Is it okay to run it?",
           "ne": "यो टुलले यो गर्छ: {summary}{cmds} चलाऊँ?"}
 DECLINED = "The user said no, so no tool was made or run. Tell them kindly that's fine."
 GEN_PROMPT = (
-    "You write one tiny, safe Python tool for the assistant Jarvis. Define `def run(arg: str) -> str` that "
+    "You write one tiny, safe Python tool for the assistant KURAMA. Define `def run(arg: str) -> str` that "
     "returns a short plain-text answer. Allowed imports only: {mods}; and `from jarvis_helpers import ...` with "
     "http_get(url)->str, read_text(path)->str, write_text(path, text)->str, run_cmd([...])->str with the "
     "list written inline, e.g. run_cmd(['gsettings', 'set', key, value]) (binaries: {cmds}). If the request "

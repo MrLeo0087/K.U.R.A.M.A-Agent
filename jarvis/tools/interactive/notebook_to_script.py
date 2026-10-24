@@ -99,7 +99,7 @@ def convert(nb: dict, name: str, wrap_main: bool = False) -> tuple[str, dict]:
             blocks.append(["# %% [markdown]"] + _comment(text))
         else:
             blocks.append(_comment(text, "raw"))
-    head = f"# Converted from {name} by Jarvis notebook_to_script (outputs removed)."
+    head = f"# Converted from {name} by KURAMA notebook_to_script (outputs removed)."
     if not wrap_main:
         return "\n\n".join([head] + ["\n".join(b) for b in blocks]) + "\n", stats
     imports, body = [], []

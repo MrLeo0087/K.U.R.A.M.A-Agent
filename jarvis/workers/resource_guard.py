@@ -1,6 +1,6 @@
 """Resource guard (worker "resource_guard") and the snapshot behind the resource_status tool.
 
-Checks RAM, swap, CPU (5-minute average of samples), disk ("/" and the home filesystem) and Jarvis's
+Checks RAM, swap, CPU (5-minute average of samples), disk ("/" and the home filesystem) and KURAMA's
 own RSS against the CLAUDE.md caps (core < 600 MB, everything < 1.5 GB). An alert names the top 3
 memory hogs. Hysteresis: a metric alerts once when it crosses its threshold, then again only after
 it has recovered (fallen RESOURCE_HYSTERESIS_PCT below) or RESOURCE_REALERT_S (30 min) later.
@@ -82,7 +82,7 @@ def summary(snap: dict | None = None) -> str:
     s = snap or snapshot()
     disk = ", ".join(f"{k} {v:.0f}%" for k, v in s["disk"].items())
     return (f"RAM {s['ram_pct']:.0f}% ({s['ram_used_gb']}/{s['ram_total_gb']} GB), swap {s['swap_pct']:.0f}%, "
-            f"CPU {s['cpu_pct']:.0f}% (5-min avg), disk {disk}; Jarvis {s['jarvis_core_mb']} MB core / "
+            f"CPU {s['cpu_pct']:.0f}% (5-min avg), disk {disk}; KURAMA {s['jarvis_core_mb']} MB core / "
             f"{s['jarvis_total_mb']} MB total")
 
 

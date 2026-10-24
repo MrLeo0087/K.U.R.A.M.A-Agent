@@ -69,7 +69,7 @@ STT_DUAL = os.getenv("JARVIS_STT_DUAL", "1").lower() not in ("0", "false", "no",
 STT_EN_MIN_LOGPROB = -0.6  # auto "English" below this confidence is treated as suspicious
 # Whisper vocabulary hint (biases spelling of names/apps; tested not to break hi/ne detection).
 STT_PROMPT = os.getenv("JARVIS_STT_PROMPT",
-                       "Kurama, Jarvis, VS Code, Brave, YouTube, GitHub, Nepalgunj, Kathmandu, Pokhara.")
+                       "Kurama, KURAMA, VS Code, Brave, YouTube, GitHub, Nepalgunj, Kathmandu, Pokhara.")
 # Common mishearings fixed after transcription (regex, case-insensitive, word-bounded).
 STT_FIXES: dict[str, str] = {
     r"\b(?:b\.?\s?s\.?|be\s?as|versus|vs\.?|v\.\s?s\.)\s+(?:code|cold|cord|court|coat)\b": "VS Code",
@@ -132,7 +132,7 @@ BARGE_IN_FRAMES = 8  # consecutive loud+voiced 30 ms frames needed (~240 ms)
 BARGE_IN_GRACE_S = 0.4  # ignore the mic right after playback starts
 
 # --- wake ---
-# "Hey Jarvis" wake word (P12): webrtcvad + noise gate find short bursts; only those are sent to the
+# "Hey KURAMA" wake word (P12): webrtcvad + noise gate find short bursts; only those are sent to the
 # free Google Web Speech recognizer (SpeechRecognition, no key), Groq Whisper if Google fails.
 WAKE_ENABLED = os.getenv("JARVIS_WAKE", "1").lower() not in ("0", "false", "no", "off")
 WAKE_ENGINE = os.getenv("JARVIS_WAKE_ENGINE", "google")  # google | groq
@@ -152,7 +152,7 @@ WAKE_LONG_HEAD_S = 2.0
 WAKE_GAP_MS = 450  # this much quiet ends a burst
 WAKE_IDLE_S = float(os.getenv("JARVIS_WAKE_IDLE_S", "45"))  # awake -> sleeping after this long without speech
 WAKE_ACK = os.getenv("JARVIS_WAKE_ACK", "beep")  # beep (instant, local) | voice ("Yes?") | none
-WAKE_STOP_WORD = True  # in wake mode, saying "stop" while Jarvis speaks interrupts playback
+WAKE_STOP_WORD = True  # in wake mode, saying "stop" while KURAMA speaks interrupts playback
 WAKE_STOP_RMS = 1500.0  # the "stop" burst must be this loud (speaker echo is filtered by length)
 WAKE_DEBUG = os.getenv("JARVIS_WAKE_DEBUG", "0").lower() not in ("0", "false", "no", "off")
 
@@ -181,7 +181,14 @@ ROUTER_MAX_GROUPS = 3
 ROUTER_URL_GROUP = "browser"  # group for messages containing a URL/domain
 ROUTER_SITE_OVER_APPS = True  # "open youtube": a known site/URL drops the apps group (browser wins)
 FASTPATH = os.getenv("JARVIS_FASTPATH", "1").lower() not in ("0", "false", "no", "off")  # regex intents, 0 tokens
-ASSISTANT_NAMES = ("jarvis", "kurama")  # wake/address words stripped from commands
+ASSISTANT_NAME = os.getenv("KURAMA_NAME", "KURAMA")  # default name; the user can change it (core/identity.py)
+# Owner password for protected self-information (architecture, storage, security). Only a salted hash is kept;
+# change it with KURAMA_PASSWORD_HASH=sha256(SELF_PASSWORD_SALT + lowercase password).
+SELF_PASSWORD_SALT = "kurama-self-v1:"
+SELF_PASSWORD_HASH = os.getenv("KURAMA_PASSWORD_HASH", "8e1e9a607be9d9e165f378291be7324a139bd1f15e8e3c2e41a2e78ab95d2e6d")
+SELF_UNLOCK_S = 600  # protected answers stay unlocked this long after the right password
+SELF_PENDING_S = 180  # how long a "say the password" question waits for the answer
+ASSISTANT_NAMES = ("kurama",)  # always answered to, besides the current name; stripped from commands
 HOME_PLACE = os.getenv("JARVIS_HOME_PLACE", "Kathmandu")  # default for weather
 HTTP_TIMEOUT_S = 5.0
 IMAGE_TIMEOUT_S = 90  # per image service
@@ -207,7 +214,7 @@ SNAP_PANEL_OFFSET = 32  # GNOME top bar height, used when wmctrl reports no usab
 SCREENSHOT_DIR = Path(os.getenv("JARVIS_SCREENSHOT_DIR", str(Path.home() / "Pictures" / "Screenshots")))
 SCREENSHOT_TOOLS = ("gnome-screenshot", "scrot")  # first one found (and working) is used
 CLIPBOARD_READ_MAX = 500  # chars of clipboard text returned to the LLM
-CLIPBOARD_HISTORY_MAX = 50  # rows kept of text Jarvis itself copied
+CLIPBOARD_HISTORY_MAX = 50  # rows kept of text KURAMA itself copied
 READ_ALOUD_MAX_CHARS = 3000
 GREETING = os.getenv("JARVIS_GREETING", "1").lower() not in ("0", "false", "no", "off")
 GREETING_WEATHER = True  # include a weather one-liner for HOME_PLACE (network, in a thread)
@@ -220,6 +227,12 @@ WORKSPACES: dict[str, dict[str, list[str]]] = {
 }
 # Keyword rules: group -> words/phrases (matched on word boundaries, case-insensitive).
 ROUTER_RULES: dict[str, tuple[str, ...]] = {
+    "self": ("yourself", "about you", "your name", "who are you", "what can you do", "what you can do",
+             "do you have a tool", "do you have any tool", "can you help", "help me", "i'm stuck", "i am stuck",
+             "stuck", "don't know how", "dont know how", "no idea", "guide me", "what should i do", "how do i",
+             "how can i", "suggest", "your data", "you store", "you save", "your output", "your memory",
+             "your limitation", "your limits", "how do you work", "your architecture", "how are you built",
+             "change your name", "call yourself", "your password", "आफ्नो बारेमा", "तिम्रो नाम", "तुम्हारा नाम"),
     "image": ("generate image", "generate an image", "image of", "picture of", "photo of", "drawing of",
               "draw ", "illustration", "painting of", "तस्वीर", "चित्र"),
     "general": ("time", "date", "day is it", "clock", "what day", "o'clock", "baje",
@@ -340,8 +353,8 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
     "filesearch": "find files by name or by text content",
     "telegram": "send a file or a message to the user's Telegram (phone)",
     "toolsmith": "no tool fits a real task: offer to build a small new tool; saved skills list/delete",
-    "skills": "small tools Jarvis built earlier (saved skills)",
-    "system": "system resources (RAM, swap, CPU, disk, Jarvis memory) and background workers status",
+    "skills": "small tools KURAMA built earlier (saved skills)",
+    "system": "system resources (RAM, swap, CPU, disk, KURAMA memory) and background workers status",
     "watch": "watch a process/PID until it exits or tail a training log and alert on errors/progress",
     "automation": "trigger n8n workflows; crash watchdog (auto-restart dev servers) targets and status",
     "audio": "speaker volume, mute, microphone mute",
@@ -368,13 +381,15 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
     "jobs": "long writing jobs (essays, articles, reports) and background job status/cancel/resume",
     "schedule": "reminders and scheduled commands at a time or repeating; list or cancel them",
     "image": "generate a picture or drawing from a description",
+    "self": "about the assistant itself (abilities, outputs/data locations, limits, how it works), which tool "
+            "fits a task, guidance when the user is stuck, change the assistant's name",
 }
 # Tiny glosses for the request_tools meta-tool (sent on every unmatched turn, so each word costs):
 # "" = the group name says it all.
 TOOL_GROUP_GLOSS: dict[str, str] = {
     "general": "time", "weather": "", "files": "folders", "filesearch": "",
     "telegram": "phone", "toolsmith": "new tool", "skills": "", "system": "RAM, CPU, disk",
-    "watch": "process, log", "automation": "n8n", "audio": "volume", "display": "brightness, theme",
+    "watch": "process", "automation": "n8n", "audio": "volume", "display": "brightness, theme",
     "screen": "screenshot", "power": "battery", "clipboard": "", "speech": "", "windows": "",
     "apps": "", "media": "music", "desktop": "DND, wallpaper", "git": "", "dev": "tests, venv", "codequality": "review",
     "devutils": "docstrings",
@@ -382,7 +397,8 @@ TOOL_GROUP_GLOSS: dict[str, str] = {
     "knowledge": "my code", "usage": "tokens", "browser": "",
     "jobs": "writing",
     "schedule": "remind",
-    "image": "picture",
+    "image": "",
+    "self": "about me",
 }
 
 # Words that suggest multi-step reasoning (router asks for the smart tier).
@@ -535,7 +551,7 @@ WEB_TIMEOUT_S = 6.0
 WEB_CACHE_S = 600  # search / wikipedia results reused for 10 min
 WEB_SEARCH_MAX_CHARS = 800
 WEB_PAGE_MAX_BYTES = 2_000_000  # read_webpage stops downloading past this
-WEB_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) Jarvis/1.0 (personal assistant)"
+WEB_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) KURAMA/1.0 (personal assistant)"
 META_TOOLS = os.getenv("JARVIS_META_TOOLS", "1").lower() not in ("0", "false", "no", "off")  # request_tools
 META_REFUSAL_RETRY = True  # a tool-less "I can't" answer is retried once with request_tools bound
 

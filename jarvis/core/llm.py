@@ -93,7 +93,7 @@ class _NoAsync:
     """Placeholder so ChatGroq does not build an unused async HTTP client."""
 
     def create(self, *a: Any, **k: Any) -> Any:
-        raise NotImplementedError("Jarvis only uses the sync Groq client")
+        raise NotImplementedError("KURAMA only uses the sync Groq client")
 
 
 def model_settings(model: str) -> dict:

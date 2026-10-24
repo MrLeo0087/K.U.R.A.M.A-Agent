@@ -1,7 +1,7 @@
 """Speech-to-text on Groq Whisper: STT_MODEL first, STT_FALLBACK on any error.
 
 Auto language detection: verbose_json returns the detected language ("english", "nepali",
-"hindi", ...), mapped to the codes Jarvis speaks (en / ne / hi). Each call is logged to the
+"hindi", ...), mapped to the codes KURAMA speaks (en / ne / hi). Each call is logged to the
 llm_calls table with purpose="stt" (0 tokens; audio is not token-billed).
 """
 from __future__ import annotations
@@ -17,7 +17,7 @@ from jarvis.core import config, llm, store
 
 log = logging.getLogger(__name__)
 
-# Whisper's language names/codes -> Jarvis language codes. Whisper often labels Nepali speech
+# Whisper's language names/codes -> KURAMA language codes. Whisper often labels Nepali speech
 # as Marathi or Sanskrit (same Devanagari script), so those map to Nepali; Urdu sounds like
 # Hindi when spoken. Anything else falls back to English.
 LANG_MAP: dict[str, str] = {

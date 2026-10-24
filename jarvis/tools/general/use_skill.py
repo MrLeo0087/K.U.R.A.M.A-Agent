@@ -5,7 +5,7 @@ from jarvis.core import toolsmith
 from jarvis.core.registry import tool
 
 
-@tool(group="toolsmith", safety="safe", description="Run a saved skill (a small tool Jarvis built earlier).")
+@tool(group="toolsmith", safety="safe", description="Run a saved skill (a small tool KURAMA built earlier).")
 def use_skill(name: str, arg: str = "") -> str:
     """Run a saved skill by name.
 

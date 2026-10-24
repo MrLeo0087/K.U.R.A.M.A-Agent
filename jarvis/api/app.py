@@ -1,4 +1,4 @@
-"""Jarvis API app factory + runner.
+"""KURAMA API app factory + runner.
 
     python -m jarvis.api [--host H] [--port P] [--no-warm]     (python -m jarvis.server is a shim)
 
@@ -55,7 +55,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             threading.Thread(target=engine.warm, name="jarvis-warm", daemon=True).start()
         yield
 
-    app = FastAPI(title="Jarvis (KURAMA) API", version=info.API_VERSION, lifespan=lifespan,
+    app = FastAPI(title="KURAMA (KURAMA) API", version=info.API_VERSION, lifespan=lifespan,
                   description="Backend for the KURAMA holographic UI. Optional bearer token "
                               "(JARVIS_API_TOKEN); SSE endpoints also accept ?token=.")
     app.state.settings = s
@@ -75,13 +75,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     else:
         @app.get("/", include_in_schema=False)
         async def root():
-            return JSONResponse({"name": "Jarvis API", "docs": "/docs", "health": "/api/v1/health"})
+            return JSONResponse({"name": "KURAMA API", "docs": "/docs", "health": "/api/v1/health"})
     return app
 
 
 def parse_args(argv: list[str] | None = None, prog: str = "python -m jarvis.api") -> argparse.Namespace:
     env = settings_mod.from_env()
-    ap = argparse.ArgumentParser(prog=prog, description="Jarvis API + KURAMA UI")
+    ap = argparse.ArgumentParser(prog=prog, description="KURAMA API + KURAMA UI")
     ap.add_argument("--host", default=env.host, help="bind address (default JARVIS_API_HOST or 127.0.0.1)")
     ap.add_argument("--port", type=int, default=env.port, help="port (default JARVIS_API_PORT or 8000)")
     ap.add_argument("--no-warm", action="store_true", help="don't preload the agent after startup")
@@ -100,6 +100,6 @@ def main(argv: list[str] | None = None, prog: str = "python -m jarvis.api") -> i
         return 2
     import uvicorn
     shown = "127.0.0.1" if s.host in ("0.0.0.0", "::") else s.host
-    print(f"Jarvis API + KURAMA UI: http://{shown}:{s.port}  (docs: /docs)", flush=True)
+    print(f"KURAMA API + KURAMA UI: http://{shown}:{s.port}  (docs: /docs)", flush=True)
     uvicorn.run(create_app(s), host=s.host, port=s.port, log_level=s.log_level, access_log=False)
     return 0

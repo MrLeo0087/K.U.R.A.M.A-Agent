@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start Jarvis on login (no sudo):
+# Start KURAMA on login (no sudo):
 #   - workers  -> ~/.config/systemd/user/jarvis-workers.service (enabled + started now)
 #   - voice    -> ~/.config/autostart/jarvis.desktop (starts with your desktop session: needs DISPLAY + audio)
 # Options: --no-voice, --no-workers. Undo with scripts/uninstall_autostart.sh

@@ -65,7 +65,7 @@ def http_get(url: str) -> str:
 
         chunks, size = [], 0
         with httpx.stream("GET", str(url), timeout=6.0, follow_redirects=True,
-                          headers={"User-Agent": "Jarvis-tool/1.0"}) as r:
+                          headers={"User-Agent": "KURAMA-tool/1.0"}) as r:
             for chunk in r.iter_bytes():
                 chunks.append(chunk)
                 size += len(chunk)

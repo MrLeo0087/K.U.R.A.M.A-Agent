@@ -15,7 +15,7 @@ cache = TTLCache(config.WEB_CACHE_S)
 _client: Any = None
 _lock = threading.Lock()
 # Wikimedia rejects generic agents (403); their etiquette asks for a descriptive one.
-WIKI_AGENT = ("JarvisAssistant/1.0 (personal desktop assistant; "
+WIKI_AGENT = ("KURAMAAssistant/1.0 (personal desktop assistant; "
               "https://www.mediawiki.org/wiki/API:Etiquette) httpx")
 
 

@@ -1,4 +1,4 @@
-"""Jarvis HTTP API (FastAPI): the only thing the frontend talks to. See jarvis/api/app.py."""
+"""KURAMA HTTP API (FastAPI): the only thing the frontend talks to. See jarvis/api/app.py."""
 
 
 def create_app(*args, **kwargs):  # lazy: importing jarvis.api stays free

@@ -425,7 +425,7 @@ export class Conversation {
       if (!this.started && now - this.lastSpeech > this.AUTO_OFF_MS) { this.stop(); this.cb.onAutoOff?.(); }
     } else if (this.player.playing) {
       // barge-in: louder than the noise floor by a wide margin (echo cancellation removes most of
-      // Jarvis's own voice) for ~280 ms -> stop talking and listen.
+      // KURAMA's own voice) for ~280 ms -> stop talking and listen.
       const thr = Math.max(this.floor * 6, 0.045);
       this.bargeMs = rms > thr ? this.bargeMs + dt : Math.max(0, this.bargeMs - dt);
       if (this.bargeMs >= 280) {

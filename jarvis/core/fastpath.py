@@ -39,10 +39,17 @@ class FastResult:
 
 
 # --- normalisation ---
-_NAMES = "|".join(map(re.escape, config.ASSISTANT_NAMES))
-_LEAD = re.compile(r"^\s*(?:(?:hey|hi|ok|okay|yo)[\s,]+)?(?:(?:" + _NAMES + r")\b[\s,!.:]*)?(?:please\s+)?"
-                   r"(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?)?", I)
-_TRAIL = re.compile(r"(?:[\s,]+(?:please|" + _NAMES + r"))*[\s?.!।॥]*$", I)
+def refresh_names() -> None:
+    """(Re)build the patterns that strip the assistant's name (called again after a rename)."""
+    global _NAMES, _LEAD, _TRAIL
+    from jarvis.core import identity
+    _NAMES = "|".join(map(re.escape, identity.names()))
+    _LEAD = re.compile(r"^\s*(?:(?:hey|hi|ok|okay|yo)[\s,]+)?(?:(?:" + _NAMES + r")\b[\s,!.:]*)?(?:please\s+)?"
+                       r"(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?)?", I)
+    _TRAIL = re.compile(r"(?:[\s,]+(?:please|" + _NAMES + r"))*[\s?.!।॥]*$", I)
+
+
+refresh_names()
 
 
 def normalize(text: str) -> str:
@@ -452,11 +459,57 @@ def image_intent(t: str) -> Intent | None:
     return Intent("image", "generate_image", "image", args, prompt)
 
 
+_RENAME = re.compile(r"^(?:(?:from now on|now)\s+)?(?:change|set)\s+your\s+name\s+(?:to|as)\s+(?P<n>.+)$|"
+                     r"^(?:(?:from now on|now)\s+)?(?:call yourself|your (?:new )?name (?:is|will be))\s+(?P<n2>.+)$|"
+                     r"^(?:from now on\s+)?i(?:'ll| will) call you\s+(?P<n3>.+)$", I)
+_WHOAMI = re.compile(r"^(?:what(?:'s| is) your name|who are you|what are you|tell me about yourself|"
+                     r"introduce yourself)$", I)
+_CANDO = re.compile(r"^(?:what (?:all )?can you do|what are your (?:features|abilities|skills)|what do you do)$", I)
+_OUT_WHERE = re.compile(r"^where (?:do|did|will) you (?:store|save|keep|put) (?:the |my |your |all )?"
+                        r"(?:outputs?|output folder|files|results|images|pictures|essays|poems|work)(?: folder)?$|"
+                        r"^where (?:is|are) (?:the |my |your )?(?:outputs?|output folder|results)$", I)
+_DATA_WHERE = re.compile(r"^where (?:do|did) you (?:store|save|keep) (?:the |my |your |all )?"
+                         r"(?:data|memory|memories|conversations?|chats?|personal info\w*|database|notes)$", I)
+_LIMITS = re.compile(r"^what are your (?:limits|limitations|weaknesses)$|^what can'?t you do$", I)
+_ARCH = re.compile(r"^(?:how do you work|how are you (?:built|made)|(?:what is|explain|tell me) your architecture|"
+                   r"your architecture)$", I)
+_HAVE_TOOL = re.compile(r"^do you have (?:a |any )?(?:tool|feature|way|option)s? (?:for|to|that can)\s+(?P<need>.+)$", I)
+
+
+def _self_intent(t: str) -> Intent | None:
+    from jarvis.core import selfknow
+    if selfknow.looks_like_password_try(t):
+        return Intent("unlock", "_unlock", "self", {"text": t})
+    if m := _RENAME.match(t):
+        new = (m.group("n") or m.group("n2") or m.group("n3") or "").strip(" .!")
+        return Intent("rename", "set_my_name", "self", {"name": new}, new)
+    if _WHOAMI.match(t):
+        return Intent("whoami", "about_me", "self", {"topic": "overview"})
+    if _CANDO.match(t):
+        return Intent("cando", "about_me", "self", {"topic": "overview"})
+    if _OUT_WHERE.match(t):
+        return Intent("selfinfo", "about_me", "self", {"topic": "outputs"})
+    if _DATA_WHERE.match(t):
+        return Intent("selfinfo", "about_me", "self", {"topic": "storage"})
+    if _LIMITS.match(t):
+        return Intent("selfinfo", "about_me", "self", {"topic": "limits"})
+    if _ARCH.match(t):
+        return Intent("selfinfo", "about_me", "self", {"topic": "architecture"})
+    if m := _HAVE_TOOL.match(t):
+        return Intent("havetool", "find_capability", "self", {"need": m.group("need")}, m.group("need"))
+    return None
+
+
 def match(text: str) -> Intent | None:
     """The single high-confidence intent for text, or None."""
+    from jarvis.core import selfknow
+    if selfknow.looks_like_password_try(text):  # raw text: the password answer is checked before anything else
+        return Intent("unlock", "_unlock", "self", {"text": text})
     t = normalize(text)
     if not t or len(t) > 200:
         return None
+    if si := _self_intent(t):
+        return si
     if m := _full(TIME_LOCAL, t):
         want_date = bool(re.search(r"\b(?:date|day|today)\b|गते|तारीख|बार", t, I))
         return Intent("time", "get_time", "general", {"_date": True} if want_date else {})
@@ -598,6 +651,17 @@ def render(intent: Intent, ok: bool, output: str, lang: str) -> str:
         return _T["search"].get(lang, _T["search"]["en"]).format(e=eng, q=q)
     if intent.name == "name":
         return _say("name", lang, intent.label)
+    if intent.name == "selfinfo" and out.startswith("LOCKED"):
+        return "That's protected information. Please tell me the password first."
+    if intent.name == "whoami":
+        from jarvis.core import identity
+        return f"I'm {identity.name()}, your personal assistant on this laptop. " + out.split(". ", 2)[-1].split(". ")[0] + "."
+    if intent.name == "havetool":
+        lines = [ln[2:].split(" (", 1)[0].replace("_", " ") for ln in out.splitlines() if ln.startswith("- ")]
+        if not lines:
+            return ("I don't have a tool for that yet. I can search the web for the steps, or build a small new "
+                    "tool for it if you like.")
+        return f"Yes, I can help with {intent.label}. These of my tools fit: {', '.join(lines[:4])}. Shall I start?"
     return out  # weather / recall / digest / tokens / session: the tool output is already text
 
 
@@ -631,6 +695,9 @@ def merge_opens(answers: list[str]) -> list[str]:
 
 def _internal(intent: Intent) -> tuple[bool, str]:
     """Intents handled without a registered tool (P7 profile acknowledgement)."""
+    if intent.tool == "_unlock":
+        from jarvis.core import selfknow
+        return True, selfknow.try_unlock(intent.args["text"])
     if intent.tool == "_profile":
         from jarvis.core import profile
         profile.save(intent.args["key"], intent.args["value"], "fastpath")

@@ -14,7 +14,7 @@ from jarvis.core import config, registry
 
 NAME = "request_tools"
 HINT = ("Tool groups are available through request_tools. If one fits the user's request, call it now. "
-        "If none fits but it is a real task Jarvis could do on this computer, request toolsmith. "
+        "If none fits but it is a real task doable on this computer, request toolsmith. "
         "Otherwise reply kindly in one short sentence that you can't do that yet.")
 TOOLSMITH_HINT = ("No tool exists for this task yet: call make_tool now (it asks the user before building "
                   "anything) instead of saying you can't.")

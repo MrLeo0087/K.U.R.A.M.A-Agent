@@ -1,6 +1,6 @@
 """Read the supervisor's status file (data/workers.json) so tools can tell what is running.
 
-Stdlib + psutil only: imported by tools inside the main Jarvis process.
+Stdlib + psutil only: imported by tools inside the main KURAMA process.
 """
 from __future__ import annotations
 

@@ -47,7 +47,7 @@ class Bridge:
     def handle(self, path: str, headers: dict, body: bytes) -> tuple[int, dict]:
         if path.rstrip("/") != PATH:
             return 404, {"ok": False, "error": "not found"}
-        if not token_ok(headers.get("X-Jarvis-Token") or headers.get("x-jarvis-token")):
+        if not token_ok(headers.get("X-Jarvis-Token") or headers.get("X-Kurama-Token")):
             self.log.warning("refused request with a missing or wrong token")
             return 401, {"ok": False, "error": "unauthorized"}
         if len(body) > config.N8N_INBOUND_MAX_BYTES:
@@ -80,7 +80,7 @@ class Bridge:
 
 def make_handler(bridge: Bridge):
     class Handler(BaseHTTPRequestHandler):
-        server_version = "Jarvis"
+        server_version = "KURAMA"
 
         def _send(self, code: int, payload: dict) -> None:
             body = json.dumps(payload, ensure_ascii=False).encode("utf-8")

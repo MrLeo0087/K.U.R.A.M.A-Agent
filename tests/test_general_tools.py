@@ -176,7 +176,7 @@ def test_remember_recall_forget():
 # --- fast path ---
 POSITIVE = {
     "what time is it": ("get_time", {}),
-    "Hey Jarvis, what's the time?": ("get_time", {}),
+    "Hey KURAMA, what's the time?": ("get_time", {}),
     "kati bajyo": ("get_time", {}),
     "what time is it in Tokyo?": ("get_time", {"place": "Tokyo"}),
     "time in New York": ("get_time", {"place": "New York"}),
@@ -189,7 +189,7 @@ POSITIVE = {
     "Pokhara ko mausam kasto cha": ("weather", {"place": "Pokhara", "days": 1}),
     "मौसम कस्तो छ": ("weather", {"place": "", "days": 1}),
     "remember 1234": ("remember", {"text": "1234"}),
-    "Hey Jarvis, remember 5678.": ("remember", {"text": "5678"}),
+    "Hey KURAMA, remember 5678.": ("remember", {"text": "5678"}),
     "yaad rakho 4321": ("remember", {"text": "4321"}),
     "what do you remember?": ("recall", {"which": "all"}),
     "what was the last thing I told you to remember?": ("recall", {"which": "last"}),
@@ -227,7 +227,7 @@ def no_llm(monkeypatch):
 
 def test_fastpath_hit_makes_zero_llm_calls(fast_on, no_llm, http, apps):
     bot = agent.Agent()
-    assert bot.run("Hey Jarvis, remember 1234") == "Okay, I'll remember: 1234."
+    assert bot.run("Hey KURAMA, remember 1234") == "Okay, I'll remember: 1234."
     assert bot.last["fastpath"] == "remember" and bot.last["route"].method == "fastpath"
     bot.run("remember 5678")
     assert bot.run("what do you remember?") == "You asked me to remember 2 things: 1) 1234; 2) 5678."

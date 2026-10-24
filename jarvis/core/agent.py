@@ -32,7 +32,7 @@ from typing import Annotated, Any, Callable, Iterator, TypedDict
 from langchain_core.messages import (AIMessage, BaseMessage, HumanMessage, SystemMessage,
                                      ToolMessage)
 
-from jarvis.core import (config, fastpath, jobs, llm, meta, planner, profile, registry, router, safety,
+from jarvis.core import (config, fastpath, identity, selfknow, jobs, llm, meta, planner, profile, registry, router, safety,
                          store)
 
 log = logging.getLogger("jarvis.agent")
@@ -40,20 +40,22 @@ log = logging.getLogger("jarvis.agent")
 LANG_NAMES = {"en": "English", "ne": "Nepali (Devanagari script)", "hi": "Hindi (Devanagari script)"}
 
 SYSTEM_PROMPT = (
-    "You are Jarvis, a warm and polite helper on the user's Ubuntu laptop. Talk like a kind friend: "
+    "You are {name}, a warm and polite helper on the user's Ubuntu laptop. Talk like a kind friend: "
     "simple everyday words, no technical jargon unless the user is technical. "
     "Keep replies short (1-2 sentences) unless asked for more. "
     "Answer in the user's language (English, Hindi or Nepali). "
     "Plain text only: no markdown, lists or emojis, since replies may be spoken aloud. "
     "Use a tool only when needed to answer or act, and never invent tool results. "
-    "If something is declined or fails, say so gently. If you don't know, say so honestly."
+    "If something fails, say so gently; if you don't know, say so. "
+    "If the user is stuck or asks what you can do, use find_capability or about_me, then suggest next steps "
+    "you can do and offer to start."
 )
 VOICE_SUFFIX = (" Your reply is spoken aloud: plain sentences, no markdown or lists. Default to 1-2 short "
                 "sentences; if the user asks to explain or for detail, give up to 6 sentences. "
                 "The user spoke {lang}; reply in {lang}.")
 SUMMARY_SUFFIX = " Earlier conversation (summary): {summary}"
 SUMMARY_PROMPT = (
-    "Update the running summary of a chat between a user and the assistant Jarvis. "
+    "Update the running summary of a chat between a user and the assistant. "
     "Keep facts, decisions and user preferences; drop small talk. Under 60 words, plain text."
 )
 NO_ANSWER = "Sorry, I'm not sure about that one."
@@ -399,7 +401,7 @@ class Agent:
 
     # --- history ---
     def _messages(self, user_text: str, mode: str, lang: str | None) -> list[BaseMessage]:
-        system = SYSTEM_PROMPT
+        system = SYSTEM_PROMPT.replace("{name}", identity.name())
         if mode == "voice":
             system += VOICE_SUFFIX.format(lang=LANG_NAMES.get(lang or "en", "English"))
         with self._lock:
@@ -476,6 +478,7 @@ class Agent:
             threading.Thread(target=work, name="session-end", daemon=True).start()
 
     def _remember(self, user_text: str, answer: str) -> None:
+        user_text = selfknow.redact(user_text)  # never keep the owner password in history
         self._persist_turn(user_text, answer)
         batch: list[BaseMessage] = []
         with self._lock:
