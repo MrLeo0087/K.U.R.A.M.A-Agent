@@ -70,7 +70,7 @@ STT_EN_MIN_LOGPROB = -0.6  # auto "English" below this confidence is treated as 
 # Whisper vocabulary hint (biases spelling of names/apps; tested not to break hi/ne detection).
 STT_NO_SPEECH_MAX = 0.6  # Whisper's no_speech_prob above this: background noise, not a command
 STT_PROMPT = os.getenv("JARVIS_STT_PROMPT",
-                       "Kurama, KURAMA, VS Code, Brave, YouTube, GitHub, Nepalgunj, Kathmandu, Pokhara.")
+                       "Kurama, KURAMA, VS Code, Bluetooth, Brave, YouTube, Wi-Fi, GitHub, Nepalgunj, Kathmandu, Pokhara.")
 # Common mishearings fixed after transcription (regex, case-insensitive, word-bounded).
 STT_FIXES: dict[str, str] = {
     r"\b(?:b\.?\s?s\.?|be\s?as|versus|vs\.?|v\.\s?s\.)\s+(?:code|cold|cord|court|coat)\b": "VS Code",
@@ -79,6 +79,9 @@ STT_FIXES: dict[str, str] = {
     r"\b(?:karama|kurma|corama|kurrama)\b": "Kurama",
     r"\bslip\b(?=\s+(?:my|the|this|now|mode|kurama|laptop|computer)\b|\s*[.!?]*$)": "sleep",  # "slip my laptop"
     r"^\s*hut\s+down\b": "shut down",
+    # "turn off/on" as Whisper often hears it with an accent: "tone of", "tron off", "torn of", "pon up"
+    r"\b(?:tone|tron|torn|tan|tun|ton|tum)\s+(?:of+|op)\b": "turn off",
+    r"\b(?:tone|tron|torn|tan|tun|ton|tum|pon)\s+(?:on|up)\b": "turn on",
 }
 SOUNDS = os.getenv("KURAMA_SOUNDS", "1").lower() not in ("0", "false", "no", "off")  # alarm/timer/reminder sounds
 ALARM_RINGS = 6  # how many times an alarm rings

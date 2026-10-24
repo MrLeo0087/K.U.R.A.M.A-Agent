@@ -195,7 +195,7 @@ POSITIVE = {
     "what was the last thing I told you to remember?": ("recall", {"which": "last"}),
     "open youtube": ("open_url", {"target": "youtube"}),
     "youtube kholo": ("open_url", {"target": "youtube"}),
-    "open vs code": ("open_app", {"name": "vs code"}),
+    "open vs code": ("open_app", {"name": "VS Code"}),  # mishearing fixes normalise the name
     "launch files": ("open_app", {"name": "files"}),
 }
 NEGATIVE = ["remember when we went to Pokhara?", "do you remember me", "remember me",

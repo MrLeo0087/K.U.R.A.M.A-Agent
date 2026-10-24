@@ -124,3 +124,20 @@ def test_phone_gets_only_what_matters(monkeypatch):
     from jarvis.core import notify
     assert notify.wants_phone("warning", "resource_guard") and notify.wants_phone("info", "scheduler")
     assert not notify.wants_phone("info", "jobs") and not notify.wants_phone("info", "focus")
+
+
+def test_switch_phrases_accents_and_follow_ups(monkeypatch):
+    import json
+    import time
+
+    from jarvis.core import config, fastpath, stt
+    monkeypatch.setattr(config, "FASTPATH", True)
+    m = lambda t: (lambda i: (i.tool, i.args) if i else None)(fastpath.match(stt.fix_text(t)))  # noqa: E731
+    assert m("Tone of the Bluetooth") == ("laptop_toggle", {"setting": "bluetooth", "state": "off"})
+    assert m("PON UP THE BLUETOOTH BRO") == ("laptop_toggle", {"setting": "bluetooth", "state": "on"})
+    assert m("disable wifi") == ("laptop_toggle", {"setting": "wifi", "state": "off"})
+    assert m("is bluetooth on or off?") == ("laptop_toggle", {"setting": "bluetooth", "state": "status"})
+    assert m("then turn it off") is None  # nothing switched recently
+    store.kv_set("last_switch", json.dumps({"device": "bluetooth", "t": time.time()}))
+    assert m("Then turn off this.") == ("laptop_toggle", {"setting": "bluetooth", "state": "off"})
+    assert m("switch off the laptop") == ("power_off", {"action": "shutdown"})

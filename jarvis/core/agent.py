@@ -258,8 +258,17 @@ class Agent:
             self._graph = self._build()
         return self._graph
 
+    _FOLLOWUP = re.compile(r"\b(?:it|this|that|them|those|again|too|also|instead|back|same|one more|another|"
+                           r"on|off|more|less|louder|quieter|yes|do it|go ahead)\b", re.I)
+
     def _route_node(self, state: AgentState) -> dict:
         r = router.route(state["user_text"])
+        prev, at = getattr(self, "_prev_groups", ([], 0.0))
+        if (not r.groups and prev and time.time() - at < 300 and len(state["user_text"].split()) <= 8
+                and self._FOLLOWUP.search(state["user_text"])):  # "then turn it off": same tools as the last turn
+            r = router.Route(prev, "followup", r.reasoning, r.latency_ms)
+        if r.groups:
+            self._prev_groups = (list(r.groups), time.time())
         tools: list[Any] = registry.schemas_for(r.groups) if r.groups else []
         tier = "smart" if (len(r.groups) > 1 or r.reasoning) else "fast"
         if tier == "fast" and not tools and state.get("mode") == "voice":

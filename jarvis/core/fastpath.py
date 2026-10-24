@@ -55,6 +55,8 @@ refresh_names()
 
 def normalize(text: str) -> str:
     t = " ".join((text or "").split())
+    for pat, rep in config.STT_FIXES.items():  # the same mishearing fixes as voice ("tone of" -> "turn off")
+        t = re.sub(pat, rep, t, flags=I)
     t = _LEAD.sub("", t, count=1)
     return _TRAIL.sub("", t).strip(" ,")
 
@@ -807,18 +809,57 @@ _NUM = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "
         "nine": 9, "ten": 10, "fifteen": 15, "twenty": 20, "thirty": 30, "forty": 40, "forty five": 45, "half an": 0.5}
 _AMOUNT = r"(?P<n>\d+(?:\.\d+)?|a|an|one|two|three|four|five|six|seven|eight|nine|ten|fifteen|twenty|thirty|forty(?: five)?|half an)"
 _UNIT = r"(?P<u>sec(?:ond)?s?|min(?:ute)?s?|hours?|hrs?)"
-_TIMER = [re.compile(r"^(?:set|start|put|make)\s+(?:a|an|the)?\s*(?:timer|countdown|count\s*down)\s+(?:for|of)\s+" + _AMOUNT + r"\s*" + _UNIT + r"$", I),
+_TIMER = [re.compile(r"^(?:set|start|put|make)\s+(?:\w+\s+)?(?:timer|countdown|count\s*down)\s+(?:for|of)\s+" + _AMOUNT + r"\s*" + _UNIT + r"$", I),
           re.compile(r"^(?:set|start)?\s*(?:a|an)?\s*" + _AMOUNT + r"[\s-]*" + _UNIT + r"\s+(?:timer|countdown)$", I),
           re.compile(r"^(?:timer|countdown)\s+(?:for\s+)?" + _AMOUNT + r"\s*" + _UNIT + r"$", I)]
 _ALARM = re.compile(r"^(?:set|put|create|add)\s+(?:an?\s+|the\s+)?alarm\s+(?:for|at)\s+(?P<w>.+)$|"
                     r"^wake\s+me\s+(?:up\s+)?(?:at|by|in)\s+(?P<w2>.+)$|^alarm\s+(?:for|at)\s+(?P<w3>.+)$", I)
 _STOPWATCH = re.compile(r"^(?P<a>start|begin|stop|pause|reset|restart|resume|check|lap)?\s*(?:the\s+|a\s+)?stop\s?watch"
                         r"(?:\s+(?P<b>start|stop|status|time|lap|reset))?$|^(?P<c>lap)$", I)
-_SWITCH = re.compile(r"^(?:turn|switch|put)\s+(?P<s>on|off)\s+(?:the\s+)?(?P<d>wi-?fi|wireless|bluetooth|airplane mode|"
-                     r"flight mode|aeroplane mode|battery saver|power saver|screen)$|"
-                     r"^(?:turn|switch|put)\s+(?:the\s+)?(?P<d2>wi-?fi|wireless|bluetooth|airplane mode|flight mode|"
-                     r"aeroplane mode|battery saver|power saver|screen)\s+(?P<s2>on|off)$|"
-                     r"^(?P<d3>wi-?fi|bluetooth|airplane mode|flight mode|battery saver|power saver)\s+(?P<s3>on|off)$", I)
+_DEVICES = (("airplane", r"(?:air|aero)plane(?:\s+mode)?|flight\s+mode"), ("wifi", r"wi[\s-]?fi|wireless|internet"),
+            ("bluetooth", r"blue\s?tooth"), ("power_mode", r"(?:battery|power)\s+saver"), ("screen", r"screen|display"))
+_SW_VERB = re.compile(r"\b(?:turn|switch|put|make|set|enable|disable|activate|deactivate|start|stop|kill)\b", I)
+_SW_FILL = re.compile(r"\b(?:the|my|this|that|it|please|bro|man|dude|now|again|then|also|just|for me|kurama|"
+                      r"can you|could you|would you|will you)\b", I)
+_SW_FOLLOW = re.compile(r"^(?:(?:turn|switch|put)\s+)?(?:it|this|that|them)?\s*(?:on|off|back on|back off)"
+                        r"(?:\s+(?:it|this|that|them))?$|^(?:turn|switch|put)\s+(?:it|this|that|them)\s+(?:on|off)$", I)
+SWITCH_TTL_S = 600  # "turn it off" refers to the device switched in the last 10 minutes
+
+
+def switch_intent(t: str) -> Intent | None:
+    """"turn off bluetooth", "bluetooth off bro", "disable wifi", and the follow-up "turn it off" (0 tokens)."""
+    low = t.lower()
+    device = next((name for name, rx in _DEVICES if re.search(r"\b(?:" + rx + r")\b", low)), None)
+    if re.search(r"\b(?:is|are|was|status|whether|check)\b", low) and not _SW_VERB.search(low):
+        # "is bluetooth on?", "bluetooth status": a question, answered by reading the switch
+        return Intent("control", "laptop_toggle", "system", {"setting": device, "state": "status"}) \
+            if device in ("wifi", "bluetooth", "airplane", "power_mode") else None
+    st = "off" if re.search(r"\b(?:off|down|disable|deactivate|kill|stop)\b", low) else \
+        "on" if re.search(r"\b(?:on|up|enable|activate|start)\b", low) else None
+    if st is None:
+        return None
+    rest = _SW_FILL.sub(" ", low)
+    if device is None:  # follow-up: "turn it off", "then turn off this", "off"
+        if not _SW_FOLLOW.match(" ".join(re.sub(r"\b(?:then|now|please|bro|kurama)\b", " ", low).split())):
+            return None
+        try:
+            import json
+            from jarvis.core import store
+            last = json.loads(store.kv_get("last_switch", "") or "{}")
+        except Exception:
+            last = {}
+        if time.time() - last.get("t", 0) > SWITCH_TTL_S or not last.get("device"):
+            return None
+        device = last["device"]
+    elif not (_SW_VERB.search(rest) or len(rest.split()) <= 3):  # "my bluetooth is off" is a statement, not an order
+        return None
+    if device == "screen":
+        return Intent("control", "laptop_toggle", "system", {"setting": "screen", "state": "off"}) if st == "off" else None
+    if device == "power_mode":
+        return Intent("control", "laptop_toggle", "system", {"setting": "power_mode", "state": "saver" if st == "on" else "balanced"})
+    return Intent("control", "laptop_toggle", "system", {"setting": device, "state": st})
+
+
 _POWERMODE = re.compile(r"^(?:switch\s+to\s+|set\s+|use\s+|enable\s+)?(?P<m>power saver|battery saver|saver|balanced|"
                         r"performance|high performance)\s+mode$", I)
 
@@ -851,15 +892,8 @@ def _control_intent(t: str) -> Intent | None:
         a = {"begin": "start", "resume": "start", "restart": "reset", "pause": "stop", "check": "status",
              "time": "status"}.get(a, a)
         return Intent("control", "stopwatch", "clock", {"action": a})
-    if m := _SWITCH.match(t):
-        d = (m.group("d") or m.group("d2") or m.group("d3")).lower()
-        st = (m.group("s") or m.group("s2") or m.group("s3")).lower()
-        if d == "screen":
-            return Intent("control", "laptop_toggle", "system", {"setting": "screen", "state": "off"}) if st == "off" else None
-        if "saver" in d:
-            return Intent("control", "laptop_toggle", "system", {"setting": "power_mode", "state": "saver" if st == "on" else "balanced"})
-        setting = "wifi" if d.startswith(("wi", "wire")) else "bluetooth" if d == "bluetooth" else "airplane"
-        return Intent("control", "laptop_toggle", "system", {"setting": setting, "state": st})
+    if si := switch_intent(t):
+        return si
     if m := _POWERMODE.match(t):
         mode = m.group("m").lower()
         return Intent("control", "laptop_toggle", "system",

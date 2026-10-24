@@ -1,8 +1,11 @@
 """laptop_toggle: the laptop's quick switches: Wi-Fi, Bluetooth, airplane mode, power mode, screen off. Safe."""
 from __future__ import annotations
 
+import json
+import time
 from typing import Literal
 
+from jarvis.core import store
 from jarvis.core.registry import tool
 from jarvis.tools.general import _sys
 
@@ -36,6 +39,8 @@ def laptop_toggle(setting: Literal["wifi", "bluetooth", "airplane", "power_mode"
         state: on / off / status; for power_mode: saver, balanced or performance; for screen: off.
     """
     state = (state or "status").lower().strip()
+    if setting in ("wifi", "bluetooth", "airplane"):  # "turn it off" next time means this one
+        store.kv_set("last_switch", json.dumps({"device": setting, "t": time.time()}))
     try:
         if setting in ("wifi", "bluetooth", "airplane"):
             if state not in ("on", "off", "status"):
