@@ -360,6 +360,9 @@ def fmt_duration(seconds: float) -> str:
     return f"{h}h {m}m" if h else (f"{m}m {s}s" if m else f"{s}s")
 
 
+KINDS = ("run", "proc", "log", "colab")  # training/process watches ("web" watches belong to webwatch)
+
+
 def describe(w: dict) -> str:
     st = w.get("state") or {}
     where = {"run": "local", "proc": "process", "log": "log", "colab": "Colab"}.get(w["kind"], w["kind"])
@@ -378,11 +381,11 @@ def describe(w: dict) -> str:
 
 
 def status_text(include_recent: bool = True) -> str:
-    active = store.watches_list(("active",))
+    active = [w for w in store.watches_list(("active",)) if w["kind"] in KINDS]
     lines = [describe(w) for w in active]
     if include_recent:
-        recent = [w for w in store.watches_list(("done", "failed", "stopped"))
-                  if w.get("finished") and time.time() - w["finished"] < 12 * 3600][:3]
+        recent = [w for w in store.watches_list(("done", "failed", "stopped")) if w["kind"] in KINDS
+                  and w.get("finished") and time.time() - w["finished"] < 12 * 3600][:3]
         if recent:
             lines += ["Recently finished:"] + [describe(w) for w in recent]
     return "\n".join(lines) if lines else "Nothing is training or being watched right now."

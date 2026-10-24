@@ -327,6 +327,11 @@ class ProcessWatcher(Worker):
             return
         store.watch_update(w["id"], state=st)
 
+    # ---------- websites ----------
+    def check_web(self, w: dict) -> None:
+        from jarvis.core import webwatch
+        webwatch.check(w)
+
     # ---------- Colab ----------
     def poll_colab(self) -> None:
         since = store.kv_get("colab_since") or "12h"

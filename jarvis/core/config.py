@@ -257,7 +257,8 @@ ROUTER_EXAMPLES: dict[str, tuple[str, ...]] = {
               "guard my laptop while I am away", "where is my laptop", "anti theft"),
     "image": ("make an image of a cat in space", "create a picture of mountains", "draw a logo"),
     "web": ("search online for", "look this up on the internet", "who won the match yesterday",
-            "latest news about technology"),
+            "latest news about technology", "tell me when this website changes", "watch the exam results page",
+            "let me know when the notice board page updates"),
     "memory": ("remember that my wifi password is", "what did I tell you about", "what did we discuss last time"),
     "knowledge": ("how does my code handle this", "find where my project loads the config", "explain my repo"),
     "usage": ("how many tokens did I use", "give me a summary of today"),
@@ -475,7 +476,8 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
     "codequality": "dependency doctor (unpinned/outdated/vulnerable/unused), secrets scan, pre-commit gate, "
                    "repo hygiene, AI code review of a diff/file/commit",
     "devutils": "notebook (.ipynb) to .py script, generate requirements.txt from imports, config file snapshots/diff",
-    "web": "search the web (DuckDuckGo/SearXNG) incl. latest news, Wikipedia summaries, read a web page",
+    "web": "search the web (DuckDuckGo/SearXNG) incl. latest news, Wikipedia summaries, read a web page, watch a "
+           "page and say when it changes",
     "memory": "notes the user dictates, facts about the user (profile), past conversations/sessions",
     "knowledge": "search or ask questions about the user's own code, docs and notes (RAG); index a folder",
     "usage": "LLM token usage, budget and API cost; daily digest of the day's activity",
@@ -569,6 +571,9 @@ DOCTOR_TEMP_WARN = 90  # °C CPU = a finding
 DOCTOR_KERNEL_IDLE_MIN = 30  # a Jupyter kernel this old with ~0% CPU counts as idle
 GUARD_INTERVAL_S = 5.0  # laptop guard checks (only while armed)
 PHONE_INBOX = os.getenv("KURAMA_PHONE_INBOX", "~/Downloads/Phone")  # files sent from the phone land here
+WEBWATCH_EVERY_MIN = 60  # website watcher: default check interval
+WEBWATCH_MIN_EVERY_MIN = 10  # never more often (be polite to the site)
+WEBWATCH_FAIL_ALERT = 5  # say so when a watched page fails this many times in a row
 COLAB_POLL_S = 60.0  # how often KURAMA checks for Colab pings (only while a Colab run is active)
 COLAB_SILENT_MIN = 25  # no ping for this long = the Colab runtime probably disconnected
 COLAB_PROGRESS_EVERY_S = 300  # the notebook sends progress at most this often (ntfy.sh free limits)

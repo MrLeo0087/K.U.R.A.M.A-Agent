@@ -557,7 +557,16 @@ _FREE_RAM = re.compile(r"^(?:free|clean|clear)(?: up)? (?:some )?(?:ram|memory)$
 _PORT = re.compile(r"^(?:what(?:'s| is)|who(?:'s| is)) (?:running |listening )?(?:on|using) port (?P<p>\d{2,5})$", I)
 
 
+_WEBWATCH = re.compile(r"^(?:watch|monitor|keep an eye on|track|tell me when) (?:the (?:page|site|website) )?"
+                       r"(?P<url>https?://\S+|[\w-]+(?:\.[\w-]+)+(?:/\S*)?)(?: (?:changes|updates))?"
+                       r"(?: (?:for|and tell me when it (?:says|mentions|shows)|when it (?:says|mentions|shows)) "
+                       r"(?P<w>.+?))?$", I)
+
+
 def _daily_intent(t: str) -> Intent | None:
+    if m := _WEBWATCH.match(t):
+        return Intent("webwatch", "web_watch", "web", {"action": "add", "url": m.group("url"),
+                                                        "word": (m.group("w") or "").strip(" '\"")})
     if _DOCTOR.match(t):
         return Intent("doctor", "laptop_doctor", "system", {"action": "check"})
     if _FREE_RAM.match(t):
