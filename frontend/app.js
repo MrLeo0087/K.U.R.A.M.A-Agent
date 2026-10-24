@@ -479,7 +479,7 @@ function welcome() {
   w.id = "welcome";
   w.innerHTML = "<p>Type, tap the mic, or start a hands-free conversation.</p>";
   const row = el("div", "suggest");
-  for (const s of ["What time is it?", "What's using my RAM?", "Weather in Kathmandu", "What do you remember about me?"]) {
+  for (const s of ["Summarize today", "Latest news", "What can you do?", "Generate an image of a misty Himalayan sunrise"]) {
     const b = el("button", "chip sug");
     b.type = "button";
     b.textContent = s;
@@ -793,6 +793,7 @@ function wsStep(d) {
 }
 
 async function wsBody(it, box) {
+  const tok = (box._tok = Symbol("render")); // a newer render wins (startup loads several items at once)
   box.innerHTML = "";
   if (it.kind === "image") {
     const img = el("img", "ws-img");
@@ -805,6 +806,7 @@ async function wsBody(it, box) {
   if (it.text == null && it.src) {
     try { const r = await fetch(it.src); it.text = r.ok ? await r.text() : "(couldn't load this file)"; }
     catch { it.text = "(couldn't load this file)"; }
+    if (box._tok !== tok) return;
   }
   const doc = el("div", "ws-text");
   doc.innerHTML = renderMarkdown(it.text || "");
