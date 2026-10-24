@@ -129,9 +129,10 @@ def fire(row: dict) -> list[str]:
     if kind == "alarm":  # rings for a while, and reaches the phone too
         sound.play("alarm", config.ALARM_RINGS)
         return notify.notify(f"⏰ Alarm ({_hm(row['next_run'])})", row["text"], level="info", source="scheduler")
-    if kind == "timer":  # a laptop thing: sound + desktop, not the phone
+    if kind == "timer":  # a laptop thing: sound + desktop; the phone too only when asked ("...and tell me on Telegram")
         sound.play("timer", 3)
-        return notify.notify("⏱️ Time's up", row["text"], level="info", source="timer")
+        return notify.notify("⏱️ Time's up", row["text"], level="info", source="timer",
+                             telegram=True if row.get("note") == "phone" else None)
     sound.play("reminder", 2)
     return notify.notify(f"⏰ Reminder ({_hm(row['next_run'])})", f"{row['text']}\nIt's time, go do it now.",
                          level="info", source="scheduler")

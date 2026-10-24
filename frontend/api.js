@@ -50,6 +50,8 @@ export class Api {
   cancelSchedule(id) { return this.request(`/api/v1/schedule/${encodeURIComponent(id)}`, { method: "DELETE" }); }
   stopwatch(action) { return this.request(`/api/v1/stopwatch/${action}`, { method: "POST", body: {} }); }
   wakeSleep() { return this.request("/api/v1/wake/sleep", { method: "POST", body: {} }); }
+  deviceSound() { return this.request("/api/v1/voice/device-sound"); }
+  setDeviceSound(hear) { return this.request("/api/v1/voice/device-sound", { method: "POST", body: { hear } }); }
   wakeAwake() { return this.request("/api/v1/wake/awake", { method: "POST", body: {} }); }
   wakeEvents() { return new EventSource(this.url("/api/v1/wake/events", true)); }
   powerOff() { return this.request("/api/v1/power/off", { method: "POST", body: {} }); }

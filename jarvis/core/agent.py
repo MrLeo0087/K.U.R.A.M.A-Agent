@@ -22,6 +22,7 @@ A tool-less "I can't" answer is retried once with the meta-tool bound. Both log 
 """
 from __future__ import annotations
 
+import json
 import logging
 import operator
 import re
@@ -68,6 +69,7 @@ JOB_STARTED = {
 TASK_FAILED = "Sorry, I couldn't manage this part: {text}."
 PREV_RESULT = "\n(Result of the previous step, use it: {result})"
 PREV_RESULT_MAX = 1500
+DUPLICATE = "(duplicate) Already done earlier in this request, not run again: "
 
 
 class AgentState(TypedDict, total=False):
@@ -427,6 +429,12 @@ class Agent:
                 out.append(ToolMessage(content=content, tool_call_id=tc["id"], name=name))
                 continue
             denied = self.last.setdefault("denied", [])
+            key = f"{name}:{json.dumps(args or {}, sort_keys=True, default=str)}"
+            done = self.last.setdefault("done_calls", {})
+            if key in done:  # the same call twice in one request (two identical timers): run it once
+                self.last.setdefault("tools", []).append({"name": name, "ok": True})
+                out.append(ToolMessage(content=DUPLICATE + done[key][:200], tool_call_id=tc["id"], name=name))
+                continue
             if name in denied:  # never ask the same thing twice in one turn (no yes/no loops)
                 content, ok = "The user already declined this. Don't call it again; say it wasn't done.", False
             elif name not in allowed:
@@ -445,6 +453,8 @@ class Agent:
                 content, ok = res.output, res.ok
                 if content.startswith("The user declined"):
                     denied.append(name)
+                elif ok:
+                    done[key] = content
             self.last.setdefault("tools", []).append({"name": name, "ok": ok})
             out.append(ToolMessage(content=content, tool_call_id=tc["id"], name=name))
         direct = self._direct_reply(state, out)
@@ -464,6 +474,8 @@ class Agent:
         said = []
         for m in results:
             text = str(m.content)
+            if text.startswith(DUPLICATE):
+                continue  # said once already
             if text.lower().startswith(("error", "the user", "refused")):
                 return ""  # something went wrong: let the model explain it
             intent = config.DIRECT_REPLY_TOOLS[m.name]

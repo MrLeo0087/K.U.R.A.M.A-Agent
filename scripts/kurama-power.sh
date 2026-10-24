@@ -14,6 +14,7 @@ running() { pgrep -f -- "$PROCS" >/dev/null; }
 off() {
   mkdir -p "$(dirname "$FLAG")" && touch "$FLAG"
   scripts/kurama-wallpaper.sh stop >/dev/null  # closes the window and puts the real wallpaper back
+  venv/bin/python -m jarvis.core.devaudio off 2>/dev/null  # the real speaker/mic back (no echo canceller)
   pkill -TERM -f -- "$PROCS" 2>/dev/null
   for _ in $(seq 1 20); do running || break; sleep 0.25; done
   pkill -KILL -f -- "$PROCS" 2>/dev/null  # anything that ignored the polite stop

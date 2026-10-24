@@ -1183,6 +1183,10 @@ def _amount(m: re.Match) -> dict | None:
     return {key: v} if v else None
 
 
+_PHONE_TAIL = re.compile(r"[\s,]+(?:and\s+)?(?:(?:when|once|after)\b[^,]{0,40}?[\s,]+)?(?:also\s+)?(?:send|message|text|"
+                         r"notify|tell|ping|alert|inform)\b.{0,40}?\b(?:telegram|telegra|phone|mobile)\b.*$", I)
+
+
 def _control_intent(t: str) -> Intent | None:
     if _SHUTDOWN.match(t):
         return Intent("control", "power_off", "power", {"action": "shutdown"})
@@ -1192,9 +1196,10 @@ def _control_intent(t: str) -> Intent | None:
         return Intent("control", "suspend_computer", "power", {})
     if _LOGOUT.match(t):
         return Intent("control", "power_off", "power", {"action": "logout"})
+    t2 = _PHONE_TAIL.sub("", t)  # "set a timer for 40 seconds and when it's done message me on Telegram"
     for rx in _TIMER:
-        if (m := rx.match(t)) and (args := _amount(m)):
-            return Intent("control", "set_timer", "clock", args)
+        if (m := rx.match(t2)) and (args := _amount(m)):
+            return Intent("control", "set_timer", "clock", {**args, "phone": True} if t2 != t else args)
     if m := _ALARM.match(t):
         w = (m.group("w") or m.group("w2") or m.group("w3")).strip(" .")
         return Intent("control", "set_alarm", "clock", {"when": w if not t.lower().startswith("wake me up in") else f"in {w}"})

@@ -39,9 +39,17 @@ def app_name(p: psutil.Process) -> str:
     low = name.lower()
     for key, label in (("chrome", "Chrome"), ("chromium", "Chromium"), ("brave", "Brave"), ("firefox", "Firefox"),
                        ("code", "VS Code"), ("slack", "Slack"), ("discord", "Discord"), ("telegram", "Telegram"),
-                       ("spotify", "Spotify"), ("webkit", "KURAMA wallpaper"), ("gnome-shell", "GNOME Shell")):
+                       ("spotify", "Spotify"), ("gnome-shell", "GNOME Shell"), ("gjs", "GNOME extensions")):
         if low.startswith(key) or (key == "code" and "/code" in cmd and "electron" in cmd):
             return label
+    if "kurama_wallpaper" in cmd:  # the window and its WebKit page are one thing to the user
+        return "KURAMA screen"
+    if low.startswith("webkit"):
+        try:
+            parent = " ".join(p.parent().cmdline()[:3]) if p.parent() else ""
+        except psutil.Error:
+            parent = ""
+        return "KURAMA screen" if "kurama_wallpaper" in parent else "WebKit"
     if "ipykernel" in cmd or "jupyter" in cmd:
         return "Jupyter"
     if "jarvis" in cmd:

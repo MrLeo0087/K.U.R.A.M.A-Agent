@@ -15,6 +15,7 @@ from __future__ import annotations
 import collections
 import io
 import logging
+import os
 import queue
 import shutil
 import subprocess
@@ -160,14 +161,30 @@ class Endpointer:
 
 
 def _input_stream(callback: Callable, sample_rate: int, frame_ms: int):
+    raw = None
+    if config.AUDIO_INPUT_DEVICE is None:  # the echo-cancelled mic costs CPU: server-side listening reads the raw one
+        try:
+            from jarvis.core import devaudio
+            raw = devaudio.raw_source()
+        except Exception:
+            raw = None
+    old = os.environ.get("PIPEWIRE_NODE")
     try:
         import sounddevice as sd
 
+        if raw:
+            os.environ["PIPEWIRE_NODE"] = raw  # read by PipeWire's ALSA plugin when the stream opens
         return sd.RawInputStream(samplerate=sample_rate, blocksize=sample_rate * frame_ms // 1000,
                                  channels=1, dtype="int16", device=config.AUDIO_INPUT_DEVICE,
                                  callback=callback)
     except Exception as e:  # PortAudio missing, no mic, device busy...
         raise AudioError(f"cannot open microphone: {e}") from e
+    finally:
+        if raw:
+            if old is None:
+                os.environ.pop("PIPEWIRE_NODE", None)
+            else:
+                os.environ["PIPEWIRE_NODE"] = old
 
 
 def record(max_s: float | None = None, on_speech_start: Callable[[], None] | None = None,

@@ -49,6 +49,20 @@ scripts/kurama-wallpaper.sh stop && scripts/kurama-wallpaper.sh
 | Open as a normal window instead of the wallpaper | `scripts/kurama-wallpaper.sh --window` |
 | Open in any browser (server must be running) | http://127.0.0.1:8000 |
 
+## Mic and device sound
+
+KURAMA can remove the laptop's own sound (videos, music, its own voice) from the mic. Turn this on or off in
+Settings → **Hear device sound**. When it's off (the default), "Speakers (through KURAMA)" is your speaker in
+the sound settings.
+
+| What | Command |
+|---|---|
+| Is the device-sound remover on? | `pactl get-default-source` (shows `kurama_ec_source` when it's on) |
+| Put normal sound settings back now | `venv/bin/python -m jarvis.core.devaudio off` |
+| Apply the saved setting again | `venv/bin/python -m jarvis.core.devaudio` |
+
+`scripts/kurama-power.sh off` also puts the normal sound settings back.
+
 ## Checking and troubleshooting
 
 | What | Command |

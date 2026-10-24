@@ -64,3 +64,19 @@ async def tts_endpoint(body: TTSIn, request: Request):
                             status_code=502)
     return StreamingResponse(stream.iterate(first), media_type="audio/mpeg",
                              headers={"Cache-Control": "no-store", "X-Voice": stream.voice})
+
+
+class DeviceSoundIn(BaseModel):
+    hear: bool = Field(..., description="true: KURAMA hears device sound too; false: only you (echo canceller on)")
+
+
+@router.get("/voice/device-sound", summary="Does KURAMA hear the laptop's own sound?")
+async def device_sound_get():
+    from jarvis.core import devaudio
+    return await run_in_threadpool(devaudio.status)
+
+
+@router.post("/voice/device-sound", summary="Hear device sound on/off (off = the laptop's own sound is removed from the mic)")
+async def device_sound_set(body: DeviceSoundIn):
+    from jarvis.core import devaudio
+    return await run_in_threadpool(devaudio.set_hear, body.hear)

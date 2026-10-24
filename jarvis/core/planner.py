@@ -213,6 +213,17 @@ _TG_TAIL = re.compile(r"^\s*(?:(?:and|then|also)\s+)*(?:please\s+)?(?:send|share
                       r"(?:telegram|phone|mobile)\b", re.I)
 
 
+# "...and when the timer completes, send me a message on Telegram": a condition on the previous task, not a new
+# task (it was run as a second, duplicate timer)
+_WHEN_TAIL = re.compile(r"^\s*(?:(?:and|then|also)\s+)*(?:when|once|after|as\s+soon\s+as|jab|jaba)\b.{0,40}?\b(?:complete[sd]?|"
+                        r"finish(?:e[sd])?|done|over|ends?|ended|rings?|goes\s+off|up|ready|sakiyo|sakincha|"
+                        r"khatam|ho\s+jaye)\b", re.I)
+
+
+def is_when_tail(clause: str) -> bool:
+    return bool(_WHEN_TAIL.match(clause.strip()))
+
+
 def merge_tails(tasks: list[dict]) -> list[dict]:
     """Glue "give me the result"-style tasks onto the previous task; remap depends_on indices."""
     out: list[dict] = []
@@ -222,7 +233,7 @@ def merge_tails(tasks: list[dict]) -> list[dict]:
             out[-1] = {**out[-1], "telegram": True}  # the job's result goes to Telegram when it's done
             remap[i] = len(out) - 1
             continue
-        if out and (is_result_tail(t["text"]) or (_IMG_TASK.search(out[-1]["text"]) and _WALL_TAIL.match(t["text"]))):
+        if out and (is_result_tail(t["text"]) or is_when_tail(t["text"]) or (_IMG_TASK.search(out[-1]["text"]) and _WALL_TAIL.match(t["text"]))):
             out[-1] = {**out[-1], "text": f"{out[-1]['text'].rstrip(' .,')} and {t['text'].strip()}"}
             remap[i] = len(out) - 1
             continue
@@ -284,6 +295,8 @@ def is_multi(text: str) -> bool:
     clauses = split_clauses(text)
     if len(clauses) < 2:
         return False
+    if len(clauses) == 2 and is_when_tail(clauses[1]):
+        return False  # "set a timer and when it's done tell me on Telegram" is one request (no planner tokens)
     is_tail = lambda c: bool(_WALL_TAIL.match(c) or _TG_TAIL.match(c))  # noqa: E731
     if _IMG_TASK.search(clauses[0]) and is_tail(clauses[-1]) and not any(
             re.match(r"\s*(?:open|play|send|search|close|start|launch)\b", c, re.I)

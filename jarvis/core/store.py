@@ -573,12 +573,13 @@ def notes_between(t0: float, t1: float) -> list[dict]:
 SCHEDULE_FIELDS = ("text", "kind", "next_run", "repeat", "last_run", "enabled", "note")
 
 
-def schedule_add(text: str, kind: str, next_run: float, repeat: str = "none", created: float | None = None) -> int:
+def schedule_add(text: str, kind: str, next_run: float, repeat: str = "none", created: float | None = None,
+                 note: str = "") -> int:
     with _lock:
         if _conn is None:
             init(_path)
         cur = _conn.execute("INSERT INTO schedules(text,kind,next_run,repeat,created,enabled,note) "  # type: ignore[union-attr]
-                            "VALUES (?,?,?,?,?,1,'')", (text, kind, next_run, repeat or "none", created or time.time()))
+                            "VALUES (?,?,?,?,?,1,?)", (text, kind, next_run, repeat or "none", created or time.time(), note))
         return int(cur.lastrowid)
 
 

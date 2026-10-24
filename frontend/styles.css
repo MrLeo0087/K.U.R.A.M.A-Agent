@@ -856,3 +856,13 @@ body.paused dialog[open] { animation: none !important; } /* a dialog opened whil
 .perf .rg svg { width: 58px; height: 58px; } .perf .rg .v { margin-top: -41px; height: 41px; font-size: 14px; }
 .perf .spark.short { height: 20px; margin-top: 4px; }
 .perf .kfoot { margin-top: 8px; padding-top: 8px; }
+
+/* talk mode: mic mute button (only shown in talk mode) */
+.mute-btn { display: none; flex: none; align-self: center; width: 32px; height: 32px; padding: 0; place-items: center; border-radius: 9px;
+  color: var(--muted); background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.07); cursor: pointer; transition: all 0.2s; }
+body[data-mode="conv"] .mute-btn { display: grid; }
+.mute-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.mute-btn .off { display: none; }
+.mute-btn:hover { color: var(--text); border-color: rgba(255, 140, 50, 0.3); }
+.mute-btn[aria-pressed="true"] { color: #fff; background: var(--danger); border-color: transparent; }
+.mute-btn[aria-pressed="true"] .on { display: none; } .mute-btn[aria-pressed="true"] .off { display: block; }

@@ -78,6 +78,8 @@ STT_FIXES: dict[str, str] = {
     r"\bvisual\s+studio(?:\s+code)?\b": "VS Code",
     r"\bbear\s+skull\b": "VS Code",
     r"\b(?:karama|kurma|corama|kurrama)\b": "Kurama",
+    r"\bkura\s+(?:may|ma|mah)\b": "Kurama",  # "the Kura may sleep"
+    r"\bzarvis\b": "Jarvis",
     r"^\s*(?:wariyo|warriyo|huarion|hu\s?ar\s?yu|who\s?r\s?u)\s*[?.!]*\s*$": "Who are you?",
     r"\bslip\b(?=\s+(?:my|the|this|now|mode|kurama|laptop|computer)\b|\s*[.!?]*$)": "sleep",  # "slip my laptop"
     r"^\s*hut\s+down\b": "shut down",

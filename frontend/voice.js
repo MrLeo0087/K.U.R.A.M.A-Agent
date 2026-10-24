@@ -134,8 +134,14 @@ const TAP_WORKLET = `class KuramaTap extends AudioWorkletProcessor {
 registerProcessor("kurama-tap", KuramaTap);`;
 
 export class Mic {
-  constructor() { this.stream = null; this.sinks = new Set(); }
+  constructor() { this.stream = null; this.sinks = new Set(); this.muted = false; this.hearDevice = false; }
   get open() { return !!this.stream; }
+
+  // muted: the track delivers silence (nothing is heard, recorded or sent) until unmuted
+  setMuted(on) {
+    this.muted = !!on;
+    this.stream?.getAudioTracks().forEach((t) => { t.enabled = !this.muted; });
+  }
 
   // plain = no echo cancellation / noise suppression / gain control: much cheaper (the sleeping wake-word
   // listener never talks, so it needs no echo cancellation)
@@ -148,8 +154,10 @@ export class Mic {
         : "Microphone not available in this window — open http://127.0.0.1:8000 in a browser, or update the wallpaper app.");
     }
     const stream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: !plain, noiseSuppression: !plain, autoGainControl: !plain, channelCount: 1 },
+      // hearDevice: the user wants KURAMA to hear the laptop's sound too, so the page doesn't cancel it either
+      audio: { echoCancellation: !plain && !this.hearDevice, noiseSuppression: !plain, autoGainControl: !plain, channelCount: 1 },
     });
+    stream.getAudioTracks().forEach((t) => { t.enabled = !this.muted; });
     const ctx = audioCtx(); // full rate: a 16 kHz context made speech recognition noticeably worse
     this.src = ctx.createMediaStreamSource(stream);
     this.analyser = ctx.createAnalyser();
@@ -181,7 +189,7 @@ export class Mic {
   }
 
   async restart(opts) { // switch processing (sleep <-> awake) without losing recorders listening on this mic
-    if (this.stream && !!opts?.plain === !!this.plain) return;
+    if (this.stream && !!opts?.plain === !!this.plain && !opts?.force) return;
     this.stop();
     await this.start(opts);
   }
@@ -322,7 +330,10 @@ export class Player {
   enqueue(text, lang, gen = this.gen) {
     if (gen !== this.gen || !speakable(text)) return;
     this.items.push({ text, lang, ctrl: null, p: null });
-    this.said = [...(this.said || []).slice(-3), text]; // what KURAMA is saying: echo check for barge-in
+    // what KURAMA said in the last 90 s: the mic hearing it back (speaker -> mic) is never taken as a request
+    const now = Date.now(), keep = (this.saidAt || []).map((t, i) => (now - t < 90000 ? i : -1)).filter((i) => i >= 0).slice(-40);
+    this.said = [...keep.map((i) => this.said[i]), text];
+    this.saidAt = [...keep.map((i) => this.saidAt[i]), now];
     this._pump();
   }
 
@@ -410,6 +421,7 @@ export class Conversation {
     this.rec = new Recorder(mic);
     this.cb = { onUtterance, onState, onBargeCheck, onAutoOff };
     this.on = false;
+    this.muted = false; // the user muted the mic: nothing is detected or recorded
     this.asleep = false; // only listening for "wake up KURAMA": short phrases only, no auto-off
     this.state = "off";
     this.timer = 0;
@@ -425,6 +437,7 @@ export class Conversation {
 
   async start() {
     await this.mic.start();
+    this.mic.setMuted(this.muted);
     this.on = true;
     this.lastSpeech = performance.now();
     this.lastTick = 0;
@@ -434,6 +447,7 @@ export class Conversation {
 
   stop() {
     this.on = false;
+    this.mic.setMuted(false);
     clearInterval(this.timer);
     this.rec.cancel();
     this._set("off");
@@ -446,6 +460,13 @@ export class Conversation {
     this.speechMs = 0; this.silenceMs = 0; this.started = false;
     this.bRec = false; this.bSpeech = 0; this.bSil = 0; this.bOn = false;
     this._set(this.asleep ? "sleeping" : "listening");
+  }
+
+  mute(on) {
+    this.muted = !!on;
+    if (this.on) this.mic.setMuted(this.muted); // (the mic itself stays usable for dictation when talk mode is off)
+    if (this.muted) { this.rec.cancel(); this.bRec = false; if (this.on) this._set(this.asleep ? "sleeping" : "listening"); }
+    else if (this.on && this.state !== "thinking") this.listen();
   }
 
   sleep(on) { this.asleep = !!on; this.lastSpeech = performance.now(); if (this.on && this.state !== "thinking") this.listen(); }
@@ -461,7 +482,7 @@ export class Conversation {
   }
 
   _tick() {
-    if (!this.on) return;
+    if (!this.on || this.muted) return;
     // real elapsed time: when the page is busy drawing, ticks come late, and counting each as 50 ms made
     // speech look too short (ignored) and pauses too long (cut off)
     const now = performance.now(), dt = this.lastTick ? Math.min(250, now - this.lastTick) : 50;

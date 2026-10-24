@@ -115,6 +115,10 @@
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4"/></svg>
             </button>
           </div>
+          <button type="button" id="m-mute" class="mute-btn" aria-pressed="false" aria-label="Mute the mic (talk mode)" title="Mute / unmute the mic">
+            <svg class="on" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>
+            <svg class="off" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 9.3V6a3 3 0 0 0-5.7-1.3M9 9v2a3 3 0 0 0 4.6 2.5M5.5 11a6.5 6.5 0 0 0 10.4 5.2M18.5 11c0 .9-.2 1.8-.5 2.6M12 17.5V21M4 4l16 16"/></svg>
+          </button>
           <textarea id="input" rows="1" placeholder="Ask KURAMA anything…" aria-label="Message"></textarea>
           <button type="submit" id="send" class="send" aria-label="Send">
             <svg class="i-send" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h13M12 5l7 7-7 7"/></svg>
@@ -236,6 +240,7 @@
         </select>
       </label>
       <label class="check"><input id="set-wake" type="checkbox"><span>Wake word <small>talk mode on at start, asleep until “wake up KURAMA”; “sleep now” to sleep</small></span></label>
+      <label class="check"><input id="set-hear" type="checkbox"><span>Hear device sound <small>off: KURAMA hears only you; the laptop's own sound (videos, music, its own voice) is removed from the mic · on: it hears both</small></span></label>
       <label class="check"><input id="set-low" type="checkbox"><span>Low power <small>static orb, CSS glow only</small></span></label>
       <p id="set-msg" class="note" role="status"></p>
       <div class="row">

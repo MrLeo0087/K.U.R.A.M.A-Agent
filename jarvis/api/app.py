@@ -53,6 +53,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(_app: FastAPI):
         if s.warm_on_start:
             threading.Thread(target=engine.warm, name="jarvis-warm", daemon=True).start()
+            from jarvis.core import devaudio  # "hear device sound" off: the echo canceller (system audio)
+            threading.Thread(target=devaudio.apply, name="kurama-devaudio-apply", daemon=True).start()
         yield
 
     app = FastAPI(title="KURAMA (KURAMA) API", version=info.API_VERSION, lifespan=lifespan,
