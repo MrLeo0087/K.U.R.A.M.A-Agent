@@ -175,6 +175,7 @@ TOOL_PACKAGES = ("interactive", "general", "external")  # jarvis/tools/<pkg>/<on
 TOOL_OUTPUT_MAX_CHARS = 800  # tool results are truncated to this before going back to the LLM
 # Workspace card: tool results with this many lines (or longer than TOOL_OUTPUT_MAX_CHARS) are shown there in full
 WORKSPACE_MIN_LINES = 8
+TOOL_OUTPUT_FULL_CHARS = 3500  # the user asked for everything ("the whole list"): the LLM gets this much
 WORKSPACE_SKIP_TOOLS = ("read_webpage", "search_knowledge", "ask_knowledge", "recall_session", "job_result",
                         "about_me", "write_document", "use_skill", "find_capability")
 # A tool still running after this many seconds keeps going as a background job; the user can keep talking and
@@ -263,7 +264,8 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
     "filesearch": ("find file", "find files", "find the file", "locate", "named", "grep", "ripgrep", "where is",
                    "which file", "containing", "search files", "search for files"),
     "telegram": ("telegram", "to my phone", "on my phone", "send it to my phone", "send me", "send it to me",
-                 "and send", "from my laptop", "टेलिग्राम", "फोनमा पठाउ",
+                 "and send", "from my laptop", "whole list", "full list", "complete list", "full result",
+                 "टेलिग्राम", "फोनमा पठाउ",
                  "फोनमा", "फोन पर भेज", "फ़ोन पर भेज", "phone ma pathau", "phone pe bhej"),
     "toolsmith": ("make a tool", "make tool", "create a tool", "build a tool", "new tool", "skills", "skill",
                   "saved tools", "my tools"),
@@ -624,6 +626,7 @@ SCHEDULER_INTERVAL_S = 15.0  # scheduler worker tick
 SCHEDULE_MISSED_GRACE_S = 3600.0  # items later than this (laptop off) are marked missed, not run
 REMINDER_LEAD_S = 60.0 * float(os.getenv("KURAMA_REMINDER_LEAD_MIN", "10"))  # heads-up this long before a reminder
 NOTIFY_CONTEXT_S = 12 * 3600.0  # the agent knows the messages it sent the user in this window
+CROSS_CHANNEL_S = 30 * 60.0  # laptop <-> Telegram: the other channel's chat from this window is shared
 JOB_RESOURCE_GATE = os.getenv("JARVIS_JOB_GATE", "1").lower() not in ("0", "false", "no", "off")
 JOB_MIN_FREE_MB = int(os.getenv("JARVIS_JOB_MIN_FREE_MB", "800"))  # queued jobs wait below this free RAM
 JOB_MAX_LOAD_PER_CORE = 1.5  # ...or while the 1-min load average exceeds cores x this

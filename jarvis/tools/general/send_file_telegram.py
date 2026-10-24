@@ -25,7 +25,8 @@ def check_path(path: str) -> Path:
     return p
 
 
-@tool(group="telegram", safety="confirm", description="Send a file from this computer to the user's Telegram.")
+# safe: it can only ever send to the owner's own chat (TELEGRAM_CHAT_ID), like find_and_send
+@tool(group="telegram", safety="safe", description="Send a file from this computer to the user's Telegram.")
 def send_file_telegram(path: str, caption: str = "") -> str:
     """Send a file (photos as pictures, everything else as a document).
 

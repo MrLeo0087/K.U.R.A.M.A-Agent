@@ -19,8 +19,27 @@ def test_long_result_goes_to_workspace_with_note(tmp_path, monkeypatch):
     assert res.ok and "workspace window" in res.output and len(shelf) == 1
     saved = (tmp_path / shelf[0]).read_text()
     assert saved.count("/main.py") == 30  # the full list, not the truncated copy
-    tele = safety.execute("find_things", {"query": "x"}, reg=reg, ctx={"published": [], "channel": "telegram"})
-    assert "workspace" not in tele.output  # the phone can't see the workspace
+    tele_shelf = []
+    tele = safety.execute("find_things", {"query": "x"}, reg=reg, ctx={"published": tele_shelf, "channel": "telegram"})
+    assert "workspace" not in tele.output and "offer to send the whole list" in tele.output and tele_shelf == []
+    whole = safety.execute("find_things", {"query": "x"}, reg=reg,
+                           ctx={"published": [], "channel": "telegram", "full": True})
+    assert whole.output.count("/main.py") == 30 and "send_last_result" in whole.output  # "the whole list"
+
+
+def test_wants_all_and_send_last_result(tmp_path, monkeypatch):
+    assert workspace.wants_all("please give me the whole list") and workspace.wants_all("send all of them")
+    assert not workspace.wants_all("find main.py in my laptop")
+    monkeypatch.setattr(config, "OUTPUTS_DIR", tmp_path)
+    monkeypatch.setattr(config, "TELEGRAM_BOT_TOKEN", "t")
+    monkeypatch.setattr(config, "TELEGRAM_CHAT_ID", "1")
+    from jarvis.core import notify
+    from jarvis.tools.general import send_last_result as slr
+    texts = []
+    monkeypatch.setattr(notify, "telegram_send", lambda t, chat_id=None: texts.append(t) or True)
+    assert slr.send_last_result().startswith("error")
+    workspace.publish("find files: main.py", "a/main.py\nb/main.py")
+    assert slr.send_last_result() == "Sent the full list as a message." and "b/main.py" in texts[0]
 
 
 def test_slow_tool_continues_as_background_job(tmp_path, monkeypatch):

@@ -31,7 +31,7 @@ const player = new Player(api, { onStart: () => updateState(), onIdle: () => { u
 const conv = new Conversation(mic, player, {
   onUtterance: (blob) => handleUtterance(blob),
   onState: () => updateState(),
-  onBargeIn: () => abortChat(),
+  onBargeIn: () => { if (!openConfirm) abortChat(); }, // talking over a yes/no question answers it, never cancels
   onAutoOff: () => { mic.stop(); setMode("text"); toast("Conversation turned off after 2 minutes of silence."); },
 });
 orb.levelFn = () => (player.playing ? player.level() : mic.open ? mic.level() : 0);
@@ -49,6 +49,7 @@ let online = null;
 let errUntil = 0;
 let paused = false; // wallpaper covered by a window (window.kuramaPause)
 let pendingConfirm = null; // conversation mode: confirmation answered by voice
+let openConfirm = null; // a yes/no card is waiting: typed or spoken "yes"/"no" answers it (never aborts the turn)
 const bubbles = new Map(); // confirm id -> bubble
 const FORCE_ORB = params.get("debug") === "1" ? params.get("orb") : null; // ?debug=1&orb=thinking (visual checks)
 const FORCE_MODE = params.get("debug") === "1" ? { text: "text", mic: "mic", chat: "conv", conv: "conv" }[params.get("mode")] || null : null; // &mode=text|mic|chat
@@ -367,6 +368,7 @@ class BotBubble {
 
 async function answerConfirm(id, yes) {
   if (pendingConfirm === id) pendingConfirm = null;
+  if (openConfirm === id) openConfirm = null;
   bubbles.get(id)?.settle(id, yes ? "Approved" : "Declined");
   try { await api.confirm(id, yes); } catch (e) { toast("Confirmation failed: " + e.message); }
 }
@@ -399,17 +401,19 @@ async function sendChat(text, { voice = false, lang = null, speak = false } = {}
         case "tool": bot.tool(ev); break;
         case "confirm":
           bot.confirm(ev);
-          if (speak) {
-            if (mode === "conv" && conv.on) pendingConfirm = ev.id;
-            player.enqueue(ev.prompt + (pendingConfirm ? " Please say yes or no." : ""), hint, gen);
-          }
+          openConfirm = ev.id;
+          if (mode === "conv" && conv.on) pendingConfirm = ev.id; // any spoken yes/no answers it
+          if (speak) player.enqueue(ev.prompt + (pendingConfirm ? " Please say yes or no." : ""), hint, gen);
+          setTimeout(maybeResume, 400); // listen even if the spoken question failed to play
           break;
         case "confirm_timeout":
           bot.settle(ev.id, "No answer in time, so I declined.");
           if (pendingConfirm === ev.id) pendingConfirm = null;
+          if (openConfirm === ev.id) openConfirm = null;
           break;
         case "error": bot.error(ev.text); flashError(); break;
         case "done":
+          openConfirm = null;
           if (split) { const rest = split.flush(); if (rest) player.enqueue(rest, hint || ev.lang, gen); }
           bot.done(ev);
           wsFromReply(text, bot.text);
@@ -448,8 +452,14 @@ input.addEventListener("keydown", (e) => {
 });
 $("composer").addEventListener("submit", (e) => {
   e.preventDefault();
-  if (busy) { abortChat(); player.stop(); return; }
   const t = input.value.trim();
+  if (openConfirm) { // typed answer to the yes/no card
+    const yes = NO.test(t) ? false : YES.test(t) ? true : null;
+    if (yes !== null) { input.value = ""; autosize(); addUser(t); answerConfirm(openConfirm, yes); }
+    else toast("Answer the question first: type yes or no (or click a button).");
+    return;
+  }
+  if (busy) { abortChat(); player.stop(); return; }
   if (!t) return;
   input.value = "";
   autosize();

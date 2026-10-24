@@ -429,6 +429,14 @@ def current_session() -> int | None:
     return _session_id
 
 
+def messages_other_channels(channel: str, since: float, limit: int = 6) -> list[dict]:
+    """Recent messages from KURAMA's other channels (laptop "" vs "telegram"), oldest first."""
+    rows = _exec("SELECT m.role, m.text, m.ts, s.channel FROM messages m JOIN sessions s ON m.session = s.id "
+                 "WHERE COALESCE(s.channel, '') != ? AND m.ts >= ? ORDER BY m.id DESC LIMIT ?",
+                 (channel or "", since, int(limit)))
+    return [dict(r) for r in reversed(rows)]
+
+
 def session_latest(channel: str) -> dict | None:
     """The most recent session of a channel ("telegram", ...), to carry a chat over a restart."""
     rows = _exec("SELECT * FROM sessions WHERE channel=? ORDER BY start DESC LIMIT 1", (channel,))

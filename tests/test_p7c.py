@@ -124,7 +124,7 @@ def test_send_file_path_checks_and_multipart(roots, tmp_path, tg, monkeypatch):
     assert "only send files" in ex("send_file_telegram", {"path": "/etc/hostname"})[0].output
     assert "doesn't exist" in ex("send_file_telegram", {"path": str(tmp_path / "nope.pdf")})[0].output
     res, asked = ex("send_file_telegram", {"path": str(doc)}, answers=(False,))
-    assert not res.ok and tg == [] and "Telegram" in asked[0]
+    assert asked == []  # safe now: it only sends to the owner's own chat, no yes/no
     res, _ = ex("send_file_telegram", {"path": str(doc), "caption": "here"})
     assert res.ok and tg[-1][:3] == ("sendDocument", {"chat_id": "42", "caption": "here"}, {"document": "report.pdf"})
     ex("send_file_telegram", {"path": str(img)})

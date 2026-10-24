@@ -33,7 +33,7 @@ from langchain_core.messages import (AIMessage, BaseMessage, HumanMessage, Syste
                                      ToolMessage)
 
 from jarvis.core import (config, fastpath, identity, selfknow, jobs, llm, meta, notify, planner, profile, registry, router,
-                         safety, store)
+                         safety, store, workspace)
 
 log = logging.getLogger("jarvis.agent")
 
@@ -42,7 +42,8 @@ LANG_NAMES = {"en": "English", "ne": "Nepali (Devanagari script)", "hi": "Hindi 
 SYSTEM_PROMPT = (
     "You are {name}, a warm and polite helper on the user's Ubuntu laptop. Talk like a kind friend: "
     "simple everyday words, no technical jargon unless the user is technical. "
-    "Keep replies short (1-2 sentences) unless asked for more. "
+    "Keep replies short (1-2 sentences) unless asked for more; always do it the way the user asks "
+    "(more detail, the full list, another format). "
     "Answer in the user's language (English, Hindi or Nepali). "
     "Plain text only: no markdown, lists or emojis, since replies may be spoken aloud. "
     "Use a tool only when needed to answer or act, and never invent tool results. "
@@ -403,6 +404,7 @@ class Agent:
                                      ctx={"user_text": state["user_text"], "lang": state.get("lang"),
                                           "mode": state.get("mode", "text"), "channel": self.channel,
                                           "published": self.last.setdefault("workspace", []),
+                                          "full": workspace.wants_all(state["user_text"]),
                                           "jobs": self.last.setdefault("jobs", []),
                                           "request": state.get("request") or state["user_text"]})
                 content, ok = res.output, res.ok
@@ -432,6 +434,9 @@ class Agent:
             told = notify.context_line(user_text, self.channel)  # reminders/alerts it sent on its own
             if told:
                 system += " " + told
+            other = self._other_channel(user_text)  # laptop <-> Telegram: one KURAMA, one conversation
+            if other:
+                system += " " + other
         return [SystemMessage(content=system), *recent, HumanMessage(content=user_text)]
 
     # --- sessions + profile (P7) ---
@@ -457,6 +462,25 @@ class Agent:
             self.last["facts"] = facts
         elif self._SELF_TALK.search(user_text) and not user_text.rstrip().endswith("?"):
             self._self_talk = (self._self_talk + [user_text[:200]])[-6:]
+
+    _REFERS = re.compile(r"\b(?:this|that|it|those|them|same|earlier|before|above|last|again|telegram|phone|"
+                         r"laptop|computer|file|folder|send)\b", re.I)
+
+    def _other_channel(self, user_text: str) -> str:
+        """The last few messages from the other channel (dashboard vs Telegram, within CROSS_CHANNEL_S), only
+        when this turn may refer to them ("send that file to Telegram", "what did I ask on my laptop")."""
+        if not self._REFERS.search(user_text or ""):
+            return ""
+        try:
+            rows = store.messages_other_channels(self.channel, time.time() - config.CROSS_CHANNEL_S, 6)
+        except Exception as e:
+            log.warning("cross-channel context failed: %s", e)
+            return ""
+        if not rows:
+            return ""
+        where = "the laptop dashboard" if self.channel == "telegram" else "Telegram"
+        lines = " | ".join(f"{r['role']}: {' '.join((r['text'] or '').split())[:220]}" for r in rows)
+        return f"Recent chat with the user on {where} (same conversation, continue it): {lines}"
 
     def _resume(self, now: float) -> None:
         """After a restart, carry on this channel's last chat (if it was within SESSION_IDLE_S): its recent turns

@@ -206,7 +206,7 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 
 /* ---------- orb ---------- */
 .core { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding-bottom: 10px; }
-.orb { position: relative; width: min(380px, 25vw, 40vh); aspect-ratio: 1; cursor: pointer; flex: none; }
+.orb { position: relative; width: min(290px, 19vw, 30vh); aspect-ratio: 1; cursor: pointer; flex: none; }
 .orb canvas { position: absolute; inset: -22%; width: 144%; height: 144%; will-change: transform; } /* own layers: static canvases never repaint */
 .halo { position: absolute; inset: -10%; border-radius: 50%; pointer-events: none;
   background: radial-gradient(circle, rgba(255, 110, 20, 0.30) 14%, rgba(255, 90, 0, 0.09) 40%, transparent 66%);

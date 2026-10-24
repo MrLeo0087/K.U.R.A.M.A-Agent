@@ -62,7 +62,7 @@ class Settings:
     allowed_hosts: list[str] = field(default_factory=list)  # Host header allowlist (DNS-rebinding guard)
     serve_frontend: bool = True
     frontend_dir: Path = ROOT / "frontend"
-    confirm_timeout_s: float = 60.0  # no answer from the browser -> deny
+    confirm_timeout_s: float = 120.0  # no answer from the browser -> deny
     warm_on_start: bool = True  # import + warm the agent in the background after startup
     warm_delay_s: float = 1.0
     max_text_chars: int = 4000
@@ -96,7 +96,7 @@ def from_env(host: str | None = None, port: int | None = None) -> Settings:
         allowed_hosts=_list(hosts) if hosts else (list(LOOPBACK) if host in LOOPBACK else ["*"]),
         serve_frontend=_bool(True, "JARVIS_SERVE_FRONTEND"),
         frontend_dir=Path(_env("JARVIS_FRONTEND_DIR", default=str(ROOT / "frontend"))),
-        confirm_timeout_s=_float(60.0, "JARVIS_API_CONFIRM_TIMEOUT", "JARVIS_WEB_CONFIRM_TIMEOUT"),
+        confirm_timeout_s=_float(120.0, "JARVIS_API_CONFIRM_TIMEOUT", "JARVIS_WEB_CONFIRM_TIMEOUT"),
         warm_on_start=_bool(True, "JARVIS_API_WARM", "JARVIS_WEB_WARM"),
         warm_delay_s=_float(1.0, "JARVIS_API_WARM_DELAY", "JARVIS_WEB_WARM_DELAY"),
         max_text_chars=_int(4000, "JARVIS_API_MAX_TEXT", "JARVIS_WEB_MAX_TEXT"),

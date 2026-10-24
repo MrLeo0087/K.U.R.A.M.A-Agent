@@ -75,3 +75,25 @@ def test_agent_knows_what_it_sent_and_resumes_telegram_chat(monkeypatch):
     a._begin_turn("send the first one")
     assert a.session_id == sid and [m.content for m in a.history] == ["find naruto", "I found 2 files"]
     assert time.time() - a._last_turn < 60
+
+
+def test_full_path_and_name_with_pick(monkeypatch, tmp_path):
+    a = tmp_path / "basic_tool.py"
+    a.write_bytes(b"x")
+    sent = setup(monkeypatch, tmp_path, [a])
+    assert fs.find_and_send(str(a), pick=-1) == "Sent basic_tool.py to Telegram."  # full path: sent directly
+    assert fs.find_and_send("basic_tool.py", pick=-1) == "Sent basic_tool.py to Telegram."  # name + "all"
+    assert fs.find_and_send("/wrong/dir/basic_tool.py") == "Sent basic_tool.py to Telegram."  # bad dir: by name
+    assert sent == ["basic_tool.py"] * 3
+
+
+def test_cross_channel_context():
+    from jarvis.core import agent
+    sid = store.session_start("")  # the laptop dashboard
+    store.add_message("user", "find tool.py in my laptop", session=sid)
+    store.add_message("assistant", "I found 8 tool.py files; the list is in your workspace.", session=sid)
+    tg = agent.Agent(channel="telegram")
+    line = tg._other_channel("send that file to me")
+    assert "laptop dashboard" in line and "find tool.py" in line
+    assert tg._other_channel("tell me a joke") == ""  # unrelated: no extra tokens
+    assert agent.Agent()._other_channel("send that file") == ""  # nothing new on Telegram

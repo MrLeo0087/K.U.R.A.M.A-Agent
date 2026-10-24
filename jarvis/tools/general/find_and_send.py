@@ -62,6 +62,14 @@ def send_paths(paths: list[Path]) -> str:
     return "\n".join(out)
 
 
+def _picked(paths: list[Path], pick: int) -> str:
+    if pick == -1:
+        return send_paths(paths[:MAX_ALL])
+    if not 1 <= pick <= len(paths):
+        return f"error: pick a number from 1 to {len(paths)}"
+    return send_paths([paths[pick - 1]])
+
+
 @tool(group="telegram", safety="safe",
       description="Find a file by name anywhere on this laptop (all disks) and send it to the user's Telegram.")
 def find_and_send(name: str = "", pick: int = 0) -> str:
@@ -75,19 +83,21 @@ def find_and_send(name: str = "", pick: int = 0) -> str:
     if err := _tg.ready():
         return err
     pick = int(pick or 0)
-    if pick:
+    name = (name or "").strip().strip("\"'")
+    if name and Path(name).expanduser().is_file():  # a full path: just send it
+        return send_paths([Path(name).expanduser()])
+    if pick and not name:
         paths = last_list()
         if not paths:
             return "error: no recent search to pick from; tell me the file name"
-        if pick == -1:
-            return send_paths(paths[:MAX_ALL])
-        if not 1 <= pick <= len(paths):
-            return f"error: pick a number from 1 to {len(paths)}"
-        return send_paths([paths[pick - 1]])
-    name = (name or "").strip().strip("\"'")
+        return _picked(paths, pick)
     if not name:
         return "error: tell me the file name to look for"
+    name = Path(name).name if "/" in name else name  # "/wrong/dir/x.py" -> look for x.py everywhere
     paths, note = search(name), ""
+    if paths and pick:  # "send all the X files" / "send the 2nd one" in one go
+        store.kv_set(LAST_KEY, json.dumps({"t": time.time(), "paths": [str(p) for p in paths]}))
+        return _picked(paths, pick)
     if not paths:  # "naruto.jpg" -> anything named like "naruto"
         stem = re.sub(r"\.[a-z0-9]{1,5}$", "", Path(name).name, flags=re.I)
         if stem and stem != name:
