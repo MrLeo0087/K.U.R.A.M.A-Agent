@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KURAMA · Holo Calm preview</title>
+<style>
+  :root {
+    --bg: #04070c; --bg2: #071019;
+    --amber: #ff8a2a; --amber-2: #ffb36b; --amber-glow: rgba(255, 138, 42, .35);
+    --cyan: #5fe3ff; --cyan-dim: rgba(95, 227, 255, .55); --cyan-faint: rgba(95, 227, 255, .14);
+    --text: #e9f3f8; --muted: #8aa1b0; --dim: #4f6575;
+    --glass: rgba(14, 28, 40, .42); --edge: rgba(120, 220, 255, .10);
+    --sans: "Ubuntu Sans", "Ubuntu", "Noto Sans", sans-serif;
+    --mono: "JetBrains Mono", "Ubuntu Sans Mono", monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--text);
+    font-family: var(--sans); font-weight: 300; -webkit-font-smoothing: antialiased; }
+  body {
+    background:
+      radial-gradient(1100px 760px at 50% 44%, rgba(255, 138, 42, .07), transparent 60%),
+      radial-gradient(900px 600px at 50% 46%, rgba(95, 227, 255, .05), transparent 65%),
+      linear-gradient(180deg, var(--bg2), var(--bg) 70%);
+  }
+  /* a very faint hologram grid, drawn once */
+  .grid { position: fixed; inset: 0; pointer-events: none; opacity: .5;
+    background-image: linear-gradient(rgba(95,227,255,.035) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(95,227,255,.035) 1px, transparent 1px);
+    background-size: 64px 64px; mask-image: radial-gradient(ellipse at 50% 45%, #000 20%, transparent 75%); }
+
+  /* ---------- top bar ---------- */
+  .top { position: fixed; top: 36px; left: 48px; right: 48px; display: flex; justify-content: space-between;
+    align-items: flex-start; }
+  .clock { font-family: var(--sans); font-weight: 200; font-size: 92px; letter-spacing: -1px; line-height: .9;
+    font-variant-numeric: tabular-nums;
+    color: var(--text); }
+  .clock .ampm { font-size: 18px; letter-spacing: 3px; color: var(--amber-2); margin-left: 10px; font-weight: 300; }
+  .date { margin-top: 14px; font-size: 13px; letter-spacing: 4px; text-transform: uppercase; color: var(--muted); }
+  .weather { margin-top: 10px; font-size: 14px; color: var(--muted); display: flex; gap: 10px; align-items: center; }
+  .weather b { color: var(--text); font-weight: 400; }
+  .vitals { display: flex; gap: 18px; align-items: center; padding: 10px 14px; border-radius: 16px;
+    background: var(--glass); border: 1px solid var(--edge); backdrop-filter: blur(6px); cursor: pointer; }
+  .ring { width: 46px; text-align: center; }
+  .ring svg { width: 46px; height: 46px; transform: rotate(-90deg); }
+  .ring .v { font-family: var(--mono); font-size: 11px; color: var(--text); margin-top: -32px; height: 32px; }
+  .ring .k { font-size: 9px; letter-spacing: 2px; color: var(--dim); margin-top: 4px; }
+  .power { width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--edge); display: grid;
+    place-items: center; color: var(--muted); font-size: 13px; margin-left: 6px; }
+
+  /* ---------- center ---------- */
+  .stage { position: fixed; left: 50%; top: 42%; transform: translate(-50%, -50%); text-align: center; }
+  canvas#orb { width: 520px; height: 520px; display: block; }
+  .name { margin-top: -18px; font-size: 26px; letter-spacing: 18px; font-weight: 300; padding-left: 18px;
+    color: var(--text); }
+  .status { margin-top: 12px; font-size: 14px; color: var(--muted); letter-spacing: .5px; min-height: 20px; }
+  .status b { color: var(--cyan); font-weight: 400; }
+  .status .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--cyan);
+    box-shadow: 0 0 10px var(--cyan); margin-right: 8px; vertical-align: 2px; }
+
+  /* ---------- glass panels ---------- */
+  .glass { background: var(--glass); border: 1px solid var(--edge); border-radius: 20px;
+    backdrop-filter: blur(8px); box-shadow: inset 0 1px 0 rgba(255,255,255,.04), 0 20px 60px rgba(0,0,0,.35);
+    transition: border-color .35s, box-shadow .35s; position: relative; overflow: hidden; }
+  .glass:hover { border-color: rgba(95, 227, 255, .28); box-shadow: inset 0 1px 0 rgba(255,255,255,.06),
+    0 0 0 1px rgba(95,227,255,.05), 0 20px 60px rgba(0,0,0,.35), 0 0 40px rgba(95,227,255,.06); }
+  .glass::after { /* one-shot scanline sweep when a panel opens */ content: ""; position: absolute; left: 0; right: 0;
+    top: -40%; height: 40%; background: linear-gradient(180deg, transparent, rgba(95,227,255,.08), transparent);
+    animation: sweep 1.1s ease-out 1 both; pointer-events: none; }
+  @keyframes sweep { to { top: 120%; } }
+  .ptitle { font-size: 11px; letter-spacing: 4px; color: var(--dim); text-transform: uppercase; display: flex;
+    justify-content: space-between; }
+
+  .now { position: fixed; left: 48px; bottom: 40px; width: 470px; padding: 22px 24px; }
+  .item { display: grid; grid-template-columns: 26px 1fr auto; gap: 12px; align-items: center; margin-top: 18px; }
+  .ico { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; font-size: 13px;
+    background: var(--cyan-faint); color: var(--cyan); }
+  .ico.a { background: rgba(255,138,42,.12); color: var(--amber-2); }
+  .it { font-size: 15px; color: var(--text); font-weight: 400; }
+  .sub { font-size: 13px; color: var(--muted); margin-top: 3px; white-space: nowrap; }
+  .bar { height: 3px; background: rgba(95,227,255,.10); border-radius: 3px; margin-top: 8px; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--cyan), #a7f3ff);
+    box-shadow: 0 0 10px var(--cyan); border-radius: 3px; transition: width 1.2s cubic-bezier(.2,.8,.2,1); }
+  .right { font-family: var(--mono); font-size: 12px; color: var(--muted); text-align: right; }
+  .spark { color: var(--cyan); letter-spacing: 0; font-size: 11px; }
+
+  .chat { position: fixed; right: 48px; bottom: 40px; width: 560px; }
+  .msgs { padding: 0 6px 14px; display: flex; flex-direction: column; gap: 14px;
+    mask-image: linear-gradient(180deg, transparent, #000 35%); max-height: 360px; justify-content: flex-end; }
+  .m { font-size: 15px; line-height: 1.55; max-width: 92%; }
+  .m.you { align-self: flex-end; color: var(--muted); text-align: right; }
+  .m.you span { display: inline-block; padding: 8px 14px; border-radius: 14px 14px 4px 14px;
+    background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.06); }
+  .m.k { color: var(--text); padding-left: 16px; border-left: 2px solid var(--amber); }
+  .m.k.old { opacity: .45; border-left-color: rgba(255,138,42,.35); }
+  .m .who { font-size: 10px; letter-spacing: 3px; color: var(--dim); margin-bottom: 4px; }
+  .composer { display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 18px; border-radius: 18px; }
+  .composer input { flex: 1; background: transparent; border: 0; outline: 0; color: var(--text);
+    font: 300 15px var(--sans); }
+  .composer input::placeholder { color: var(--dim); }
+  .mode { display: flex; gap: 4px; }
+  .mode b { width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center; font-size: 14px;
+    color: var(--muted); font-weight: 400; }
+  .mode b.on { background: rgba(255,138,42,.14); color: var(--amber-2); box-shadow: inset 0 0 0 1px rgba(255,138,42,.3); }
+  .send { width: 40px; height: 40px; border-radius: 13px; display: grid; place-items: center; color: #1a0b00;
+    background: linear-gradient(135deg, var(--amber-2), var(--amber)); box-shadow: 0 0 22px var(--amber-glow);
+    font-weight: 600; }
+
+  /* demo controls (preview only) */
+  .demo { position: fixed; top: 50%; right: 18px; transform: translateY(-50%); display: flex; flex-direction: column;
+    gap: 6px; opacity: .55; }
+  .demo button { font: 11px var(--mono); color: var(--muted); background: rgba(255,255,255,.03);
+    border: 1px solid var(--edge); border-radius: 8px; padding: 6px 10px; cursor: pointer; text-align: left; }
+  .demo button.on { color: var(--cyan); border-color: rgba(95,227,255,.4); }
+  .fps { position: fixed; left: 50%; bottom: 10px; transform: translateX(-50%); font: 10px var(--mono);
+    color: var(--dim); }
+</style>
+</head>
+<body>
+<div class="grid"></div>
+
+<header class="top">
+  <div>
+    <div class="clock"><span id="hm">06:27</span><span class="ampm" id="ap">PM</span></div>
+    <div class="date" id="date">Saturday · 24 October</div>
+    <div class="weather">◐ <b>24°</b> Nepalgunj · clear sky · feels 26°</div>
+  </div>
+  <div class="vitals" title="Click for the full system HUD">
+    <div class="ring"><svg viewBox="0 0 46 46"><circle cx="23" cy="23" r="19" fill="none" stroke="rgba(95,227,255,.12)" stroke-width="3"/><circle id="r-cpu" cx="23" cy="23" r="19" fill="none" stroke="#5fe3ff" stroke-width="3" stroke-linecap="round" stroke-dasharray="119.4" stroke-dashoffset="100"/></svg><div class="v" id="v-cpu">16%</div><div class="k">CPU</div></div>
+    <div class="ring"><svg viewBox="0 0 46 46"><circle cx="23" cy="23" r="19" fill="none" stroke="rgba(95,227,255,.12)" stroke-width="3"/><circle cx="23" cy="23" r="19" fill="none" stroke="#5fe3ff" stroke-width="3" stroke-linecap="round" stroke-dasharray="119.4" stroke-dashoffset="31"/></svg><div class="v">74%</div><div class="k">RAM</div></div>
+    <div class="ring"><svg viewBox="0 0 46 46"><circle cx="23" cy="23" r="19" fill="none" stroke="rgba(255,138,42,.15)" stroke-width="3"/><circle cx="23" cy="23" r="19" fill="none" stroke="#ff8a2a" stroke-width="3" stroke-linecap="round" stroke-dasharray="119.4" stroke-dashoffset="0"/></svg><div class="v">100</div><div class="k">BATT</div></div>
+    <div class="ring"><svg viewBox="0 0 46 46"><circle cx="23" cy="23" r="19" fill="none" stroke="rgba(95,227,255,.12)" stroke-width="3"/><circle cx="23" cy="23" r="19" fill="none" stroke="#5fe3ff" stroke-width="3" stroke-linecap="round" stroke-dasharray="119.4" stroke-dashoffset="36"/></svg><div class="v">70%</div><div class="k">DISK</div></div>
+    <div class="power">⏻</div>
+  </div>
+</header>
+
+<main class="stage">
+  <canvas id="orb" width="390" height="390"></canvas>
+  <div class="name">KURAMA</div>
+  <div class="status" id="status"><span class="dot"></span>training <b>cnn-cats</b> · epoch 12/30 · ~1h 30m left</div>
+</main>
+
+<section class="glass now">
+  <div class="ptitle"><span>Now</span><span>3 active</span></div>
+  <div class="item">
+    <div class="ico">◐</div>
+    <div><div class="it">CNN on Colab</div><div class="sub">epoch <span id="ep">12</span>/30 · loss 0.41 <span class="spark">▇▅▄▃▂</span> · acc 0.87</div>
+      <div class="bar"><i id="trbar" style="width:40%"></i></div></div>
+    <div class="right">1h 30m<br>left</div>
+  </div>
+  <div class="item">
+    <div class="ico">⇣</div>
+    <div><div class="it">imagenet-subset.tar</div><div class="sub">starts tonight 1:00 AM · resumes if cut</div></div>
+    <div class="right">2.1 GB</div>
+  </div>
+  <div class="item">
+    <div class="ico a">◇</div>
+    <div><div class="it">DSA lecture</div><div class="sub">Room 201 · in 25 min</div></div>
+    <div class="right">09:00</div>
+  </div>
+</section>
+
+<section class="chat">
+  <div class="msgs" id="msgs">
+    <div class="m k old"><div class="who">KURAMA</div>Your Downloads folder is tidy now: 27 files sorted.</div>
+    <div class="m you"><span>how is my training going?</span></div>
+    <div class="m k" id="reply"><div class="who">KURAMA</div><span id="rtext">Epoch 12 of 30, loss is still falling (0.41) and accuracy is 87%. About an hour and a half left.</span></div>
+  </div>
+  <div class="glass composer">
+    <div class="mode"><b>⌨</b><b>🎙</b><b class="on">◉</b></div>
+    <input placeholder="Ask KURAMA anything…">
+    <div class="send">→</div>
+  </div>
+</section>
+
+<nav class="demo" id="demo">
+  <button data-s="idle">idle</button><button data-s="listening">listening</button>
+  <button data-s="thinking">thinking</button><button data-s="speaking" class="on">speaking</button>
+  <button data-s="decode">new reply ✨</button>
+</nav>
+<div class="fps" id="fps"></div>
+
+<script>
+// ---------- orb: one canvas, one loop, adaptive frame rate (preview of the real thing) ----------
+const cv = document.getElementById("orb"), cx = cv.getContext("2d");
+const W = cv.width, H = cv.height, C = W / 2;             // drawn at 390 px, shown at 520 px (cheaper)
+const params = new URLSearchParams(location.search);
+let state = params.get("state") || "speaking";
+const FPS = { idle: 12, listening: 30, thinking: 30, speaking: 40 };
+let epochFrac = 12 / 30, t0 = performance.now(), last = 0, frames = 0, fpsT = 0;
+const parts = Array.from({ length: 26 }, (_, i) => ({ a: (i / 26) * Math.PI * 2, r: 128 + (i % 5) * 9, s: .2 + (i % 7) * .05 }));
+
+function ring(r, a0, a1, color, w, alpha = 1) {
+  cx.globalAlpha = alpha; cx.strokeStyle = color; cx.lineWidth = w;
+  cx.beginPath(); cx.arc(C, C, r, a0, a1); cx.stroke(); cx.globalAlpha = 1;
+}
+function draw(t) {
+  const s = t / 1000, act = { idle: .25, listening: .7, thinking: 1, speaking: .85 }[state];
+  cx.clearRect(0, 0, W, H);
+  // outer halo
+  const g = cx.createRadialGradient(C, C, 40, C, C, C);
+  g.addColorStop(0, "rgba(255,138,42,.20)"); g.addColorStop(.45, "rgba(255,120,30,.06)"); g.addColorStop(1, "rgba(0,0,0,0)");
+  cx.fillStyle = g; cx.fillRect(0, 0, W, H);
+  // hologram rings (cyan), slowly turning
+  for (let i = 0; i < 3; i++) {
+    const r = 150 + i * 12, rot = s * (.12 + i * .05) * (i % 2 ? -1 : 1) * (1 + act);
+    for (let k = 0; k < 4; k++) ring(r, rot + k * Math.PI / 2, rot + k * Math.PI / 2 + .9 - i * .2, "#5fe3ff", 1, .18 + .1 * act);
+  }
+  // tick marks
+  cx.strokeStyle = "rgba(95,227,255,.22)"; cx.lineWidth = 1;
+  for (let k = 0; k < 72; k++) {
+    const a = k / 72 * Math.PI * 2, r1 = 176, r2 = k % 6 ? 180 : 185;
+    cx.beginPath(); cx.moveTo(C + Math.cos(a) * r1, C + Math.sin(a) * r1); cx.lineTo(C + Math.cos(a) * r2, C + Math.sin(a) * r2); cx.stroke();
+  }
+  // training progress arc (fills epoch by epoch)
+  ring(168, -Math.PI / 2, -Math.PI / 2 + epochFrac * Math.PI * 2, "rgba(95,227,255,.85)", 2.2);
+  const ea = -Math.PI / 2 + epochFrac * Math.PI * 2;
+  cx.fillStyle = "#bff6ff"; cx.beginPath(); cx.arc(C + Math.cos(ea) * 168, C + Math.sin(ea) * 168, 3.2, 0, 7); cx.fill();
+  // voice waveform ring (listening / speaking)
+  if (state === "listening" || state === "speaking") {
+    cx.beginPath();
+    for (let k = 0; k <= 120; k++) {
+      const a = k / 120 * Math.PI * 2;
+      const amp = (state === "speaking" ? 9 : 6) * (Math.sin(a * 6 + s * 7) * .5 + Math.sin(a * 11 - s * 5) * .35 + Math.sin(s * 3) * .15);
+      const r = 112 + amp * (0.6 + .4 * Math.sin(s * 2.3));
+      k ? cx.lineTo(C + Math.cos(a) * r, C + Math.sin(a) * r) : cx.moveTo(C + Math.cos(a) * r, C + Math.sin(a) * r);
+    }
+    cx.strokeStyle = state === "speaking" ? "rgba(255,179,107,.75)" : "rgba(95,227,255,.7)"; cx.lineWidth = 1.6; cx.stroke();
+  }
+  // orbiting particles (faster while thinking)
+  for (const p of parts) {
+    const a = p.a + s * p.s * (state === "thinking" ? 3 : 1);
+    cx.fillStyle = state === "thinking" ? "rgba(191,246,255,.9)" : "rgba(95,227,255,.45)";
+    cx.beginPath(); cx.arc(C + Math.cos(a) * p.r, C + Math.sin(a) * p.r * .96, state === "thinking" ? 1.6 : 1.1, 0, 7); cx.fill();
+  }
+  // core: breathing amber sun
+  const br = 1 + Math.sin(s * (state === "idle" ? 1.1 : 2.4)) * (state === "idle" ? .025 : .05);
+  const R = 62 * br;
+  const core = cx.createRadialGradient(C - 14, C - 18, 4, C, C, R);
+  core.addColorStop(0, "#fff1dc"); core.addColorStop(.25, "#ffc77f"); core.addColorStop(.6, "#ff8a2a"); core.addColorStop(1, "#a83f00");
+  cx.shadowColor = "rgba(255,138,42,.8)"; cx.shadowBlur = 40 + 20 * act;
+  cx.fillStyle = core; cx.beginPath(); cx.arc(C, C, R, 0, 7); cx.fill(); cx.shadowBlur = 0;
+  ring(R + 10, s * .8, s * .8 + 4.2, "rgba(255,179,107,.55)", 1.4);
+  ring(R + 18, -s * .5, -s * .5 + 2.6, "rgba(255,138,42,.35)", 1);
+}
+function loop(t) {
+  requestAnimationFrame(loop);
+  if (t - last < 1000 / FPS[state]) return;              // adaptive: only as many frames as the state needs
+  last = t; draw(t); frames++;
+  if (t - fpsT > 1000) { document.getElementById("fps").textContent = `${frames} fps · ${state} · preview`; frames = 0; fpsT = t; }
+}
+requestAnimationFrame(loop);
+
+// ---------- one-shot effects ----------
+function decode(el, text) {                               // hologram "decode" for a new reply (only this span)
+  const glyphs = "▚▞▖▗▘▝░▒01<>/\\=+", n = text.length; let i = 0;
+  const tick = () => {
+    i += Math.max(1, n / 28);
+    el.textContent = text.slice(0, i) + Array.from({ length: Math.min(12, n - i) }, () => glyphs[Math.random() * glyphs.length | 0]).join("");
+    if (i < n) setTimeout(tick, 28); else el.textContent = text;
+  };
+  tick();
+}
+const statusLine = {
+  idle: '<span class="dot"></span>ready · say "hey KURAMA"',
+  listening: '<span class="dot"></span><b>listening…</b>',
+  thinking: '<span class="dot"></span><b>thinking</b> · laptop_doctor',
+  speaking: '<span class="dot"></span>training <b>cnn-cats</b> · epoch 12/30 · ~1h 30m left',
+};
+document.getElementById("demo").addEventListener("click", (e) => {
+  const s = e.target.dataset.s; if (!s) return;
+  document.querySelectorAll(".demo button").forEach((b) => b.classList.toggle("on", b === e.target));
+  if (s === "decode") {
+    decode(document.getElementById("rtext"), "Training finished: 30/30 epochs, accuracy 93%. best.pt is in Downloads/Colab.");
+    epochFrac = 1; document.getElementById("trbar").style.width = "100%"; document.getElementById("ep").textContent = "30";
+    return;
+  }
+  state = s; document.getElementById("status").innerHTML = statusLine[s];
+});
+document.getElementById("status").innerHTML = statusLine[state];
+// clock (updates once a minute: no per-second repaint)
+function clock() {
+  const d = new Date(); let h = d.getHours(); const ap = h >= 12 ? "PM" : "AM"; h = h % 12 || 12;
+  document.getElementById("hm").textContent = `${String(h).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  document.getElementById("ap").textContent = ap;
+  document.getElementById("date").textContent = d.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" }).replace(",", " ·");
+}
+if (!params.get("still")) { clock(); setInterval(clock, 60000); }
+</script>
+</body>
+</html>

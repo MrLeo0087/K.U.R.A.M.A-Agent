@@ -62,6 +62,10 @@ export class Api {
   cancelJob(id) { return this.request(`/api/v1/jobs/${encodeURIComponent(id)}/cancel`, { method: "POST", body: {} }); }
   alerts() { return this.request("/api/v1/alerts?limit=20"); }
   alertsRead() { return this.request("/api/v1/alerts/read", { method: "POST", body: {} }); }
+  dashboard() { return this.request("/api/v1/dashboard"); }
+  detail(panel) { return this.request(`/api/v1/dashboard/detail/${encodeURIComponent(panel)}`); }
+  weatherFull() { return this.request("/api/v1/weather/full"); }
+  action(body) { return this.request("/api/v1/action", { method: "POST", body }); }
 
   async stt(blob, lang) {
     const type = (blob.type || "audio/webm").split(";")[0];

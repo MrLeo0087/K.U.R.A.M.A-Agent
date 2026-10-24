@@ -107,17 +107,13 @@ def _now() -> list[dict]:
 
 def _today_chips() -> list[dict]:
     from datetime import datetime
-    from jarvis.core import store, study
+    from jarvis.core import study
     now = datetime.now()
     chips = []
     for c in study.day_list(now):
         chips.append({"time": c["start"], "text": c["subject"], "kind": "class",
                       "next": datetime.combine(now.date(), datetime.strptime(c["start"], "%H:%M").time()) > now})
-    end = datetime.combine(now.date(), datetime.max.time()).timestamp()
-    for r in store._exec("SELECT text, kind, next_run FROM schedules WHERE enabled=1 AND next_run BETWEEN ? AND ? "
-                         "ORDER BY next_run LIMIT 6", (time.time(), end)):
-        chips.append({"time": time.strftime("%H:%M", time.localtime(r["next_run"])), "text": r["text"][:30], "kind": r["kind"],
-                      "next": True})
+    # (today's reminders, alarms and timers come from /schedule on the page: it has their ids for live countdowns)
     chips.sort(key=lambda c: c["time"])
     seen_next = False
     for c in chips:  # only the first upcoming one is highlighted

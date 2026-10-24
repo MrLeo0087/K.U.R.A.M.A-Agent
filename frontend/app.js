@@ -612,13 +612,10 @@ class Spark {
   }
 }
 const cpuSpark = new Spark($("cpu-spark"), [{ color: "#ff8a2b", fill: "rgba(255,122,26,0.26)" }]);
-const netSpark = new Spark($("net-spark"),
-  [{ color: "#ffb347", fill: "rgba(255,179,71,0.20)" }, { color: "#6fb7ff", fill: "rgba(111,183,255,0.12)" }],
-  (series) => Math.max(65536, ...series.flatMap((s) => s.data)) * 1.15);
-addEventListener("resize", () => { cpuSpark.draw(); netSpark.draw(); });
+addEventListener("resize", () => cpuSpark.draw());
 
 // ---------- status ----------
-let es = null, pollTimer = 0, retryTimer = 0, procSort = "rss", lastStatus = null, lastJobsKey = "", procGlitchAt = 0;
+let es = null, pollTimer = 0, retryTimer = 0, lastStatus = null, lastJobsKey = "";
 
 function setConn(ok) {
   if (online === ok) return;
@@ -645,113 +642,62 @@ function setBar(id, pct, cls = "") {
   if (b.className !== cls) b.className = cls;
 }
 
+const RING = 2 * Math.PI * 27; // ring circumference (r = 27)
+function setRing(id, pct) {
+  const arc = $(id).querySelector(".arc"), v = Math.max(0, Math.min(100, pct || 0));
+  const off = (RING * (1 - v / 100)).toFixed(1);
+  if (arc.dataset.off !== off) { arc.dataset.off = off; arc.style.strokeDashoffset = off; }
+  $(id).classList.toggle("hot", v >= 85);
+}
+
 function renderStatus(s) {
   lastStatus = s;
   setConn(true);
   const cpu = s.cpu || {};
   tweenTo("cpu", cpu.percent ?? 0);
-  $("cpu-metric").style.setProperty("--glow", (0.12 + Math.min(1, (cpu.percent || 0) / 100) * 0.7).toFixed(2));
+  setRing("rg-cpu", cpu.percent);
   cpuSpark.push([cpu.percent ?? 0]);
-  $("cpu-freq").textContent = cpu.freq_ghz ? `${cpu.freq_ghz.toFixed(2)} GHz` : `${cpu.count ?? "?"} cores`;
   $("cpu-temp").textContent = cpu.temp_c != null ? `${Math.round(cpu.temp_c)} °C` : "– °C";
-  $("cpu-load").textContent = cpu.load?.length ? `load ${cpu.load[0].toFixed(2)}` : "";
-
   const ram = s.ram || {};
-  tweenTo("ram-used", ram.used_gb ?? 0, 1);
-  $("ram-total").textContent = fmtGb(ram.total_gb);
   tweenTo("ram", ram.percent ?? 0);
-  tweenTo("swap", s.swap?.percent ?? 0);
-  setBar("ram-bar", ram.percent, ram.percent >= 85 ? "hot" : "");
-
+  setRing("rg-ram", ram.percent);
+  $("rg-ram").title = `${fmtGb(ram.used_gb)} / ${fmtGb(ram.total_gb)} GB · swap ${s.swap?.percent ?? 0}%`;
   const disk = s.disk || {};
-  tweenTo("disk-used", disk.used_gb ?? 0);
-  $("disk-total").textContent = disk.total_gb != null ? Math.round(disk.total_gb) : "–";
-  setBar("disk-bar", disk.percent, disk.percent >= 90 ? "hot" : "");
-
-  const bat = s.battery;
-  $("bat-row").hidden = !bat;
+  tweenTo("disk", disk.percent ?? 0);
+  setRing("rg-disk", disk.percent);
+  $("rg-disk").title = `${Math.round(disk.used_gb ?? 0)} / ${Math.round(disk.total_gb ?? 0)} GB`;
+  const bat = s.battery; // the battery lives on the Laptop card
   if (bat) {
-    tweenTo("battery", bat.percent);
-    setBar("battery-bar", bat.percent, !bat.plugged && bat.percent <= 20 ? "low" : bat.plugged && bat.percent < 99 ? "chg" : "");
-    $("charging").hidden = !bat.plugged;
-    $("battery-time").textContent = bat.plugged ? (bat.percent >= 99 ? "Full · plugged in" : "Charging")
-      : bat.secs_left != null ? `${fmtDur(bat.secs_left)} left` : "On battery";
+    tweenTo("d-batp", bat.percent);
+    setBar("d-bat-bar", bat.percent, !bat.plugged && bat.percent <= 20 ? "low" : bat.plugged && bat.percent < 99 ? "chg" : "");
+    $("d-bat").dataset.state = bat.plugged ? (bat.percent >= 99 ? "full" : "charging")
+      : bat.secs_left != null ? `${fmtDur(bat.secs_left)} left` : "on battery";
+    renderBatSub();
   }
-
   const net = s.net || {};
   $("down").textContent = fmtRate(net.rx_bps);
   $("up").textContent = fmtRate(net.tx_bps);
-  netSpark.push([net.rx_bps || 0, net.tx_bps || 0]);
   $("uptime").textContent = "up " + fmtDur(s.uptime?.system_s);
-
   const j = s.jarvis || {};
   $("t-rss").textContent = j.rss_mb != null ? Math.round(j.rss_mb) : "–";
-  $("core-up").textContent = (j.agent_ready ? "agent ready" : j.agent_loaded ? "agent loading" : "agent idle") + " · " + fmtDur(j.uptime_s);
   const tk = s.tokens || {};
   $("t-tokens").textContent = fmtK(tk.today);
-  $("t-calls").textContent = `${tk.calls ?? 0} calls`;
   const al = s.alerts || {};
   $("t-alerts").textContent = String(al.unread ?? 0);
   $("tile-alerts").classList.toggle("hot", (al.unread || 0) > 0);
-  $("t-alerts-sub").textContent = al.recent?.[0] && al.unread ? al.recent[0].title : "all clear";
-
+  $("tile-alerts").title = al.recent?.[0] && al.unread ? al.recent[0].title : "No new alerts";
   renderJobs(s.jobs || {});
-  renderProcs();
 }
 
 function renderJobs(jb) {
   const items = jb.items || [];
   const key = JSON.stringify(items);
-  $("jobs-count").textContent = items.length ? `${jb.running || 0} running · ${jb.queued || 0} queued` : "";
-  if (key === lastJobsKey) return; // only touch the DOM on change
+  $("jobs-count").textContent = items.length ? `${jb.running || 0} running` : "";
+  if (key === lastJobsKey) return; // only on change
   lastJobsKey = key;
-  const ul = $("jobs");
-  ul.innerHTML = "";
   loadOutputs(); // a job finished or started: its output may be new
   loadWall(); // ...or it set a new wallpaper
-  if (!items.length) return;
-  for (const x of items) {
-    const li = el("li");
-    li.innerHTML = '<span class="p"></span><span class="q"></span><span class="s"></span>';
-    li.querySelector(".p").textContent = `#${x.id}`;
-    li.querySelector(".q").textContent = x.title || x.kind || "job";
-    li.querySelector(".s").textContent = x.progress || x.status;
-    li.classList.add("run");
-    li.title = "Open background jobs";
-    li.onclick = () => openInfo("jobs");
-    ul.append(li);
-  }
-}
-
-function renderProcs() {
-  const s = lastStatus;
-  if (!s) return;
-  const list = (procSort === "cpu" ? s.processes?.by_cpu : s.processes?.by_rss) || [];
-  if (!list.length) return;
-  const max = Math.max(0.1, ...list.map((p) => (procSort === "cpu" ? p.cpu : p.rss_mb)));
-  const ul = $("procs");
-  const before = (ul.dataset.order || "").split(",");
-  const pids = list.map((p) => String(p.pid));
-  const moved = procSort === ul.dataset.sort && pids.join(",") !== before.join(",") && alive() && Date.now() - procGlitchAt > 10000;
-  if (moved) procGlitchAt = Date.now();
-  ul.dataset.order = pids.join(",");
-  ul.dataset.sort = procSort;
-  const gl = (procGlitchAt & 1) ? "gl-a" : "gl-b"; // alternate names so the one-shot replays
-  ul.innerHTML = list.map((p, i) => {
-    const v = procSort === "cpu" ? p.cpu : p.rss_mb;
-    const mem = p.rss_mb >= 1024 ? `${(p.rss_mb / 1024).toFixed(1)} GB` : `${Math.round(p.rss_mb)} MB`;
-    const cls = moved && before[i] !== pids[i] ? ` class="${gl}"` : "";
-    return `<li${cls} title="pid ${p.pid}"><span class="n">${esc(p.name)}</span><span class="c">${p.cpu.toFixed(1)}%</span><span class="m">${mem}</span><i class="w" style="transform:scaleX(${(v / max).toFixed(3)})"></i></li>`;
-  }).join("");
-  $("procs-count").textContent = s.processes?.count ? `${s.processes.count} total` : "";
-}
-
-for (const b of document.querySelectorAll("[data-sort]")) {
-  b.onclick = () => {
-    procSort = b.dataset.sort;
-    document.querySelectorAll("[data-sort]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
-    renderProcs();
-  };
+  loadDash(); // ...and Now & today lists it
 }
 
 function stopStatus() {
@@ -805,34 +751,42 @@ async function loadWeather() {
   $("wx-sub").textContent = ok ? `Feels ${Math.round(it.feels_c)}° · ${Math.round(it.humidity)}% · ${Math.round(it.wind_kmh)} km/h` : "";
   const k = ok ? wxKind(it) : "cloud", ic = $("wx-icon");
   if (alive() || ic.dataset.k !== k) { ic.dataset.k = k; ic.innerHTML = WX_SVG[k]; } // re-insert = replay the one-shot animation
+  try { wxFull = await api.weatherFull(); } catch { wxFull = null; }
+  renderWxHours(ok ? it : null);
+}
+let wxFull = null;
+function renderWxHours(now) {
+  const box = $("wx-hours"), f = wxFull;
+  if (!f || f.error || !f.hours?.length) { box.innerHTML = ""; return; }
+  const d0 = f.days?.[0], d1 = f.days?.[1];
+  if (now && d0) $("wx-sub").textContent = `${Math.round(d0.min)}° – ${Math.round(d0.max)}° · rain ${d0.rain ?? 0}%`;
+  const picks = [1, 4, 7, 10].map((i) => f.hours[i]).filter(Boolean);
+  const h12 = (t) => { const h = +t.slice(0, 2); return `${h % 12 || 12} ${h < 12 ? "AM" : "PM"}`; };
+  box.innerHTML = picks.map((h) => `<div class="h"><small>${h12(h.t)}</small>${Math.round(h.temp)}°${h.rain >= 30 ? `<i>${h.rain}%</i>` : ""}</div>`).join("")
+    + (d1 ? `<div class="h"><small>Tmrw</small>${Math.round(d1.min)}–${Math.round(d1.max)}°</div>` : "");
 }
 loadWeather();
 
 // ---------- this laptop: Wi-Fi, volume, brightness, battery health, next reminder (every 30 s, only while visible) ----------
-let devTimer = 0;
+let devTimer = 0, devLast = null;
+function renderBatSub() {
+  const st = $("d-bat").dataset.state || "", h = devLast?.battery;
+  $("d-bat").textContent = [st, h ? `health ${h.health}%` : ""].filter(Boolean).join(" · ") || "–";
+}
 async function loadDevice() {
   clearTimeout(devTimer); devTimer = 0;
   if (MINI || paused || minimized || document.hidden) return; // applyActivity starts it again
   try {
-    const d = await api.device();
-    const w = d.wifi, v = d.volume, b = d.battery;
+    const d = devLast = await api.device();
+    const w = d.wifi, v = d.volume;
     tweenTo("d-wifi", w ? w.signal : null);
     setBar("d-wifi-bar", w?.signal ?? 0);
     $("d-ssid").textContent = w ? w.ssid : d.ip ? "wired" : "offline";
-    $("d-ssid").title = w ? `Wi-Fi: ${w.ssid}` : "";
+    $("d-ssid").title = w ? `Wi-Fi: ${w.ssid} · ${d.ip || ""}` : "";
     tweenTo("d-vol", v ? v.percent : null);
     setBar("d-vol-bar", v && !v.muted ? v.percent : 0);
-    $("d-vol-sub").textContent = v ? (v.muted ? "muted" : "speaker") : "–";
-    tweenTo("d-bri", d.brightness);
-    setBar("d-bri-bar", d.brightness ?? 0);
-    $("d-bat").textContent = b ? `${b.health}%${b.cycles ? ` · ${b.cycles} cycles` : ""}` : "–";
-    $("d-ip").textContent = d.ip || "offline";
-    $("d-sys").textContent = [d.model, d.os].filter(Boolean).join(" · ") || d.host || "–";
-    $("d-sys").title = `${d.host} · ${d.model} · ${d.os} · Linux ${d.kernel}`;
-    const n = d.next, nb = $("d-next");
-    nb.textContent = n ? `${new Date(n.at * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · ${n.text}` : "nothing scheduled";
-    nb.classList.toggle("dim", !n);
-    nb.title = n ? n.text : "";
+    $("d-vol-sub").textContent = v ? (v.muted ? "muted" : `speaker · screen ${d.brightness ?? "–"}%`) : "–";
+    renderBatSub();
     $("dev-up").textContent = "up " + fmtDur(d.uptime_s);
   } catch { /* API still starting: try again next round */ }
   devTimer = setTimeout(loadDevice, 30000);
@@ -864,31 +818,18 @@ async function loadToday() {
     const r = await api.schedule();
     sched.items = r.items || []; sched.sw = r.stopwatch; sched.at = Date.now();
     renderToday();
+    if (dash) renderNow(dash.now || [], dash.today || []);
     if ($("sched").open) renderSched();
   } catch { /* API busy */ }
   if (!paused && !minimized && !document.hidden) schedTimer = setTimeout(loadToday, 30000);
 }
-function renderToday() {
-  const today = sched.items.filter((i) => i.day === "today");
-  const show = [...today, ...sched.items.filter((i) => i.day !== "today")].slice(0, 4); // today first, then what's next
-  $("today-count").textContent = today.length ? `${today.length} today` : sched.items.length ? "nothing today" : "";
-  const ul = $("today-list");
-  ul.innerHTML = show.length ? "" : '<li class="empty">Nothing scheduled. Say “remind me to … at …” or “set an alarm for 6 am”.</li>';
-  for (const it of show) {
-    const li = el("li", `k-${it.kind}${it.day !== "today" ? " later" : ""}${it.at - Date.now() / 1000 < 3600 ? " soon" : ""}`);
-    li.innerHTML = `<span class="ic">${ICON[it.kind] || ICON.reminder}</span><span class="t"></span><span class="x"></span>`;
-    li.querySelector(".t").textContent = timeCell(it);
-    li.querySelector(".x").textContent = it.text;
-    li.title = `${it.kind} · ${it.desc}`;
-    li.dataset.id = it.id;
-    ul.append(li);
-  }
+function renderToday() { // reminders/alarms/timers of today feed the chips via /dashboard; here: the stopwatch
   renderTodayLive();
 }
 function renderTodayLive() { // every second from tick(): timer countdowns + stopwatch
-  for (const li of $("today-list").querySelectorAll("li.k-timer")) {
-    const it = sched.items.find((x) => String(x.id) === li.dataset.id);
-    if (it) li.querySelector(".t").textContent = timeCell(it);
+  for (const c of $("today-chips").querySelectorAll(".chip2.k-timer")) {
+    const it = sched.items.find((x) => String(x.id) === c.dataset.id);
+    if (it) c.querySelector("b").textContent = left(it.at);
   }
   const w = sched.sw, on = !!(w && (w.running_since || w.elapsed));
   $("today-sw").hidden = !on;
@@ -932,48 +873,63 @@ function renderSched() {
   $("sched-sw-time").textContent = swFmt(swNow());
 }
 function openSched() { if (!$("sched").open) $("sched").showModal(); renderSched(); loadToday(); }
-$("today").onclick = openSched;
-$("today").addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openSched(); } });
 $("sched").addEventListener("click", (e) => { if (e.target === $("sched")) $("sched").close(); });
 for (const b of document.querySelectorAll("[data-sw]")) {
   b.onclick = async () => { try { const r = await api.stopwatch(b.dataset.sw); toast(r.text); loadToday(); } catch (e) { toast(e.message); } };
 }
 
-// ---------- workspace: the newest picture / poem / essay, shown big (outputs from /api/v1/outputs + long replies) ----------
-const ws = { items: [], cur: -1, seen: new Set(), loaded: false };
+// ---------- workspace: results (outputs from /api/v1/outputs + long replies) as a list with tabs, a preview and actions ----------
+const ws = { items: [], cur: -1, seen: new Set(), loaded: false, tab: "all" };
 const wsTitle = (name) => name.replace(/^.*\//, "").replace(/^\d{8}-\d{4,6}-?/, "").replace(/\.[a-z0-9]+$/i, "").replace(/[-_]+/g, " ").trim() || name;
 const LONG_REPLY = (t) => t && (t.split("\n").filter((l) => l.trim()).length >= 4 || t.length > 420);
-
-const WS_MAX = 8; // the workspace keeps the last 8 results; swipe / arrows / wheel to go through them
+const WS_MAX = 24;
+const WS_TABS = [["all", "All"], ["doc", "Docs"], ["code", "Code"], ["image", "Images"], ["data", "Data"]];
+function wsType(it) {
+  if (it.kind === "image") return "image";
+  const ext = (it.name || "").split(".").pop().toLowerCase();
+  if (["py", "js", "sh", "html", "json", "ipynb", "ts", "css"].includes(ext)) return "code";
+  if (["csv", "tsv", "jsonl"].includes(ext)) return "data";
+  return "doc";
+}
+const fmtSize = (b) => (b == null ? "" : b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : b >= 1024 ? `${Math.round(b / 1024)} KB` : `${b} B`);
+function fmtAgo(t) {
+  if (!t) return "";
+  const d = Date.now() / 1000 - t;
+  return d < 60 ? "just now" : d < 3600 ? `${Math.floor(d / 60)} min ago` : d < 86400 ? `${Math.floor(d / 3600)} h ago`
+    : d < 172800 ? "yesterday" : `${Math.floor(d / 86400)} days ago`;
+}
+function wsShown() { return ws.items.filter((x) => ws.tab === "all" || x.type === ws.tab); }
 
 function wsAdd(item, show) {
   if (ws.seen.has(item.key)) return;
   ws.seen.add(item.key);
+  item.type = wsType(item);
   ws.items.unshift(item);
   if (ws.items.length > WS_MAX) ws.items.length = WS_MAX;
-  if (show || ws.cur < 0) wsShow(0); else { ws.cur = Math.min(ws.cur + 1, ws.items.length - 1); wsTabs(); }
+  if (show || ws.cur < 0) wsShow(item); else wsList();
 }
 
-function wsTabs() { // footer: name + dots, and the arrows
-  const n = ws.items.length, it = ws.items[ws.cur];
-  $("ws-name").textContent = it ? it.title : "";
-  const dots = $("ws-dots");
-  dots.innerHTML = "";
-  ws.items.forEach((x, i) => {
-    const d = el("button", "ws-dot" + (i === ws.cur ? " on" : "") + (x.kind === "image" ? " img" : ""));
-    d.type = "button"; d.title = x.title; d.setAttribute("aria-label", `Result ${i + 1} of ${n}: ${x.title}`);
-    d.onclick = () => wsShow(i);
-    dots.append(d);
-  });
-  $("ws-prev").hidden = ws.cur <= 0;
-  $("ws-next").hidden = ws.cur >= n - 1;
-}
-
-function wsStep(d) {
-  const i = ws.cur + d;
-  if (i < 0 || i >= ws.items.length) return;
-  ws.dir = d;
-  wsShow(i);
+function wsList() {
+  const counts = {};
+  for (const x of ws.items) counts[x.type] = (counts[x.type] || 0) + 1;
+  $("ws-tabs").innerHTML = WS_TABS.filter(([k]) => k === "all" || counts[k])
+    .map(([k, n]) => `<button type="button" role="tab" data-wstab="${k}" aria-selected="${ws.tab === k}">${n}${k !== "all" ? `<small>${counts[k]}</small>` : ""}</button>`).join("");
+  const list = wsShown().slice(0, 4);
+  const ul = $("ws-list");
+  ul.innerHTML = list.length ? "" : '<li class="empty">Nothing here yet.</li>';
+  for (const it of list) {
+    const li = el("li", it === ws.items[ws.cur] ? "sel" : "");
+    const ext = (it.name || "").split(".").pop().toUpperCase();
+    li.innerHTML = `<span class="ft t-${it.type}">${esc(it.type === "image" ? "IMG" : it.name ? ext.slice(0, 4) : "TXT")}</span>
+      <div class="grow"><div class="n ell"></div><div class="d"></div></div><span class="z"></span>`;
+    li.querySelector(".n").textContent = it.title;
+    li.querySelector(".d").textContent = it.mtime ? fmtAgo(it.mtime) : "from the chat";
+    li.querySelector(".z").textContent = fmtSize(it.size);
+    li.title = it.name || it.title;
+    li.onclick = () => wsShow(it);
+    ul.append(li);
+  }
+  wsActs();
 }
 
 async function wsBody(it, box) {
@@ -981,9 +937,8 @@ async function wsBody(it, box) {
   box.innerHTML = "";
   if (it.kind === "image") {
     const img = el("img", "ws-img");
-    img.alt = it.title; img.src = it.src; img.decoding = "async";
-    img.draggable = false;
-    img.onclick = () => { if (!ws.dragged) wsBig(); };
+    img.alt = it.title; img.src = it.src; img.decoding = "async"; img.draggable = false;
+    img.onclick = () => wsBig();
     box.append(img);
     return;
   }
@@ -993,23 +948,47 @@ async function wsBody(it, box) {
     if (box._tok !== tok) return;
   }
   const doc = el("div", "ws-text");
-  doc.innerHTML = renderMarkdown(it.text || "");
+  if (it.type === "code" || it.type === "data") {
+    const lines = (it.text || "").split("\n").slice(0, 400);
+    doc.innerHTML = `<pre class="code">${lines.map((l, i) => `<span class="ln">${i + 1}</span>${esc(l)}`).join("\n")}</pre>`;
+  } else doc.innerHTML = renderMarkdown(it.text || "");
   box.append(doc);
 }
 
-async function wsShow(i) {
-  const it = ws.items[i];
+async function wsShow(it) {
+  if (typeof it === "number") it = ws.items[it];
   if (!it) return;
-  ws.cur = i;
-  wsTabs();
+  ws.cur = ws.items.indexOf(it);
+  if (ws.tab !== "all" && it.type !== ws.tab) ws.tab = "all";
+  wsList();
   const view = $("ws-view");
   await wsBody(it, view);
   view.scrollTop = 0;
-  view.dataset.dir = ws.dir > 0 ? "next" : ws.dir < 0 ? "prev" : "";
-  ws.dir = 0;
-  retrigger(view, "ws-in-a", "ws-in-b"); // one short slide/fade in
+  retrigger(view, "ws-in-a", "ws-in-b"); // one short fade in
   if ($("ws-big").open) wsBig();
 }
+
+function wsActs() { // what you can do with the selected result
+  const it = ws.items[ws.cur], box = $("ws-acts");
+  if (!it) { box.innerHTML = ""; return; }
+  const file = !!it.name;
+  box.innerHTML = `<span class="tiny grow ell">${esc(it.type === "image" ? "picture" : it.text ? `${(it.text.match(/\n/g) || []).length + 1} lines` : it.type)}</span>`
+    + (file && it.type !== "image" ? '<button type="button" class="act" data-ws="open_vscode">VS Code</button>' : "")
+    + (file && it.type === "image" ? '<button type="button" class="act" data-ws="open">Open</button>' : "")
+    + (it.type !== "image" ? '<button type="button" class="act ghost" data-ws="copy">Copy</button>' : "")
+    + (file ? '<button type="button" class="act ghost" data-ws="send_phone">Phone</button><button type="button" class="act ghost" data-ws="show_folder">Folder</button>' : "");
+}
+async function wsAction(name) {
+  const it = ws.items[ws.cur];
+  if (!it) return;
+  if (name === "copy") {
+    try { await navigator.clipboard.writeText(it.text || ""); toast("Copied."); } catch { toast("Couldn't copy here."); }
+    return;
+  }
+  doAction({ name, path: it.name });
+}
+$("ws-acts").addEventListener("click", (e) => { const b = e.target.closest("[data-ws]"); if (b) wsAction(b.dataset.ws); });
+$("ws-tabs").addEventListener("click", (e) => { const b = e.target.closest("[data-wstab]"); if (b) { ws.tab = b.dataset.wstab; wsList(); } });
 
 function wsBig() {
   const it = ws.items[ws.cur];
@@ -1035,8 +1014,8 @@ async function loadOutputs() {
     const items = (await api.outputs(WS_MAX)).items || [];
     const fresh = items.filter((x) => !ws.seen.has("o" + x.name + x.mtime)).reverse(); // oldest first
     for (const x of fresh) {
-      wsAdd({ key: "o" + x.name + x.mtime, kind: x.kind, title: wsTitle(x.name), src: api.outputUrl(x.name) },
-        ws.loaded && x === fresh[fresh.length - 1]); // jump to a NEW result; at startup just list them
+      wsAdd({ key: "o" + x.name + x.mtime, kind: x.kind, title: wsTitle(x.name), name: x.name, mtime: x.mtime, size: x.size,
+        src: api.outputUrl(x.name) }, ws.loaded && x === fresh[fresh.length - 1]); // jump to a NEW result; at startup just list
     }
     if (!ws.loaded && fresh.length) wsShow(0); // startup: open on the newest
     ws.loaded = true;
@@ -1045,37 +1024,214 @@ async function loadOutputs() {
 }
 loadOutputs();
 $("ws-expand").onclick = () => wsBig();
-$("ws-prev").onclick = () => wsStep(-1);
-$("ws-next").onclick = () => wsStep(1);
-{ // swipe (touch / mouse drag) and horizontal wheel / two-finger trackpad swipe
-  const v = $("ws-view");
-  let x0 = null, wheelAt = 0;
-  v.addEventListener("pointerdown", (e) => { x0 = e.clientX; });
-  v.addEventListener("pointerup", (e) => {
-    if (x0 === null) return;
-    const dx = e.clientX - x0; x0 = null;
-    ws.dragged = Math.abs(dx) > 50;
-    if (ws.dragged) { wsStep(dx < 0 ? 1 : -1); setTimeout(() => { ws.dragged = false; }, 0); }
-  });
-  v.addEventListener("pointercancel", () => { x0 = null; });
-  v.addEventListener("wheel", (e) => {
-    if (Math.abs(e.deltaX) < 30 || Math.abs(e.deltaX) < Math.abs(e.deltaY)) return;
-    e.preventDefault();
-    const now = performance.now();
-    if (now - wheelAt < 450) return;
-    wheelAt = now;
-    wsStep(e.deltaX > 0 ? 1 : -1);
-  }, { passive: false });
-  $("ws").addEventListener("keydown", (e) => {
-    if (e.key === "ArrowLeft") wsStep(-1);
-    if (e.key === "ArrowRight") wsStep(1);
-  });
-}
+$("ws").addEventListener("keydown", (e) => {
+  const list = wsShown(), i = list.indexOf(ws.items[ws.cur]);
+  if (e.key === "ArrowUp" && i > 0) { e.preventDefault(); wsShow(list[i - 1]); }
+  if (e.key === "ArrowDown" && i < list.length - 1) { e.preventDefault(); wsShow(list[i + 1]); }
+});
 document.addEventListener("keydown", (e) => {
   if (!$("ws-big").open) return;
-  if (e.key === "ArrowLeft") wsStep(-1);
-  if (e.key === "ArrowRight") wsStep(1);
+  const list = wsShown(), i = list.indexOf(ws.items[ws.cur]);
+  if (e.key === "ArrowLeft" && i > 0) wsShow(list[i - 1]);
+  if (e.key === "ArrowRight" && i < list.length - 1) wsShow(list[i + 1]);
 });
+
+// ---------- live panels: memory by app, coding, now & today, switches, KURAMA (one /dashboard call, every 10 s) ----------
+let dash = null, dashTimer = 0, dashBusy = false;
+const gbOf = (b) => (b >= 1e9 ? `${(b / 1e9).toFixed(1)} GB` : `${Math.round(b / 1e6)} MB`);
+async function loadDash() {
+  clearTimeout(dashTimer); dashTimer = 0;
+  if (MINI || paused || minimized || document.hidden || dashBusy) return; // applyActivity starts it again
+  dashBusy = true;
+  try { dash = await api.dashboard(); renderDash(); } catch { /* API busy: next round */ }
+  finally { dashBusy = false; }
+  dashTimer = setTimeout(loadDash, 10000);
+}
+function renderDash() {
+  if (!dash) return;
+  renderApps(dash.apps || {});
+  renderCoding(dash.coding || {});
+  renderNow(dash.now || [], dash.today || []);
+  renderSwitches(dash.switches || {});
+  const k = dash.kurama || {};
+  $("t-free").textContent = k.free_pct == null ? "–" : `${k.free_pct}%`;
+  $("t-calls").textContent = k.calls_today ? `${k.calls_today} calls` : "";
+  const [run, tot] = k.workers || [0, 0];
+  $("k-workers").innerHTML = Array.from({ length: tot }, (_, i) => `<i class="${i < run ? "" : "off"}"></i>`).join("");
+  $("k-workers").title = `${run} of ${tot} background workers running`;
+  renderSuggest();
+}
+function renderApps(a) {
+  const list = (a.apps || []).slice(0, 3), ul = $("apps-list");
+  if (!list.length) return;
+  const max = Math.max(1, ...list.map((x) => x.bytes));
+  const ik = a.idle_kernels || {};
+  ul.innerHTML = list.map((x) => `<li><span class="ell">${esc(x.name)}${x.procs > 3 ? ` <small>· ${x.procs}</small>` : ""}</span><span class="m">${gbOf(x.bytes)}</span>
+    <div class="bar"><i style="transform:scaleX(${(x.bytes / max).toFixed(3)})"></i></div></li>`).join("")
+    + (ik.count ? `<li class="fix"><span>${ik.count} idle Jupyter kernel${ik.count > 1 ? "s" : ""} · ${ik.mb} MB</span><button type="button" class="act" data-ask="free some RAM">Free</button></li>` : "");
+  $("apps-sub").textContent = lastStatus?.ram ? `${Math.round(lastStatus.ram.percent)}% used` : "";
+}
+function renderCoding(c) {
+  const box = $("code-body");
+  if (!c.project) { box.innerHTML = '<p class="empty">No project yet: say “protect my project”.</p>'; $("code-snap").textContent = ""; return; }
+  $("code-snap").textContent = c.snapshot ? `snapshot ${c.snapshot === "now" ? "just now" : c.snapshot + " ago"}` : "";
+  const e = c.error;
+  box.innerHTML = `<div class="proj"><b class="ell">${esc(c.project)}</b>${c.branch ? `<span class="branch">${esc(c.branch)}</span>` : ""}</div>
+    <div class="trio"><div><span>CHANGED</span><b class="${c.changed ? "warn" : ""}">${c.changed ?? "–"}</b></div>
+      <div><span>LINES</span><b><span class="ok">+${c.ins ?? 0}</span> <span class="bad">−${c.dels ?? 0}</span></b></div>
+      <div><span>COMMIT</span><b>${c.last_commit ? esc(c.last_commit) : "–"}</b></div></div>
+    ${e ? `<div class="code-err ell" title="${esc(e.text)}">● <code>${esc(e.text)}</code>${e.where ? ` · ${esc(e.where)}` : ""}</div>` : ""}
+    <div class="btns"><button type="button" class="act" data-act="open_vscode" data-path="${esc(c.path)}">VS Code</button>
+      <button type="button" class="act ghost" data-ask="where was I">Where was I?</button>
+      <button type="button" class="act ghost" data-ask="what did I change in the last hour">Changes</button></div>`;
+}
+const NOW_IC = { train: "◐", download: "⇣", web: "◉", job: "✍", record: "●", guard: "⛨" };
+function renderNow(items, classes) {
+  const ul = $("now-list");
+  ul.innerHTML = items.slice(0, 3).map((x) => `<li class="k-${x.kind}"><span class="ic">${NOW_IC[x.kind] || "•"}</span>
+    <div class="grow"><div class="ell">${esc(x.title)}</div><div class="s ell">${esc(x.sub || "")}</div>
+    ${x.progress != null ? `<div class="mini"><i style="width:${Math.round(x.progress * 100)}%"></i></div>` : ""}</div>
+    <span class="r">${esc(x.right || "")}</span></li>`).join("");
+  // today: classes (timetable) + reminders/alarms/timers (live countdowns, from /schedule)
+  const now = Date.now() / 1000;
+  const sch = sched.items.filter((i) => i.day === "today" && i.at > now).map((i) => ({ time: i.kind === "timer" ? null : hm(i.at),
+    text: i.text, kind: i.kind, id: i.id, at: i.at }));
+  const chips = [...classes.map((c) => ({ ...c, at: null })), ...sch].sort((a, b) => (a.at || 0) - (b.at || 0) || String(a.time).localeCompare(String(b.time)));
+  let nextDone = false;
+  $("today-chips").innerHTML = chips.slice(0, 5).map((c) => {
+    const next = !nextDone && (c.next || c.at); if (next) nextDone = true;
+    return `<span class="chip2 k-${c.kind}${next ? " next" : ""}" data-id="${c.id ?? ""}"><b>${c.kind === "timer" ? left(c.at) : esc(c.time || "")}</b>${esc(c.text)}</span>`;
+  }).join("");
+  const n = items.length;
+  $("today-count").textContent = n ? `${n} running` : chips.length ? `${chips.length} today` : "all quiet";
+  if (!n && !chips.length) ul.innerHTML = '<li class="empty">Nothing running. Training, downloads and jobs show up here.</li>';
+}
+function renderSwitches(sw) {
+  for (const b of document.querySelectorAll("[data-switch]")) {
+    const on = !!sw[b.dataset.switch];
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-pressed", String(on));
+    b.title = `${b.textContent} is ${on ? "on" : "off"}: click to turn it ${on ? "off" : "on"}`;
+  }
+}
+$("switches").addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-switch]");
+  if (!b) return;
+  e.stopPropagation(); // a switch is not "open the card"
+  const want = b.classList.contains("on") ? "off" : "on";
+  b.classList.toggle("on", want === "on"); // optimistic, corrected by the reply
+  try { const r = await api.action({ name: "toggle", setting: b.dataset.switch, state: want }); toast(r.text); }
+  catch (err) { b.classList.toggle("on", want !== "on"); toast(err.message || "Couldn't switch it."); }
+  loadDash();
+});
+
+// buttons that DO something: data-act -> a direct, safe action; data-ask -> a normal request (same tools + confirmations)
+async function doAction(body) {
+  try { const r = await api.action(body); toast(r.text); } catch (e) { toast(e.message || "That didn't work."); }
+}
+function ask(text) {
+  if ($("sheet").open) $("sheet").close();
+  const speak = !S.mute;
+  if (speak) audioCtx();
+  sendChat(text, { voice: speak, speak, lang: S.lang });
+}
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-act], [data-ask]");
+  if (!b) return;
+  e.preventDefault(); e.stopPropagation();
+  if (b.dataset.ask) ask(b.dataset.ask);
+  else doAction({ name: b.dataset.act, path: b.dataset.path || "" });
+}, true);
+
+// click a card -> a big sheet with everything about it
+const SHEETS = { weather: "Weather", apps: "Memory & processes", coding: "Coding", laptop: "This laptop", system: "System", now: "Now & today" };
+function cardOpen(card) { if (card?.dataset.sheet) openSheet(card.dataset.sheet); }
+for (const c of document.querySelectorAll("[data-sheet]")) {
+  c.addEventListener("click", (e) => { if (!e.target.closest("button, a, input")) cardOpen(c); });
+  c.addEventListener("keydown", (e) => { if ((e.key === "Enter" || e.key === " ") && e.target === c) { e.preventDefault(); cardOpen(c); } });
+}
+$("sheet-close").onclick = () => $("sheet").close();
+$("sheet").addEventListener("click", (e) => { if (e.target === $("sheet")) $("sheet").close(); });
+const tbl = (rows) => `<table>${rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join("")}</tr>`).join("")}</table>`;
+const tile = (title, html, cls = "") => `<section class="tile ${cls}"><h3>${esc(title)}</h3>${html}</section>`;
+async function openSheet(panel) {
+  $("sheet-title").textContent = SHEETS[panel] || "Details";
+  const body = $("sheet-body");
+  body.innerHTML = '<p class="empty">Loading…</p>';
+  if (!$("sheet").open) $("sheet").showModal();
+  try { body.innerHTML = await sheetHtml(panel); }
+  catch (e) { body.innerHTML = `<p class="empty">Couldn't load this right now (${esc(e.message || "error")}).</p>`; }
+}
+async function sheetHtml(panel) {
+  if (panel === "weather") {
+    const f = wxFull || await api.weatherFull();
+    if (!f || f.error) return '<p class="empty">The forecast isn\'t available right now.</p>';
+    const hs = f.hours.slice(0, 24), lo = Math.min(...hs.map((h) => h.temp)), hi = Math.max(...hs.map((h) => h.temp));
+    const pts = hs.map((h, i) => `${(i / (hs.length - 1) * 600).toFixed(0)},${(100 - (h.temp - lo) / Math.max(1, hi - lo) * 80).toFixed(0)}`).join(" ");
+    const chart = `<svg class="chart" viewBox="0 0 600 110" preserveAspectRatio="none"><polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2"/></svg>
+      <div class="axis">${hs.filter((_, i) => i % 4 === 0).map((h) => `<span>${h.t} · ${Math.round(h.temp)}°${h.rain >= 30 ? ` ☂${h.rain}%` : ""}</span>`).join("")}</div>`;
+    return `<div class="sgrid">${tile("Next 24 hours", chart, "span2")}${tile("Sun", tbl([["Sunrise", f.sun.rise], ["Sunset", f.sun.set]]))}
+      ${tile("Next days", tbl(f.days.map((d) => [new Date(d.day).toLocaleDateString([], { weekday: "long" }), `${Math.round(d.min)}° – ${Math.round(d.max)}° · ${esc(d.desc)}${d.rain ? ` · rain ${d.rain}%` : ""}`])), "span3")}</div>`;
+  }
+  if (panel === "now") {
+    const d = await api.detail("now");
+    const run = d.now.length ? tbl(d.now.map((x) => [`${NOW_IC[x.kind] || "•"} ${esc(x.title)}<small>${esc(x.sub || "")}</small>`,
+      `${esc(x.right || "")} ${x.kind === "train" ? '<button type="button" class="act ghost" data-ask="stop training">Stop</button>' : ""}`])) : '<p class="empty">Nothing running.</p>';
+    return `<div class="sgrid">${tile("Running", run, "span2")}
+      ${tile("Today", `<pre class="plain">${esc(d.text)}</pre>`)}
+      ${tile("Reminders, alarms, timers & stopwatch", '<button type="button" class="act" id="open-sched">Open the schedule</button>', "span3")}</div>`;
+  }
+  const d = await api.detail(panel === "system" ? "system" : panel);
+  if (panel === "apps") {
+    return `<div class="sgrid">${tile("By app", tbl(d.apps.map((a) => [`${esc(a.name)}<small>${a.procs} process${a.procs > 1 ? "es" : ""}</small>`, gbOf(a.bytes)])), "span2")}
+      ${tile("Doctor says", `<p>${d.findings.map(esc).join("<br>")}</p><div class="btns"><button type="button" class="act" data-ask="why is my laptop slow">Full check</button>${d.kernels.length ? '<button type="button" class="act ghost" data-ask="free some RAM">Free idle kernels</button>' : ""}</div>`)}
+      ${tile("Ports in use", d.ports.length ? tbl(d.ports.map((x) => [`:${x.port}`, `${esc(x.name)} ${x.pid ? `<button type="button" class="act ghost" data-ask="stop what is on port ${x.port}">Stop</button>` : ""}`])) : '<p class="empty">No open ports.</p>', "span3")}</div>`;
+  }
+  if (panel === "coding") {
+    if (!d.project) return '<p class="empty">No project yet. Say “protect my project”.</p>';
+    const files = d.files.length ? tbl(d.files.slice(0, 14).map((f) => [`<button type="button" class="link" data-act="open_vscode" data-path="${esc(d.path + "/" + f.file)}">${esc(f.file)}</button>`,
+      f.ins === "new" ? '<span class="ok">new</span>' : `<span class="ok">+${esc(f.ins)}</span> <span class="bad">−${esc(f.dels)}</span>`])) : '<p class="empty">No uncommitted changes.</p>';
+    const errs = d.errors.length ? tbl(d.errors.map((e) => [`<code>${esc(e.error)}</code><small>${esc(e.where || "")} · ${esc(e.ago)} ago</small>`, e.fix ? `fixed: ${esc(e.fix)}` : `${e.count}×`])) : '<p class="empty">No recent errors.</p>';
+    return `<div class="sgrid">${tile(`Changes · ${d.project}${d.branch ? " (" + d.branch + ")" : ""}`, files + `<div class="btns"><button type="button" class="act" data-act="open_vscode" data-path="${esc(d.path)}">Open in VS Code</button><button type="button" class="act ghost" data-act="show_folder" data-path="${esc(d.path)}">Folder</button><button type="button" class="act ghost" data-ask="what did I change in the last hour">What changed</button><button type="button" class="act ghost" data-ask="commit my changes">Commit…</button></div>`, "span2")}
+      ${tile("Where you left off", '<p>Ask me and I\'ll sum it up from git, your errors and your snapshots.</p><div class="btns"><button type="button" class="act" data-ask="where was I">Where was I?</button></div>')}
+      ${tile("Snapshots", d.snapshots.length ? `<pre class="plain">${esc(d.snapshots.join("\n"))}</pre>` : '<p class="empty">None yet.</p>')}
+      ${tile("Recent errors", errs, "span2")}
+      ${tile("Projects", tbl(d.projects.slice(0, 10).map((x) => [esc(x.name), `<button type="button" class="act ghost" data-act="open_vscode" data-path="${esc(x.path)}">VS Code</button>`])), "span3")}</div>`;
+  }
+  if (panel === "laptop") {
+    const w = d.wifi, v = d.volume, b = d.battery, sw = d.switches || {};
+    const sws = Object.entries({ wifi: "Wi-Fi", bluetooth: "Bluetooth", dnd: "Do not disturb", night: "Night light", saver: "Battery saver", guard: "Laptop guard" })
+      .map(([k, n]) => `<span class="tg${sw[k] ? " on" : ""}">${n}</span>`).join("");
+    return `<div class="sgrid">${tile("Battery", tbl([["Health", b ? `${b.health}%${b.cycles ? ` · ${b.cycles} cycles` : ""}` : "–"], ["Power mode", esc(sw.power_mode || "–")]]))}
+      ${tile("Network", tbl([["Wi-Fi", w ? `${esc(w.ssid)} · ${w.signal}%` : "off"], ["IP", esc(d.ip || "offline")]]) + '<div class="btns"><button type="button" class="act ghost" data-ask="check my internet">Check internet</button><button type="button" class="act ghost" data-ask="internet speed test">Speed test</button></div>')}
+      ${tile("Sound & screen", tbl([["Volume", v ? `${v.percent}%${v.muted ? " (muted)" : ""}` : "–"], ["Brightness", d.brightness != null ? `${d.brightness}%` : "–"]]))}
+      ${tile("Switches", `<div class="toggles">${sws}</div><p class="tiny">Use the switches on the card to change them.</p>`, "span2")}
+      ${tile("Device", tbl([["Model", esc(d.model || "–")], ["System", esc(d.os || "–")], ["Up", fmtDur(d.uptime_s)]]))}</div>`;
+  }
+  if (panel === "system") {
+    const k = d.kurama || {};
+    const disks = tbl(d.disks.map((x) => [esc(x.mount), `${Math.round(x.used / 1e9)} / ${Math.round(x.total / 1e9)} GB`]));
+    const s0 = lastStatus || {};
+    return `<div class="sgrid">${tile("Now", tbl([["CPU", `${Math.round(s0.cpu?.percent ?? 0)}% · ${s0.cpu?.freq_ghz?.toFixed(2) ?? "–"} GHz · load ${s0.cpu?.load?.[0]?.toFixed(2) ?? "–"}`],
+        ["Memory", `${fmtGb(s0.ram?.used_gb)} / ${fmtGb(s0.ram?.total_gb)} GB · swap ${s0.swap?.percent ?? 0}%`], ["Temperature", s0.cpu?.temp_c != null ? `${Math.round(s0.cpu.temp_c)} °C` : "–"]]), "span2")}
+      ${tile("KURAMA", tbl([["Memory", `${Math.round(s0.jarvis?.rss_mb ?? 0)} MB`], ["Workers", `${k.workers?.[0] ?? 0} / ${k.workers?.[1] ?? 0} running`],
+        ["Tokens today", `${fmtK(k.tokens_today)} · ${k.calls_today ?? 0} calls`], ["Free answers", k.free_pct == null ? "–" : `${k.free_pct}% (0 tokens)`]]))}
+      ${tile("Disks", disks + `<div class="btns"><button type="button" class="act" data-ask="what is using my disk space">What can I free?</button></div>`, "span2")}
+      ${tile("Trash", `<p>${esc(d.trash)}</p><div class="btns"><button type="button" class="act ghost" data-ask="empty the trash">Empty trash…</button></div>`)}</div>`;
+  }
+  return '<p class="empty">Nothing more to show.</p>';
+}
+document.addEventListener("click", (e) => { if (e.target.id === "open-sched") { $("sheet").close(); openSched(); } });
+
+// suggestions above the box: what fits right now (0 tokens to pick)
+function renderSuggest() {
+  const s = [];
+  if (dash?.now?.some((x) => x.kind === "train")) s.push("How's training?");
+  if ((lastStatus?.ram?.percent || 0) >= 85) s.push("Why is my laptop slow?");
+  if (dash?.coding?.project) s.push("Where was I?");
+  s.push("What's on today?", "Status");
+  $("suggest").innerHTML = s.slice(0, 4).map((t) => `<button type="button" data-ask="${esc(t)}">${esc(t)}</button>`).join("");
+}
 
 // ---------- a wallpaper KURAMA made is drawn behind the dashboard (this window covers the real desktop) ----------
 let wallMtime = -1;
@@ -1224,8 +1380,8 @@ function applyActivity() {
   const idle = paused || document.hidden;
   document.body.classList.toggle("paused", idle);
   orb.pause(paused || MINI);
-  if (idle || minimized) { stopStatus(); stopClock(); clearTimeout(devTimer); devTimer = 0; clearTimeout(schedTimer); schedTimer = 0; }
-  else { if (!clockTimer) tick(); if (!es && !pollTimer) startStatus(); if (!devTimer) loadDevice(); if (!schedTimer) loadToday(); }
+  if (idle || minimized) { stopStatus(); stopClock(); clearTimeout(devTimer); devTimer = 0; clearTimeout(schedTimer); schedTimer = 0; clearTimeout(dashTimer); dashTimer = 0; }
+  else { if (!clockTimer) tick(); if (!es && !pollTimer) startStatus(); if (!devTimer) loadDevice(); if (!schedTimer) loadToday(); if (!dashTimer) loadDash(); }
   syncAmbient();
 }
 
@@ -1568,7 +1724,7 @@ setMode("text");
 if (MINI) { $("chat-title").textContent = botName; restoreMiniLog(); input.focus(); }
 tick();
 if (params.get("paused") === "1") window.kuramaPause(true); // start paused (testing)
-checkHealth().then(() => { startStatus(); loadDevice(); loadToday(); bootVoice(); });
+checkHealth().then(() => { startStatus(); loadDevice(); loadToday(); loadDash(); bootVoice(); });
 async function bootVoice() { // first load after KURAMA starts: say hello, then wait (asleep) for the wake word
   if (MINI || params.get("debug") === "1") return;
   if (S.wakeListen) { mode = "conv"; setMode("conv"); } // talk mode is the default

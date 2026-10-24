@@ -27,43 +27,38 @@
         <div id="date" class="date"></div>
       </header>
 
-      <div class="card weather-card" id="weather" aria-label="Weather">
-        <span id="wx-icon" class="wx-icon" aria-hidden="true"></span>
-        <div class="wx-main"><div id="wx-place" class="label">NEPALGUNJ</div><div class="wx-temp"><b id="wx-temp">--</b><span>°C</span></div></div>
-        <div class="wx-side"><div id="wx-desc">–</div><small id="wx-sub"></small></div>
-      </div>
-
-      <div class="card procs-card">
-        <div class="card-title">Top processes <span id="procs-count" class="muted-right"></span></div>
-        <div class="seg seg-sm" role="group" aria-label="Sort processes by">
-          <button type="button" data-sort="rss" aria-pressed="true">Memory</button>
-          <button type="button" data-sort="cpu" aria-pressed="false">CPU</button>
+      <div class="card weather-card" id="weather" data-sheet="weather" tabindex="0" role="button" aria-label="Weather: open the forecast">
+        <div class="card-title"><span id="wx-place">NEPALGUNJ</span><span class="more" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg></span></div>
+        <div class="wx-now">
+          <span id="wx-icon" class="wx-icon" aria-hidden="true"></span>
+          <div class="wx-temp"><b id="wx-temp">--</b><span>°C</span></div>
+          <div class="wx-side"><div id="wx-desc">–</div><small id="wx-sub"></small></div>
         </div>
-        <ul id="procs" class="procs"><li class="empty">Measuring…</li></ul>
+        <div id="wx-hours" class="wx-hours" aria-label="Next hours"></div>
       </div>
 
-      <div class="card core-card">
-        <div class="card-title">Kurama core <span id="core-up" class="muted-right"></span></div>
-        <div class="stats3">
-          <div><span class="label">RAM</span><b id="t-rss">–</b><small>MB</small></div>
-          <div><span class="label">TOKENS</span><b id="t-tokens">–</b><small id="t-calls">today</small></div>
-          <button type="button" id="tile-alerts" class="stat-btn"><span class="label">ALERTS</span><b id="t-alerts">0</b><small id="t-alerts-sub">all clear</small></button>
-        </div>
+      <div class="card apps-card" id="apps" data-sheet="apps" tabindex="0" role="button" aria-label="Memory by app: open details">
+        <div class="card-title">Memory <span id="apps-sub" class="pill"></span><span class="more" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg></span></div>
+        <ul id="apps-list" class="apps"><li class="empty">Measuring…</li></ul>
       </div>
 
-      <div class="card dev-card" aria-label="This laptop">
-        <div class="card-title">This laptop <span id="dev-up" class="muted-right"></span></div>
-        <div class="stats3">
+      <div class="card code-card" id="coding" data-sheet="coding" tabindex="0" role="button" aria-label="Coding: open details">
+        <div class="card-title">Coding <span id="code-snap" class="pill"></span><span class="more" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg></span></div>
+        <div id="code-body" class="code-body"><p class="empty">Looking for your project…</p></div>
+      </div>
+
+      <div class="card dev-card" id="laptop" data-sheet="laptop" tabindex="0" role="button" aria-label="This laptop: open details">
+        <div class="card-title">Laptop <span id="dev-up" class="pill"></span><span class="more" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg></span></div>
+        <div class="tri3">
+          <div><span class="label">BATTERY</span><b><span id="d-batp">–</span><small class="u">%</small></b><div class="bar thin"><i id="d-bat-bar"></i></div><small id="d-bat">–</small></div>
           <div><span class="label">WI-FI</span><b><span id="d-wifi">–</span><small class="u">%</small></b><div class="bar thin"><i id="d-wifi-bar"></i></div><small id="d-ssid">–</small></div>
           <div><span class="label">VOLUME</span><b><span id="d-vol">–</span><small class="u">%</small></b><div class="bar thin"><i id="d-vol-bar"></i></div><small id="d-vol-sub">–</small></div>
-          <div><span class="label">SCREEN</span><b><span id="d-bri">–</span><small class="u">%</small></b><div class="bar thin"><i id="d-bri-bar"></i></div><small>brightness</small></div>
         </div>
-        <ul class="dev-rows">
-          <li><span>Battery health</span><b id="d-bat">–</b></li>
-          <li><span>IP address</span><b id="d-ip">–</b></li>
-          <li><span>Device</span><b id="d-sys">–</b></li>
-          <li><span>Next reminder</span><b id="d-next">–</b></li>
-        </ul>
+        <div id="switches" class="toggles" aria-label="Quick switches">
+          <button type="button" class="tg" data-switch="wifi">Wi-Fi</button><button type="button" class="tg" data-switch="bluetooth">Bluetooth</button>
+          <button type="button" class="tg" data-switch="dnd">DND</button><button type="button" class="tg" data-switch="night">Night</button>
+          <button type="button" class="tg cool" data-switch="guard">Guard</button><button type="button" class="tg" data-switch="saver">Saver</button>
+        </div>
       </div>
     </section>
 
@@ -112,6 +107,7 @@
           </span>
         </div>
         <div id="log" class="messages" role="log" aria-live="polite" aria-relevant="additions"></div>
+        <div id="suggest" class="suggest mini-off" aria-label="Suggestions"></div>
         <form id="composer" class="ask" autocomplete="off">
           <div class="seg modes" role="group" aria-label="Input mode">
             <button type="button" id="m-text" aria-pressed="true" aria-label="Text mode" title="Text · Enter to send">
@@ -134,38 +130,30 @@
     </main>
 
     <!-- right: performance + jobs -->
-    <section class="col right" aria-label="Performance">
-      <div class="card perf">
-        <div class="card-title">Performance <span id="uptime" class="muted-right"></span></div>
-        <div class="metric cpu-metric" id="cpu-metric">
-          <div class="metric-head"><span class="label">CPU</span><span class="big"><b id="cpu">0</b>%</span></div>
-          <canvas id="cpu-spark" class="spark"></canvas>
-          <div class="sub"><span id="cpu-freq">– GHz</span><span id="cpu-load">load –</span><span id="cpu-temp">– °C</span></div>
+    <section class="col right" aria-label="System, now and workspace">
+      <div class="card perf" id="system" data-sheet="system" tabindex="0" role="button" aria-label="System: open details">
+        <div class="card-title">System <span id="uptime" class="pill"></span><span class="more" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg></span></div>
+        <div class="rings">
+          <div class="rg" id="rg-cpu"><svg viewBox="0 0 64 64"><circle class="trk" cx="32" cy="32" r="27"/><circle class="arc" cx="32" cy="32" r="27"/></svg><div class="v"><b id="cpu">0</b><small>%</small></div><div class="k">CPU</div></div>
+          <div class="rg" id="rg-ram"><svg viewBox="0 0 64 64"><circle class="trk" cx="32" cy="32" r="27"/><circle class="arc" cx="32" cy="32" r="27"/></svg><div class="v"><b id="ram">0</b><small>%</small></div><div class="k">MEMORY</div></div>
+          <div class="rg cool" id="rg-disk"><svg viewBox="0 0 64 64"><circle class="trk" cx="32" cy="32" r="27"/><circle class="arc" cx="32" cy="32" r="27"/></svg><div class="v"><b id="disk">0</b><small>%</small></div><div class="k">DISK</div></div>
         </div>
-        <div class="metric">
-          <div class="metric-head"><span class="label">MEMORY</span><span class="big"><b id="ram-used">0</b> / <span id="ram-total">0</span> GB</span></div>
-          <div class="bar"><i id="ram-bar"></i></div>
-          <div class="sub"><span><b id="ram">0</b>% used</span><span>Swap <b id="swap">0</b>%</span></div>
+        <canvas id="cpu-spark" class="spark short" aria-hidden="true"></canvas>
+        <div class="pline">
+          <span>↓ <b id="down">0 B/s</b> ↑ <b id="up">0 B/s</b></span><span id="cpu-temp">– °C</span>
+          <button type="button" id="tile-alerts" class="pl-btn" title="Alerts"><span id="t-alerts">0</span> alerts</button>
         </div>
-        <div class="metric">
-          <div class="metric-head"><span class="label">DISK ~</span><span class="big"><b id="disk-used">0</b> / <span id="disk-total">0</span> GB</span></div>
-          <div class="bar"><i id="disk-bar"></i></div>
-        </div>
-        <div class="metric" id="bat-row" hidden>
-          <div class="metric-head"><span class="label">BATTERY</span><span class="big"><b id="battery">–</b>%<span id="charging" class="charging" hidden>⚡</span></span></div>
-          <div class="bar"><i id="battery-bar"></i></div>
-          <div class="sub"><span id="battery-time"></span></div>
-        </div>
-        <div class="metric">
-          <div class="metric-head"><span class="label">NETWORK</span>
-            <span class="net"><span class="down">↓ <b id="down">0 B/s</b></span><span class="up">↑ <b id="up">0 B/s</b></span></span></div>
-          <canvas id="net-spark" class="spark short"></canvas>
+        <div class="kfoot">
+          <div><span>KURAMA</span><b id="t-rss">–</b><small>MB</small><div id="k-workers" class="workers" title="workers"></div></div>
+          <div><span>TOKENS TODAY</span><b id="t-tokens">–</b><small id="t-calls"></small></div>
+          <div><span>FREE ANSWERS</span><b id="t-free">–</b><small>0-token</small></div>
         </div>
       </div>
 
-      <div class="card today-card" id="today" role="button" tabindex="0" aria-label="Today: reminders, alarms, timers — open details">
-        <div class="card-title">Today <span id="today-count" class="muted-right"></span></div>
-        <ul id="today-list" class="today-list"><li class="empty">Nothing scheduled</li></ul>
+      <div class="card today-card" id="today" data-sheet="now" tabindex="0" role="button" aria-label="Now and today: open details">
+        <div class="card-title">Now &amp; today <span id="today-count" class="pill"></span><span class="more" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg></span></div>
+        <ul id="now-list" class="nowl"></ul>
+        <div id="today-chips" class="tchips"></div>
         <div id="today-sw" class="today-sw" hidden>
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="7.5"/><path d="M12 13V9.5M10 2.5h4M18.5 6.5l1.5-1.5"/></svg>
           <span>Stopwatch</span><b id="today-sw-time">0:00</b><small id="today-sw-state"></small>
@@ -173,20 +161,15 @@
       </div>
 
       <div class="card ws-card" id="ws" aria-label="Workspace">
-        <div class="card-title">Workspace
-          <span class="muted-right ws-tools"><span id="jobs-count"></span>
-            <button id="ws-expand" class="icon-btn" type="button" aria-label="Open large" title="Open large">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg>
-            </button>
-          </span>
+        <div class="card-title">Workspace <span id="jobs-count" class="pill"></span>
+          <button id="ws-expand" class="icon-btn" type="button" aria-label="Open large" title="Open large">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg>
+          </button>
         </div>
-        <ul id="jobs" class="jobs"></ul>
-        <div class="ws-stage">
-          <div id="ws-view" class="ws-view"><p class="ws-empty">Pictures, poems and writing you ask for appear here.</p></div>
-          <button id="ws-prev" class="ws-nav prev" type="button" aria-label="Newer" hidden>‹</button>
-          <button id="ws-next" class="ws-nav next" type="button" aria-label="Older" hidden>›</button>
-        </div>
-        <div class="ws-foot"><span id="ws-name" class="ws-name"></span><span id="ws-dots" class="ws-dots"></span></div>
+        <div id="ws-tabs" class="tabs" role="tablist"></div>
+        <ul id="ws-list" class="files" role="listbox" aria-label="Results"></ul>
+        <div id="ws-view" class="ws-view pv"><p class="ws-empty">Pictures, code and writing you ask for appear here.</p></div>
+        <div id="ws-acts" class="wsacts"></div>
       </div>
     </section>
   </div>
@@ -284,6 +267,12 @@
       </button>
     </form>
     <div id="info-body" class="info-body" role="tabpanel"></div>
+  </dialog>
+
+  <dialog id="sheet" class="modal sheet" aria-labelledby="sheet-title">
+    <div class="sheet-head"><h2 id="sheet-title">Details</h2><span class="grow"></span>
+      <button id="sheet-close" class="icon-btn" type="button" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+    <div id="sheet-body" class="sheet-body"></div>
   </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>

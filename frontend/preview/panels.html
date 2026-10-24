@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>KURAMA · panels preview</title>
+<link rel="stylesheet" href="../styles.css">
+<style>
+  /* ================= palette: amber (KURAMA) or cyan (Jarvis) — press C ================= */
+  :root { --holo: 255, 150, 70; --holo-2: 255, 190, 120; --holo-hex: #ffb066; }
+  body.cyan { --holo: 90, 210, 255; --holo-2: 170, 235, 255; --holo-hex: #6fd6ff;
+    --accent: #3fc8ff; --accent-2: #9be6ff; --accent-soft: rgba(63, 200, 255, .32); }
+  body.cyan .bg-glow { filter: hue-rotate(170deg); }
+
+  /* colour fields behind the columns: the glass blurs them */
+  .blob { position: fixed; border-radius: 50%; filter: blur(70px); pointer-events: none; opacity: .55; }
+  .blob.a { width: 520px; height: 520px; left: -120px; top: 260px; background: radial-gradient(circle, rgba(var(--holo), .28), transparent 65%); }
+  .blob.b { width: 560px; height: 560px; right: -160px; top: 120px; background: radial-gradient(circle, rgba(var(--holo), .22), transparent 65%); }
+  .blob.c { width: 460px; height: 460px; right: 120px; bottom: -160px; background: radial-gradient(circle, rgba(111,183,255,.16), transparent 65%); }
+  .blob.d { width: 420px; height: 420px; left: 260px; bottom: -180px; background: radial-gradient(circle, rgba(var(--holo), .16), transparent 65%); }
+  /* faint hologram scanlines over everything (static: costs nothing per frame) */
+  .scan { position: fixed; inset: 0; pointer-events: none; z-index: 1; opacity: .35; mix-blend-mode: overlay;
+    background: repeating-linear-gradient(180deg, rgba(255,255,255,.05) 0 1px, transparent 1px 3px); }
+
+  /* ================= hologram glass panels ================= */
+  .card { background: linear-gradient(160deg, rgba(var(--holo), .07), rgba(12, 12, 18, .40) 45%, rgba(var(--holo), .03));
+    border: 1px solid rgba(var(--holo), .18); border-radius: 6px; padding: 18px 22px;
+    backdrop-filter: blur(16px) saturate(140%); -webkit-backdrop-filter: blur(16px) saturate(140%);
+    box-shadow: inset 0 0 24px rgba(var(--holo), .05), inset 0 1px 0 rgba(255,255,255,.06), 0 18px 50px rgba(0,0,0,.35);
+    cursor: pointer; transition: border-color .3s var(--ease), box-shadow .3s var(--ease); animation: materialise .9s var(--ease) both; }
+  /* corner brackets (HUD frame) */
+  .card::before { content: ""; position: absolute; inset: -1px; pointer-events: none; border-radius: inherit;
+    --c: rgba(var(--holo-2), .85); --l: 14px;
+    background:
+      linear-gradient(var(--c), var(--c)) top left / var(--l) 1.5px no-repeat, linear-gradient(var(--c), var(--c)) top left / 1.5px var(--l) no-repeat,
+      linear-gradient(var(--c), var(--c)) top right / var(--l) 1.5px no-repeat, linear-gradient(var(--c), var(--c)) top right / 1.5px var(--l) no-repeat,
+      linear-gradient(var(--c), var(--c)) bottom left / var(--l) 1.5px no-repeat, linear-gradient(var(--c), var(--c)) bottom left / 1.5px var(--l) no-repeat,
+      linear-gradient(var(--c), var(--c)) bottom right / var(--l) 1.5px no-repeat, linear-gradient(var(--c), var(--c)) bottom right / 1.5px var(--l) no-repeat;
+    filter: drop-shadow(0 0 4px rgba(var(--holo), .8)); }
+  .card:hover { border-color: rgba(var(--holo), .40);
+    box-shadow: inset 0 0 30px rgba(var(--holo), .09), 0 0 0 1px rgba(var(--holo), .08), 0 0 34px rgba(var(--holo), .12), 0 18px 50px rgba(0,0,0,.4); }
+  .card:hover::before { --l: 22px; }
+  /* one-shot hologram "materialise": a flicker + a scan line sweeping down (only when a panel appears) */
+  @keyframes materialise { 0% { opacity: 0; clip-path: inset(0 0 100% 0); } 30% { opacity: .5; } 34% { opacity: .2; } 40% { opacity: .8; }
+    100% { opacity: 1; clip-path: inset(0 0 0 0); } }
+  .col .card:nth-child(3) { animation-delay: .08s; } .col .card:nth-child(4) { animation-delay: .16s; } .col .card:nth-child(5) { animation-delay: .24s; }
+  .card-title { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;
+    color: rgba(var(--holo-2), .85); letter-spacing: .22em; }
+  .card-title::after { content: ""; flex: 1; height: 1px; margin: 0 12px; background: linear-gradient(90deg, rgba(var(--holo), .35), transparent); order: 1; }
+  .card-title .more { order: 2; font-size: 12px; color: rgba(var(--holo), .45); letter-spacing: 0; text-transform: none; }
+  .card:hover .card-title .more { color: var(--holo-hex); }
+  .chat.card { cursor: default; animation: none; }
+
+  /* ================= shared bits ================= */
+  .tiny { font-size: 11px; color: var(--dim); }
+  .grow { flex: 1; min-width: 0; }
+  .ell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ok { color: var(--ok); } .warn { color: var(--accent-2); } .bad { color: var(--danger); } .cool { color: var(--cool); }
+  .act { font: 500 11px var(--sans); color: var(--accent-2); background: rgba(var(--holo), .10); border: 1px solid rgba(var(--holo), .30);
+    border-radius: 4px; padding: 3px 10px; white-space: nowrap; cursor: pointer; }
+  .act.ghost { color: var(--muted); background: rgba(255,255,255,.03); border-color: rgba(255,255,255,.08); }
+  .row { display: flex; align-items: center; gap: 10px; }
+  .big2 { font-size: 26px; font-weight: 300; line-height: 1; }
+  .glow { text-shadow: 0 0 12px rgba(var(--holo), .55); }
+  .bar { height: 3px; } .bar i { background: linear-gradient(90deg, rgba(var(--holo), 1), rgba(var(--holo-2), 1)); box-shadow: 0 0 8px rgba(var(--holo), .6); }
+
+  /* weather */
+  .wx .now { display: flex; align-items: center; gap: 14px; }
+  .wx .wx-icon { width: 38px; height: 38px; color: var(--holo-hex); filter: drop-shadow(0 0 6px rgba(var(--holo), .6)); }
+  .wx .temp { font-size: 34px; font-weight: 300; line-height: 1; }
+  .wx .temp small { font-size: 13px; color: var(--muted); }
+  .wx .desc { margin-left: auto; text-align: right; font-size: 13px; }
+  .wx .desc small { display: block; color: var(--muted); font-size: 11px; margin-top: 3px; }
+  .wx .hours { display: flex; justify-content: space-between; margin-top: 14px; padding-top: 12px; border-top: 1px dashed rgba(var(--holo), .18); }
+  .wx .h { text-align: center; font-size: 12px; } .wx .h small { display: block; color: var(--dim); font-size: 10px; margin-bottom: 3px; }
+
+  /* apps */
+  .apps { list-style: none; }
+  .apps li { display: grid; grid-template-columns: 1fr auto; gap: 5px 10px; padding: 6px 0; font-size: 13px; }
+  .apps .bar { grid-column: 1 / -1; }
+  .apps .m { color: var(--accent-2); font-size: 12px; }
+
+  /* coding */
+  .proj { display: flex; align-items: center; gap: 8px; }
+  .proj b { font-size: 18px; font-weight: 500; }
+  .branch { font-size: 11px; color: var(--cool); border: 1px solid rgba(111,183,255,.3); border-radius: 4px; padding: 1px 6px; }
+  .trio { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 12px; }
+  .trio span { display: block; font-size: 10px; letter-spacing: .14em; color: var(--dim); }
+  .trio b { font-size: 16px; font-weight: 400; white-space: nowrap; }
+  .err { margin-top: 12px; font-size: 12px; color: #ffb1a8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .err code { font-family: var(--code); font-size: 11px; }
+
+  /* laptop */
+  .tri3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .tri3 span { display: block; font-size: 10px; letter-spacing: .14em; color: var(--dim); margin-bottom: 3px; }
+  .tri3 b { font-size: 18px; font-weight: 400; } .tri3 b small { font-size: 11px; color: var(--muted); }
+  .tri3 .bar { margin-top: 6px; }
+  .toggles { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+  .tg { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; padding: 4px 10px; border-radius: 4px;
+    background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.07); color: var(--muted); }
+  .tg i { width: 6px; height: 6px; border-radius: 50%; background: var(--dim); }
+  .tg.on { color: var(--text); border-color: rgba(var(--holo), .35); background: rgba(var(--holo), .08); }
+  .tg.on i { background: var(--holo-hex); box-shadow: 0 0 8px var(--holo-hex); }
+  .tg.cool.on { border-color: rgba(111,183,255,.35); background: rgba(111,183,255,.08); }
+  .tg.cool.on i { background: var(--cool); box-shadow: 0 0 8px var(--cool); }
+
+  /* performance: HUD rings */
+  .rings { display: grid; grid-template-columns: repeat(3, 1fr); text-align: center; }
+  .rg svg { width: 66px; height: 66px; transform: rotate(-90deg); overflow: visible; }
+  .rg .arc { filter: drop-shadow(0 0 4px rgba(var(--holo), .9)); }
+  .rg .v { margin-top: -46px; height: 46px; font-size: 15px; } .rg .v small { font-size: 10px; color: var(--muted); }
+  .rg .k { font-size: 10px; letter-spacing: .16em; color: var(--dim); margin-top: 2px; }
+  .pline { display: flex; justify-content: space-between; margin-top: 12px; padding-top: 10px; border-top: 1px dashed rgba(var(--holo), .18); font-size: 12px; color: var(--muted); }
+  .pline b { color: var(--text); font-weight: 500; }
+
+  /* now & today */
+  .nowl { list-style: none; }
+  .nowl li { display: grid; grid-template-columns: 28px 1fr auto; gap: 12px; align-items: center; padding: 6px 0; font-size: 13px; }
+  .ic { width: 28px; height: 28px; border-radius: 4px; display: grid; place-items: center; font-size: 12px; background: rgba(111,183,255,.10);
+    color: var(--cool); box-shadow: inset 0 0 0 1px rgba(111,183,255,.2); }
+  .nowl .s { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .nowl .r { font-size: 12px; color: var(--muted); }
+  .mini { height: 3px; border-radius: 3px; background: rgba(111,183,255,.14); margin-top: 6px; overflow: hidden; }
+  .mini i { display: block; height: 100%; background: linear-gradient(90deg, var(--cool), #c3e2ff); box-shadow: 0 0 8px var(--cool); }
+  .chips { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+  .chip2 { font-size: 11px; padding: 4px 9px; border-radius: 4px; background: rgba(255,255,255,.035); color: var(--muted); }
+  .chip2 b { color: var(--text); font-weight: 500; margin-right: 4px; }
+  .chip2.next { background: rgba(var(--holo), .10); color: var(--accent-2); box-shadow: inset 0 0 0 1px rgba(var(--holo), .3); }
+
+  /* workspace: the biggest card on the right */
+  .col.right { min-height: 0; overflow: hidden; }
+  .col.right .wsx { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
+  .tabs { display: flex; gap: 4px; margin-bottom: 12px; }
+  .tabs b { font: 500 11px var(--sans); color: var(--muted); padding: 4px 10px; border-radius: 4px; }
+  .tabs b.on { color: var(--accent-2); background: rgba(var(--holo), .14); box-shadow: inset 0 0 0 1px rgba(var(--holo), .3); }
+  .files { list-style: none; }
+  .files li { display: grid; grid-template-columns: 30px 1fr auto; gap: 12px; align-items: center; padding: 7px 8px; border-radius: 4px; }
+  .files li.sel { background: rgba(var(--holo), .08); box-shadow: inset 2px 0 0 var(--holo-hex), inset 0 0 0 1px rgba(var(--holo), .18); }
+  .ft { width: 30px; height: 30px; border-radius: 4px; display: grid; place-items: center; font: 600 9px var(--code); }
+  .ft.py { background: rgba(111,183,255,.13); color: var(--cool); } .ft.md { background: rgba(255,179,71,.13); color: #ffc47a; }
+  .ft.img { background: rgba(127,209,139,.13); color: var(--ok); } .ft.csv { background: rgba(186,140,255,.13); color: #c9a8ff; }
+  .files .n { font-size: 13px; } .files .d { font-size: 11px; color: var(--dim); margin-top: 1px; } .files .z { font-size: 11px; color: var(--dim); }
+  .pv { margin-top: 12px; flex: 1 1 0; min-height: 60px; border-radius: 4px; background: rgba(0,0,0,.30); border: 1px solid rgba(var(--holo), .12);
+    padding: 14px 16px; overflow: hidden; position: relative; }
+  .pv pre { font-family: var(--code); font-size: 11.5px; line-height: 1.6; color: #cfd8e3; white-space: pre; }
+  .pv .k { color: #ffb347; } .pv .s { color: #9fe0a8; } .pv .c { color: #6c7680; } .pv .n { color: #8ec5ff; } .pv .ln { color: #454b53; margin-right: 12px; }
+  .pv::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 46px; background: linear-gradient(transparent, rgba(10,10,14,.92)); }
+  .wsacts { display: flex; gap: 6px; margin-top: 12px; align-items: center; }
+
+  /* chat */
+  .suggest { display: flex; gap: 6px; flex-wrap: wrap; margin: 2px 0 10px; }
+  .suggest b { font: 400 12px var(--sans); color: var(--muted); padding: 5px 12px; border-radius: 4px;
+    background: rgba(255,255,255,.03); border: 1px solid rgba(var(--holo), .14); cursor: pointer; }
+
+  /* ================= detail sheet (click any card) ================= */
+  .veil { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: rgba(4,4,8,.72);
+    backdrop-filter: blur(6px); opacity: 0; pointer-events: none; transition: opacity .35s var(--ease); }
+  .veil.open { opacity: 1; pointer-events: auto; }
+  .sheet { position: relative; width: min(1100px, 86vw); max-height: 82vh; overflow: auto; padding: 28px 34px; border-radius: 8px;
+    background: linear-gradient(160deg, rgba(var(--holo), .12), rgba(12, 12, 18, .94) 35%, rgba(10, 10, 15, .96));
+    border: 1px solid rgba(var(--holo), .28); backdrop-filter: blur(24px) saturate(150%);
+    box-shadow: inset 0 0 60px rgba(var(--holo), .06), 0 0 60px rgba(var(--holo), .10), 0 40px 120px rgba(0,0,0,.6); }
+  .veil.open .sheet { animation: materialise .7s var(--ease) both; }
+  .sheet h2 { font-size: 13px; letter-spacing: .24em; text-transform: uppercase; color: rgba(var(--holo-2), .9); font-weight: 500;
+    display: flex; justify-content: space-between; text-shadow: 0 0 10px rgba(var(--holo), .5); }
+  .sheet h2 span { cursor: pointer; letter-spacing: 0; font-size: 18px; color: var(--dim); text-shadow: none; }
+  .sgrid { display: grid; grid-template-columns: repeat(var(--cols, 3), 1fr); gap: 18px; margin-top: 20px; }
+  .tile { padding: 16px 18px; border-radius: 4px; background: rgba(var(--holo), .035); border: 1px solid rgba(var(--holo), .12); position: relative; }
+  .tile h3 { font-size: 10px; letter-spacing: .18em; color: rgba(var(--holo-2), .7); font-weight: 500; margin-bottom: 10px; text-transform: uppercase; }
+  .tile table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .tile td { padding: 6px 0; border-top: 1px dashed rgba(var(--holo), .12); } .tile tr:first-child td { border-top: 0; }
+  .tile td:last-child { text-align: right; color: var(--muted); }
+  .chart { height: 120px; width: 100%; filter: drop-shadow(0 0 6px rgba(var(--holo), .5)); }
+  .span2 { grid-column: span 2; } .span3 { grid-column: 1 / -1; }
+  .hint { position: fixed; left: 50%; bottom: 8px; transform: translateX(-50%); font-size: 11px; color: var(--dim); z-index: 2; }
+</style>
+</head>
+<body data-state="idle">
+  <div class="bg-grid" aria-hidden="true"></div>
+  <div class="bg-glow" aria-hidden="true"></div>
+  <div class="blob a"></div><div class="blob b"></div><div class="blob c"></div><div class="blob d"></div>
+  <div class="scan" aria-hidden="true"></div>
+
+  <div class="layout">
+    <!-- ================= LEFT ================= -->
+    <section class="col left">
+      <header class="clock-block">
+        <div class="clock glow"><span><span id="ch">06</span><span class="colon">:</span><span id="cm">27</span></span><span class="clock-side"><span id="cap">PM</span><span class="sec">23</span></span></div>
+        <div class="date" id="cdate">SATURDAY, OCTOBER 24</div>
+      </header>
+
+      <div class="card wx" data-sheet="weather">
+        <div class="card-title">Nepalgunj <span class="more">⤢</span></div>
+        <div class="now">
+          <span class="wx-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg></span>
+          <div class="temp glow">24<small>°C</small></div>
+          <div class="desc">Clear sky<small>18° – 29° · rain 10%</small></div>
+        </div>
+        <div class="hours">
+          <div class="h"><small>8 PM</small>23°</div><div class="h"><small>11 PM</small>21°</div><div class="h"><small>2 AM</small>20°</div>
+          <div class="h"><small>5 AM</small>18°</div><div class="h"><small>Tmrw</small>20–27°</div>
+        </div>
+      </div>
+
+      <div class="card" data-sheet="apps">
+        <div class="card-title">Memory <span class="more">⤢</span></div>
+        <ul class="apps">
+          <li><span>Brave</span><span class="m">2.7 GB</span><div class="bar"><i style="transform:scaleX(1)"></i></div></li>
+          <li><span>VS Code</span><span class="m">1.6 GB</span><div class="bar"><i style="transform:scaleX(.59)"></i></div></li>
+          <li><span>Jupyter <span class="tiny">· 2 idle</span> <span class="act" style="margin-left:6px">Free</span></span><span class="m">1.0 GB</span><div class="bar"><i style="transform:scaleX(.37)"></i></div></li>
+        </ul>
+      </div>
+
+      <div class="card" data-sheet="coding">
+        <div class="card-title">Coding <span class="more">⤢</span></div>
+        <div class="proj"><b>KURAMA</b><span class="branch">master</span></div>
+        <div class="trio">
+          <div><span>CHANGED</span><b class="warn">12</b></div>
+          <div><span>LINES</span><b><span class="ok">+340</span> <span class="bad">−80</span></b></div>
+          <div><span>SNAPSHOT</span><b>4m</b></div>
+        </div>
+        <div class="err">● <code>ValueError: shapes (64,) and (32,)</code> · train.py:42</div>
+      </div>
+
+      <div class="card" data-sheet="laptop">
+        <div class="card-title">Laptop <span class="more">⤢</span></div>
+        <div class="tri3">
+          <div><span>BATTERY</span><b>100<small>%</small></b><div class="bar"><i style="transform:scaleX(1)"></i></div></div>
+          <div><span>WI-FI</span><b>56<small>%</small></b><div class="bar"><i style="transform:scaleX(.56)"></i></div></div>
+          <div><span>VOLUME</span><b>40<small>%</small></b><div class="bar"><i style="transform:scaleX(.4)"></i></div></div>
+        </div>
+        <div class="toggles">
+          <span class="tg on"><i></i>Wi-Fi</span><span class="tg"><i></i>Bluetooth</span><span class="tg"><i></i>DND</span>
+          <span class="tg on"><i></i>Night</span><span class="tg cool on"><i></i>Guard</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= CENTRE ================= -->
+    <main class="center">
+      <div class="core">
+        <div id="orb" class="orb"><div class="halo" aria-hidden="true"></div><canvas id="orb-canvas"></canvas></div>
+        <h1 class="name glow">KURAMA</h1>
+        <div class="voice-state">Training cnn-cats · epoch 12/30 · ~1 h 30 m left</div>
+      </div>
+      <section class="card chat">
+        <div class="chat-head"><span class="card-title" style="margin:0">Conversation</span>
+          <span class="head-tools"><span class="chat-state"><i></i><span>Ready</span></span></span></div>
+        <div class="messages" style="justify-content:flex-end">
+          <div class="msg user"><div class="body"><div class="who">You · 06:24 PM</div><div class="text">how is my training going?</div></div></div>
+          <div class="msg bot"><div class="avatar">K</div><div class="body"><div class="who">KURAMA · 06:24 PM</div>
+            <div class="text">Epoch 12 of 30, loss is still falling (0.41) and accuracy is 87%. About an hour and a half left.</div></div></div>
+        </div>
+        <div class="suggest"><b>How's training?</b><b>Why is my laptop slow?</b><b>Where was I?</b></div>
+        <form class="ask" onsubmit="return false">
+          <div class="seg modes"><button aria-pressed="true">⌨</button><button aria-pressed="false">🎙</button><button aria-pressed="false">≋</button></div>
+          <textarea rows="1" placeholder="Ask KURAMA anything…"></textarea>
+          <button class="send" type="button">→</button>
+        </form>
+      </section>
+    </main>
+
+    <!-- ================= RIGHT ================= -->
+    <section class="col right">
+      <div class="card" data-sheet="perf">
+        <div class="card-title">System <span class="more">⤢</span></div>
+        <div class="rings">
+          <div class="rg"><svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="27" fill="none" stroke="rgba(var(--holo),.10)" stroke-width="3" stroke-dasharray="2 3"/><circle class="arc" cx="32" cy="32" r="27" fill="none" stroke="var(--holo-hex)" stroke-width="3" stroke-linecap="round" stroke-dasharray="169.6" stroke-dashoffset="142"/></svg><div class="v">16<small>%</small></div><div class="k">CPU</div></div>
+          <div class="rg"><svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="27" fill="none" stroke="rgba(var(--holo),.10)" stroke-width="3" stroke-dasharray="2 3"/><circle class="arc" cx="32" cy="32" r="27" fill="none" stroke="var(--holo-hex)" stroke-width="3" stroke-linecap="round" stroke-dasharray="169.6" stroke-dashoffset="44"/></svg><div class="v">74<small>%</small></div><div class="k">MEMORY</div></div>
+          <div class="rg"><svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="27" fill="none" stroke="rgba(var(--holo),.10)" stroke-width="3" stroke-dasharray="2 3"/><circle class="arc" cx="32" cy="32" r="27" fill="none" stroke="#6fb7ff" stroke-width="3" stroke-linecap="round" stroke-dasharray="169.6" stroke-dashoffset="51"/></svg><div class="v">70<small>%</small></div><div class="k">DISK</div></div>
+        </div>
+        <div class="pline"><span>↓ <b>1.2 MB/s</b> ↑ <b>40 KB/s</b></span><span>45 °C</span><span>KURAMA <b>246 MB</b></span></div>
+      </div>
+
+      <div class="card" data-sheet="now">
+        <div class="card-title">Now &amp; today <span class="more">⤢</span></div>
+        <ul class="nowl">
+          <li><span class="ic">◐</span><div class="grow"><div>CNN on Colab</div><div class="s">epoch 12/30 · acc 0.87</div><div class="mini"><i style="width:40%"></i></div></div><span class="r">1h 30m</span></li>
+          <li><span class="ic">⇣</span><div class="grow ell"><div class="ell">imagenet-subset.tar</div><div class="s">tonight 1:00 AM</div></div><span class="r">2.1 GB</span></li>
+        </ul>
+        <div class="chips"><span class="chip2 next"><b>09:00</b>DSA</span><span class="chip2"><b>13:00</b>Physics</span><span class="chip2"><b>18:00</b>walking</span></div>
+      </div>
+
+      <div class="card wsx" data-sheet="workspace">
+        <div class="card-title">Workspace <span class="more">⤢</span></div>
+        <div class="tabs"><b class="on">All</b><b>Docs</b><b>Code</b><b>Images</b><b>Data</b></div>
+        <ul class="files">
+          <li class="sel"><span class="ft py">PY</span><div class="grow"><div class="n ell">calculator.py</div><div class="d">18 min ago</div></div><span class="z">2.4 KB</span></li>
+          <li><span class="ft md">MD</span><div class="grow"><div class="n ell">Essay: Nepal's rivers</div><div class="d">1 h ago</div></div><span class="z">6.1 KB</span></li>
+          <li><span class="ft csv">CSV</span><div class="grow"><div class="n ell">Titanic dataset check</div><div class="d">2 h ago</div></div><span class="z">891 rows</span></li>
+          <li><span class="ft img">IMG</span><div class="grow"><div class="n ell">Moonlit mountain workspace</div><div class="d">yesterday</div></div><span class="z">1.4 MB</span></li>
+        </ul>
+        <div class="pv"><pre><span class="ln">1</span><span class="c"># Simple calculator</span>
+<span class="ln">2</span><span class="k">def</span> <span class="n">calculate</span>(a, op, b):
+<span class="ln">3</span>    <span class="k">if</span> op == <span class="s">"+"</span>: <span class="k">return</span> a + b
+<span class="ln">4</span>    <span class="k">if</span> op == <span class="s">"-"</span>: <span class="k">return</span> a - b
+<span class="ln">5</span>    <span class="k">if</span> op == <span class="s">"*"</span>: <span class="k">return</span> a * b
+<span class="ln">6</span>    <span class="k">if</span> op == <span class="s">"/"</span>: <span class="k">return</span> a / b <span class="k">if</span> b <span class="k">else</span> <span class="s">"can't divide by 0"</span>
+<span class="ln">7</span>
+<span class="ln">8</span><span class="k">while True</span>:
+<span class="ln">9</span>    a, op, b = input(<span class="s">"&gt; "</span>).split()
+<span class="ln">10</span>   print(calculate(float(a), op, float(b)))</pre></div>
+        <div class="wsacts"><span class="act">Open</span><span class="act ghost">Copy</span><span class="act ghost">Phone</span><span class="act ghost">Folder</span></div>
+      </div>
+    </section>
+  </div>
+  <div class="hint">click any panel for details · C = amber / Jarvis cyan · Esc closes</div>
+
+  <!-- ================= detail sheet ================= -->
+  <div class="veil" id="veil"><div class="sheet" id="sheet"></div></div>
+
+  <template id="t-weather"><h2>Weather · Nepalgunj <span>✕</span></h2>
+    <div class="sgrid">
+      <div class="tile span2"><h3>Next 24 hours</h3><svg class="chart" viewBox="0 0 600 120" preserveAspectRatio="none"><defs><linearGradient id="wg" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="var(--holo-hex)" stop-opacity=".35"/><stop offset="1" stop-color="var(--holo-hex)" stop-opacity="0"/></linearGradient></defs><path d="M0 40 C60 50 120 70 180 80 S300 95 360 70 480 30 600 35 L600 120 L0 120 Z" fill="url(#wg)"/><path d="M0 40 C60 50 120 70 180 80 S300 95 360 70 480 30 600 35" fill="none" stroke="var(--holo-hex)" stroke-width="2"/></svg>
+        <div class="row tiny" style="justify-content:space-between"><span>now 24°</span><span>midnight 20°</span><span>6 AM 18°</span><span>noon 27°</span><span>6 PM 25°</span></div></div>
+      <div class="tile"><h3>Right now</h3><table><tr><td>Feels like</td><td>26°</td></tr><tr><td>Humidity</td><td>75%</td></tr><tr><td>Wind</td><td>4 km/h W</td></tr><tr><td>UV</td><td>0 (night)</td></tr><tr><td>Sunrise · sunset</td><td>6:12 · 17:32</td></tr></table></div>
+      <div class="tile span3"><h3>Next 5 days</h3><table><tr><td>Sun</td><td>20° – 27° · light drizzle · 40%</td></tr><tr><td>Mon</td><td>19° – 28° · clear</td></tr><tr><td>Tue</td><td>19° – 29° · clear</td></tr><tr><td>Wed</td><td>18° – 28° · partly cloudy</td></tr><tr><td>Thu</td><td>18° – 27° · clear</td></tr></table></div>
+    </div></template>
+
+  <template id="t-apps"><h2>Memory &amp; processes <span>✕</span></h2>
+    <div class="sgrid">
+      <div class="tile span2"><h3>By app</h3><table>
+        <tr><td>Brave · 28 processes (each tab is one)</td><td>2.7 GB · CPU 9%</td></tr><tr><td>VS Code · 18 (extensions, language servers)</td><td>1.6 GB · CPU 3%</td></tr>
+        <tr><td>Jupyter · 2 kernels, idle 3 h</td><td>1.0 GB · CPU 0% <span class="act">Free</span></td></tr><tr><td>KURAMA · server, workers, wallpaper</td><td>246 MB · CPU 0.4%</td></tr>
+        <tr><td>GNOME Shell</td><td>181 MB</td></tr><tr><td>Telegram</td><td>142 MB</td></tr></table></div>
+      <div class="tile"><h3>Doctor says</h3><p style="font-size:13px;line-height:1.6">RAM is 74% full and swap 32%. The quickest win is the 2 idle Jupyter kernels (1 GB). Closing unused Brave tabs frees ~100 MB each.</p><div class="row" style="margin-top:12px"><span class="act">Free idle kernels</span><span class="act ghost">Why slow?</span></div></div>
+      <div class="tile span3"><h3>Ports in use</h3><table><tr><td>:8000 · KURAMA API</td><td>python · PID 109426</td></tr><tr><td>:8888 · Jupyter</td><td>PID 4410 <span class="act ghost">Stop</span></td></tr><tr><td>:5173 · vite dev server</td><td>PID 7781 <span class="act ghost">Stop</span></td></tr></table></div>
+    </div></template>
+
+  <template id="t-coding"><h2>Coding · KURAMA (master) <span>✕</span></h2>
+    <div class="sgrid">
+      <div class="tile span2"><h3>Uncommitted changes · 12 files</h3><table>
+        <tr><td>jarvis/core/training.py</td><td><span class="ok">+120</span> <span class="bad">−14</span></td></tr><tr><td>jarvis/workers/process_watch.py</td><td><span class="ok">+96</span> <span class="bad">−31</span></td></tr>
+        <tr><td>frontend/preview/panels.html</td><td><span class="ok">+80</span> new</td></tr><tr><td>tests/test_training.py</td><td><span class="ok">+44</span> <span class="bad">−2</span></td></tr><tr><td>… 8 more</td><td></td></tr></table>
+        <div class="row" style="margin-top:12px"><span class="act">Commit…</span><span class="act ghost">What changed (1 h)</span><span class="act ghost">Open in VS Code</span></div></div>
+      <div class="tile"><h3>Where you left off</h3><p style="font-size:13px;line-height:1.6">You were adding the Colab stop command and its tests. The last test run passed (609). Next: the dashboard redesign.</p></div>
+      <div class="tile"><h3>Snapshots</h3><table><tr><td>18:47</td><td>3 files</td></tr><tr><td>18:37</td><td>5 files</td></tr><tr><td>18:27</td><td>2 files</td></tr><tr><td>18:17</td><td>9 files</td></tr></table></div>
+      <div class="tile span2"><h3>Recent errors</h3><table><tr><td><code style="font-family:var(--code);font-size:11px;color:#ffb1a8">ValueError: shapes (64,) and (32,)</code> · train.py:42</td><td>3× · fixed by reshaping</td></tr>
+        <tr><td><code style="font-family:var(--code);font-size:11px;color:#ffb1a8">ModuleNotFoundError: timm</code></td><td>1× · <span class="act ghost">Install</span></td></tr></table></div>
+    </div></template>
+
+  <template id="t-laptop"><h2>Laptop <span>✕</span></h2>
+    <div class="sgrid">
+      <div class="tile"><h3>Battery</h3><div class="big2 glow">100%</div><table style="margin-top:8px"><tr><td>State</td><td>charging</td></tr><tr><td>Health</td><td>79% · 538 cycles</td></tr><tr><td>Power mode</td><td>balanced</td></tr></table></div>
+      <div class="tile"><h3>Network</h3><div class="big2 ok">online</div><table style="margin-top:8px"><tr><td>Wi-Fi</td><td>Narayan@Chaulagain · 56%</td></tr><tr><td>Internet</td><td>10 ms · DNS ok</td></tr><tr><td>IP</td><td>192.168.18.99</td></tr></table></div>
+      <div class="tile"><h3>Sound &amp; screen</h3><table><tr><td>Volume</td><td>40% · speaker</td></tr><tr><td>Mic</td><td>on</td></tr><tr><td>Brightness</td><td>35%</td></tr><tr><td>Night light</td><td>on</td></tr></table></div>
+      <div class="tile span3"><h3>Switches</h3><div class="toggles"><span class="tg on"><i></i>Wi-Fi</span><span class="tg"><i></i>Bluetooth</span><span class="tg"><i></i>Airplane</span><span class="tg"><i></i>Do not disturb</span><span class="tg on"><i></i>Night light</span><span class="tg"><i></i>Battery saver</span><span class="tg cool on"><i></i>Laptop guard</span><span class="tg"><i></i>Screen off</span></div></div>
+    </div></template>
+
+  <template id="t-perf"><h2>System <span>✕</span></h2>
+    <div class="sgrid">
+      <div class="tile span2"><h3>CPU · last 10 minutes</h3><svg class="chart" viewBox="0 0 600 120" preserveAspectRatio="none"><path d="M0 100 L40 95 80 90 120 70 160 85 200 60 240 88 280 92 320 75 360 50 400 82 440 90 480 70 520 86 560 80 600 84" fill="none" stroke="var(--holo-hex)" stroke-width="2"/></svg><div class="row tiny" style="justify-content:space-between"><span>2.34 GHz · 12 cores</span><span>load 1.04</span><span>45 °C</span></div></div>
+      <div class="tile"><h3>KURAMA</h3><table><tr><td>Memory</td><td>246 MB</td></tr><tr><td>Workers</td><td><span class="ok">9 / 9 running</span></td></tr><tr><td>Tokens today</td><td>226k of ~500k</td></tr><tr><td>Free answers</td><td>61% (0 tokens)</td></tr><tr><td>Speech used</td><td>18 of 416 min</td></tr></table></div>
+      <div class="tile"><h3>Memory</h3><table><tr><td>Used</td><td>5.5 / 7.5 GB</td></tr><tr><td>Swap</td><td>32%</td></tr><tr><td>Cache</td><td>1.1 GB</td></tr></table></div>
+      <div class="tile"><h3>Disks</h3><table><tr><td>/ (system)</td><td>69 / 98 GB</td></tr><tr><td>Project1</td><td>210 / 400 GB</td></tr><tr><td>Can be freed</td><td class="warn">23.5 GB →</td></tr></table></div>
+      <div class="tile"><h3>Network</h3><table><tr><td>Down</td><td>1.2 MB/s</td></tr><tr><td>Up</td><td>40 KB/s</td></tr><tr><td>Today</td><td>1.8 GB</td></tr></table></div>
+    </div></template>
+
+  <template id="t-now"><h2>Now &amp; today <span>✕</span></h2>
+    <div class="sgrid">
+      <div class="tile span2"><h3>Running</h3><table>
+        <tr><td>◐ CNN on Colab · epoch 12/30 · loss 0.41 ▇▅▄▃▂ · acc 0.87 · val 0.84</td><td>~1 h 30 m <span class="act ghost">Stop</span></td></tr>
+        <tr><td>⇣ imagenet-subset.tar · starts tonight 1:00 AM</td><td>2.1 GB</td></tr><tr><td>◉ Watching tu.edu.np/results for "BSc"</td><td>no change yet</td></tr>
+        <tr><td>✍ Job #21 · essay on Nepal's rivers</td><td>section 3 of 6</td></tr></table></div>
+      <div class="tile"><h3>Today</h3><table><tr><td>09:00</td><td>DSA · Room 201</td></tr><tr><td>13:00</td><td>Physics · Hall B</td></tr><tr><td>18:00</td><td>⏰ walking</td></tr><tr><td>⏱</td><td>stopwatch 1:54 paused</td></tr></table></div>
+      <div class="tile span3"><h3>Coming up</h3><table><tr><td>Tomorrow 06:00</td><td>⏰ walking (daily)</td></tr><tr><td>Mon 09:00</td><td>DSA · Room 201</td></tr><tr><td>Mon 10:15</td><td>Machine Learning · Lab 3</td></tr></table></div>
+    </div></template>
+
+  <template id="t-workspace"><h2>Workspace · 12 items <span>✕</span></h2>
+    <div class="sgrid" style="--cols:5">
+      <div class="tile" style="grid-column:span 2"><h3>Files</h3><table>
+        <tr><td>PY · calculator.py</td><td>18 min</td></tr><tr><td>MD · Essay: Nepal's rivers</td><td>1 h</td></tr><tr><td>CSV · Titanic dataset check</td><td>2 h</td></tr>
+        <tr><td>IMG · Moonlit mountain workspace</td><td>1 d</td></tr><tr><td>IMG · Midnight reflection</td><td>1 d</td></tr><tr><td>MD · Downloads listing</td><td>1 d</td></tr><tr><td>PY · kurama_colab_cell.py</td><td>2 d</td></tr></table></div>
+      <div class="tile" style="grid-column:span 3"><h3>calculator.py · 42 lines · Python</h3><pre style="font-family:var(--code);font-size:12px;line-height:1.7;color:#cfd8e3"><span style="color:#6c7680"># Simple calculator</span>
+<span style="color:#ffb347">def</span> <span style="color:#8ec5ff">calculate</span>(a, op, b):
+    <span style="color:#ffb347">if</span> op == <span style="color:#9fe0a8">"+"</span>: <span style="color:#ffb347">return</span> a + b
+    <span style="color:#ffb347">if</span> op == <span style="color:#9fe0a8">"-"</span>: <span style="color:#ffb347">return</span> a - b
+    <span style="color:#ffb347">if</span> op == <span style="color:#9fe0a8">"*"</span>: <span style="color:#ffb347">return</span> a * b
+    <span style="color:#ffb347">if</span> op == <span style="color:#9fe0a8">"/"</span>: <span style="color:#ffb347">return</span> a / b <span style="color:#ffb347">if</span> b <span style="color:#ffb347">else</span> <span style="color:#9fe0a8">"can't divide by 0"</span>
+
+<span style="color:#ffb347">while True</span>:
+    a, op, b = input(<span style="color:#9fe0a8">"> "</span>).split()
+    print(calculate(float(a), op, float(b)))</pre>
+        <div class="row" style="margin-top:14px"><span class="act">Open in VS Code</span><span class="act ghost">Copy</span><span class="act ghost">Send to phone</span><span class="act ghost">Show in folder</span><span class="act ghost">Delete</span></div></div>
+    </div></template>
+
+<script type="module">
+  import { Orb } from "../orb.js";
+  new Orb(document.getElementById("orb-canvas"), { halo: document.querySelector("#orb .halo") }).start();
+  const tick = () => { const d = new Date(); let h = d.getHours(); document.getElementById("cap").textContent = h >= 12 ? "PM" : "AM";
+    h = h % 12 || 12; document.getElementById("ch").textContent = String(h).padStart(2, "0");
+    document.getElementById("cm").textContent = String(d.getMinutes()).padStart(2, "0");
+    document.getElementById("cdate").textContent = d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }).toUpperCase(); };
+  tick(); setInterval(tick, 30000);
+  // click any card -> a big hologram sheet with all the details (Esc / click outside / ✕ closes)
+  const veil = document.getElementById("veil"), sheet = document.getElementById("sheet");
+  const open = (name) => { sheet.innerHTML = document.getElementById(`t-${name}`).innerHTML; veil.classList.remove("open"); void veil.offsetWidth; veil.classList.add("open"); };
+  const close = () => veil.classList.remove("open");
+  document.querySelectorAll("[data-sheet]").forEach((c) => c.addEventListener("click", () => open(c.dataset.sheet)));
+  veil.addEventListener("click", (e) => { if (e.target === veil || e.target.closest("h2 span")) close(); });
+  addEventListener("keydown", (e) => {
+    if (e.key === "Escape") close();
+    if (e.key.toLowerCase() === "c" && !e.target.closest("textarea")) document.body.classList.toggle("cyan");
+  });
+  const q = new URLSearchParams(location.search);
+  if (q.get("cyan")) document.body.classList.add("cyan");
+  if (q.get("open")) open(q.get("open"));
+</script>
+</body>
+</html>
