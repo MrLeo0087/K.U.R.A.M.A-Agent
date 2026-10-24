@@ -129,6 +129,7 @@ def execute(name: str, args: Any = None, confirm: ConfirmFn | None = None,
     """Run one tool call through the safety policy and log it."""
     reg = reg or registry.REGISTRY
     t0 = time.monotonic()
+    name, args = reg.resolve(name, args)  # a retired tool name runs the tool that replaced it
     tool = reg.get(name)
 
     def done(res: ToolResult, outcome: str, safety: str, logged_args: Any) -> ToolResult:

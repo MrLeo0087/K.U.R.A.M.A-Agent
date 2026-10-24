@@ -1,13 +1,13 @@
-"""mute_audio: mute, unmute or toggle the speakers via pactl on @DEFAULT_SINK@ (safe)."""
+"""mute_audio: mute, unmute or toggle the speakers via pactl on @DEFAULT_SINK@ (safe).
+
+No longer a tool of its own: the merged tool calls mute_audio() (old name kept as an alias)."""
 from __future__ import annotations
 
 from typing import Literal
 
-from jarvis.core.registry import tool
 from jarvis.tools.general import _sys
 
 
-@tool(group="audio", safety="safe", description="Mute, unmute or toggle the speakers, or say whether they are muted.")
 def mute_audio(action: Literal["toggle", "mute", "unmute", "status"] = "toggle") -> str:
     """Speaker mute.
 

@@ -1,10 +1,11 @@
-"""volume: get, set (0-100) or step the speaker volume via pactl on @DEFAULT_SINK@ (safe)."""
+"""volume: get, set (0-100) or step the speaker volume via pactl on @DEFAULT_SINK@ (safe).
+
+No longer a tool of its own: the merged tool calls volume() (old name kept as an alias)."""
 from __future__ import annotations
 
 from typing import Literal
 
 from jarvis.core import config
-from jarvis.core.registry import tool
 from jarvis.tools.general import _sys
 
 SINK = "@DEFAULT_SINK@"
@@ -17,7 +18,6 @@ def get_level() -> int:
     return n
 
 
-@tool(group="audio", safety="safe", description="Get, set (0-100) or step the speaker volume up/down.")
 def volume(action: Literal["get", "set", "up", "down"] = "get", level: int | None = None, step: int = 0) -> str:
     """Speaker volume.
 

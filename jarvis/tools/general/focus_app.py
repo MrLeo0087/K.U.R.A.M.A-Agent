@@ -1,11 +1,11 @@
-"""focus_app: bring an open app's window to the front via wmctrl (safe)."""
+"""focus_app: bring an open app's window to the front via wmctrl (safe).
+
+No longer a tool of its own: the merged tool calls focus_app() (old name kept as an alias)."""
 from __future__ import annotations
 
-from jarvis.core.registry import tool
 from jarvis.tools.general import _apps
 
 
-@tool(group="apps", safety="safe", description="Switch to (focus) an already open app window by name.")
 def focus_app(name: str) -> str:
     """Focus an app window.
 

@@ -1,12 +1,12 @@
-"""read_clipboard: the current clipboard text, truncated (xclip; safe, read-only)."""
+"""read_clipboard: the current clipboard text, truncated (xclip; safe, read-only).
+
+No longer a tool of its own: the merged tool calls read_clipboard() (old name kept as an alias)."""
 from __future__ import annotations
 
 from jarvis.core import config
-from jarvis.core.registry import tool
 from jarvis.tools.general import _sys
 
 
-@tool(group="clipboard", safety="safe", description="Read the text currently on the clipboard.")
 def read_clipboard(max_chars: int = 0) -> str:
     """Read the clipboard.
 

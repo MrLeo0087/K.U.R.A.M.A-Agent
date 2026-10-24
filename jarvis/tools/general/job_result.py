@@ -1,12 +1,12 @@
-"""job_result: where a background job saved its output, plus the first lines (safe)."""
+"""job_result: where a background job saved its output, plus the first lines (safe).
+
+No longer a tool of its own: the merged tool calls job_result() (old name kept as an alias)."""
 from __future__ import annotations
 
 from pathlib import Path
 
-from jarvis.core.registry import tool
 
 
-@tool(group="jobs", safety="safe", description="Show a background job's output file path and its beginning.")
 def job_result(job_id: int) -> str:
     """Get a job's result.
 

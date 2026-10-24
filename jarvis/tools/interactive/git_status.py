@@ -1,9 +1,10 @@
-"""git_status: branch, ahead/behind and a compact changed-files summary of a git repo (safe)."""
+"""git_status: branch, ahead/behind and a compact changed-files summary of a git repo (safe).
+
+No longer a tool of its own: the merged tool calls git_status() (old name kept as an alias)."""
 from __future__ import annotations
 
 import re
 
-from jarvis.core.registry import tool
 from jarvis.tools.interactive import _proc
 
 MAX_FILES = 10
@@ -45,7 +46,6 @@ def _branch_text(head: str) -> str:
             f"behind {behind.group(1) if behind else 0}")
 
 
-@tool(group="git", safety="safe", description="Git status of a repo: branch, ahead/behind, changed files.")
 def git_status(repo: str = ".") -> str:
     """Show git status.
 

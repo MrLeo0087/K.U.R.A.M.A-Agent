@@ -1,13 +1,14 @@
 """repo_hygiene: suggestions to tidy a git repo (safe, read-only): missing README/LICENSE/.gitignore
 entries, tracked junk (__pycache__, venv, .env, .pyc), big or binary files, merged/stale branches,
-TODO/FIXME count and empty folders. Nothing is changed."""
+TODO/FIXME count and empty folders. Nothing is changed.
+
+No longer a tool of its own: the merged tool calls repo_hygiene() (old name kept as an alias)."""
 from __future__ import annotations
 
 import os
 import time
 from pathlib import Path
 
-from jarvis.core.registry import tool
 from jarvis.tools.interactive import _proc
 
 BIG_BYTES = 1024 * 1024
@@ -102,8 +103,6 @@ def empty_dirs(root: Path, limit: int = 20000) -> list[str]:
     return out
 
 
-@tool(group="codequality", safety="safe",
-      description="Repo tidiness check: README/LICENSE/.gitignore gaps, tracked junk, big files, stale branches, TODOs, empty dirs.")
 def repo_hygiene(repo: str = ".") -> str:
     """Suggest hygiene fixes for a git repository (changes nothing).
 

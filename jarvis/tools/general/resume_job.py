@@ -1,10 +1,10 @@
-"""resume_job: continue an interrupted writing job from its next section (safe)."""
+"""resume_job: continue an interrupted writing job from its next section (safe).
+
+No longer a tool of its own: the merged tool calls resume_job() (old name kept as an alias)."""
 from __future__ import annotations
 
-from jarvis.core.registry import tool
 
 
-@tool(group="jobs", safety="safe", description="Resume an interrupted or cancelled writing job from its next section.")
 def resume_job(job: str) -> str:
     """Resume a writing job.
 

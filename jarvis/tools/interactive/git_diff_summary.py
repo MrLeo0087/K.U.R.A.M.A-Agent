@@ -1,7 +1,8 @@
-"""git_diff_summary: `git diff --stat` for staged and unstaged changes (safe)."""
+"""git_diff_summary: `git diff --stat` for staged and unstaged changes (safe).
+
+No longer a tool of its own: the merged tool calls git_diff_summary() (old name kept as an alias)."""
 from __future__ import annotations
 
-from jarvis.core.registry import tool
 from jarvis.tools.interactive import _proc
 
 
@@ -10,7 +11,6 @@ def _stat(root, staged: bool) -> str:
     return _proc.git(args, root).rstrip()
 
 
-@tool(group="git", safety="safe", description="Summarize git changes (diff --stat) for staged and unstaged files.")
 def git_diff_summary(repo: str = ".") -> str:
     """Diff summary.
 

@@ -1,6 +1,8 @@
 """find_and_send: find a file by name anywhere on the laptop (home + every mounted disk) and send it to the
 user's Telegram. One match is sent at once; several are listed with numbers ("send 2", "send all"); no match
-falls back to similar names. Safe: it only ever sends to the owner's own chat (TELEGRAM_CHAT_ID)."""
+falls back to similar names. Safe: it only ever sends to the owner's own chat (TELEGRAM_CHAT_ID).
+
+No longer a tool of its own: the merged tool calls find_and_send() (old name kept as an alias)."""
 from __future__ import annotations
 
 import json
@@ -10,7 +12,6 @@ from datetime import datetime
 from pathlib import Path
 
 from jarvis.core import config, store
-from jarvis.core.registry import tool
 from jarvis.tools.general import _tg
 
 LAST_KEY = "found_files"  # the numbered list from the last search, for "send 2" / "all"
@@ -70,8 +71,6 @@ def _picked(paths: list[Path], pick: int) -> str:
     return send_paths([paths[pick - 1]])
 
 
-@tool(group="telegram", safety="safe",
-      description="Find a file by name anywhere on this laptop (all disks) and send it to the user's Telegram.")
 def find_and_send(name: str = "", pick: int = 0) -> str:
     """Search home and every disk for a file name and send it. Several matches: lists them numbered; call
     again with pick=N (or pick=-1 for all) to send from that list.

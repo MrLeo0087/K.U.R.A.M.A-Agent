@@ -1,7 +1,9 @@
 """precommit_gate: quick checks on staged files before a commit (safe): Python syntax, ruff (or a small
 ast fallback), secrets in the staged diff, files over 5 MB, merge-conflict markers, breakpoints and
 debug prints. install_hook=True asks first, then writes .git/hooks/pre-commit that runs
-`python -m jarvis.tools.interactive.precommit_gate`; an existing hook is never replaced without a yes."""
+`python -m jarvis.tools.interactive.precommit_gate`; an existing hook is never replaced without a yes.
+
+No longer a tool of its own: the merged tool calls precommit_gate() (old name kept as an alias)."""
 from __future__ import annotations
 
 import ast
@@ -159,8 +161,6 @@ def install(root: Path) -> str:
     return f"installed pre-commit hook at {hook}"
 
 
-@tool(group="codequality", safety="safe",
-      description="Pre-commit checks on staged files (syntax, lint, secrets, big files, conflicts, breakpoints); can install a git hook.")
 def precommit_gate(repo: str = ".", install_hook: bool = False) -> str:
     """Run quick checks on the staged files.
 

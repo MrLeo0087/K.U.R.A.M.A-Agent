@@ -138,7 +138,7 @@ def test_reusable_saved_then_reused_with_zero_generation(gen, monkeypatch):
     from jarvis.core import llm
     monkeypatch.setattr(llm, "structured", lambda *a, **k: (_ for _ in ()).throw(AssertionError("codegen")))
     res2, asked = run_make("how many days until 25 December 2026", [True])
-    assert "saved skill fits: days_until" in res2.output and asked == [] and len(calls) == 1
+    assert "saved tool fits: days_until" in res2.output and asked == [] and len(calls) == 1
     out = safety.execute("use_skill", {"name": "days_until", "arg": "2026-12-25"}, confirm=lambda p: False)
     assert out.ok and out.output == "63 days"
     direct = safety.execute("days_until", {"arg": "2027-01-01"}, confirm=lambda p: False)

@@ -78,7 +78,7 @@ def fast_on(monkeypatch):
 # --- registration ---
 def test_tools_registered():
     want = {"weather": ("weather", "safe"), "get_time": ("general", "safe"), "open_app": ("apps", "safe"),
-            "close_app": ("apps", "safe"), "focus_app": ("apps", "safe"), "remember": ("memory", "safe"),
+            "close_app": ("apps", "safe"), "window": ("windows", "safe"), "remember": ("memory", "safe"),
             "recall": ("memory", "safe"), "forget": ("memory", "confirm")}
     for name, (group, level) in want.items():
         t = registry.get(name)

@@ -166,7 +166,7 @@ def test_cancel_and_tools(sent):
     from jarvis.core import registry, safety
 
     tools = registry.schemas_for(["schedule"])
-    assert {t.name for t in tools} == {"add_reminder", "schedule_command", "list_schedules", "cancel_schedule"}
+    assert {t.name for t in tools} == {"add_reminder", "schedule_command", "schedules"}
     assert next(t for t in tools if t.name == "schedule_command").metadata["safety"] == "confirm"
     out = safety.execute("add_reminder", {"text": "call mom", "when": "tomorrow at 9"})
     assert out.ok and "tomorrow at 9:00 AM" in out.output

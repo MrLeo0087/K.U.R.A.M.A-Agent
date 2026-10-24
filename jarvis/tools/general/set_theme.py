@@ -10,7 +10,7 @@ import re
 from pathlib import Path
 from typing import Literal
 
-from jarvis.core.registry import tool
+from jarvis.core.registry import alias, tool
 from jarvis.tools.general import _sys
 
 IFACE = "org.gnome.desktop.interface"
@@ -53,13 +53,17 @@ def current_mode() -> str:
 
 
 @tool(group="display", safety="safe",
-      description="Switch the desktop between light mode and dark mode (keeps your icons and cursor).")
-def set_theme(mode: Literal["light", "dark", "toggle", "status"] = "toggle") -> str:
+      description="Light/dark mode: switch, toggle or check it, or turn automatic dark mode at sunset on/off.")
+def set_theme(mode: Literal["light", "dark", "toggle", "status", "auto_on", "auto_off", "auto_status"] = "toggle") -> str:
     """Light/dark mode.
 
     Args:
-        mode: light, dark, toggle, or status (just report the current mode).
+        mode: light, dark, toggle, status (report the current mode), or auto_on / auto_off / auto_status
+            (switch to dark at sunset and light at sunrise by itself).
     """
+    if mode.startswith("auto_"):
+        from jarvis.tools.general.auto_theme import auto_theme
+        return auto_theme(mode[5:])
     if not _sys.which("gsettings"):
         return "error: gsettings not found (GNOME settings tool)"
     now = current_mode()
@@ -80,3 +84,6 @@ def set_theme(mode: Literal["light", "dark", "toggle", "status"] = "toggle") -> 
         return f"error: could not switch to {target} mode ({e})"
     extra = f" (theme {changed[0]})" if changed else ""
     return f"Switched to {target} mode{extra}."
+
+
+alias("auto_theme", "set_theme", lambda a: {"mode": "auto_" + str(a.get("action", "status"))})

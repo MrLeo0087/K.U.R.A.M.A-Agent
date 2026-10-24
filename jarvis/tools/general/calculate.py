@@ -6,7 +6,7 @@ import math
 import operator as op
 import re
 
-from jarvis.core.registry import tool
+from jarvis.core.registry import alias, tool
 
 _OPS = {ast.Add: op.add, ast.Sub: op.sub, ast.Mult: op.mul, ast.Div: op.truediv, ast.Pow: op.pow,
         ast.Mod: op.mod, ast.FloorDiv: op.floordiv, ast.USub: op.neg, ast.UAdd: op.pos}
@@ -62,16 +62,29 @@ def _convert(text: str) -> str | None:
     return None
 
 
-@tool(group="daily", safety="safe", description="Do math (+ - * / ^ %, sqrt, percent of) or convert units (km, kg, °C, GB, hours...).")
+_MONEY = re.compile(r"^(?:convert\s+)?(?P<v>[\d,]+(?:\.\d+)?)\s*(?P<a>[a-z$]+(?: [a-z]+)?)\s+(?:to|in|into)\s+"
+                    r"(?P<b>[a-z]+(?: [a-z]+)?)$", re.I)
+_CODES = {"NPR", "INR", "USD", "EUR", "GBP", "JPY", "CNY", "AED", "SAR", "MYR", "KRW", "AUD", "CAD", "CHF", "SGD",
+          "QAR", "KWD", "BDT", "PKR", "LKR", "THB", "HKD", "NZD", "SEK", "NOK", "DKK", "RUB", "BRL", "ZAR", "TRY"}
+
+
+@tool(group="daily", safety="safe",
+      description="Do math (+ - * / ^ %, sqrt, percent of), convert units (km, kg, °C, GB, hours...) or money "
+                  "with today's rate (100 USD to NPR).")
 def calculate(expression: str) -> str:
     """Calculate or convert.
 
     Args:
-        expression: e.g. "18% of 2500", "(45*3)+12", "sqrt(144)", "10 km to miles", "100 f to c".
+        expression: e.g. "18% of 2500", "(45*3)+12", "sqrt(144)", "10 km to miles", "100 f to c", "50 dollars to NPR".
     """
     text = (expression or "").strip().rstrip("?=")
     if conv := _convert(text):
         return conv
+    if money := _MONEY.match(text):  # "100 usd to npr", "50 dollars in rupees"
+        from jarvis.tools.general.convert_currency import _ALIAS, convert_currency
+        a, b = money.group("a").lower(), money.group("b").lower()
+        if (a in _ALIAS or a.upper() in _CODES) and (b in _ALIAS or b.upper() in _CODES):
+            return convert_currency(float(money.group("v").replace(",", "")), a, b)
     e = text.lower().replace("^", "**").replace("×", "*").replace("÷", "/").replace(",", "")
     e = re.sub(r"([\d.]+)\s*%\s*of\s*([\d.]+)", r"(\1/100*\2)", e)
     e = re.sub(r"\b(what is|what's|calculate|compute|equals?)\b", "", e).strip()
@@ -79,3 +92,6 @@ def calculate(expression: str) -> str:
         return f"{text} = {_fmt(_eval(ast.parse(e, mode='eval')))}"
     except (ValueError, SyntaxError, ZeroDivisionError, OverflowError, TypeError) as ex:
         return f"error: can't calculate that ({ex})"
+
+
+alias("convert_currency", "calculate", lambda a: {"expression": f"{a.get('amount', 1)} {a.get('from_currency', 'USD')} to {a.get('to_currency', 'NPR')}"})

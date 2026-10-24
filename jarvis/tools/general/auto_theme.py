@@ -1,12 +1,13 @@
 """auto_theme: turn automatic dark/light mode (sunset/sunrise or fixed times) on or off. Safe.
-The switching itself is done by the auto_theme worker (python -m jarvis.workers)."""
+The switching itself is done by the auto_theme worker (python -m jarvis.workers).
+
+No longer a tool of its own: the merged tool calls auto_theme() (old name kept as an alias)."""
 from __future__ import annotations
 
 from datetime import datetime
 from typing import Literal
 
 from jarvis.core import config
-from jarvis.core.registry import tool
 from jarvis.tools.general import _autotheme as at
 
 
@@ -16,7 +17,6 @@ def _times() -> str:
     return f"light at {sunrise:%H:%M}, dark at {sunset:%H:%M} ({src})"
 
 
-@tool(group="desktop", safety="safe", description="Turn automatic dark/light mode at sunset/sunrise on or off, or check it.")
 def auto_theme(action: Literal["on", "off", "status"] = "status") -> str:
     """Automatic dark/light mode.
 

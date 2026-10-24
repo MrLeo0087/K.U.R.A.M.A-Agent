@@ -1,5 +1,7 @@
 """playlist: play a named playlist from config.PLAYLISTS (URL -> browser; local folder -> mpv if
-installed, else the default player via xdg-open). Safe."""
+installed, else the default player via xdg-open). Safe.
+
+No longer a tool of its own: the merged tool calls playlist() (old name kept as an alias)."""
 from __future__ import annotations
 
 import shutil
@@ -7,7 +9,6 @@ import subprocess
 from pathlib import Path
 
 from jarvis.core import config
-from jarvis.core.registry import tool
 from jarvis.tools.general import open_url
 
 
@@ -27,7 +28,6 @@ def find(name: str) -> tuple[str, str] | None:
     return hits[0] if hits else None
 
 
-@tool(group="media", safety="safe", description="Play one of the user's named playlists (web link or music folder), or list them.")
 def playlist(name: str = "") -> str:
     """Named playlist.
 

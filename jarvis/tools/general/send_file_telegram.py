@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from jarvis.core import config, notify
-from jarvis.core.registry import tool
+from jarvis.core.registry import alias, tool
 from jarvis.tools.general import _files, _tg
 
 PHOTO_EXT = {".jpg", ".jpeg", ".png", ".webp"}
@@ -26,18 +26,26 @@ def check_path(path: str) -> Path:
 
 
 # safe: it can only ever send to the owner's own chat (TELEGRAM_CHAT_ID), like find_and_send
-@tool(group="telegram", safety="safe", description="Send a file from this computer to the user's Telegram.")
-def send_file_telegram(path: str, caption: str = "") -> str:
+@tool(group="telegram", safety="safe",
+      description="Send a file from this laptop to the user's Telegram: a full path, or a file NAME to find anywhere "
+                  "(all disks; several matches give a numbered list), or pick N / all from the last list.")
+def send_file_telegram(path: str = "", caption: str = "", pick: int = 0) -> str:
     """Send a file (photos as pictures, everything else as a document).
 
     Args:
-        path: File path.
+        path: File path, or just a file name / words from it to find it first.
         caption: Optional short caption.
+        pick: Send item N of the last numbered list (-1 = all of them).
     """
+    from jarvis.tools.general.find_and_send import find_and_send
+    if pick or not path.strip():
+        return find_and_send(path, pick)
     try:
         p = check_path(path)
     except ValueError as e:
-        return f"error: {e}"
+        if "/" in path or path.startswith("~"):
+            return f"error: {e}"
+        return find_and_send(path)  # a name, not a path: find it first
     if err := _tg.ready():
         return err
     return deliver(p, caption)
@@ -56,3 +64,6 @@ def deliver(p: Path, caption: str = "") -> str:
     if not ok:
         return f"error: Telegram didn't accept {p.name} (check the bot token/chat id or your internet)"
     return f"Sent {p.name} to Telegram."
+
+
+alias("find_and_send", "send_file_telegram", lambda a: {"path": a.get("name", ""), "pick": a.get("pick", 0)})

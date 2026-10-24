@@ -5,7 +5,6 @@ from jarvis.core import config, fastpath
 from jarvis.tools.general import calculate as calc_mod
 from jarvis.tools.general import convert_currency as cur_mod
 from jarvis.tools.general import gesture_control as gest_mod
-from jarvis.tools.general import news_headlines as news_mod
 
 
 def test_calculate_math_and_units():
@@ -17,15 +16,6 @@ def test_calculate_math_and_units():
 def test_currency(monkeypatch):
     monkeypatch.setattr(cur_mod, "rates", lambda base: {"NPR": 150.0})
     assert cur_mod.convert_currency(2, "dollars", "rupees") == "2.00 USD = 300.00 NPR (rate 150)"
-
-
-def test_news(monkeypatch):
-    rss = ("<rss><channel><item><title>Big win - BBC</title><source>BBC</source></item>"
-           "<item><title>Rain</title></item></channel></rss>")
-    monkeypatch.setattr(news_mod, "fetch_rss", lambda url: rss)
-    news_mod._cache.clear()
-    out = news_mod.news_headlines("cricket", 2)
-    assert "- Big win (BBC)" in out and "- Rain" in out
 
 
 def test_gesture_start_stop(monkeypatch, tmp_path):
@@ -46,7 +36,7 @@ def test_gesture_start_stop(monkeypatch, tmp_path):
 def test_fastpath_phrases(monkeypatch):
     for text, tool in [("enable the media control through hand", "gesture_control"),
                        ("summarize the today day", "daily_digest"), ("what did we do today", "daily_digest"),
-                       ("what is 18% of 2500", "calculate"), ("latest news about cricket", "news_headlines")]:
+                       ("what is 18% of 2500", "calculate"), ("latest news about cricket", "web_search")]:
         it = fastpath.match(text)
         assert it is not None and it.tool == tool, text
 

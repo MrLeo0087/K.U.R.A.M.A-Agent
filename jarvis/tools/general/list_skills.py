@@ -1,11 +1,11 @@
-"""list_skills (P7c): the small tools KURAMA built and saved."""
+"""list_skills (P7c): the small tools KURAMA built and saved.
+
+No longer a tool of its own: the merged tool calls list_skills() (old name kept as an alias)."""
 from __future__ import annotations
 
 from jarvis.core import toolsmith
-from jarvis.core.registry import tool
 
 
-@tool(group="toolsmith", safety="safe", description="List the saved skills (small tools KURAMA built earlier).")
 def list_skills() -> str:
     """List saved skills with what they do and how often they were used."""
     metas = toolsmith.list_saved()

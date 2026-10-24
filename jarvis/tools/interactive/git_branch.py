@@ -1,13 +1,13 @@
-"""git_branch: create (and switch to) or switch to a git branch (confirm). Never deletes or forces."""
+"""git_branch: create (and switch to) or switch to a git branch (confirm). Never deletes or forces.
+
+No longer a tool of its own: the merged tool calls git_branch() (old name kept as an alias)."""
 from __future__ import annotations
 
 from typing import Literal
 
-from jarvis.core.registry import tool
 from jarvis.tools.interactive import _proc
 
 
-@tool(group="git", safety="confirm", description="Create a new git branch (and switch to it) or switch to an existing one.")
 def git_branch(name: str, action: Literal["create", "switch"] = "switch", repo: str = ".") -> str:
     """Create or switch a branch.
 

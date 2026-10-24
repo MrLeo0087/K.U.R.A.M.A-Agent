@@ -1,10 +1,10 @@
-"""cancel_job: stop a running background job by id or title words (safe)."""
+"""cancel_job: stop a running background job by id or title words (safe).
+
+No longer a tool of its own: the merged tool calls cancel_job() (old name kept as an alias)."""
 from __future__ import annotations
 
-from jarvis.core.registry import tool
 
 
-@tool(group="jobs", safety="safe", description="Cancel a background job by its id or words from its title.")
 def cancel_job(job: str = "") -> str:
     """Cancel a background job.
 

@@ -471,10 +471,13 @@ class Agent:
             if text.lower().startswith(("error", "the user", "refused")):
                 return ""  # something went wrong: let the model explain it
             intent = config.DIRECT_REPLY_TOOLS[m.name]
+            args = (calls.get(m.tool_call_id) or {}).get("args") or {}
+            if intent == "audio":  # one tool, three kinds of reply
+                intent = "mic" if args.get("target") == "mic" else (
+                    "volume" if args.get("action", "get") in ("get", "set", "up", "down") else "mute")
             if intent is None:
                 said.append("Done, I sent it to your Telegram.")
                 continue
-            args = (calls.get(m.tool_call_id) or {}).get("args") or {}
             label = str(args.get("target") or args.get("name") or "")
             said.append(fastpath.render(fastpath.Intent(intent, m.name, "", args, label), True, text, lang))
         return " ".join(fastpath.merge_opens(said)).strip()

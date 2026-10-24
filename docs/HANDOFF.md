@@ -13,7 +13,7 @@ Repo: /media/leo/Project1/New_project/KURAMA, branch master. The venv is Python 
 ## How it runs
 - **API server:** `venv/bin/python -m jarvis.server --port 8000` (FastAPI, `jarvis/api/`). It also serves `frontend/`.
 - **Workers:** `venv/bin/python -m jarvis.workers` runs one supervisor process with these threads: scheduler
-  (reminders), telegram_bot, resource_guard, crash_watchdog, process_watch, daily_digest, auto_theme and n8n_inbound.
+  (reminders), telegram_bot, resource_guard, crash_watchdog, process_watch, daily_digest and auto_theme.
 - **Live wallpaper:** `scripts/kurama_wallpaper.py` uses the SYSTEM python3 (GTK3 + WebKit2 4.1, Wnck). It is a
   desktop-type window showing `/?wallpaper=1`.
   - It pauses the page (`window.kuramaPause`) while a maximized window covers it.
@@ -51,7 +51,7 @@ Repo: /media/leo/Project1/New_project/KURAMA, branch master. The venv is Python 
   - The Telegram chat resumes after a restart (`_resume`).
   - `notify.context_line` adds "messages you sent the user" only when relevant.
   - The system prompt must stay under 250 tokens (a test enforces it).
-- **`fastpath.py`:** zero-token regex intents for open, volume, math, news, image, wallpaper, self-knowledge, password
+- **`fastpath.py`:** zero-token regex intents for open, volume, math, news (web_search), image, wallpaper, self-knowledge, password
   unlock, gesture, digest and more. `planner.py` splits multi-task requests. `router.py` uses keywords first, then the
   fast-tier classifier, and sends only 1–3 tool groups (at most 5 tools per group). The meta tool `request_tools`
   must stay under 200 tokens (a test enforces it).
@@ -66,9 +66,14 @@ Repo: /media/leo/Project1/New_project/KURAMA, branch master. The venv is Python 
   - `paths.py` `all_disks()`: home plus every mounted data disk.
 - **Tools:** `jarvis/tools/{general,interactive}/<one file per tool>.py`, registered with
   `@tool(group=..., safety="safe|confirm|blocked")`. Notable tools: generate_image (IMAGE_APIS list, then Pollinations),
-  find_files and find_and_send (whole-laptop search; numbered picks "2"/"all" handled by the bot at 0 tokens),
-  calculate, convert_currency, news_headlines, focus_timer, cleanup_scan, gesture_control, about_me,
-  find_capability, set_my_name, set_wallpaper, open_url (find_site falls back to a DuckDuckGo jump).
+  find_files and send_file_telegram (path or name; whole-laptop search; numbered picks "2"/"all" handled by the bot
+  at 0 tokens), calculate (math, units, currency), cleanup_scan, gesture_control, about_me, find_capability,
+  set_my_name, set_wallpaper, open_url (find_site falls back to a DuckDuckGo jump).
+  - Step 0 cleanup (108 -> 81 tools): small tools were merged into one tool with an `action` (audio, clipboard,
+    jobs, skills, schedules, window, git_info, git_change, repo_check; auto theme -> set_theme, currency ->
+    calculate, find_and_send -> send_file_telegram, playlist -> media_control, focus_timer -> focus_mode). The old
+    names still work through `registry.alias` / `registry.resolve` (fast path, Telegram bot, saved commands) but are
+    never sent to the LLM. Removed: add_docstrings, benchmark_table, read_aloud, news_headlines, n8n (tool + worker).
 - **Gesture control:** the user's module is at
   /media/leo/Project1/Project/Gen_AI/Big_project/02_K.U.R.A.M.A/Version_4/Extra_tools_file/Youtube_vision_control.
   It runs unmodified in `data/vision_venv` through `scripts/gesture_runner.py` (xdotool keyboard shim).
@@ -97,7 +102,7 @@ Repo: /media/leo/Project1/New_project/KURAMA, branch master. The venv is Python 
   - Add the fstab line.
   - Revoke the Telegram token and Groq keys that were exposed in an old chat.
   - Test gesture control with the camera, the mic/wake word, the mini panel voice, the reminder heads-up and
-    find_and_send from the phone.
+    sending files from the phone.
 - **Git:** there is no remote yet and `gh` isn't installed. `kurama_2.zip` (217 MB) is now untracked, but it is
   still in history (commit b4c5ddc). GitHub will reject a push until the history is rewritten
   (`git filter-repo --path kurama_2.zip --invert-paths`). That needs the user's OK.

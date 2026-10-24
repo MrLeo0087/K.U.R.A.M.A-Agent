@@ -1,10 +1,10 @@
-"""list_jobs: what KURAMA is working on in the background (safe)."""
+"""list_jobs: what KURAMA is working on in the background (safe).
+
+No longer a tool of its own: the merged tool calls list_jobs() (old name kept as an alias)."""
 from __future__ import annotations
 
-from jarvis.core.registry import tool
 
 
-@tool(group="jobs", safety="safe", description="List background jobs and their status/progress.")
 def list_jobs() -> str:
     from jarvis.core import jobs
 

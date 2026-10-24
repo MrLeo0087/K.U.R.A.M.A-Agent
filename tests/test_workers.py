@@ -1,5 +1,5 @@
 """P6 background core: worker base, supervisor, notify, process/log watcher, crash watchdog, resource guard,
-Telegram remote control, n8n bridge. Everything mocked: no network, no real processes started."""
+Telegram remote control. Everything mocked: no network, no real processes started."""
 import json
 import logging
 import threading
@@ -10,7 +10,7 @@ import psutil
 import pytest
 
 from jarvis.core import config, notify, registry, safety, store
-from jarvis.workers import base, crash_watchdog, n8n_inbound, process_watch, resource_guard, status, supervisor
+from jarvis.workers import base, crash_watchdog, process_watch, resource_guard, status, supervisor
 from jarvis.workers import telegram_bot
 
 
@@ -23,8 +23,6 @@ def p6(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "NOTIFY_DESKTOP", False)
     monkeypatch.setattr(config, "TELEGRAM_BOT_TOKEN", "")
     monkeypatch.setattr(config, "TELEGRAM_CHAT_ID", "")
-    monkeypatch.setattr(config, "JARVIS_INBOUND_TOKEN", "")
-    monkeypatch.setattr(config, "N8N_WEBHOOKS", {})
 
     def no_network(*a, **k):
         raise AssertionError("real HTTP in a test")
@@ -100,7 +98,7 @@ def test_worker_thread_start_stop():
 
 def test_supervisor_status_file_and_skip(caplog):
     caplog.set_level(logging.INFO)
-    sup = supervisor.Supervisor(["process_watch", "telegram_bot", "n8n_inbound", "bogus"])
+    sup = supervisor.Supervisor(["process_watch", "telegram_bot", "bogus"])
     sup.start()
     try:
         data = status.read()
@@ -391,61 +389,8 @@ def test_telegram_status_and_help(tg, monkeypatch):
     assert bot.answer("/help").startswith("I'm KURAMA") and bot.answer("/start@JarvisBot") == telegram_bot.HELP
 
 
-# --- n8n bridge ---
 class Resp:
     status_code, text = 200, '{"started": true}'
-
-
-def test_n8n_trigger(monkeypatch):
-    from jarvis.tools.general import n8n_trigger as mod
-
-    sent = []
-    monkeypatch.setattr(mod, "_post", lambda url, payload: sent.append((url, payload)) or Resp())
-    assert registry.safety_of(registry.get("n8n_trigger")) == "confirm"
-    assert "none configured" in mod.n8n_trigger("backup", "{}")
-    monkeypatch.setattr(config, "N8N_WEBHOOKS", {"backup": "http://localhost:5678/webhook/backup"})
-    assert "not valid JSON" in mod.n8n_trigger("backup", "{oops")
-    assert "JSON object" in mod.n8n_trigger("backup", "[1]")
-    out = mod.n8n_trigger("backup", '{"note": "hi"}')
-    assert out.startswith("ok: n8n backup returned HTTP 200") and sent == [
-        ("http://localhost:5678/webhook/backup", {"note": "hi"})]
-    assert "declined" in safety.execute("n8n_trigger", {"workflow": "backup"}, confirm=lambda p: False).output
-
-
-def test_n8n_inbound_token_check(monkeypatch):
-    br = n8n_inbound.Bridge(logging.getLogger("t"))
-    br._agent = FakeAgent("done")
-    body = json.dumps({"text": "hi"}).encode()
-    assert n8n_inbound.N8nInbound().available().startswith("not configured")
-    assert br.handle("/jarvis", {"X-Jarvis-Token": ""}, body)[0] == 401  # unset token refuses everything
-    monkeypatch.setattr(config, "JARVIS_INBOUND_TOKEN", "s3cret")
-    assert br.handle("/jarvis", {"X-Jarvis-Token": "wrong"}, body)[0] == 401
-    assert br.handle("/other", {"X-Jarvis-Token": "s3cret"}, body)[0] == 404
-    assert br.handle("/jarvis", {"X-Jarvis-Token": "s3cret"}, b"not json")[0] == 400
-    assert br.handle("/jarvis", {"X-Jarvis-Token": "s3cret"}, body) == (200, {"ok": True, "reply": "done"})
-    code, out = br.handle("/jarvis", {"X-Jarvis-Token": "s3cret"},
-                          json.dumps({"notify": {"title": "Backup", "text": "ok", "level": "info"}}).encode())
-    assert code == 200 and out["channels"] == ["store"] and store.alerts_recent()[0]["title"] == "Backup"
-
-
-def test_n8n_inbound_server_localhost(monkeypatch):
-    monkeypatch.setattr(config, "JARVIS_INBOUND_TOKEN", "s3cret")
-    monkeypatch.setattr(config, "N8N_INBOUND_PORT", 0)  # any free port on 127.0.0.1
-    w = n8n_inbound.N8nInbound()
-    w.bridge._agent = FakeAgent("pong")
-    w.setup()
-    try:
-        port = w.server.server_address[1]
-        req = urllib.request.Request(f"http://127.0.0.1:{port}/jarvis", data=b'{"text": "ping"}',
-                                     headers={"X-Jarvis-Token": "s3cret", "Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=5) as r:
-            assert json.loads(r.read()) == {"ok": True, "reply": "pong"}
-        bad = urllib.request.Request(f"http://127.0.0.1:{port}/jarvis", data=b"{}", headers={"X-Jarvis-Token": "x"})
-        with pytest.raises(urllib.error.HTTPError) as e:
-            urllib.request.urlopen(bad, timeout=5)
-        assert e.value.code == 401
-    finally:
-        w.teardown()
 
 
 def test_telegram_ignores_stale_backlog(tg):

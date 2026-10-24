@@ -8,7 +8,7 @@ import time
 from typing import Literal
 
 from jarvis.core import config
-from jarvis.core.registry import tool
+from jarvis.core.registry import alias, tool
 from jarvis.tools.general import _desk, _sys
 
 _lock = threading.Lock()
@@ -83,3 +83,6 @@ def focus_mode(minutes: int = 25, action: Literal["start", "stop", "status"] = "
     timer.start()
     extra = f" Closed {', '.join(closed)}." if closed else ""
     return f"Focus mode on for {minutes} minutes: Do Not Disturb is on.{extra}"
+
+
+alias("focus_timer", "focus_mode", lambda a: {"minutes": a.get("minutes", 25)}, action="start")

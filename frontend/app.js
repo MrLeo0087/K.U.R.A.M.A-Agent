@@ -1103,10 +1103,10 @@ const finder = { tools: null };
 const EXAMPLE = {
   generate_image: "generate an image of ", scaffold_project: "create a new python project called ", send_file_telegram: "send this file to Telegram: ",
   web_search: "search for ", weather: "weather in ", get_time: "time in ", open_url: "open ", open_app: "open ",
-  remember: "remember ", add_reminder: "remind me to  at ", news_headlines: "latest news about ", calculate: "what is ",
-  convert_currency: "convert 100 dollars to rupees", focus_timer: "start a 25 minute focus session", cleanup_scan: "what is using my disk space",
+  remember: "remember ", add_reminder: "remind me to  at ", calculate: "what is ",
+  focus_mode: "start a 25 minute focus session", cleanup_scan: "what is using my disk space",
   gesture_control: "enable hand gesture control", daily_digest: "summarize today", write_document: "write an essay about ",
-  set_wallpaper: "change my wallpaper", screenshot: "take a screenshot", volume: "set volume to 50", find_files: "find file ",
+  set_wallpaper: "change my wallpaper", screenshot: "take a screenshot", audio: "set volume to 50", find_files: "find file ",
 };
 const words = (t) => (t.toLowerCase().match(/[a-z0-9]+/g) || []).filter((w) => w.length > 1);
 async function finderLoad() {

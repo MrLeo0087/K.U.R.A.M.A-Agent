@@ -1,11 +1,11 @@
-"""delete_skill (P7c): remove a saved skill (asks first)."""
+"""delete_skill (P7c): remove a saved skill (asks first).
+
+No longer a tool of its own: the merged tool calls delete_skill() (old name kept as an alias)."""
 from __future__ import annotations
 
 from jarvis.core import toolsmith
-from jarvis.core.registry import tool
 
 
-@tool(group="toolsmith", safety="confirm", description="Delete a saved skill.")
 def delete_skill(name: str) -> str:
     """Delete a saved skill by name.
 

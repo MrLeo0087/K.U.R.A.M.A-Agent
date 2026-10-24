@@ -22,7 +22,6 @@ GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
 TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID: str = os.getenv("TELEGRAM_CHAT_ID", "")
 TELEGRAM_MAX_AGE_S = 120  # ignore Telegram messages sent more than this long before the bot started
-JARVIS_INBOUND_TOKEN: str = os.getenv("JARVIS_INBOUND_TOKEN", "")  # n8n inbound bridge; unset = disabled
 
 # --- LLM models (Groq) ---
 LLM_DEFAULT = "openai/gpt-oss-120b"  # "smart" tier: reasoning / multi-tool
@@ -190,19 +189,19 @@ TOOL_OUTPUT_MAX_CHARS = 800  # tool results are truncated to this before going b
 # Workspace card: tool results with this many lines (or longer than TOOL_OUTPUT_MAX_CHARS) are shown there in full
 # Simple actions answer themselves with the fast path's templates: no second LLM call just to say "done"
 # (tool -> fast-path intent used to word the reply; None = fixed sentence below)
-DIRECT_REPLY_TOOLS = {"open_url": "open", "open_app": "open", "volume": "volume", "brightness": "brightness",
-                      "media_control": "media", "mute_audio": "mute", "mic_mute": "mic", "lock_screen": "lock",
+DIRECT_REPLY_TOOLS = {"open_url": "open", "open_app": "open", "audio": "audio", "brightness": "brightness",
+                      "media_control": "media", "lock_screen": "lock",
                       "screenshot": "screenshot", "send_message_telegram": None}
 WORKSPACE_MIN_LINES = 8
 WORKSPACE_SHOW_ALL = ("list_folder",)  # results the user wants to see in full, to pick from
 TOOL_OUTPUT_FULL_CHARS = 3500  # the user asked for everything ("the whole list"): the LLM gets this much
-WORKSPACE_SKIP_TOOLS = ("read_webpage", "search_knowledge", "ask_knowledge", "recall_session", "job_result",
-                        "about_me", "write_document", "use_skill", "find_capability")
+WORKSPACE_SKIP_TOOLS = ("read_webpage", "search_knowledge", "ask_knowledge", "recall_session", "jobs",
+                        "about_me", "write_document", "skills", "find_capability")
 # A tool still running after this many seconds keeps going as a background job; the user can keep talking and
 # is told when it's done (0 = off)
 TOOL_BACKGROUND_AFTER_S = float(os.getenv("KURAMA_TOOL_BG_AFTER_S", "6"))
-TOOL_NO_BACKGROUND = ("start_job", "generate_image", "write_document", "resume_job", "cancel_job", "make_tool",
-                      "focus_timer", "gesture_control", "power_off", "suspend_computer")
+TOOL_NO_BACKGROUND = ("start_job", "generate_image", "write_document", "jobs", "make_tool",
+                      "focus_mode", "gesture_control", "power_off", "suspend_computer")
 TOOLSMITH_OFFER = True  # a refusal on a real task always offers to build a tool (asks first)
 AGENT_MAX_TOOL_ROUNDS = 4  # llm -> tools loops per request, then the model must answer
 AGENT_MAX_TOKENS = 400
@@ -269,8 +268,8 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
              "your limitation", "your limits", "how do you work", "your architecture", "how are you built",
              "change your name", "call yourself", "your password", "आफ्नो बारेमा", "तिम्रो नाम", "तुम्हारा नाम"),
     "daily": ("calculate", "calculator", "% of", "percent of", "convert currency", "convert money", " to miles", " to km", "square root",
-              "currency", "exchange rate", "dollar", "rupee", "usd", "npr", "inr", "euro", "news", "headline",
-              "focus", "pomodoro", "concentrate", "study session", "disk space", "free space", "cleanup", "clean up",
+              "currency", "exchange rate", "dollar", "rupee", "usd", "npr", "inr", "euro",
+              "disk space", "free space", "cleanup", "clean up",
               "storage full", "what is using"),
     "image": ("generate image", "generate an image", "image of", "picture of", "photo of", "drawing of",
               "draw ", "illustration", "painting of", "तस्वीर", "चित्र"),
@@ -302,12 +301,11 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
               "microphone", "audio", "awaz", "awaaz", "awaj", "aawaj", "bolume", "आवाज", "आवाज़", "भोल्युम", "माइक"),
     "desktop": ("do not disturb", "dnd", "notifications", "notification", "night light", "night-light",
                 "blue light", "wallpaper", "wallpapers", "background image", "desktop background",
-                "auto theme", "auto dark", "automatic dark", "dark at sunset", "sunset", "sunrise",
-                "focus mode", "focus session", "pomodoro", "deep work", "वालपेपर", "नाइट लाइट",
+                "focus mode", "focus session", "focus", "pomodoro", "deep work", "concentrate", "study session", "वालपेपर", "नाइट लाइट",
                 "डिस्टर्ब", "फोकस मोड", "सूचना", "नोटिफिकेशन"),
     "display": ("brightness", "brighter", "dimmer", "dim the screen", "screen brightness", "backlight",
                 "चमक", "ब्राइटनेस", "light mode", "dark mode", "light theme", "dark theme", "theme",
-                "night mode", "day mode"),
+                "night mode", "day mode", "auto theme", "auto dark", "automatic dark", "dark at sunset", "sunset", "sunrise"),
     "screen": ("screenshot", "screenshots", "screen shot", "screen capture", "capture the screen",
                "capture screen", "स्क्रीनशॉट"),
     "power": ("battery", "charging", "charge left", "battery health", "बैटरी", "ब्याट्री", "बेट्री",
@@ -315,9 +313,6 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
               "power off", "log out", "logout", "sign out", "लॉक"),
     "clock": ("timer", "alarm", "stopwatch", "stop watch", "wake me", "count down", "countdown", "lap"),
     "clipboard": ("clipboard", "clip board", "copy", "copied", "paste", "क्लिपबोर्ड"),
-    "speech": ("read aloud", "read out", "read it out", "read this", "read that", "say aloud",
-               "speak this", "read the clipboard", "read clipboard", "padh ke sunao", "पढ़कर सुनाओ",
-               "पढेर सुनाउ"),
     "windows": ("window", "windows", "snap", "minimize", "minimise", "maximize", "maximise",
                 "left half", "right half", "tile", "restore window", "full screen", "fullscreen",
                 "split", "side by side", "half screen", "big screen", "पूरा स्क्रीन", "what's open",
@@ -346,18 +341,12 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
                     "code review karo", "mera code review", "code check karo", "code herdeu", "कोड रिभ्यु",
                     "कोड रिव्यू", "कोड समीक्षा", "कोड जाँच", "कोड जाँच गर", "कोड हेर", "सिक्रेट", "डिपेन्डेन्सी",
                     "निर्भरता", "requirements", "requirements.txt", "requirements file", "check requirements"),
-    "devutils": ("docstring", "docstrings", "doc string", "doc strings", "type hint", "type hints", "type hinting",
-                 "type annotations", "add type hints", "document my functions", "document these functions",
-                 "notebook", "notebooks", "jupyter", "ipynb", "notebook to script", "notebook to python",
+    "devutils": ("notebook", "notebooks", "jupyter", "ipynb", "notebook to script", "notebook to python",
                  "requirements generator", "generate requirements", "create requirements",
                  "config diff", "config changes", "config changed", "config change", "what changed in config",
                  "what changed in my config", "what changed in the config", "changes in config", "changes in my config",
                  "config snapshot", "snapshot config", "snapshot my config", "snapshot the config", "compare config",
-                 "config drift", "benchmark table", "benchmark results", "results table", "result table",
-                 "metrics table", "compare runs", "compare results", "compare experiments", "leaderboard",
-                 "experiment results", "डकस्ट्रिङ", "डकस्ट्रिंग", "डॉकस्ट्रिंग", "टाइप हिन्ट", "टाइप हिंट", "नोटबुक",
-                 "नोटबुकलाई", "कन्फिग", "कॉन्फ़िग", "कॉन्फिग", "बेन्चमार्क", "बेंचमार्क", "नतिजा तालिका",
-                 "परिणाम तालिका", "रिजल्ट टेबल", "config me kya badla", "config ma ke pheriyo",
+                 "config drift", "नोटबुक", "नोटबुकलाई", "कन्फिग", "कॉन्फ़िग", "कॉन्फिग", "config me kya badla", "config ma ke pheriyo",
                  "config ma ke badliyo", "config मा के फेरियो", "config मा के बदलियो", "config में क्या बदला",
                  "कन्फिगमा के फेरियो", "type hint lagao", "docstring lekh", "docstring likho",
                  "results ki table", "benchmark table banao"),
@@ -383,7 +372,7 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
     "watch": ("watch", "watches", "watching", "monitor", "keep an eye", "tell me when", "notify me when",
               "alert me", "let me know when", "training run", "training", "log file", "tail the log",
               "finishes", "nazar", "नजर", "निगरानी", "हेरिरहनु", "ध्यान राख"),
-    "automation": ("n8n", "workflow", "webhook", "automation", "trigger", "watchdog", "auto restart",
+    "automation": ("automation", "watchdog", "auto restart",
                    "auto-restart", "keep alive", "keep it running", "if it crashes", "crashed", "crashes",
                    "वर्कफ्लो", "स्वचालन"),
     "jobs": ("job", "jobs", "background", "working on", "progress", "job status", "cancel",
@@ -398,20 +387,19 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
     "weather": "current weather and up to 3-day forecast for any place",
     "files": "create folders, write files, move/copy, move to trash",
     "filesearch": "find files by name or by text content",
-    "telegram": "send a file or a message to the user's Telegram (phone)",
-    "toolsmith": "no tool fits a real task: offer to build a small new tool; saved skills list/delete",
+    "telegram": "send a file (by path or name) or a message to the user's Telegram (phone)",
+    "toolsmith": "no tool fits a real task: offer to build a small new tool; saved tools list/run/delete",
     "skills": "small tools KURAMA built earlier (saved skills)",
     "system": "system resources (RAM, CPU, disk) and laptop switches: Wi-Fi, Bluetooth, airplane, power mode, screen off",
     "watch": "watch a process/PID until it exits or tail a training log and alert on errors/progress",
-    "automation": "trigger n8n workflows; crash watchdog (auto-restart dev servers) targets and status",
+    "automation": "crash watchdog: keep dev servers running (auto-restart) and their status",
     "audio": "speaker volume, mute, microphone mute",
-    "display": "screen brightness, light/dark mode",
-    "desktop": "do not disturb, night light, wallpaper, automatic dark/light at sunset, focus (pomodoro) timer",
+    "display": "screen brightness, light/dark mode (also automatic at sunset)",
+    "desktop": "do not disturb, night light, wallpaper, focus (pomodoro) session",
     "screen": "take a screenshot (full screen, window or area)",
     "power": "battery status, lock the screen, sleep/suspend, shut down, restart, log out",
     "clock": "timers, alarms (with sound) and a stopwatch",
     "clipboard": "read or write the clipboard, clipboard history",
-    "speech": "read text or the clipboard aloud",
     "windows": "snap, maximize, minimize, restore or list windows",
     "apps": "open, close, focus or force-kill apps; launch a named workspace of apps and sites",
     "media": "music and video playback (play, pause, next, previous, what's playing), YouTube, playlists, hand-gesture media control (camera)",
@@ -419,9 +407,8 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
     "dev": "tests, new projects, Python environment checks",
     "codequality": "dependency doctor (unpinned/outdated/vulnerable/unused), secrets scan, pre-commit gate, "
                    "repo hygiene, AI code review of a diff/file/commit",
-    "devutils": "add docstrings/type hints, notebook (.ipynb) to .py script, generate requirements.txt from "
-                "imports, config file snapshots/diff, benchmark/results markdown table",
-    "web": "search the web (DuckDuckGo/SearXNG), Wikipedia summaries of people/topics, read a web page",
+    "devutils": "notebook (.ipynb) to .py script, generate requirements.txt from imports, config file snapshots/diff",
+    "web": "search the web (DuckDuckGo/SearXNG) incl. latest news, Wikipedia summaries, read a web page",
     "memory": "notes the user dictates, facts about the user (profile), past conversations/sessions",
     "knowledge": "search or ask questions about the user's own code, docs and notes (RAG); index a folder",
     "usage": "LLM token usage, budget and API cost; daily digest of the day's activity",
@@ -429,7 +416,7 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
     "jobs": "long writing jobs (essays, articles, reports) and background job status/cancel/resume",
     "schedule": "reminders and scheduled commands at a time or repeating; list or cancel them",
     "image": "generate a picture or drawing from a description",
-    "daily": "calculator and unit conversion, currency rates, news headlines, focus/pomodoro timer, disk cleanup scan",
+    "daily": "calculator, unit and currency conversion, disk cleanup scan",
     "self": "about the assistant itself (abilities, outputs/data locations, limits, how it works), which tool "
             "fits a task, guidance when the user is stuck, change the assistant's name",
 }
@@ -438,17 +425,17 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
 TOOL_GROUP_GLOSS: dict[str, str] = {
     "general": "time", "weather": "", "files": "folders", "filesearch": "",
     "telegram": "phone", "toolsmith": "new tool", "skills": "", "system": "RAM, CPU",
-    "watch": "process", "automation": "n8n", "audio": "volume", "display": "brightness",
-    "screen": "screenshot", "power": "battery", "clipboard": "", "speech": "", "windows": "",
+    "watch": "process", "automation": "watchdog", "audio": "volume", "display": "brightness",
+    "screen": "screenshot", "power": "battery", "clipboard": "", "windows": "",
     "apps": "", "media": "music", "desktop": "wallpaper", "git": "", "dev": "tests", "codequality": "review",
-    "devutils": "docstrings",
+    "devutils": "notebooks",
     "web": "search", "memory": "notes",
     "knowledge": "my code", "usage": "tokens", "browser": "",
     "jobs": "writing",
     "schedule": "remind",
     "clock": "",
     "image": "",
-    "daily": "math, news",
+    "daily": "math",
     "self": "about me",
 }
 
@@ -472,7 +459,7 @@ SHELL_ALLOWLIST = ("ls", "cat", "head", "tail", "wc", "grep", "rg", "fdfind", "f
 # --- Background core (P6): python -m jarvis.workers ---
 WORKERS_ENABLED: tuple[str, ...] = tuple(
     w.strip() for w in os.getenv("JARVIS_WORKERS", "process_watch,resource_guard,crash_watchdog,"
-                                 "telegram_bot,n8n_inbound,daily_digest,auto_theme,scheduler").split(",") if w.strip())
+                                 "telegram_bot,daily_digest,auto_theme,scheduler").split(",") if w.strip())
 WORKER_MIN_INTERVAL_S = 5.0  # no daemon polls faster than this
 WORKER_MAX_BACKOFF_S = 300.0  # error backoff cap (interval * 2^errors)
 WORKER_LOG_BYTES = 1_000_000  # rotating log per worker: ~1 MB x 3
@@ -483,9 +470,9 @@ NOTIFY_DESKTOP = os.getenv("JARVIS_NOTIFY_DESKTOP", "1").lower() not in ("0", "f
 NOTIFY_DEDUPE_S = 60.0  # identical (title, text) within this window is sent once
 NOTIFY_TELEGRAM_PER_MIN = 20  # Telegram rate limit (Bot API allows ~30/s; we stay polite)
 # What reaches the phone on its own: every warning/error, plus info only from these sources (your reminders, the
-# process/log watches you set, n8n flows, the daily digest). Everything else stays on the laptop (desktop + UI);
+# process/log watches you set, the daily digest). Everything else stays on the laptop (desktop + UI);
 # things asked FROM Telegram are always answered there.
-TELEGRAM_INFO_SOURCES = tuple(os.getenv("KURAMA_TELEGRAM_INFO", "scheduler,process_watch,n8n,daily_digest").split(","))
+TELEGRAM_INFO_SOURCES = tuple(os.getenv("KURAMA_TELEGRAM_INFO", "scheduler,process_watch,daily_digest").split(","))
 ALERT_ANNOUNCE_MAX_AGE_S = 3600.0  # older unannounced alerts are not spoken
 ALERT_ANNOUNCE_CHECK_S = 5.0  # the voice loop looks for new alerts at most this often
 ALERT_SPOKEN_LEVELS = ("info", "warning", "error")  # levels the idle voice loop speaks
@@ -522,11 +509,6 @@ RESOURCE_REALERT_S = 1800.0  # still high: alert again after 30 min
 TELEGRAM_POLL_TIMEOUT_S = 6  # long-poll seconds (short so Ctrl+C stops the workers quickly)
 TELEGRAM_CONFIRM_TIMEOUT_S = 60.0  # "Reply yes/no": no answer in time means no
 TELEGRAM_MAX_REPLY_CHARS = 3500
-# n8n bridge
-N8N_WEBHOOKS: dict[str, str] = {}  # workflow name -> webhook URL, e.g. {"backup": "http://localhost:5678/webhook/backup"}
-N8N_TIMEOUT_S = 10.0
-N8N_INBOUND_PORT = int(os.getenv("JARVIS_INBOUND_PORT", "8765"))  # 127.0.0.1 only
-N8N_INBOUND_MAX_BYTES = 64_000
 
 # --- Multitasking (P3b-2): planner, background jobs, rate limiter ---
 PLANNER_MAX_TASKS = 4

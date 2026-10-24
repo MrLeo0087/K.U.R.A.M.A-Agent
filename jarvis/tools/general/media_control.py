@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from jarvis.core.registry import tool
+from jarvis.core.registry import alias, tool
 from jarvis.tools.general import _sys
 
 COMMANDS = {"play": "play", "pause": "pause", "play_pause": "play-pause", "next": "next",
@@ -23,15 +23,21 @@ def status(player: str = "") -> str | None:
     return out if out and "no player" not in out.lower() else None
 
 
-@tool(group="media", safety="safe", description="Control music/video playback: play, pause, next, previous, stop, or what's playing.")
-def media_control(action: Literal["play_pause", "play", "pause", "next", "previous", "stop", "status"] = "play_pause",
-                  player: str = "") -> str:
+@tool(group="media", safety="safe",
+      description="Control music/video playback (play, pause, next, previous, stop, what's playing) or play one of "
+                  "the user's named playlists.")
+def media_control(action: Literal["play_pause", "play", "pause", "next", "previous", "stop", "status",
+                                  "playlist"] = "play_pause", player: str = "", name: str = "") -> str:
     """Media player control (Spotify, browser video, VLC...).
 
     Args:
-        action: play_pause (toggle), play, pause, next, previous, stop or status.
+        action: play_pause (toggle), play, pause, next, previous, stop, status, or playlist (play `name`).
         player: Optional player name (spotify, firefox, vlc); empty = the active one.
+        name: The playlist's name (action=playlist; empty = list them).
     """
+    if action == "playlist":
+        from jarvis.tools.general.playlist import playlist
+        return playlist(name)
     try:
         st = status(player)
         if st is None:
@@ -48,3 +54,6 @@ def media_control(action: Literal["play_pause", "play", "pause", "next", "previo
         return DONE[action]
     except _sys.SysError as e:
         return f"error: {e}"
+
+
+alias("playlist", "media_control", lambda a: {"name": a.get("name", "")}, action="playlist")

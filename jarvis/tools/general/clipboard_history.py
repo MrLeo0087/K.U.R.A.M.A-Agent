@@ -1,12 +1,12 @@
-"""clipboard_history: recent text KURAMA copied (SQLite, no daemon); can copy an old item back. Safe."""
+"""clipboard_history: recent text KURAMA copied (SQLite, no daemon); can copy an old item back. Safe.
+
+No longer a tool of its own: the merged tool calls clipboard_history() (old name kept as an alias)."""
 from __future__ import annotations
 
 from jarvis.core import store
-from jarvis.core.registry import tool
 from jarvis.tools.general import _sys
 
 
-@tool(group="clipboard", safety="safe", description="List text KURAMA copied recently, or copy item N back to the clipboard.")
 def clipboard_history(limit: int = 5, restore: int = 0) -> str:
     """KURAMA's clipboard history (only text KURAMA itself copied).
 

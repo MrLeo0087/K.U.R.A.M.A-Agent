@@ -1,14 +1,14 @@
-"""write_clipboard: put text on the clipboard (xclip) and keep it in KURAMA's own history (safe)."""
+"""write_clipboard: put text on the clipboard (xclip) and keep it in KURAMA's own history (safe).
+
+No longer a tool of its own: the merged tool calls write_clipboard() (old name kept as an alias)."""
 from __future__ import annotations
 
 from jarvis.core import store
-from jarvis.core.registry import tool
 from jarvis.tools.general import _sys
 
 MAX_CHARS = 100_000
 
 
-@tool(group="clipboard", safety="safe", description="Copy the given text to the clipboard.")
 def write_clipboard(text: str) -> str:
     """Copy text to the clipboard.
 

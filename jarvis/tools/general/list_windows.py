@@ -1,13 +1,13 @@
-"""list_windows: the open windows (title and app) from wmctrl (safe, read-only)."""
+"""list_windows: the open windows (title and app) from wmctrl (safe, read-only).
+
+No longer a tool of its own: the merged tool calls list_windows() (old name kept as an alias)."""
 from __future__ import annotations
 
 from jarvis.core import config
-from jarvis.core.registry import tool
 from jarvis.tools.general import _apps
 from jarvis.tools.interactive import _proc
 
 
-@tool(group="windows", safety="safe", description="List the open windows (title and app).")
 def list_windows() -> str:
     """List open windows."""
     try:

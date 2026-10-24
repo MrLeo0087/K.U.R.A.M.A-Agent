@@ -1,9 +1,10 @@
-"""convert_currency: live exchange rates (open.er-api.com, free, no key; cached 6 h) (safe)."""
+"""convert_currency: live exchange rates (open.er-api.com, free, no key; cached 6 h) (safe).
+
+No longer a tool of its own: the merged tool calls convert_currency() (old name kept as an alias)."""
 from __future__ import annotations
 
 import time
 
-from jarvis.core.registry import tool
 
 RATES_URL = "https://open.er-api.com/v6/latest/{base}"
 _cache: dict[str, tuple[float, dict]] = {}
@@ -31,7 +32,6 @@ def rates(base: str) -> dict:
     return data["rates"]
 
 
-@tool(group="daily", safety="safe", description="Convert money between currencies with today's rate (NPR, INR, USD, EUR...).")
 def convert_currency(amount: float, from_currency: str, to_currency: str = "NPR") -> str:
     """Currency conversion.
 

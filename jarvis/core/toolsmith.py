@@ -338,7 +338,7 @@ def handle(task: str, user_text: str | None = None, lang: str | None = None) -> 
     lang = _lang(full, lang)
     hit = find_skill(task + " " + (user_text or ""))
     if hit:
-        return (f"A saved skill fits: {hit['name']} ({hit['summary']}). Call use_skill with name="
+        return (f"A saved tool fits: {hit['name']} ({hit['summary']}). Call skills with action='use', name="
                 f"'{hit['name']}' and arg = {hit.get('arg_hint') or 'empty'}.")
     key = (safety.context().get("request") or full).strip().lower()
     now = time.time()

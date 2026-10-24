@@ -1,10 +1,10 @@
-"""list_schedules: pending reminders and scheduled commands (safe)."""
+"""list_schedules: pending reminders and scheduled commands (safe).
+
+No longer a tool of its own: the merged tool calls list_schedules() (old name kept as an alias)."""
 from __future__ import annotations
 
-from jarvis.core.registry import tool
 
 
-@tool(group="schedule", safety="safe", description="List pending reminders and scheduled commands.")
 def list_schedules() -> str:
     from jarvis.core import reminders
 

@@ -1,0 +1,34 @@
+"""window: list open windows, switch to one, or snap/maximize/minimize one (safe).
+
+Merged from list_windows, focus_app and snap_window (their old names still work as aliases).
+"""
+from __future__ import annotations
+
+from typing import Literal
+
+from jarvis.core.registry import alias, tool
+from jarvis.tools.general.focus_app import focus_app
+from jarvis.tools.general.list_windows import list_windows
+from jarvis.tools.general.snap_window import snap_window
+
+
+@tool(group="windows", safety="safe",
+      description="Windows: list the open ones, switch to an app's window, or snap left/right, maximize, minimize, restore.")
+def window(action: Literal["list", "focus", "left", "right", "maximize", "minimize", "restore"] = "list",
+           name: str = "") -> str:
+    """Manage windows.
+
+    Args:
+        action: list, focus (switch to `name`), or a position for the active window / `name`'s window.
+        name: The app or window title (empty = the active window for positions).
+    """
+    if action == "focus":
+        return focus_app(name) if name else "error: which app should I switch to?"
+    if action == "list":
+        return list_windows()
+    return snap_window(action, name)
+
+
+alias("list_windows", "window", action="list")
+alias("focus_app", "window", action="focus")
+alias("snap_window", "window", lambda a: {"action": a.get("position", "maximize"), "name": a.get("window", "")})

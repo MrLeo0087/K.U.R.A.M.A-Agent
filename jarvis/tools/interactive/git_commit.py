@@ -1,10 +1,11 @@
-"""git_commit: commit staged changes with a given or auto-generated message (confirm). Never pushes."""
+"""git_commit: commit staged changes with a given or auto-generated message (confirm). Never pushes.
+
+No longer a tool of its own: the merged tool calls git_commit() (old name kept as an alias)."""
 from __future__ import annotations
 
 import logging
 import re
 
-from jarvis.core.registry import tool
 from jarvis.tools.interactive import _proc
 
 log = logging.getLogger("jarvis.tools.git_commit")
@@ -38,8 +39,6 @@ def auto_message(stat: str, diff: str) -> str:
     return _fallback_message(stat)
 
 
-@tool(group="git", safety="confirm",
-      description="Commit staged git changes; auto-writes a short message if none is given. Never pushes.")
 def git_commit(message: str = "", repo: str = ".", add_all: bool = False) -> str:
     """Commit staged changes.
 

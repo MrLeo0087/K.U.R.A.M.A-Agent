@@ -1,12 +1,13 @@
 """secrets_audit: scan tracked files and recent git history for API keys, tokens, private keys and
 passwords, and check that .env is gitignored and untracked (safe). Secret values are never printed:
-each hit shows file:line, the kind and a masked preview (first 4 chars + ****)."""
+each hit shows file:line, the kind and a masked preview (first 4 chars + ****).
+
+No longer a tool of its own: the merged tool calls secrets_audit() (old name kept as an alias)."""
 from __future__ import annotations
 
 import os
 from pathlib import Path
 
-from jarvis.core.registry import tool
 from jarvis.tools.interactive import _proc, _secrets
 
 MAX_FILE_BYTES = 1_000_000
@@ -103,8 +104,6 @@ def report(root: Path, tree: list, history: list, nfiles: int, ncommits: int, en
     return _proc.clip("\n".join(lines))
 
 
-@tool(group="codequality", safety="safe",
-      description="Scan a repo's files and recent git history for leaked keys/tokens/passwords; checks .env is ignored.")
 def secrets_audit(repo: str = ".", commits: int = 200, history: bool = True) -> str:
     """Audit a repository for committed secrets (values are always masked).
 

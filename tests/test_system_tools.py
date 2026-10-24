@@ -1,5 +1,5 @@
 """P5b desktop tools: volume, mute, mic, media, brightness, windows, workspace, lock/suspend/power,
-screenshot, clipboard, read aloud, greeting, fast path and routing.
+screenshot, clipboard, greeting, fast path and routing.
 Every system command goes to a fake (_sys._exec): nothing real is ever changed."""
 import os
 import re
@@ -18,7 +18,6 @@ from jarvis.tools.general.lock_screen import lock_screen
 from jarvis.tools.general.media_control import media_control
 from jarvis.tools.general.mic_mute import mic_mute
 from jarvis.tools.general.mute_audio import mute_audio
-from jarvis.tools.general.read_aloud import read_aloud
 from jarvis.tools.general.read_clipboard import read_clipboard
 from jarvis.tools.general.screenshot import screenshot
 from jarvis.tools.general.snap_window import snap_window
@@ -109,14 +108,12 @@ def desk(monkeypatch, tmp_path):
 
 
 # --- registration / groups ---
-NEW = {"volume": ("audio", "safe"), "mute_audio": ("audio", "safe"), "mic_mute": ("audio", "safe"),
+NEW = {"audio": ("audio", "safe"),
        "media_control": ("media", "safe"), "brightness": ("display", "safe"),
-       "snap_window": ("windows", "safe"), "list_windows": ("windows", "safe"),
+       "window": ("windows", "safe"),
        "launch_workspace": ("apps", "safe"), "lock_screen": ("power", "safe"),
        "suspend_computer": ("power", "confirm"), "power_off": ("power", "confirm"),
-       "screenshot": ("screen", "safe"), "read_clipboard": ("clipboard", "safe"),
-       "write_clipboard": ("clipboard", "safe"), "clipboard_history": ("clipboard", "safe"),
-       "read_aloud": ("speech", "safe")}
+       "screenshot": ("screen", "safe"), "clipboard": ("clipboard", "safe")}
 
 
 def test_tools_registered_and_groups_small():
@@ -299,19 +296,6 @@ def test_clipboard_history_only_jarvis_text(desk):
     assert clipboard_history().startswith("no clipboard history")
 
 
-# --- read aloud ---
-def test_read_aloud_text_and_clipboard(desk, monkeypatch):
-    from jarvis.core import tts
-    spoken = []
-    monkeypatch.setattr(tts, "speak", lambda text, lang="en", block=True: spoken.append((text, lang, block)))
-    assert read_aloud("Hello there") == "reading 11 characters aloud from the text"
-    desk.clip = "नमस्ते दुनिया"
-    assert read_aloud("clipboard").endswith("from the clipboard")
-    assert spoken[0] == ("Hello there", "en", False) and spoken[1][0] == "नमस्ते दुनिया" and spoken[1][2] is False
-    desk.clip = ""
-    assert read_aloud("the clipboard").startswith("error: nothing to read")
-
-
 # --- greeting ---
 def test_greeting_template(monkeypatch):
     wx = lambda place: "Kathmandu, Nepal: 21°C, feels like 20°C, partly cloudy. Humidity 60%, wind 5 km/h."
@@ -402,7 +386,7 @@ ROUTES = {
     "make it a bit louder than that": "audio", "is my microphone on": "audio",
     "dim the screen a little more": "display", "grab a screen shot of the error": "screen",
     "put the computer to sleep": "power", "what is on my clipboard": "clipboard",
-    "read aloud what I just copied": "speech", "put vs code on the left half": "windows",
+    "put vs code on the left half": "windows",
     "start my coding workspace": "apps", "skip this song": "media",
 }
 

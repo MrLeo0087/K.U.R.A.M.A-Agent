@@ -1,11 +1,11 @@
-"""git_log: the last N commits of a repo, one line each (safe)."""
+"""git_log: the last N commits of a repo, one line each (safe).
+
+No longer a tool of its own: the merged tool calls git_log() (old name kept as an alias)."""
 from __future__ import annotations
 
-from jarvis.core.registry import tool
 from jarvis.tools.interactive import _proc
 
 
-@tool(group="git", safety="safe", description="Show the last N git commits, one line each.")
 def git_log(repo: str = ".", n: int = 10) -> str:
     """Recent commits.
 

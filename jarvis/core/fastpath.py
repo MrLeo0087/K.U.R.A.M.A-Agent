@@ -541,9 +541,7 @@ def _daily_intent(t: str) -> Intent | None:
         return Intent("calc", "calculate", "daily", {"expression": m.group("e")})
     if m := _NEWS.match(t):
         topic = (m.group("topic") or "").strip()
-        if topic.lower() in ("nepal", "nepali"):
-            topic = ""
-        return Intent("news", "news_headlines", "daily", {"topic": topic})
+        return Intent("news", "web_search", "web", {"query": f"latest news {topic or 'Nepal'}"})
     return None
 
 

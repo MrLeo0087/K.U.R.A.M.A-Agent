@@ -1,10 +1,10 @@
-"""cancel_schedule: cancel a reminder / scheduled command by id or words (safe)."""
+"""cancel_schedule: cancel a reminder / scheduled command by id or words (safe).
+
+No longer a tool of its own: the merged tool calls cancel_schedule() (old name kept as an alias)."""
 from __future__ import annotations
 
-from jarvis.core.registry import tool
 
 
-@tool(group="schedule", safety="safe", description="Cancel a reminder or scheduled command by its id or words from it.")
 def cancel_schedule(item: str) -> str:
     """Cancel a reminder.
 

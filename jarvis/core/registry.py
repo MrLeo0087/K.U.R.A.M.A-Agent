@@ -184,6 +184,9 @@ class Registry:
     tools: dict[str, BaseTool] = field(default_factory=dict)
     packages: tuple[str, ...] = ("jarvis.tools",)
     _discovered: bool = False
+    # retired tool name -> (new tool, convert(args) -> args, fixed args). Old names keep working for the fast
+    # path, the Telegram bot and saved commands; the LLM only ever sees the new, merged tools.
+    legacy: dict[str, tuple[str, Callable[[dict], dict] | None, dict]] = field(default_factory=dict)
 
     def tool(self, _func: Callable | None = None, *, name: str | None = None,
              group: str = "general", safety: str = "safe", description: str = "",
@@ -243,6 +246,25 @@ class Registry:
         self._ensure()
         return self.tools.get(name)
 
+    def alias(self, old: str, new: str, convert: Callable[[dict], dict] | None = None, **fixed: Any) -> None:
+        """Keep a retired tool name working: calls to `old` run `new` with convert(args) + fixed args."""
+        self.legacy[old] = (new, convert, fixed)
+
+    def resolve(self, name: str, args: Any = None) -> tuple[str, Any]:
+        """(name, args) with a retired name mapped onto the tool that replaced it."""
+        self._ensure()
+        hit = self.legacy.get(name)
+        if hit is None or name in self.tools:
+            return name, args
+        new, convert, fixed = hit
+        if isinstance(args, str):
+            try:
+                args = json.loads(args) if args.strip() else {}
+            except ValueError:
+                args = {}
+        a = dict(args or {})
+        return new, {**(convert(a) if convert else a), **fixed}
+
     def groups(self) -> list[str]:
         self._ensure()
         return sorted({group_of(t) for t in self.tools.values()})
@@ -280,6 +302,7 @@ class Registry:
 
     def call(self, name: str, args: Any = None) -> ToolResult:
         """Run a tool (no safety checks: use jarvis.core.safety.execute for that)."""
+        name, args = self.resolve(name, args)
         t = self.get(name)
         if t is None:
             return ToolResult(False, f"error: unknown tool {name!r}", "unknown tool")
@@ -305,6 +328,8 @@ class Registry:
 REGISTRY = Registry()
 
 tool = REGISTRY.tool
+alias = REGISTRY.alias
+resolve = REGISTRY.resolve
 discover = REGISTRY.discover
 get = REGISTRY.get
 groups = REGISTRY.groups

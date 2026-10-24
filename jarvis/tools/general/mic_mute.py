@@ -1,13 +1,13 @@
-"""mic_mute: mute, unmute or toggle the microphone via pactl on @DEFAULT_SOURCE@ (safe)."""
+"""mic_mute: mute, unmute or toggle the microphone via pactl on @DEFAULT_SOURCE@ (safe).
+
+No longer a tool of its own: the merged tool calls mic_mute() (old name kept as an alias)."""
 from __future__ import annotations
 
 from typing import Literal
 
-from jarvis.core.registry import tool
 from jarvis.tools.general import _sys
 
 
-@tool(group="audio", safety="safe", description="Mute, unmute or toggle the microphone, or say whether it is muted.")
 def mic_mute(action: Literal["toggle", "mute", "unmute", "status"] = "toggle") -> str:
     """Microphone mute.
 

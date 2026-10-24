@@ -1,6 +1,8 @@
 """snap_window: snap the active or a named window to the left/right half, maximize, minimize or
 restore it (wmctrl + xdotool; the work area comes from `wmctrl -d`, else the display size minus the
-GNOME top bar). Safe."""
+GNOME top bar). Safe.
+
+No longer a tool of its own: the merged tool calls snap_window() (old name kept as an alias)."""
 from __future__ import annotations
 
 import os
@@ -8,7 +10,6 @@ import re
 from typing import Literal
 
 from jarvis.core import config
-from jarvis.core.registry import tool
 from jarvis.tools.general import _apps, _sys
 from jarvis.tools.interactive import _proc
 
@@ -44,7 +45,6 @@ def _target(window: str) -> tuple[str, str]:
     return hex(int(wid)), "the active window"
 
 
-@tool(group="windows", safety="safe", description="Snap the active or a named window left/right, maximize, minimize or restore it.")
 def snap_window(position: Literal["left", "right", "maximize", "minimize", "restore"], window: str = "") -> str:
     """Arrange a window.
 
