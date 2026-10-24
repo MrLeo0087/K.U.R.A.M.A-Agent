@@ -29,6 +29,8 @@ HELP = (
     "/where (or /locate) — where the laptop is, with a map link\n"
     "/here <name> — label the current Wi-Fi (e.g. /here Home) so /where names it\n"
     "/guard on | off — watch the laptop; a photo + location if someone uses it\n"
+    "/history [phone|laptop] — where it's been (share your live location with me to build the phone's trail)\n"
+    "/track on | off — log the laptop often and message you on each move (lost mode)\n"
     "\n📋 Clipboard & files\n"
     "copy: <text> — put text on the laptop's clipboard\n"
     "/clip — get the laptop's clipboard\n"
@@ -143,6 +145,15 @@ class TelegramBot(Worker):
         msg = self._own_message(update)
         if msg is None:
             return
+        if msg.get("location"):  # a shared pin or a live-location update from the phone -> the phone's trail
+            from jarvis.core import locationlog
+            loc = msg["location"]
+            live = bool(loc.get("live_period")) or bool((update.get("edited_message")))
+            pt = locationlog.record_phone(loc["latitude"], loc["longitude"], int(loc.get("horizontal_accuracy") or 0), live)
+            if not update.get("edited_message"):  # reply only to the first share, not every live update
+                self.send("📍 Got your phone's location — I'll keep a trail while you share it. /history phone to see it."
+                          if pt else "📍 Location received (same spot as before).")
+            return
         self.typing()  # at once: "typing…" shows even while a voice note transcribes or a file saves
         text = (msg.get("text") or "").strip()
         if not text:
@@ -190,6 +201,14 @@ class TelegramBot(Worker):
                 from jarvis.core import geolocate
                 label = text.split(maxsplit=1)[1].strip() if len(text.split(maxsplit=1)) > 1 else "home"
                 return geolocate.label_here(label)
+            if cmd in ("/history", "/trail"):
+                from jarvis.core import locationlog
+                dev = "laptop" if arg.startswith("laptop") else "phone"
+                hrs = next((int(w) for w in text.split()[1:] if w.isdigit()), 24)
+                return locationlog.summary(dev, hrs)
+            if cmd == "/track":  # lost mode for the laptop (the phone uses Find My Device / live-location sharing)
+                from jarvis.core import locationlog
+                return locationlog.set_lost("laptop", arg != "off")
             return HELP
         if m := phone.COPY.match(text):  # 0 tokens: phone -> laptop clipboard
             return phone.set_clipboard(m.group("t").strip())

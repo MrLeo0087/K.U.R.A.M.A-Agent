@@ -38,6 +38,11 @@ CREATE TABLE IF NOT EXISTS jobs (
 CREATE TABLE IF NOT EXISTS notes (
     id INTEGER PRIMARY KEY, text TEXT NOT NULL, created REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS locations (
+    id INTEGER PRIMARY KEY, ts REAL NOT NULL, device TEXT NOT NULL, lat REAL, lon REAL,
+    accuracy INTEGER, source TEXT, place TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_loc_device_ts ON locations(device, ts);
 CREATE TABLE IF NOT EXISTS clipboard (
     id INTEGER PRIMARY KEY, text TEXT NOT NULL, created REAL NOT NULL
 );
@@ -167,6 +172,39 @@ def log_tool(tool: str, args: Any, ok: bool, latency_ms: int, safety: str = "saf
           (time.time(), tool, json.dumps(args, default=str)[:2000], int(bool(ok)),
            int(latency_ms), safety, (error or "")[:500], outcome or ("allowed" if ok else "error"),
            (result or "")[:1000]))
+
+
+def location_add(device: str, lat: float, lon: float, accuracy: int = 0, source: str = "",
+                 place: str = "", ts: float | None = None) -> int:
+    row = _exec("INSERT INTO locations(ts,device,lat,lon,accuracy,source,place) VALUES (?,?,?,?,?,?,?)",
+                (ts or time.time(), device, float(lat), float(lon), int(accuracy or 0), source, place))
+    return _exec("SELECT last_insert_rowid() AS id")[0]["id"]
+
+
+def locations_since(device: str, since: float, limit: int = 2000) -> list[dict]:
+    rows = _exec("SELECT * FROM locations WHERE device=? AND ts>=? ORDER BY ts ASC LIMIT ?",
+                 (device, since, int(limit)))
+    return [dict(r) for r in rows]
+
+
+def location_last(device: str) -> dict | None:
+    rows = _exec("SELECT * FROM locations WHERE device=? ORDER BY ts DESC LIMIT 1", (device,))
+    return dict(rows[0]) if rows else None
+
+
+def locations_clear(device: str | None = None) -> int:
+    before = _exec("SELECT COUNT(*) AS n FROM locations" + ("" if device is None else " WHERE device=?"),
+                   () if device is None else (device,))[0]["n"]
+    _exec("DELETE FROM locations" + ("" if device is None else " WHERE device=?"),
+          () if device is None else (device,))
+    return before
+
+
+def locations_prune(keep_days: float) -> int:
+    cutoff = time.time() - keep_days * 86400
+    n = _exec("SELECT COUNT(*) AS n FROM locations WHERE ts<?", (cutoff,))[0]["n"]
+    _exec("DELETE FROM locations WHERE ts<?", (cutoff,))
+    return n
 
 
 def log_routing(query: str, groups: list[str], method: str, latency_ms: int) -> None:

@@ -256,6 +256,15 @@ _MEDIA_OBJ = r"(?: (?:the |my )?(?:music|song|video|playback|track|player|media|
 _SONG = r"(?:song|track|video)"
 _SONG_HI = r"(?:gaana|gana|geet|song|track|गाना|गीत)"
 SWITCHES = [  # (intent name, tool, group, args, patterns); first full match wins
+    ("loc_history", "location_history", "system", {"device": "phone"}, _rx(
+        r"(?:show |give me |see )?(?:my )?(?:phone|mobile)(?:'s)? (?:location |movement |travel )?history",
+        r"where (?:has |did )(?:my |the )?(?:phone|mobile) (?:been|gone|go)(?: today| recently)?",
+        r"(?:track|trace) (?:my |the )?(?:phone|mobile)(?:'s)? (?:movement|location history|trail)")),
+    ("loc_history", "location_history", "system", {"device": "laptop"}, _rx(
+        r"(?:show |give me |see )?(?:my )?(?:laptop|computer|pc)(?:'s)? (?:location |movement |travel )?history",
+        r"where (?:has |did )(?:my |the )?(?:laptop|computer) (?:been|gone)(?: today| recently)?",
+        r"(?:show |give me )?(?:my )?location history",
+        r"(?:track|trace) (?:my |the )?(?:laptop|computer)(?:'s)? (?:movement|location history|trail)")),
     ("find_phone", "find_my_phone", "system", {"phone": "iphone"}, _rx(
         r"(?:find|locate|where(?:'s| is)|track|ring) (?:my |the )?(?:lost |missing )?iphone(?: now)?",
         r"find my (?:phone|mobile) \(?iphone\)?")),

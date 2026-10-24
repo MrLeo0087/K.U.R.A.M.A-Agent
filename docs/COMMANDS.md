@@ -75,6 +75,8 @@ Send these to the KURAMA bot. Send **/help** (or "give me all laptop control com
 | `/where` (or `/locate`, "where is my laptop") | Where the laptop is, with a map link |
 | `/here <name>` (e.g. `/here Home`) | Label the current Wi-Fi so `/where` names that spot exactly |
 | `/guard on` / `/guard off` | Watch the laptop; a photo + location if someone uses it |
+| `/history [phone\|laptop]` | Where it's been (a trail). Share your **live location** with the bot to build the phone's trail |
+| `/track on` / `/track off` | Laptop "lost mode": log it often and message you on each move |
 | `copy: <text>` | Put text on the laptop's clipboard |
 | `/clip` | Get the laptop's clipboard |
 | send a file/photo | Saved on the laptop (caption `to <folder>` picks the folder) |

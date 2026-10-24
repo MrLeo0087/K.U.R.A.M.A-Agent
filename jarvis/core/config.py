@@ -553,7 +553,8 @@ SHELL_ALLOWLIST = ("ls", "cat", "head", "tail", "wc", "grep", "rg", "fdfind", "f
 # --- Background core (P6): python -m jarvis.workers ---
 WORKERS_ENABLED: tuple[str, ...] = tuple(
     w.strip() for w in os.getenv("JARVIS_WORKERS", "process_watch,resource_guard,crash_watchdog,"
-                                 "telegram_bot,daily_digest,auto_theme,scheduler,timemachine,guard").split(",") if w.strip())
+                                 "telegram_bot,daily_digest,auto_theme,scheduler,timemachine,guard,"
+                                 "location_tracker").split(",") if w.strip())
 WORKER_MIN_INTERVAL_S = 5.0  # no daemon polls faster than this
 WORKER_MAX_BACKOFF_S = 300.0  # error backoff cap (interval * 2^errors)
 WORKER_LOG_BYTES = 1_000_000  # rotating log per worker: ~1 MB x 3
@@ -759,6 +760,14 @@ AUTO_THEME = os.getenv("JARVIS_AUTO_THEME", "0").lower() in ("1", "true", "yes",
 AUTO_THEME_SOURCE = "sun"  # "sun" = home-city sunrise/sunset (Open-Meteo), "fixed" = AUTO_THEME_TIMES
 AUTO_THEME_TIMES = ("07:00", "18:30")  # (light from, dark from); also the offline fallback
 AUTO_THEME_INTERVAL_S = 60.0
+# Location history (lightweight): the laptop logs its position only this often (default 30 min); the worker
+# wakes every LOCATION_TICK_S but does network work only when LOCATION_LOG_INTERVAL_S has passed (or lost mode).
+LOCATION_HISTORY = os.getenv("KURAMA_LOCATION_HISTORY", "1").lower() not in ("0", "false", "no", "off")
+LOCATION_TICK_S = 300.0  # the worker's heartbeat (cheap: usually just checks the clock)
+LOCATION_LOG_INTERVAL_S = float(os.getenv("KURAMA_LOCATION_INTERVAL_S", str(30 * 60)))  # normal logging cadence
+LOCATION_LOST_INTERVAL_S = 120.0  # while "lost mode" is on, log this often
+LOCATION_MIN_MOVE_M = 120.0  # a fix closer than this to the last one is treated as the same spot (no new point)
+LOCATION_KEEP_DAYS = 60.0  # older points are pruned, so the table stays tiny
 FOCUS_CLOSE: tuple[str, ...] = ()  # apps focus_mode closes at start, e.g. ("discord", "telegram")
 PLAYLISTS: dict[str, str] = {  # spoken name -> URL or local music folder
     "lofi": "https://www.youtube.com/watch?v=jfKfPfyJRdk",
