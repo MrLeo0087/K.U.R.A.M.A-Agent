@@ -181,6 +181,13 @@ class ProcessWatcher(Worker):
             cmdalerts.check()  # long terminal commands that just finished (one stat() when nothing new)
         except Exception as e:
             self.log.info("command alerts failed: %s", e)
+        if time.time() - getattr(self, "last_net", 0.0) >= 30:  # "tell me when the internet is back"
+            self.last_net = time.time()
+            try:
+                from jarvis.core import netdoctor
+                netdoctor.check_wait()
+            except Exception as e:
+                self.log.info("internet wait check failed: %s", e)
         active = store.watches_list(("active",))
         for w in active:
             try:

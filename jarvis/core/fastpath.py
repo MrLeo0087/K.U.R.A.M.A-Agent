@@ -571,7 +571,23 @@ _INSTALL = re.compile(r"^(?:please )?(?:pip )?install (?:the )?(?:package |modul
                       r"(?: (?:in|into|for) (?:the |my )?(?P<f>.+?)(?: project| venv)?)?$", I)
 
 
+_NET = re.compile(r"^(?:why is |is )?(?:my |the )?(?:internet|wifi|wi-fi|net|connection|network)(?: connection)? "
+                  r"(?:so |very |really )?(?:slow|not working|down|broken|bad|off|working|ok|fine)(?: now| today)?$|"
+                  r"^(?:check|test|diagnose) (?:my |the )?(?:internet|wifi|wi-fi|network|connection)(?: connection)?$|"
+                  r"^(?:i have )?no internet$", I)
+_NET_SPEED = re.compile(r"^(?:check |test |run (?:a )?)?(?:my |the )?(?:internet|wifi|download) speed(?: test)?$|"
+                        r"^speed ?test$|^how fast is (?:my |the )?(?:internet|wifi)$", I)
+_NET_BACK = re.compile(r"^(?:tell|notify|ping|message) me when (?:the )?(?:internet|wifi|net|connection) "
+                       r"(?:is|comes) back(?: on)?$", I)
+
+
 def _daily_intent(t: str) -> Intent | None:
+    if _NET.match(t):
+        return Intent("net", "internet_doctor", "system", {"action": "check"})
+    if _NET_SPEED.match(t):
+        return Intent("net", "internet_doctor", "system", {"action": "speed"})
+    if _NET_BACK.match(t):
+        return Intent("net", "internet_doctor", "system", {"action": "notify_when_back"})
     if m := _INSTALL.match(t):
         pkg = m.group("p")
         if pkg.lower() in ("it", "this", "that", "them"):  # "install it" right after a ModuleNotFoundError

@@ -228,6 +228,7 @@ ROUTER_CHAT_EXAMPLES: tuple[str, ...] = (
 ROUTER_EXAMPLES: dict[str, tuple[str, ...]] = {
     "system": ("my laptop feels slow and laggy", "what is eating my memory", "check cpu and ram usage",
                "what is using port 8000", "free up some memory", "my laptop is getting hot",
+               "the internet is not working", "websites are not loading", "how fast is my connection",
                "turn wifi off", "is bluetooth on", "airplane mode", "switch to power saver"),
     "audio": ("it is too quiet, I can barely hear", "the sound is way too loud", "make it a little louder",
               "mute my mic"),
@@ -454,7 +455,8 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
     "telegram": "send a file (by path or name) or a message to the user's Telegram (phone)",
     "toolsmith": "no tool fits a real task: offer to build a small new tool; saved tools list/run/delete",
     "skills": "small tools KURAMA built earlier (saved skills)",
-    "system": "laptop doctor (why it is slow: RAM, CPU, heat, disk; free RAM, ports, stop a process) and laptop "
+    "system": "laptop doctor (why it is slow: RAM, CPU, heat, disk; free RAM, ports, stop a process), internet "
+              "doctor (why the internet is slow/down, speed test, reconnect, tell me when it is back) and laptop "
               "switches: Wi-Fi, Bluetooth, airplane, power mode, screen off",
     "watch": "Training Guard: start/watch ML training runs (local or Google Colab), progress, crash, NaN, stuck, "
              "finished alerts; watch any process or log",
