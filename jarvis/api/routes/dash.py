@@ -60,6 +60,12 @@ def _coding() -> dict:
         m = re.findall(r"(\d+) (insertion|deletion)", git("diff", "HEAD", "--shortstat"))
         out["ins"] = int(next((n for n, k in m if k == "insertion"), 0))
         out["dels"] = int(next((n for n, k in m if k == "deletion"), 0))
+        files = []
+        for ln in git("diff", "HEAD", "--numstat").splitlines():
+            a, d, f = (ln.split("\t") + ["", "", ""])[:3]
+            files.append({"file": f, "ins": a, "dels": d})
+        files += [{"file": f, "ins": "new", "dels": ""} for f in git("ls-files", "--others", "--exclude-standard").splitlines()]
+        out["files"] = sorted(files, key=lambda x: -(int(x["ins"]) if x["ins"].isdigit() else 0))[:6]
         ct = git("log", "-1", "--format=%ct").strip()
         out["last_commit"] = _ago(float(ct)) if ct else ""
     out["snapshot"] = _ago(float(store.kv_get(f"tm_last:{p}") or 0))

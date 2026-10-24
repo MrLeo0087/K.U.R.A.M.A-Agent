@@ -679,19 +679,6 @@ function setRing(id, pct) {
   $(id).classList.toggle("hot", v >= 85);
 }
 
-function setSum(id, text, live = false) { // the one-line summary a collapsed card shows
-  const n = $(id);
-  if (n.textContent !== text) n.textContent = text;
-  n.classList.toggle("live", !!live);
-}
-function renderLaptopSum() {
-  const b = lastStatus?.battery, w = devLast?.wifi;
-  const parts = [];
-  if (b) parts.push(`${Math.round(b.percent)}%${b.plugged ? " ⚡" : ""}`);
-  parts.push(w ? `Wi-Fi ${w.signal}%` : devLast ? (devLast.ip ? "wired" : "offline") : "");
-  setSum("sum-laptop", parts.filter(Boolean).join(" · "), b && !b.plugged && b.percent <= 20);
-}
-
 function renderStatus(s) {
   lastStatus = s;
   setConn(true);
@@ -720,9 +707,6 @@ function renderStatus(s) {
   $("down").textContent = fmtRate(net.rx_bps);
   $("up").textContent = fmtRate(net.tx_bps);
   $("uptime").textContent = "up " + fmtDur(s.uptime?.system_s);
-  setSum("sum-system", `CPU ${Math.round(cpu.percent ?? 0)}% · RAM ${Math.round(ram.percent ?? 0)}% · Disk ${Math.round(disk.percent ?? 0)}%`,
-    (cpu.percent ?? 0) >= 85 || (ram.percent ?? 0) >= 90);
-  renderLaptopSum();
   const j = s.jarvis || {};
   $("t-rss").textContent = j.rss_mb != null ? Math.round(j.rss_mb) : "–";
   const tk = s.tokens || {};
@@ -793,7 +777,6 @@ async function loadWeather() {
   $("wx-place").textContent = (it?.place || "Nepalgunj").toUpperCase();
   if (ok) tweenTo("wx-temp", it.temp_c, 0); else $("wx-temp").textContent = "--";
   $("wx-desc").textContent = ok ? it.desc || "" : "unavailable";
-  setSum("sum-weather", ok ? `${Math.round(it.temp_c)}° · ${it.desc || ""}` : "unavailable");
   $("wx-sub").textContent = ok ? `Feels ${Math.round(it.feels_c)}° · ${Math.round(it.humidity)}% · ${Math.round(it.wind_kmh)} km/h` : "";
   const k = ok ? wxKind(it) : "cloud", ic = $("wx-icon");
   if (alive() || ic.dataset.k !== k) { ic.dataset.k = k; ic.innerHTML = WX_SVG[k]; } // re-insert = replay the one-shot animation
@@ -833,7 +816,6 @@ async function loadDevice() {
     setBar("d-vol-bar", v && !v.muted ? v.percent : 0);
     $("d-vol-sub").textContent = v ? (v.muted ? "muted" : `speaker · screen ${d.brightness ?? "–"}%`) : "–";
     renderBatSub();
-    renderLaptopSum();
     $("dev-up").textContent = "up " + fmtDur(d.uptime_s);
   } catch { /* API still starting: try again next round */ }
   devTimer = setTimeout(loadDevice, 30000);
@@ -1023,7 +1005,7 @@ function wsActs() { // what you can do with the selected result
   const it = ws.items[ws.cur], box = $("ws-acts");
   if (!it) { box.innerHTML = ""; return; }
   const file = !!it.name;
-  const kind = { image: "picture", code: "code", data: "data", doc: "document" }[it.type] || it.type;
+  const kind = { image: "image", code: "code", data: "data", doc: "doc" }[it.type] || it.type;
   const lines = it.text ? ` · ${(it.text.match(/\n/g) || []).length + 1} lines` : "";
   box.innerHTML = `<span class="tiny grow ell">${esc(kind + lines + (it.size ? ` · ${fmtSize(it.size)}` : ""))}</span>`
     + (file && it.type !== "image" ? '<button type="button" class="act" data-ws="open_vscode">VS Code</button>' : "")
@@ -1108,7 +1090,6 @@ async function loadDash() {
 }
 function renderDash() {
   if (!dash) return;
-  renderApps(dash.apps || {});
   renderCoding(dash.coding || {});
   renderNow(dash.now || [], dash.today || []);
   renderSwitches(dash.switches || {});
@@ -1120,27 +1101,16 @@ function renderDash() {
   $("k-workers").title = `${run} of ${tot} background workers running`;
   renderSuggest();
 }
-function renderApps(a) {
-  const list = (a.apps || []).slice(0, 3), ul = $("apps-list");
-  if (!list.length) return;
-  const max = Math.max(1, ...list.map((x) => x.bytes));
-  const ik = a.idle_kernels || {};
-  ul.innerHTML = list.map((x) => `<li><span class="ell">${esc(x.name)}${x.procs > 3 ? ` <small>· ${x.procs}</small>` : ""}</span><span class="m">${gbOf(x.bytes)}</span>
-    <div class="bar"><i style="transform:scaleX(${(x.bytes / max).toFixed(3)})"></i></div></li>`).join("")
-    + (ik.count ? `<li class="fix"><span>${ik.count} idle Jupyter kernel${ik.count > 1 ? "s" : ""} · ${ik.mb} MB</span><button type="button" class="act" data-ask="free some RAM">Free</button></li>` : "");
-  $("apps-sub").textContent = lastStatus?.ram ? `${Math.round(lastStatus.ram.percent)}% used` : "";
-  setSum("sum-apps", `${list[0].name} ${gbOf(list[0].bytes)}` + (ik.count ? ` · ${ik.mb} MB to free` : ""), !!ik.count);
-}
 function renderCoding(c) {
   const box = $("code-body");
-  if (!c.project) { box.innerHTML = '<p class="empty">No project yet: say “protect my project”.</p>'; $("code-snap").textContent = ""; setSum("sum-coding", "no project"); return; }
-  setSum("sum-coding", `${c.project} · ${c.changed ? `${c.changed} changed` : "clean"}${c.error ? " · ⚠ error" : ""}`, !!c.error);
+  if (!c.project) { box.innerHTML = '<p class="empty">No project yet: say “protect my project”.</p>'; $("code-snap").textContent = ""; return; }
   $("code-snap").textContent = c.snapshot ? `snapshot ${c.snapshot === "now" ? "just now" : c.snapshot + " ago"}` : "";
   const e = c.error;
   box.innerHTML = `<div class="proj"><b class="ell">${esc(c.project)}</b>${c.branch ? `<span class="branch">${esc(c.branch)}</span>` : ""}</div>
     <div class="trio"><div><span>CHANGED</span><b class="${c.changed ? "warn" : ""}">${c.changed ?? "–"}</b></div>
       <div><span>LINES</span><b><span class="ok">+${c.ins ?? 0}</span> <span class="bad">−${c.dels ?? 0}</span></b></div>
       <div><span>COMMIT</span><b>${c.last_commit ? esc(c.last_commit) : "–"}</b></div></div>
+    ${(c.files || []).length ? `<ul class="cfiles">${c.files.map((f) => `<li><button type="button" class="link ell" data-act="open_vscode" data-path="${esc(c.path + "/" + f.file)}" title="Open in VS Code">${esc(f.file)}</button><span>${f.ins === "new" ? '<i class="ok">new</i>' : `<i class="ok">+${esc(f.ins)}</i> <i class="bad">−${esc(f.dels)}</i>`}</span></li>`).join("")}</ul>` : ""}
     ${e ? `<div class="code-err ell" title="${esc(e.text)}">● <code>${esc(e.text)}</code>${e.where ? ` · ${esc(e.where)}` : ""}</div>` : ""}
     <div class="btns"><button type="button" class="act" data-act="open_vscode" data-path="${esc(c.path)}">VS Code</button>
       <button type="button" class="act ghost" data-ask="where was I">Where was I?</button>
@@ -1164,8 +1134,6 @@ function renderNow(items, classes) {
     return `<span class="chip2 k-${c.kind}${next ? " next" : ""}" data-id="${c.id ?? ""}"><b>${c.kind === "timer" ? left(c.at) : esc(c.time || "")}</b>${esc(c.text)}</span>`;
   }).join("");
   const n = items.length, first = items[0], nextChip = chips.find((c) => c.next || c.at) || chips[0];
-  setSum("sum-now", first ? `${first.title}${first.right ? ` · ${first.right}` : ""}${n > 1 ? ` +${n - 1}` : ""}`
-    : nextChip ? `next: ${nextChip.text} ${nextChip.kind === "timer" ? left(nextChip.at) : nextChip.time || ""}` : "all quiet", !!first);
   $("today-count").textContent = n ? `${n} running` : chips.length ? `${chips.length} today` : "all quiet";
   if (!n && !chips.length) ul.innerHTML = '<li class="empty">Nothing running. Training, downloads and jobs show up here.</li>';
 }

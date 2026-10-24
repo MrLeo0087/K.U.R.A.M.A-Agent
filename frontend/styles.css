@@ -669,14 +669,6 @@ body.paused dialog[open] { animation: none !important; } /* a dialog opened whil
 .wx-hours .h { text-align: center; font-size: 12px; } .wx-hours .h small { display: block; font-size: 10px; color: var(--dim); margin-bottom: 2px; }
 .wx-hours .h i { display: block; font-style: normal; font-size: 10px; color: var(--cool); }
 
-/* memory by app */
-.apps { list-style: none; }
-.apps li { display: grid; grid-template-columns: 1fr auto; gap: 5px 10px; padding: 5px 0; font-size: 13px; align-items: center; }
-.apps li small { color: var(--dim); }
-.apps .m { color: var(--accent-2); font-size: 12px; font-variant-numeric: tabular-nums; }
-.apps .bar { grid-column: 1 / -1; height: 3px; }
-.apps li.fix { font-size: 12px; color: var(--muted); padding-top: 8px; }
-
 /* coding */
 .proj { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .proj b { font-size: 17px; font-weight: 500; }
@@ -693,7 +685,7 @@ body.paused dialog[open] { animation: none !important; } /* a dialog opened whil
 .tri3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .tri3 > div { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .tri3 b { font-size: 18px; font-weight: 400; font-variant-numeric: tabular-nums; } .tri3 small { font-size: 11px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.toggles { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 12px; }
+.toggles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin-top: 12px; }
 .tg { display: inline-flex; align-items: center; gap: 6px; font: 400 11.5px var(--sans); padding: 4px 9px; border-radius: 6px; cursor: pointer;
   background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.07); color: var(--muted); transition: all 0.25s var(--ease); }
 .tg::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--dim); transition: all 0.25s; }
@@ -792,25 +784,75 @@ body.paused dialog[open] { animation: none !important; } /* a dialog opened whil
 .link { font: inherit; color: var(--text); background: none; border: 0; padding: 0; cursor: pointer; text-align: left; }
 .link:hover { color: var(--accent-2); text-decoration: underline; }
 @media (max-width: 900px) { .sgrid { grid-template-columns: 1fr; } .tile.span2 { grid-column: auto; } }
-@media (max-height: 1000px) { .wx-hours { margin-top: 8px; padding-top: 7px; } .apps li { padding: 4px 0; } }
+@media (max-height: 1000px) { .wx-hours { margin-top: 8px; padding-top: 7px; } }
 
-/* ---------- calm mode: secondary cards are one line (title · the one number that matters); click = details ---------- */
-.col .card.collapsed { padding: 11px 18px; }
-.col .card.collapsed > :not(.card-title) { display: none !important; }
-.col .card.collapsed .card-title { margin: 0; }
-.col .card.collapsed .pill { display: none; }
-.card-title .sum { display: none; }
-.card.collapsed .card-title .sum { display: block; order: 2; max-width: 68%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font-size: 12.5px; letter-spacing: 0.01em; text-transform: none; color: var(--text); opacity: 0.85; font-variant-numeric: tabular-nums; }
-.card.collapsed .card-title .sum.live { color: var(--accent-2); opacity: 1; }
-.card.collapsed .card-title .sum.live::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 7px;
-  vertical-align: 1px; background: var(--accent); box-shadow: 0 0 8px var(--accent); }
-.col .card.collapsed::before { --l: 9px; --c: rgba(255, 179, 102, 0.35); }
-.col.left .clock-block { margin-bottom: 6px; }
-.col.left, .col.right { gap: 12px; }
+/* =====================================================================================================
+   Symmetric HUD: equal side columns; big clock (left) mirrors big weather (right); cards point to the orb.
+   Static CSS only (no loops): corner brackets, an index tag per card, a tick on the edge facing the orb.
+   ===================================================================================================== */
+.layout { grid-template-columns: minmax(290px, 23vw) minmax(0, 1fr) minmax(290px, 23vw); }
+.col.left, .col.right { gap: 14px; }
+.clock-block, .wx-head { height: calc(clamp(56px, 6.6vw, 120px) * 0.95 + 90px); margin-bottom: 2px; }
 
-/* workspace: the main panel on the right; the list scrolls through the last 10 */
-.ws-card .files { max-height: 236px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(255, 140, 50, 0.25) transparent; }
+/* weather: the clock's mirror */
+.wx-head { text-align: right; cursor: pointer; outline: none; animation: rise 0.8s var(--ease) both; }
+.wx-big { display: flex; justify-content: flex-end; align-items: flex-start; gap: 0.12em; font-size: clamp(56px, 6.6vw, 120px); font-weight: 200;
+  line-height: 0.95; letter-spacing: -0.035em; font-variant-numeric: tabular-nums; }
+.wx-big .deg { font-size: 0.3em; letter-spacing: 0; color: var(--muted); margin-top: 0.2em; }
+.wx-head .wx-icon { width: 0.5em; height: 0.5em; align-self: center; margin-right: 0.12em; }
+.wx-head .wx-icon svg { width: 100%; height: 100%; }
+.wx-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wx-row { display: flex; justify-content: flex-end; align-items: center; gap: 14px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+.wx-row small { font-size: 12px; white-space: nowrap; }
+.wx-head .wx-hours { margin: 0; padding: 0 0 0 14px; border: 0; border-left: 1px solid rgba(255, 140, 50, 0.2); gap: 12px; justify-content: flex-end; }
+.wx-head .wx-hours .h { font-size: 12px; }
+.wx-head:hover .wx-big b, .wx-head:focus-visible .wx-big b { color: var(--accent-2); transition: color 0.3s; }
+
+/* cards: an index tag and a tick on the edge that faces the orb */
+.col { counter-reset: card; }
+.col .card { counter-increment: card; }
+.col .card .card-title::before { content: "0" counter(card); font: 500 9px var(--code); letter-spacing: 0.06em; color: var(--accent);
+  opacity: 0.7; padding: 1px 4px; border: 1px solid rgba(255, 140, 50, 0.25); border-radius: 3px; }
+.col.left .card { border-right-color: rgba(255, 150, 70, 0.22); }
+.col.right .card { border-left-color: rgba(255, 150, 70, 0.22); }
+.col.left .card:not(.shine)::after, .col.right .card:not(.shine)::after {
+  content: ""; position: absolute; top: 22px; width: 10px; height: 1px; background: rgba(255, 170, 100, 0.55); pointer-events: none; }
+.col.left .card:not(.shine)::after { right: -11px; }
+.col.right .card:not(.shine)::after { left: -11px; }
+
+/* coding fills the left column: changed files, then the error, then actions at the bottom */
+.col.left .code-card { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.code-body { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
+.code-body > .btns { margin-top: auto; padding-top: 10px; }
+.cfiles { list-style: none; margin-top: 10px; padding-top: 8px; border-top: 1px dashed rgba(255, 140, 50, 0.16); overflow: hidden; min-height: 0; }
+.cfiles li { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; font-size: 12px; }
+.cfiles .link { font-family: var(--code); font-size: 11.5px; color: var(--muted); min-width: 0; }
+.cfiles .link:hover { color: var(--accent-2); }
+.cfiles i { font-style: normal; font-size: 11px; font-variant-numeric: tabular-nums; }
+
+/* workspace: segmented tabs, a list of the last 10, and a framed preview with its toolbar on top */
+.ws-card .tabs { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2px; padding: 2px; margin-bottom: 8px;
+  border-radius: 8px; background: rgba(255, 255, 255, 0.025); box-shadow: inset 0 0 0 1px rgba(255, 140, 50, 0.1); }
+.ws-card .tabs button { padding: 4px 6px; text-align: center; }
+.ws-card .files { flex: 1 1 0; min-height: 76px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(255, 140, 50, 0.25) transparent; }
 .ws-card .files::-webkit-scrollbar { width: 5px; } .ws-card .files::-webkit-scrollbar-thumb { background: rgba(255, 140, 50, 0.25); border-radius: 3px; }
-.ws-card .ws-view.pv { min-height: 140px; }
-.ft img { width: 30px; height: 30px; border-radius: 7px; object-fit: cover; display: block; }
+.ws-card .files li { grid-template-columns: 26px 1fr auto; gap: 9px; padding: 4px 7px; }
+.ws-card .ft { width: 26px; height: 26px; border-radius: 6px; font-size: 8px; }
+.ws-card .files .n { font-size: 12.5px; line-height: 1.3; } .ws-card .files .d { font-size: 10.5px; }
+.ft img { width: 100%; height: 100%; border-radius: inherit; object-fit: cover; display: block; }
+.ws-pane { flex: 1.3 1 0; min-height: 110px; display: flex; flex-direction: column; margin-top: 10px; border-radius: 9px; overflow: hidden;
+  background: rgba(0, 0, 0, 0.16); border: 1px solid rgba(255, 140, 50, 0.14); }
+.ws-pane .wsacts { margin: 0; padding: 7px 10px; gap: 5px; border-bottom: 1px dashed rgba(255, 140, 50, 0.14); background: rgba(255, 122, 26, 0.03); }
+.ws-pane .wsacts .tiny { letter-spacing: 0.04em; }
+.ws-pane .wsacts .act { padding: 2px 8px; font-size: 10.5px; }
+.ws-card .ws-pane .ws-view.pv { margin: 0; flex: 1 1 0; min-height: 0; border: 0; border-radius: 0; background: none; padding: 10px 12px; }
+
+@media (max-width: 1100px) { .wx-head { grid-column: 1 / -1; } }
+@media (max-width: 760px) {
+  .wx-head { order: 1; text-align: left; min-height: 0; } .wx-big, .wx-row { justify-content: flex-start; } .wx-big { font-size: 56px; }
+  .clock-block { min-height: 0; } .col.left .card::after, .col.right .card::after { display: none; }
+}
+/* system: a little tighter so the workspace below gets the room */
+.perf .rg svg { width: 58px; height: 58px; } .perf .rg .v { margin-top: -41px; height: 41px; font-size: 14px; }
+.perf .spark.short { height: 20px; margin-top: 4px; }
+.perf .kfoot { margin-top: 8px; padding-top: 8px; }
