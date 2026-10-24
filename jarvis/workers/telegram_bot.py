@@ -49,6 +49,11 @@ class TelegramBot(Worker):
     name = "telegram_bot"
     interval_s = 5.0
 
+    def next_delay(self) -> float:
+        # poll back-to-back: getUpdates already long-polls (blocking, ~0 CPU), so there's no reason to sleep 5 s
+        # between polls — that sleep was adding up to 5 s before a command (camera/screenshot/…) was even picked up
+        return 0.2 if not self.errors else super().next_delay()
+
     def __init__(self, interval_s: float | None = None):
         super().__init__(interval_s)
         self.offset = 0
@@ -77,7 +82,7 @@ class TelegramBot(Worker):
     def poll(self, timeout: int | None = None) -> list[dict]:
         timeout = config.TELEGRAM_POLL_TIMEOUT_S if timeout is None else timeout
         updates = notify.telegram_call("getUpdates", {"offset": self.offset, "timeout": timeout,
-                                                      "allowed_updates": ["message"]},
+                                                      "allowed_updates": ["message", "edited_message"]},
                                        timeout=timeout + 10) or []
         if updates:
             self.offset = max(int(u.get("update_id", 0)) for u in updates) + 1
