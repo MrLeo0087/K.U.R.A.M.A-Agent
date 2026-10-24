@@ -41,6 +41,7 @@ class Job:
     output_path: str = ""
     error: str = ""
     tokens: int = 0
+    origin: str = ""  # "telegram" when asked from the phone: the result goes back there
     created: float = field(default_factory=time.time)
     finished: float | None = None
     cancel_event: threading.Event = field(default_factory=threading.Event, repr=False)
@@ -116,6 +117,13 @@ class JobManager:
     def submit(self, title: str, kind: str, fn: JobFn, request: str = "", lang: str = "en") -> Job:
         jid = store.job_insert(title, kind, request)
         job = Job(jid, title, kind, request, lang or "en")
+        try:
+            from jarvis.core import safety
+            job.origin = safety.context().get("channel") or ""
+        except Exception:
+            pass
+        if job.origin == "telegram":
+            _send_after[jid] = True  # asked from the phone: the result itself goes back to the phone
         with self._lock:
             self._jobs[jid] = job
         job.future = self._pool.submit(self._run, job, fn)
@@ -180,6 +188,8 @@ class JobManager:
                    error=job.error[:500], tokens=job.tokens, progress=job.progress)
         if status == "done":
             store.kv_delete(f"job_resume:{job.id}")
+        if _send_after.pop(job.id, False) and status == "done":
+            send_output(job)
         for cb in list(self._callbacks):
             try:
                 cb(job)
@@ -258,6 +268,41 @@ def _from_row(row: dict) -> Job:
                finished=row.get("finished"))
 
 
+# --- follow-ups: "make X and send it to my Telegram" ---
+_send_after: dict[int, bool] = {}
+
+
+def then_send(job_id: int) -> str:
+    """Send this job's result to the user's Telegram when it is done (now, if it already is)."""
+    job = get_manager().get(int(job_id))
+    if job is None:
+        return f"error: no job #{job_id}"
+    if job.status == "done":
+        return send_output(job)
+    if job.status in ACTIVE:
+        _send_after[job.id] = True
+        return f"I'll send it to your Telegram as soon as job #{job.id} is ready."
+    return f"error: job #{job.id} {job.status}, so there's nothing to send"
+
+
+def send_output(job: "Job") -> str:
+    """The job's output file to Telegram: pictures as photos, short text as a message, the rest as a file."""
+    from jarvis.core import notify
+    from jarvis.tools.general.send_file_telegram import deliver
+
+    p = Path(job.output_path or "")
+    if not p.is_file():
+        return f"error: job #{job.id} has no file to send"
+    if p.suffix.lower() in (".md", ".txt"):
+        text = p.read_text(encoding="utf-8", errors="replace").strip()
+        if len(text) <= config.TELEGRAM_MAX_REPLY_CHARS:
+            return "Sent it to your Telegram." if notify.telegram_send(text) else "error: Telegram didn't accept it"
+    out = deliver(p, caption=job.title[:200])
+    if out.startswith("error"):
+        log.warning("job #%d: %s", job.id, out)
+    return out
+
+
 # --- announcer ---
 SPOKEN = {
     "done": {"en": "I've finished {title}. It's saved in your outputs folder.",
@@ -314,8 +359,11 @@ def notify(job: Job) -> None:
         title, text, level = f"✅ Done: {job.title}", f"Saved to {job.output_path}" if job.output_path else "", "info"
     else:
         title, text, level = f"Job failed: {job.title}", (job.error or "")[:300], "warning"
+    # laptop jobs stay on the laptop (desktop + the UI's announcement); phone jobs get their result sent back
+    # by then_send, so only a failure of a phone job needs a separate Telegram line
+    phone = job.origin == "telegram" and job.status != "done"
     try:
-        _n.notify(title, text, level=level, source="jobs")
+        _n.notify(title, text, level=level, source="jobs", telegram=phone)
     except Exception as e:  # a notification must never break the job runner
         log.debug("job notify failed: %s", e)
 

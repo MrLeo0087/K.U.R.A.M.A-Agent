@@ -451,14 +451,21 @@ WALL_TAIL = re.compile(r"[\s,]*(?:\band\b|\bthen\b)?\s*(?:please\s+)?(?:make|set
                        r"(?:wallpaper|background)\b.*$", I)
 
 
+TG_TAIL = re.compile(r"[\s,]*(?:\b(?:and|then)\b\s*)?(?:also\s+)?(?:please\s+)?(?:send|share|forward)\s+"
+                     r"(?:it|this|that|them|the (?:image|picture|photo|pic|file))?\s*(?:image|picture|photo|pic)?\s*"
+                     r"(?:to|in|on|via|through)\s+(?:my\s+)?(?:telegram|phone|mobile)\b.*$", I)
+
+
 def image_intent(t: str) -> Intent | None:
     wall = bool(WALL_TAIL.search(t))
     t = WALL_TAIL.sub("", t) if wall else t
+    tg = bool(TG_TAIL.search(t))
+    t = TG_TAIL.sub("", t) if tg else t
     m = _IMAGE.match(t) or _DRAW.match(t)
     if not m or re.search(r"\b(?:and|then)\s+(?:send|open|set)\b", t, I):  # multi-step: let the planner split it
         return None
     prompt = m.group("p").strip(" .,!?")
-    args = {"prompt": prompt, "set_as_wallpaper": True} if wall else {"prompt": prompt}
+    args = {"prompt": prompt, **({"set_as_wallpaper": True} if wall else {}), **({"send_to_telegram": True} if tg else {})}
     return Intent("image", "generate_image", "image", args, prompt)
 
 

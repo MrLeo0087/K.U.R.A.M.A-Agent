@@ -87,6 +87,7 @@ def offer(name: str, text: str) -> str:
     if path is None:
         return ""
     phone = ctx.get("channel") == "telegram"
+    full = bool(ctx.get("full")) or name in config.WORKSPACE_SHOW_ALL
     if not phone:
         shelf.append(str(path.relative_to(Path(config.OUTPUTS_DIR))))  # the dashboard opens it in the Workspace
-    return NOTES[("phone" if phone else "dash", bool(ctx.get("full")))].format(n=len(text.splitlines()))
+    return NOTES[("phone" if phone else "dash", full)].format(n=len(text.splitlines()))

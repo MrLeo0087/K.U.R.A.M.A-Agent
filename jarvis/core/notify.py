@@ -124,10 +124,16 @@ def _duplicate(title: str, text: str) -> bool:
         return False
 
 
+def wants_phone(level: str, source: str) -> bool:
+    """Does this alert deserve the user's phone? Warnings/errors yes; info only from TELEGRAM_INFO_SOURCES."""
+    return level in ("warning", "error") or source in config.TELEGRAM_INFO_SOURCES
+
+
 def notify(title: str, text: str = "", level: str = "info", source: str = "", desktop: bool = True,
-           telegram: bool = True, save: bool = True) -> list[str]:
-    """Fan out one alert. Returns the channels it reached ([] when deduplicated)."""
+           telegram: bool | None = None, save: bool = True) -> list[str]:
+    """Fan out one alert. telegram=None decides by wants_phone(). Returns the channels it reached."""
     level = level if level in LEVELS else "info"
+    telegram = wants_phone(level, source) if telegram is None else telegram
     title, text = (title or "KURAMA").strip()[:120], (text or "").strip()[:3000]
     if _duplicate(title, text):
         log.info("dedupe: %s", title)

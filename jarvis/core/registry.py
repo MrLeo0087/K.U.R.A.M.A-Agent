@@ -295,7 +295,7 @@ class Registry:
         try:  # a long result goes to the Workspace card in full; the LLM gets a truncated copy + a note
             from jarvis.core import workspace
             note = workspace.offer(name, full)
-            if workspace.full_requested():  # "give me the whole list": hand the LLM much more of it
+            if workspace.full_requested() or name in config.WORKSPACE_SHOW_ALL:  # "the whole list" / a pick list
                 limit = max(limit or 0, config.TOOL_OUTPUT_FULL_CHARS)
         except Exception as e:
             log.warning("workspace publish failed: %s", e)

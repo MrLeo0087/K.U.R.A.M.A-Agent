@@ -207,11 +207,21 @@ _WALL_TAIL = re.compile(r"^\s*(?:and\s+|then\s+)?(?:please\s+)?(?:make|set|use|k
                         re.I)
 
 
+# "...and send it to my Telegram": a follow-up of the previous task (sent when its job is done)
+_TG_TAIL = re.compile(r"^\s*(?:(?:and|then|also)\s+)*(?:please\s+)?(?:send|share|forward)\s+(?:it|this|that|them|"
+                      r"the\s+\w+)?\s*(?:image|picture|photo|pic|file)?\s*(?:to|in|on|via|through)\s+(?:my\s+)?"
+                      r"(?:telegram|phone|mobile)\b", re.I)
+
+
 def merge_tails(tasks: list[dict]) -> list[dict]:
     """Glue "give me the result"-style tasks onto the previous task; remap depends_on indices."""
     out: list[dict] = []
     remap: dict[int, int] = {}
     for i, t in enumerate(tasks):
+        if out and _TG_TAIL.match(t["text"]) and is_long_job(out[-1]["text"]):
+            out[-1] = {**out[-1], "telegram": True}  # the job's result goes to Telegram when it's done
+            remap[i] = len(out) - 1
+            continue
         if out and (is_result_tail(t["text"]) or (_IMG_TASK.search(out[-1]["text"]) and _WALL_TAIL.match(t["text"]))):
             out[-1] = {**out[-1], "text": f"{out[-1]['text'].rstrip(' .,')} and {t['text'].strip()}"}
             remap[i] = len(out) - 1
@@ -272,9 +282,11 @@ def is_multi(text: str) -> bool:
     clauses = split_clauses(text)
     if len(clauses) < 2:
         return False
-    if _IMG_TASK.search(clauses[0]) and _WALL_TAIL.match(clauses[-1]) and not any(
-            re.match(r"\s*(?:open|play|send|search|close|start|launch)\b", c, re.I) for c in clauses[1:-1]):
-        return False  # "draw X and set it as my wallpaper" is ONE request (generate_image(set_as_wallpaper))
+    is_tail = lambda c: bool(_WALL_TAIL.match(c) or _TG_TAIL.match(c))  # noqa: E731
+    if _IMG_TASK.search(clauses[0]) and is_tail(clauses[-1]) and not any(
+            re.match(r"\s*(?:open|play|send|search|close|start|launch)\b", c, re.I)
+            for c in clauses[1:-1] if not is_tail(c)):
+        return False  # "draw X (and set it as my wallpaper) (and send it to Telegram)" is ONE generate_image call
     return sum(1 for c in clauses if is_command(c)) >= 2
 
 

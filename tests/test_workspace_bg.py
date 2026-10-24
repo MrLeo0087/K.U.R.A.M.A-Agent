@@ -39,7 +39,7 @@ def test_wants_all_and_send_last_result(tmp_path, monkeypatch):
     monkeypatch.setattr(notify, "telegram_send", lambda t, chat_id=None: texts.append(t) or True)
     assert slr.send_last_result().startswith("error")
     workspace.publish("find files: main.py", "a/main.py\nb/main.py")
-    assert slr.send_last_result() == "Sent the full list as a message." and "b/main.py" in texts[0]
+    assert slr.send_last_result("list").endswith("as a message.") and "b/main.py" in texts[0]
 
 
 def test_slow_tool_continues_as_background_job(tmp_path, monkeypatch):

@@ -97,3 +97,30 @@ def test_cross_channel_context():
     assert "laptop dashboard" in line and "find tool.py" in line
     assert tg._other_channel("tell me a joke") == ""  # unrelated: no extra tokens
     assert agent.Agent()._other_channel("send that file") == ""  # nothing new on Telegram
+
+
+def test_image_and_send_to_telegram_is_one_request(monkeypatch):
+    from jarvis.core import fastpath, planner
+    text = "can you generate an image of the hill in oil paint style and also send that image to telegram"
+    assert not planner.is_multi(text)
+    it = fastpath.image_intent(text)
+    assert it.args == {"prompt": "the hill in oil paint style", "send_to_telegram": True}
+
+
+def test_list_folder_numbers_files_for_picking(monkeypatch, tmp_path):
+    from jarvis.tools.interactive.list_folder import list_folder
+    d = tmp_path / "docs"
+    (d / "sub").mkdir(parents=True)
+    for n in ("a.pdf", "b.jpg"):
+        (d / n).write_bytes(b"x")
+    out = list_folder(str(d))
+    assert "1 folders, 2 files" in out and "Folders: sub" in out and "1. " in out and "2. " in out
+    sent = setup(monkeypatch, tmp_path, [])
+    assert fs.find_and_send(pick=2).startswith("Sent ") and len(sent) == 1
+    assert "a.pdf" in list_folder(str(d), pattern=".pdf") and "b.jpg" not in list_folder(str(d), ".pdf")
+
+
+def test_phone_gets_only_what_matters(monkeypatch):
+    from jarvis.core import notify
+    assert notify.wants_phone("warning", "resource_guard") and notify.wants_phone("info", "scheduler")
+    assert not notify.wants_phone("info", "jobs") and not notify.wants_phone("info", "focus")

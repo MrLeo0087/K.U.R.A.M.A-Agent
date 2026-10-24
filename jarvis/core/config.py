@@ -175,6 +175,7 @@ TOOL_PACKAGES = ("interactive", "general", "external")  # jarvis/tools/<pkg>/<on
 TOOL_OUTPUT_MAX_CHARS = 800  # tool results are truncated to this before going back to the LLM
 # Workspace card: tool results with this many lines (or longer than TOOL_OUTPUT_MAX_CHARS) are shown there in full
 WORKSPACE_MIN_LINES = 8
+WORKSPACE_SHOW_ALL = ("list_folder",)  # results the user wants to see in full, to pick from
 TOOL_OUTPUT_FULL_CHARS = 3500  # the user asked for everything ("the whole list"): the LLM gets this much
 WORKSPACE_SKIP_TOOLS = ("read_webpage", "search_knowledge", "ask_knowledge", "recall_session", "job_result",
                         "about_me", "write_document", "use_skill", "find_capability")
@@ -262,6 +263,8 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
     "files": ("file", "files", "folder", "folders", "directory", "delete", "remove", "rename", "mkdir",
               "move file", "copy file", "trash", "फाइल", "फोल्डर", "मिटाओ", "मेटाउ"),
     "filesearch": ("find file", "find files", "find the file", "locate", "named", "grep", "ripgrep", "where is",
+                   "files in", "list files", "list the files", "what's in", "what is in", "show files",
+                   "list folder", "contents of", "inside the folder", "in the folder",
                    "which file", "containing", "search files", "search for files"),
     "telegram": ("telegram", "to my phone", "on my phone", "send it to my phone", "send me", "send it to me",
                  "and send", "from my laptop", "whole list", "full list", "complete list", "full result",
@@ -453,6 +456,10 @@ WORKERS_STATUS_PATH = DATA_DIR / "workers.json"  # PID + per-worker state, read 
 NOTIFY_DESKTOP = os.getenv("JARVIS_NOTIFY_DESKTOP", "1").lower() not in ("0", "false", "no", "off")
 NOTIFY_DEDUPE_S = 60.0  # identical (title, text) within this window is sent once
 NOTIFY_TELEGRAM_PER_MIN = 20  # Telegram rate limit (Bot API allows ~30/s; we stay polite)
+# What reaches the phone on its own: every warning/error, plus info only from these sources (your reminders, the
+# process/log watches you set, n8n flows, the daily digest). Everything else stays on the laptop (desktop + UI);
+# things asked FROM Telegram are always answered there.
+TELEGRAM_INFO_SOURCES = tuple(os.getenv("KURAMA_TELEGRAM_INFO", "scheduler,process_watch,n8n,daily_digest").split(","))
 ALERT_ANNOUNCE_MAX_AGE_S = 3600.0  # older unannounced alerts are not spoken
 ALERT_ANNOUNCE_CHECK_S = 5.0  # the voice loop looks for new alerts at most this often
 ALERT_SPOKEN_LEVELS = ("info", "warning", "error")  # levels the idle voice loop speaks

@@ -56,12 +56,14 @@ def fetch_image(prompt: str, width: int, height: int) -> bytes:
 
 @tool(group="image", safety="safe",
       description="Generate a picture from a text description (free); runs in the background, shows in the workspace.")
-def generate_image(prompt: str, set_as_wallpaper: bool = False, width: int = 0, height: int = 0) -> str:
+def generate_image(prompt: str, set_as_wallpaper: bool = False, send_to_telegram: bool = False, width: int = 0,
+                   height: int = 0) -> str:
     """Create an image.
 
     Args:
         prompt: What the picture should show, in English; include a style only if the user asked for one.
         set_as_wallpaper: True when the user also wants it as the desktop wallpaper (done when the image is ready).
+        send_to_telegram: True when the user also wants the picture on Telegram/phone (sent when it's ready).
         width: Pixels, 256 to 1920 (0 = default; wallpapers default to 1920x1080).
         height: Pixels, 256 to 1920.
     """
@@ -88,6 +90,10 @@ def generate_image(prompt: str, set_as_wallpaper: bool = False, width: int = 0, 
         return str(path)
 
     j = jobs.get_manager().submit(f"{'wallpaper' if set_as_wallpaper else 'image'}: {prompt[:40]}", "image", job, prompt)
+    if send_to_telegram:
+        jobs.then_send(j.id)
+        extra = " and set it as your wallpaper" if set_as_wallpaper else ""
+        return f"I'm making your picture now (job #{j.id}); I'll send it to your Telegram{extra} as soon as it's ready."
     if set_as_wallpaper:
         return f"I'm making your picture now (job #{j.id}) and will set it as your wallpaper as soon as it's ready."
     return f"I'm making your picture now (job #{j.id}). It will appear in the workspace in a few seconds."

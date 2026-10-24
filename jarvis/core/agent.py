@@ -225,6 +225,8 @@ class Agent:
         lang = state.get("lang") or planner.detect_lang(t["text"])
         try:
             job = jobs.start_task(t["text"], lang=lang)
+            if t.get("telegram"):
+                jobs.then_send(job.id)
         except Exception as e:
             log.exception("could not start job")
             return {"results": [{"idx": state.get("idx", 0), "kind": "quick", "text": t["text"],
