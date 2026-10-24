@@ -46,6 +46,9 @@ export class Api {
   fetchWeather() { return this.request("/api/v1/weather"); }
   device() { return this.request("/api/v1/device"); }
   greeting() { return this.request("/api/v1/greeting"); }
+  schedule() { return this.request("/api/v1/schedule"); }
+  cancelSchedule(id) { return this.request(`/api/v1/schedule/${encodeURIComponent(id)}`, { method: "DELETE" }); }
+  stopwatch(action) { return this.request(`/api/v1/stopwatch/${action}`, { method: "POST", body: {} }); }
   wakeSleep() { return this.request("/api/v1/wake/sleep", { method: "POST", body: {} }); }
   wakeAwake() { return this.request("/api/v1/wake/awake", { method: "POST", body: {} }); }
   wakeEvents() { return new EventSource(this.url("/api/v1/wake/events", true)); }

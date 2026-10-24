@@ -163,6 +163,15 @@
         </div>
       </div>
 
+      <div class="card today-card" id="today" role="button" tabindex="0" aria-label="Today: reminders, alarms, timers — open details">
+        <div class="card-title">Today <span id="today-count" class="muted-right"></span></div>
+        <ul id="today-list" class="today-list"><li class="empty">Nothing scheduled</li></ul>
+        <div id="today-sw" class="today-sw" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="7.5"/><path d="M12 13V9.5M10 2.5h4M18.5 6.5l1.5-1.5"/></svg>
+          <span>Stopwatch</span><b id="today-sw-time">0:00</b><small id="today-sw-state"></small>
+        </div>
+      </div>
+
       <div class="card ws-card" id="ws" aria-label="Workspace">
         <div class="card-title">Workspace
           <span class="muted-right ws-tools"><span id="jobs-count"></span>
@@ -181,6 +190,29 @@
       </div>
     </section>
   </div>
+
+  <dialog id="sched" class="modal sched" aria-labelledby="sched-title">
+    <form method="dialog" class="info-head">
+      <h2 id="sched-title">Today &amp; upcoming</h2>
+      <span class="grow"></span>
+      <button class="icon-btn" value="close" aria-label="Close">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </form>
+    <div class="sched-body">
+      <section class="sched-sw">
+        <div class="sched-sw-time"><span class="label">STOPWATCH</span><b id="sched-sw-time">0:00</b><small id="sched-sw-laps"></small></div>
+        <div class="row">
+          <button type="button" class="btn" data-sw="start">Start</button>
+          <button type="button" class="btn" data-sw="stop">Stop</button>
+          <button type="button" class="btn" data-sw="lap">Lap</button>
+          <button type="button" class="btn" data-sw="reset">Reset</button>
+        </div>
+      </section>
+      <div id="sched-groups"></div>
+      <p class="sched-hint">Say “remind me to … at …”, “set an alarm for 6 am”, “set a timer for 10 minutes”.</p>
+    </div>
+  </dialog>
 
   <dialog id="finder" class="finder" aria-label="Find a tool">
     <div class="finder-head">

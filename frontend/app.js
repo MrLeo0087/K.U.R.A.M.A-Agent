@@ -438,6 +438,7 @@ async function sendChat(text, { voice = false, lang = null, speak = false } = {}
           bot.done(ev);
           wsFromReply(text, bot.text);
           if (ev.jobs?.length) watchJobs(ev.jobs); // background work: tell the user when it's done
+          setTimeout(loadToday, 600); // a reminder / alarm / timer may have changed
           setTimeout(loadOutputs, 800); // a tool may have just saved a file (long results go to the workspace)
           setTimeout(loadWall, 1500);
           if (/\bname\b/i.test(text)) setTimeout(loadName, 500); // "change your name to ..."
@@ -831,6 +832,107 @@ async function loadDevice() {
   devTimer = setTimeout(loadDevice, 30000);
 }
 
+// ---------- Today: reminders, alarms, timers + stopwatch (card + details dialog; live countdowns on the clock tick) ----------
+const ICON = {
+  alarm: '<svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="7"/><path d="M12 9.5V13l2.5 1.5M5 4 2.5 6.5M19 4l2.5 2.5"/></svg>',
+  timer: '<svg viewBox="0 0 24 24"><path d="M7 3h10M7 21h10M8 3c0 5 8 5 8 9s-8 4-8 9M16 3c0 5-8 5-8 9s8 4 8 9"/></svg>',
+  reminder: '<svg viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15zM10 20a2 2 0 0 0 4 0"/></svg>',
+  command: '<svg viewBox="0 0 24 24"><path d="M5 7l5 5-5 5M12 17h7"/></svg>',
+};
+const sched = { items: [], sw: null, at: 0 };
+let schedTimer = 0;
+const hm = (ts) => new Date(ts * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+function left(ts) { // "4:32" / "1:05:00" until ts
+  const s = Math.max(0, Math.round(ts - Date.now() / 1000));
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  return h ? `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}` : `${m}:${String(sec).padStart(2, "0")}`;
+}
+function swNow() { const w = sched.sw; return w ? w.elapsed + (w.running_since ? Date.now() / 1000 - w.running_since : 0) : 0; }
+function swFmt(s) { s = Math.floor(s); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
+  return (h ? `${h}:${String(m).padStart(2, "0")}` : `${m}`) + `:${String(x).padStart(2, "0")}`; }
+function timeCell(it) { return it.kind === "timer" ? `${left(it.at)} left` : it.day === "today" ? hm(it.at) : it.day === "tomorrow" ? `tmrw ${hm(it.at)}` : new Date(it.at * 1000).toLocaleDateString([], { weekday: "short" }) + " " + hm(it.at); }
+async function loadToday() {
+  clearTimeout(schedTimer); schedTimer = 0;
+  if (MINI) return;
+  try {
+    const r = await api.schedule();
+    sched.items = r.items || []; sched.sw = r.stopwatch; sched.at = Date.now();
+    renderToday();
+    if ($("sched").open) renderSched();
+  } catch { /* API busy */ }
+  if (!paused && !minimized && !document.hidden) schedTimer = setTimeout(loadToday, 30000);
+}
+function renderToday() {
+  const today = sched.items.filter((i) => i.day === "today");
+  const show = [...today, ...sched.items.filter((i) => i.day !== "today")].slice(0, 4); // today first, then what's next
+  $("today-count").textContent = today.length ? `${today.length} today` : sched.items.length ? "nothing today" : "";
+  const ul = $("today-list");
+  ul.innerHTML = show.length ? "" : '<li class="empty">Nothing scheduled. Say “remind me to … at …” or “set an alarm for 6 am”.</li>';
+  for (const it of show) {
+    const li = el("li", `k-${it.kind}${it.day !== "today" ? " later" : ""}${it.at - Date.now() / 1000 < 3600 ? " soon" : ""}`);
+    li.innerHTML = `<span class="ic">${ICON[it.kind] || ICON.reminder}</span><span class="t"></span><span class="x"></span>`;
+    li.querySelector(".t").textContent = timeCell(it);
+    li.querySelector(".x").textContent = it.text;
+    li.title = `${it.kind} · ${it.desc}`;
+    li.dataset.id = it.id;
+    ul.append(li);
+  }
+  renderTodayLive();
+}
+function renderTodayLive() { // every second from tick(): timer countdowns + stopwatch
+  for (const li of $("today-list").querySelectorAll("li.k-timer")) {
+    const it = sched.items.find((x) => String(x.id) === li.dataset.id);
+    if (it) li.querySelector(".t").textContent = timeCell(it);
+  }
+  const w = sched.sw, on = !!(w && (w.running_since || w.elapsed));
+  $("today-sw").hidden = !on;
+  if (on) {
+    $("today-sw-time").textContent = swFmt(swNow());
+    $("today-sw-state").textContent = w.running_since ? "running" : "paused";
+    $("today-sw").classList.toggle("run", !!w.running_since);
+  }
+  if ($("sched").open) { $("sched-sw-time").textContent = swFmt(swNow()); for (const n of document.querySelectorAll(".sched-item.k-timer .t")) { const it = sched.items.find((x) => String(x.id) === n.dataset.id); if (it) n.textContent = timeCell(it); } }
+}
+function renderSched() {
+  const box = $("sched-groups");
+  box.innerHTML = "";
+  const groups = [["Today", (i) => i.day === "today" && i.repeat === "none"], ["Tomorrow", (i) => i.day === "tomorrow" && i.repeat === "none"],
+    ["Later", (i) => i.day === "later" && i.repeat === "none"], ["Repeating", (i) => i.repeat !== "none"]];
+  let any = false;
+  for (const [name, f] of groups) {
+    const items = sched.items.filter(f);
+    if (!items.length) continue;
+    any = true;
+    const g = el("section", "sched-group");
+    g.append(el("h3", "", name));
+    for (const it of items) {
+      const row = el("div", `sched-item k-${it.kind}`);
+      row.innerHTML = `<span class="ic">${ICON[it.kind] || ICON.reminder}</span><span class="t"></span><span class="x"></span>`;
+      row.querySelector(".t").textContent = timeCell(it);
+      row.querySelector(".t").dataset.id = it.id;
+      row.querySelector(".x").innerHTML = `${esc(it.text)}<small>${esc(it.kind)} · ${esc(it.desc)}</small>`;
+      const del = el("button", "icon-btn del", '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>');
+      del.type = "button";
+      del.title = `Cancel this ${it.kind}`;
+      del.onclick = async () => { try { await api.cancelSchedule(it.id); toast(`Cancelled: ${it.text}`); loadToday(); } catch (e) { toast(e.message); } };
+      row.append(del);
+      g.append(row);
+    }
+    box.append(g);
+  }
+  if (!any) box.append(el("p", "sched-empty", "Nothing scheduled yet."));
+  const laps = sched.sw?.laps || [];
+  $("sched-sw-laps").textContent = laps.length ? `Laps: ${laps.slice(-4).map(swFmt).join(" · ")}` : "";
+  $("sched-sw-time").textContent = swFmt(swNow());
+}
+function openSched() { if (!$("sched").open) $("sched").showModal(); renderSched(); loadToday(); }
+$("today").onclick = openSched;
+$("today").addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openSched(); } });
+$("sched").addEventListener("click", (e) => { if (e.target === $("sched")) $("sched").close(); });
+for (const b of document.querySelectorAll("[data-sw]")) {
+  b.onclick = async () => { try { const r = await api.stopwatch(b.dataset.sw); toast(r.text); loadToday(); } catch (e) { toast(e.message); } };
+}
+
 // ---------- workspace: the newest picture / poem / essay, shown big (outputs from /api/v1/outputs + long replies) ----------
 const ws = { items: [], cur: -1, seen: new Set(), loaded: false };
 const wsTitle = (name) => name.replace(/^.*\//, "").replace(/^\d{8}-\d{4,6}-?/, "").replace(/\.[a-z0-9]+$/i, "").replace(/[-_]+/g, " ").trim() || name;
@@ -1099,6 +1201,7 @@ function tick() {
   $("clock-ap").textContent = parts[1] || "";
   $("clock-s").textContent = String(now.getSeconds()).padStart(2, "0");
   $("date").textContent = now.toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" });
+  renderTodayLive();
   clockTimer = setTimeout(tick, 1000 - (Date.now() % 1000) + 5);
 }
 function stopClock() { clearTimeout(clockTimer); clockTimer = 0; }
@@ -1108,8 +1211,8 @@ function applyActivity() {
   const idle = paused || document.hidden;
   document.body.classList.toggle("paused", idle);
   orb.pause(paused || MINI);
-  if (idle || minimized) { stopStatus(); stopClock(); clearTimeout(devTimer); devTimer = 0; }
-  else { if (!clockTimer) tick(); if (!es && !pollTimer) startStatus(); if (!devTimer) loadDevice(); }
+  if (idle || minimized) { stopStatus(); stopClock(); clearTimeout(devTimer); devTimer = 0; clearTimeout(schedTimer); schedTimer = 0; }
+  else { if (!clockTimer) tick(); if (!es && !pollTimer) startStatus(); if (!devTimer) loadDevice(); if (!schedTimer) loadToday(); }
   syncAmbient();
 }
 
@@ -1432,7 +1535,7 @@ setMode("text");
 if (MINI) { $("chat-title").textContent = botName; restoreMiniLog(); input.focus(); }
 tick();
 if (params.get("paused") === "1") window.kuramaPause(true); // start paused (testing)
-checkHealth().then(() => { startStatus(); loadDevice(); bootVoice(); });
+checkHealth().then(() => { startStatus(); loadDevice(); loadToday(); bootVoice(); });
 async function bootVoice() { // first load after KURAMA starts: say hello, then wait (asleep) for the wake word
   if (MINI || params.get("debug") === "1") return;
   if (S.wakeListen) { mode = "conv"; setMode("conv"); } // talk mode is the default

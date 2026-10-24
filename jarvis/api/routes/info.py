@@ -214,6 +214,45 @@ async def device_info():
     return await run_in_threadpool(device.info)
 
 
+# ---------- "Today" card: reminders, alarms, timers and the stopwatch ----------
+@router.get("/schedule", summary="Upcoming reminders, alarms, timers + the stopwatch (dashboard 'Today' card)")
+async def schedule():
+    def build() -> dict:
+        import json as _json
+        from datetime import datetime
+
+        from jarvis.core import store, when
+        now = datetime.now()
+        items = []
+        for r in store.schedules_list(enabled_only=True, limit=60):
+            if not r.get("next_run"):
+                continue
+            d = datetime.fromtimestamp(r["next_run"])
+            days = (d.date() - now.date()).days
+            items.append({"id": r["id"], "kind": r.get("kind") or "reminder", "text": r["text"], "at": r["next_run"],
+                          "repeat": r.get("repeat") or "none", "day": "today" if days <= 0 else "tomorrow" if days == 1 else "later",
+                          "desc": when.describe(r["next_run"], r.get("repeat") or "none", now)})
+        sw = _json.loads(store.kv_get("stopwatch", "") or "{}") or {}
+        return {"now": now.timestamp(), "items": items,
+                "stopwatch": {"running_since": sw.get("run"), "elapsed": sw.get("acc", 0.0), "laps": sw.get("laps", [])}}
+    return await run_in_threadpool(build)
+
+
+@router.delete("/schedule/{sched_id}", summary="Cancel a reminder / alarm / timer")
+async def schedule_cancel(sched_id: int):
+    from jarvis.core import store
+    ok = await run_in_threadpool(store.schedule_delete, sched_id)
+    return {"ok": bool(ok)} if ok else JSONResponse({"ok": False, "error": "no such item"}, status_code=404)
+
+
+@router.post("/stopwatch/{action}", summary="Stopwatch: start / stop / lap / reset")
+async def stopwatch_action(action: str):
+    from jarvis.tools.general.stopwatch import stopwatch
+    if action not in ("start", "stop", "lap", "reset", "status"):
+        return JSONResponse({"error": "unknown action"}, status_code=400)
+    return {"text": await run_in_threadpool(stopwatch, action)}
+
+
 # ---------- greeting: the first dashboard load after KURAMA starts says hello (once per start) ----------
 _greeted = {"done": False}
 GREETING_ASKS = ("how are you?", "what are we doing today?", "what's the plan today?", "I'm ready when you are.",
