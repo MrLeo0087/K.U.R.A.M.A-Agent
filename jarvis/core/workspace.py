@@ -48,7 +48,7 @@ def worth_it(name: str, text: str) -> bool:
     if name in config.WORKSPACE_SKIP_TOOLS or text.startswith("error"):
         return False
     lines = [ln for ln in text.splitlines() if ln.strip()]
-    return len(lines) >= config.WORKSPACE_MIN_LINES or len(text) > config.TOOL_OUTPUT_MAX_CHARS
+    return len(lines) >= config.WORKSPACE_MIN_LINES or len(text) > config.WORKSPACE_MIN_CHARS
 
 
 def publish(title: str, text: str) -> Path | None:

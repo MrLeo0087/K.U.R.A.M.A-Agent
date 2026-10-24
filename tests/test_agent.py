@@ -77,6 +77,13 @@ def test_tool_call_then_answer(fake):
     assert purposes == ["agent_text", "agent_text"]
 
 
+def test_time_is_said_without_a_second_llm_call(fake, monkeypatch):
+    monkeypatch.setattr(config, "DIRECT_REPLY_TOOLS", {**config.DIRECT_REPLY_TOOLS, "get_time": "time"})
+    calls = fake(call(), AIMessage(content="Let me know if you need anything else!"))
+    out = agent.Agent().run("can you tell me what is time right now?")
+    assert out.startswith("It's ") and ("AM" in out or "PM" in out) and len(calls) == 1  # the tool's sentence
+
+
 def test_stream_yields_final_answer(fake):
     calls = fake(call(), AIMessage(content="It is late."))
     a = agent.Agent()

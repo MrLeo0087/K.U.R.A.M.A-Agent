@@ -76,9 +76,10 @@ def _rx(*alts: str) -> list[re.Pattern]:
 
 
 # --- time ---
+_TQ = r"(?:(?:tell me|do you know|let me know|say|check|give me|any idea) )?"  # "can you tell me what is time right now"
 TIME_LOCAL = _rx(
-    r"(?:tell me |what(?:'s| is) )?(?:the )?(?:current |local )?time(?: (?:now|right now|is it))?",
-    r"what time is it(?: now| right now)?",
+    _TQ + r"(?:what(?:'s| is) )?(?:the )?(?:current |local )?time(?: (?:now|right now|is it|it is))?(?: now| right now)?",
+    _TQ + r"what time (?:is it|it is)(?: now| right now)?",
     r"what(?:'s| is) (?:the |today'?s )?date(?: today)?",
     r"(?:abhi |aba |ahile )?(?:kitne|kitna) baje(?: hain| hai| he)?",
     r"(?:ahile |aba )?kati bajyo(?: ho)?", r"(?:samay|time) kya (?:hua|hai)(?: abhi)?",
@@ -88,7 +89,7 @@ TIME_LOCAL = _rx(
 TIME_PLACE = _rx(
     r"(?:(?:tell me|give me|provide|show me|check|get|find|say) |what(?:'s| is) )?(?:the )?(?:current |local )?"
     r"time (?:right now |now )?(?:in|at|of|for) (?P<place>.+)",
-    r"what time is it (?:now |right now )?(?:in|at) (?P<place>.+)",
+    _TQ + r"what time (?:is it|it is) (?:now |right now )?(?:in|at) (?P<place>.+)",
     r"(?P<place>.+?) (?:ma|mein|me|मा|में) (?:abhi |ahile )?(?:kati bajyo|kitne baje(?: hain| hai)?|"
     r"कति बज्यो|कितने बजे (?:हैं|है)|time kya hai)",
 )

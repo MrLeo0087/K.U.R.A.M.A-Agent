@@ -12,19 +12,22 @@ def _reg(fn, name="slow_tool"):
 
 def test_long_result_goes_to_workspace_with_note(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "OUTPUTS_DIR", tmp_path)
-    reg = _reg(lambda query: "\n".join(f"/home/x/{i}/main.py" for i in range(30)), "find_things")
+    small = safety.execute("find_things", {"query": "x"}, reg=_reg(lambda query: "\n".join(f"/a/{i}.py" for i in range(30)),
+                           "find_things"), ctx={"published": (few := []), "jobs": []})
+    assert small.ok and few == [] and "workspace" not in small.output  # a quick list stays in the chat
+    reg = _reg(lambda query: "\n".join(f"/home/x/{i}/main.py" for i in range(60)), "find_things")
     shelf = []
     res = safety.execute("find_things", {"query": "main.py"}, reg=reg,
                          ctx={"user_text": "find main.py", "published": shelf, "jobs": []})
     assert res.ok and "workspace window" in res.output and len(shelf) == 1
     saved = (tmp_path / shelf[0]).read_text()
-    assert saved.count("/main.py") == 30  # the full list, not the truncated copy
+    assert saved.count("/main.py") == 60  # the full list, not the truncated copy
     tele_shelf = []
     tele = safety.execute("find_things", {"query": "x"}, reg=reg, ctx={"published": tele_shelf, "channel": "telegram"})
     assert "workspace" not in tele.output and "offer to send the whole list" in tele.output and tele_shelf == []
     whole = safety.execute("find_things", {"query": "x"}, reg=reg,
                            ctx={"published": [], "channel": "telegram", "full": True})
-    assert whole.output.count("/main.py") == 30 and "send_last_result" in whole.output  # "the whole list"
+    assert whole.output.count("/main.py") == 60 and "send_last_result" in whole.output  # "the whole list"
 
 
 def test_wants_all_and_send_last_result(tmp_path, monkeypatch):
@@ -81,6 +84,10 @@ def test_whisper_hallucinations_and_unspoken_text():
 def test_noise_gate_and_greeting_once(monkeypatch):
     assert stt.is_noise(stt.Transcript("uh huh", "en", "m", no_speech=0.8))  # Whisper says: probably no speech
     assert not stt.is_noise(stt.Transcript("open youtube", "en", "m", no_speech=0.1))
+    assert not stt.is_noise(stt.Transcript("open spotify", "en", "m", logprob=-0.2, no_speech=0.7))  # heard clearly
+    assert stt.is_hallucination("KURAMA, Pokhara.") and not stt.is_hallucination("Open Spotify.")
+    assert tts.clean_for_speech("It's 10:15 PM.") == "It's 10:15 PM."  # times are read out
+    assert tts.clean_for_speech("That is 17,000 rupees") == "That is 17,000 rupees"
     from fastapi.testclient import TestClient
 
     from jarvis.api.app import create_app

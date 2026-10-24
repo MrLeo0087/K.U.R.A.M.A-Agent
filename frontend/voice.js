@@ -66,21 +66,42 @@ export function insertAtCursor(value, selStart, selEnd, text) {
 // Downsample Float32 PCM to `outRate` mono (box filter: averages the samples of each output step) and
 // encode it as 16-bit PCM WAV. /api/v1/stt accepts audio/wav, so no MediaRecorder is needed anywhere
 // (WebKitGTK, used by the wallpaper window, has none).
+// A windowed-sinc low-pass before decimating: the old box filter let 8-24 kHz hiss fold back into the speech
+// band, which blurred "s", "f" and "sh" for Whisper ("Spotify" heard as "so fast").
 export function downsample(pcm, inRate, outRate = 16000) {
   if (outRate >= inRate) return pcm;
-  const ratio = inRate / outRate;
+  const ratio = inRate / outRate, half = Math.ceil(4 * ratio), cut = 0.45 / ratio;
+  const taps = new Float32Array(2 * half + 1);
+  let sum = 0;
+  for (let k = -half; k <= half; k++) {
+    const sinc = k === 0 ? 2 * cut : Math.sin(2 * Math.PI * cut * k) / (Math.PI * k);
+    sum += taps[k + half] = sinc * (0.5 + 0.5 * Math.cos(Math.PI * k / (half + 1))); // Hann window
+  }
+  for (let k = 0; k < taps.length; k++) taps[k] /= sum;
   const out = new Float32Array(Math.floor(pcm.length / ratio));
   for (let i = 0; i < out.length; i++) {
-    const a = Math.floor(i * ratio), b = Math.min(pcm.length, Math.floor((i + 1) * ratio));
+    const c = Math.round(i * ratio);
     let s = 0;
-    for (let j = a; j < b; j++) s += pcm[j];
-    out[i] = b > a ? s / (b - a) : 0;
+    for (let k = -half; k <= half; k++) { const j = c + k; if (j >= 0 && j < pcm.length) s += pcm[j] * taps[k + half]; }
+    out[i] = s;
   }
   return out;
 }
 
+// Quiet recordings (mic far away, low input gain) are lifted to a normal level: Whisper calls very quiet
+// speech "no speech" and drops it. Loud ones are left alone.
+export function normalize(pcm, target = 0.7, maxGain = 8) {
+  let peak = 0;
+  for (let i = 0; i < pcm.length; i++) { const a = Math.abs(pcm[i]); if (a > peak) peak = a; }
+  if (!peak || peak >= target / 2) return pcm;
+  const g = Math.min(maxGain, target / peak);
+  for (let i = 0; i < pcm.length; i++) pcm[i] *= g;
+  return pcm;
+}
+
 export function encodeWav(pcm, inRate, outRate = 16000) {
-  const data = downsample(pcm, inRate, outRate);
+  let data = downsample(pcm, inRate, outRate);
+  data = normalize(data === pcm ? Float32Array.from(pcm) : data);
   const rate = Math.min(inRate, outRate);
   const buf = new ArrayBuffer(44 + data.length * 2);
   const v = new DataView(buf);
@@ -258,7 +279,7 @@ export class SentenceSplitter {
 
 // ---------- TTS player ----------
 // Only real words are spoken: file paths, links, emoji and long numbers stay on screen (the server cleans the rest).
-const UNSPOKEN = /https?:\/\/\S+|(?:~|\.{1,2})?\/[\w.@+-]+(?:\/[\w.@+-]*)+|#?\b\d[\d,._:-]{4,}\b|[\u{1F000}-\u{1FAFF}\u2600-\u27BF\uFE0F\u200D]/gu;
+const UNSPOKEN = /https?:\/\/\S+|(?:~|\.{1,2})?\/[\w.@+-]+(?:\/[\w.@+-]*)+|#\d{4,}\b|\b\d{7,}\b|[\u{1F000}-\u{1FAFF}\u2600-\u27BF\uFE0F\u200D]/gu;
 export function speakable(text) {
   return letters((text || "").replace(UNSPOKEN, " ")) >= 2;
 }
@@ -394,7 +415,7 @@ export class Conversation {
     this.timer = 0;
     this.floor = 0.006;
     this.MIN_SPEECH_MS = 300; // shorter bursts are clicks/bumps/noise, not words
-    this.END_SILENCE_MS = 900;
+    this.END_SILENCE_MS = 1000; // a short pause mid-sentence ("open ... Spotify") doesn't end the request
     this.MAX_UTTERANCE_MS = 30000;
     this.RESTART_IDLE_MS = 8000; // restart the recorder during long silences (keeps uploads small)
     this.AUTO_OFF_MS = 120000;
@@ -406,6 +427,7 @@ export class Conversation {
     await this.mic.start();
     this.on = true;
     this.lastSpeech = performance.now();
+    this.lastTick = 0;
     this.timer = setInterval(() => this._tick(), 50);
     this.listen();
   }
@@ -440,7 +462,10 @@ export class Conversation {
 
   _tick() {
     if (!this.on) return;
-    const now = performance.now(), dt = 50;
+    // real elapsed time: when the page is busy drawing, ticks come late, and counting each as 50 ms made
+    // speech look too short (ignored) and pauses too long (cut off)
+    const now = performance.now(), dt = this.lastTick ? Math.min(250, now - this.lastTick) : 50;
+    this.lastTick = now;
     const rms = this.mic.rms();
     if (this.state === "listening" || this.state === "capturing" || this.state === "sleeping") {
       const thr = Math.max(this.floor * 3, 0.016);

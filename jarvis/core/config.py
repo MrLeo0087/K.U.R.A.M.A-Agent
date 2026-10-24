@@ -67,9 +67,11 @@ STT_PREFER_FALLBACK_LANGS = ("ne",)  # use large-v3 first for these
 STT_DUAL = os.getenv("JARVIS_STT_DUAL", "1").lower() not in ("0", "false", "no", "off")
 STT_EN_MIN_LOGPROB = -0.6  # auto "English" below this confidence is treated as suspicious
 # Whisper vocabulary hint (biases spelling of names/apps; tested not to break hi/ne detection).
-STT_NO_SPEECH_MAX = 0.6  # Whisper's no_speech_prob above this: background noise, not a command
+STT_NO_SPEECH_MAX = 0.6  # Whisper's no_speech_prob above this...
+STT_NOISE_MAX_LOGPROB = -0.8  # ...and confidence below this: background noise, not a command
 STT_PROMPT = os.getenv("JARVIS_STT_PROMPT",
-                       "Kurama, KURAMA, VS Code, Bluetooth, Brave, YouTube, Wi-Fi, gesture control, GitHub, Nepalgunj, Kathmandu, Pokhara.")
+                       "Kurama, KURAMA, VS Code, Bluetooth, Brave, YouTube, Spotify, Instagram, Telegram, Wi-Fi, gesture control, "
+                       "GitHub, Colab, Nepalgunj, Kathmandu, Pokhara.")
 # Common mishearings fixed after transcription (regex, case-insensitive, word-bounded).
 STT_FIXES: dict[str, str] = {
     r"\b(?:b\.?\s?s\.?|be\s?as|versus|vs\.?|v\.\s?s\.)\s+(?:code|cold|cord|court|coat)\b": "VS Code",
@@ -100,6 +102,7 @@ VOICES: dict[str, str] = {
 # --- paths ---
 DATA_DIR = Path(os.getenv("JARVIS_DATA_DIR", str(ROOT / "data")))
 DB_PATH = DATA_DIR / "jarvis.db"
+STT_LOG = DATA_DIR / "logs" / "stt.log"  # one line per recognition (what was heard, confidence)
 LOG_DIR = DATA_DIR / "logs"
 
 # --- daily token budgets (self-imposed, ~90% of Groq free-tier TPD) ---
@@ -191,8 +194,9 @@ TOOL_OUTPUT_MAX_CHARS = 800  # tool results are truncated to this before going b
 # (tool -> fast-path intent used to word the reply; None = fixed sentence below)
 DIRECT_REPLY_TOOLS = {"open_url": "open", "open_app": "open", "audio": "audio", "brightness": "brightness",
                       "media_control": "media", "lock_screen": "lock",
-                      "screenshot": "screenshot", "send_message_telegram": None}
-WORKSPACE_MIN_LINES = 8
+                      "screenshot": "screenshot", "send_message_telegram": None, "get_time": "time"}
+WORKSPACE_MIN_LINES = 40  # only big results go to the Workspace (simple answers stay in the chat)
+WORKSPACE_MIN_CHARS = 4000
 WORKSPACE_SHOW_ALL = ("list_folder", "training")  # results the user wants to see in full, to pick from
 TOOL_OUTPUT_FULL_CHARS = 3500  # the user asked for everything ("the whole list"): the LLM gets this much
 WORKSPACE_SKIP_TOOLS = ("read_webpage", "search_knowledge", "ask_knowledge", "recall_session", "jobs",

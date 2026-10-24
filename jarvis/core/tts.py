@@ -34,7 +34,8 @@ _FENCE = re.compile(r"```.*?```", re.S)
 _EMOJI = re.compile("[\U0001F000-\U0001FAFF☀-➿⬀-⯿️‍]+")
 # file paths (/home/x/y.py, ~/a/b, C:\\x\\y) and long numbers/ids are shown on screen, never read out
 _PATH = re.compile(r"(?<![\w])(?:~|\.{1,2})?/[\w.@+\-]+(?:/[\w.@+\-]*)+|\b[A-Za-z]:\\[^\s]+")
-_LONGNUM = re.compile(r"#?\b\d[\d,._:-]{4,}\b|\b[0-9a-f]{12,}\b")
+# ids, PIDs and hashes stay on screen; times (10:15), prices (17,000) and decimals are spoken
+_LONGNUM = re.compile(r"#\d{4,}\b|\b\d{7,}\b|\b(?=[0-9a-f]*\d)[0-9a-f]{12,}\b")
 
 
 def clean_for_speech(text: str) -> str:

@@ -42,6 +42,8 @@ def is_hallucination(text: str) -> bool:
     vocab = set(prompt)
     if len(norm) >= 3 and vocab and sum(w in vocab for w in norm) / len(norm) >= 0.8:
         return True
+    if len(norm) == 2 and all(w in vocab for w in norm):  # "KURAMA, Pokhara."
+        return True
     # "Kurama, VS Code, Brave, YouTube, and ...": 3+ prompt words in the prompt's own order = an echo, not speech
     dedup = [w for i, w in enumerate(norm) if i == 0 or w != norm[i - 1]]
     for i in range(len(dedup)):
@@ -112,8 +114,11 @@ def _no_speech(result) -> float | None:
 
 
 def is_noise(t: "Transcript") -> bool:
-    """Background noise that Whisper turned into words: the auto-detect pass says "probably not speech"."""
-    return t.no_speech is not None and t.no_speech > config.STT_NO_SPEECH_MAX
+    """Background noise that Whisper turned into words: "probably not speech" AND not confident about the words
+    (Whisper's own rule). no_speech alone also dropped real, clearly heard requests now and then."""
+    if t.no_speech is None or t.no_speech <= config.STT_NO_SPEECH_MAX:
+        return False
+    return t.logprob is None or t.logprob < config.STT_NOISE_MAX_LOGPROB
 
 
 def _one(wav: bytes, language: str | None, models: list[str]) -> Transcript:
@@ -245,7 +250,26 @@ def transcribe(wav: bytes, language: str | None = None) -> Transcript:
 
 def _gate(best: Transcript, auto: Transcript) -> Transcript:
     """Noise check on the final pick only (gating each pass threw away the good one)."""
+    heard = best.text
     if best.text and is_noise(auto):
         log.info("dropped as noise (no_speech %.2f): %r", auto.no_speech or 0, best.text[:60])
         best.text = ""
+    _trail(best, auto, heard)
     return best
+
+
+def _trail(best: Transcript, auto: Transcript, heard: str) -> None:
+    """One line per recognition in data/logs/stt.log (what was heard, which pass won, confidence, dropped?):
+    the evidence when voice recognition seems off. Kept small."""
+    try:
+        path = config.STT_LOG
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.exists() and path.stat().st_size > 256_000:
+            path.write_text("".join(path.read_text(encoding="utf-8").splitlines(True)[-500:]), encoding="utf-8")
+        f = lambda v: "-" if v is None else f"{v:.2f}"  # noqa: E731
+        with path.open("a", encoding="utf-8") as fh:
+            fh.write(f"{time.strftime('%m-%d %H:%M:%S')} {best.duration_s:4.1f}s {best.model[8:]:>14} "
+                     f"{auto.raw_lang or '-'}->{best.lang} lp={f(best.logprob)} ns={f(auto.no_speech)} "
+                     f"{'DROPPED ' if heard and not best.text else ''}{heard!r}\n")
+    except OSError:
+        pass

@@ -910,7 +910,8 @@ for (const b of document.querySelectorAll("[data-sw]")) {
 // ---------- workspace: results (outputs from /api/v1/outputs + long replies) as a list with tabs, a preview and actions ----------
 const ws = { items: [], cur: -1, seen: new Set(), loaded: false, tab: "all" };
 const wsTitle = (name) => name.replace(/^.*\//, "").replace(/^\d{8}-\d{4,6}-?/, "").replace(/\.[a-z0-9]+$/i, "").replace(/[-_]+/g, " ").trim() || name;
-const LONG_REPLY = (t) => t && (t.split("\n").filter((l) => l.trim()).length >= 4 || t.length > 420);
+// only a big answer goes to the Workspace too (simple ones stay in the chat)
+const LONG_REPLY = (t) => t && (t.split("\n").filter((l) => l.trim()).length >= 14 || t.length > 1500);
 const WS_MAX = 100; // kept in the panel (the files themselves stay in data/outputs for good)
 const WS_SHOW = 10; // listed per tab: the last 10 documents, 10 pictures, 10 code files...
 const WS_TABS = [["all", "All"], ["doc", "Docs"], ["code", "Code"], ["image", "Images"], ["data", "Data"]];
@@ -1052,7 +1053,8 @@ async function loadOutputs() {
   if (outputsBusy) return;
   outputsBusy = true;
   try {
-    const items = (await api.outputs(100)).items || [];
+    const items = ((await api.outputs(100)).items || []) // small saved tool results (quick lists) are not Workspace material
+      .filter((x) => !(String(x.name).startsWith("results/") && x.size < 4000));
     const fresh = items.filter((x) => !ws.seen.has("o" + x.name + x.mtime)).reverse(); // oldest first
     for (const x of fresh) {
       wsAdd({ key: "o" + x.name + x.mtime, kind: x.kind, title: wsTitle(x.name), name: x.name, mtime: x.mtime, size: x.size,
