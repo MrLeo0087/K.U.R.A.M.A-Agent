@@ -80,6 +80,9 @@ STT_FIXES: dict[str, str] = {
     r"^\s*(?:wariyo|warriyo|huarion|hu\s?ar\s?yu|who\s?r\s?u)\s*[?.!]*\s*$": "Who are you?",
     r"\bslip\b(?=\s+(?:my|the|this|now|mode|kurama|laptop|computer)\b|\s*[.!?]*$)": "sleep",  # "slip my laptop"
     r"^\s*hut\s+down\b": "shut down",
+    r"\bsit\b(?=\s+(?:the\s+|my\s+|a\s+)?(?:brightness|volume|timer|alarm|reminder|wallpaper)\b)": "set",  # "sit the brightness"
+    r"\b(start|stop|reset|pause)\s+(?:or|our|a|uh)\s+stopwatch\b": r"\1 the stopwatch",
+    r"\b(?:remiander|remainder|reminer|remindar)\b(?!\s+of\b)": "reminder",
     # "turn off/on" as Whisper often hears it with an accent: "tone of", "tron off", "torn of", "pon up"
     r"\b(?:tone|tron|torn|tan|tun|ton|tum)\s+(?:of+|op)\b": "turn off",
     r"\b(?:tone|tron|torn|tan|tun|ton|tum|pon)\s+(?:on|up)\b": "turn on",
@@ -110,6 +113,7 @@ STT_DAILY_AUDIO_SECONDS = 25_000  # Groq free tier ~28,800 audio-seconds/day
 
 # --- LLM call behaviour ---
 LLM_TIMEOUT_S = 30.0
+AGENT_TIMEOUT_S = 15.0  # interactive turns (text, Telegram): a stuck call is retried instead of waiting 30 s
 VOICE_TIMEOUT_S = 10.0  # spoken chat: give up sooner (then retry/fall back) instead of 30 s of silence
 LLM_MAX_TOKENS = 1024
 LLM_TEMPERATURE = 0.6
@@ -242,7 +246,7 @@ BRIGHTNESS_STEP = 10
 BRIGHTNESS_MIN = 5  # never dim below this: a black screen is hard to undo by voice
 SNAP_PANEL_OFFSET = 32  # GNOME top bar height, used when wmctrl reports no usable work area
 SCREENSHOT_DIR = Path(os.getenv("JARVIS_SCREENSHOT_DIR", str(Path.home() / "Pictures" / "Screenshots")))
-SCREENSHOT_TOOLS = ("gnome-screenshot", "scrot")  # first one found (and working) is used
+SCREENSHOT_TOOLS = ("scrot", "gnome-screenshot")  # first one found (and working) is used; scrot ~0.1 s, gnome ~0.9 s
 CLIPBOARD_READ_MAX = 500  # chars of clipboard text returned to the LLM
 CLIPBOARD_HISTORY_MAX = 50  # rows kept of text KURAMA itself copied
 READ_ALOUD_MAX_CHARS = 3000

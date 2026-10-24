@@ -299,6 +299,8 @@ class Agent:
         kw: dict[str, Any] = {"tier": state.get("tier", "fast"), "tools": tools,
                               "purpose": f"agent_{state.get('mode', 'text')}",
                               "max_tokens": config.AGENT_MAX_TOKENS}
+        if kw["tier"] != "voice":  # (the voice tier has its own, shorter timeout)
+            kw["timeout"] = config.AGENT_TIMEOUT_S
         if tools and last_round:
             kw["tool_choice"] = "none"
         msgs = state["messages"]

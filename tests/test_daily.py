@@ -68,3 +68,17 @@ def test_close_app_phrases():
     assert fastpath.match("Disable the handset system.").args == {"action": "off"}
     for text in ("close the tab", "close the door", "close all windows"):
         assert fastpath.match(text) is None, text
+
+
+def test_fastpath_common_misses():
+    cases = {"Take the screenshot of my display.": ("screenshot", {"mode": "full"}),
+             "Sit the brightness at 1%.": ("brightness", {"action": "set", "level": 1}),
+             "Start or stopwatch now.": ("stopwatch", {"action": "start"}),
+             "open the file manager": ("open_app", {"name": "file manager"}),
+             "switch off the laptop": ("power_off", {"action": "shutdown"})}
+    for text, want in cases.items():
+        it = fastpath.match(text)
+        assert it is not None and (it.tool, it.args) == want, text
+    it = fastpath.match("set remiander for 11:58 PM of today for reading book")
+    assert it.tool == "add_reminder" and it.args["text"] == "reading book"
+    assert fastpath.match("Also set the reminder for tomorrow 6 am for walking.").args["text"] == "walking"

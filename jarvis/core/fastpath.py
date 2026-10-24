@@ -53,11 +53,16 @@ def refresh_names() -> None:
 refresh_names()
 
 
+_DEVICE_TAIL = re.compile(r"\s+(?:of|in|from|for)\s+(?:my|the|this)\s+(?:laptop|computer|pc|system|display|"
+                          r"screen|desktop|monitor|device)(?=[\s,?.!।]*$)", I)
+
+
 def normalize(text: str) -> str:
     t = " ".join((text or "").split())
     for pat, rep in config.STT_FIXES.items():  # the same mishearing fixes as voice ("tone of" -> "turn off")
         t = re.sub(pat, rep, t, flags=I)
     t = _LEAD.sub("", t, count=1)
+    t = _DEVICE_TAIL.sub("", t)  # "take the screenshot of my display" = "take the screenshot"
     return _TRAIL.sub("", t).strip(" ,")
 
 
@@ -175,14 +180,13 @@ def search_intent(t: str) -> Intent | None:
     return Intent("search", "open_url", "browser", {"target": url}, f"{SEARCH_NAMES[eng]}|{q}")
 
 
-_ON_LAPTOP = r"(?: (?:of|off|on|in|from) (?:my|the|this) (?:laptop|computer|pc|system))?"  # "the camera of my laptop"
 OPEN = _rx(
     r"(?P<verb>open|launch|start|run|fire up|bring up|go to)(?: up)? (?:the |my )?(?P<target>.+?)"
-    r"(?: (?:app|application|for me))?" + _ON_LAPTOP,
+    r"(?: (?:app|application|for me))?",
     r"(?P<target>.+?) (?P<verb>kholo|khol|kholdo|khola|kholnu|kholdeu|chalao|chala|खोलो|खोल|खोल्नु|खोलदेउ|खोल्देउ|चलाओ)",
 )
-CLOSE = _rx(r"(?P<verb>close|quit|exit) (?:the |my )?(?P<target>.+?)(?: (?:app|application|window|windows))?" + _ON_LAPTOP)
-_BAD_TARGET = re.compile(r"(?:\band\b|\bthen\b|,|\bnew\b|\btab\b|\bfile\b|\bfolder\b|\bdoor\b|\btests?\b|"
+CLOSE = _rx(r"(?P<verb>close|quit|exit) (?:the |my )?(?P<target>.+?)(?: (?:app|application|window|windows))?")
+_BAD_TARGET = re.compile(r"(?:\band\b|\bthen\b|,|\bnew\b|\btab\b|\bfile\b(?! manager)|\bfolder\b|\bdoor\b|\btests?\b|"
                          r"\bcommand\b|\bscript\b|^(?:a|an|it|this|that)\b)", I)
 
 
@@ -812,8 +816,11 @@ def try_answer(text: str, lang: str | None = None, confirm=None, mode: str = "te
 
 
 # --- P9b --- reminders: "remind me to X at/in ...", "remind me at ... to X", list, cancel
-REMIND = _rx(r"(?:remind me|set (?:a |an )?(?:reminder|alarm)|add (?:a )?reminder|create (?:a )?reminder)"
+REMIND = _rx(r"(?:remind me|set (?:a |an |the |my )?(?:reminder|alarm)|add (?:a )?reminder|create (?:a )?reminder)"
              r"(?: for me)?(?: to| that| about| for)?\s+(?P<rest>.+)")
+# "3:02 PM of today for reading book": time first, then the task
+_WHEN_FIRST = re.compile(r"^(?P<d1>(?:today|tomorrow)\s+)?(?:at\s+)?(?P<t>\d{1,2}(?::\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.))"
+                         r"(?:\s+(?:of\s+)?(?P<d2>today|tomorrow))?\s+(?:for|to|about)\s+(?P<x>.+)$", I)
 REMIND_LIST = _rx(
     r"(?:what|which|any) (?:reminders|schedules|scheduled (?:commands|tasks)) (?:do i have|are there|are set|"
     r"have i set)(?: today)?",
@@ -840,7 +847,7 @@ _TIMER = [re.compile(r"^(?:set|start|put|make)\s+(?:\w+\s+)?(?:timer|countdown|c
 _ALARM = re.compile(r"^(?:set|put|create|add)\s+(?:an?\s+|the\s+)?alarm\s+(?:for|at)\s+(?P<w>.+)$|"
                     r"^wake\s+me\s+(?:up\s+)?(?:at|by|in)\s+(?P<w2>.+)$|^alarm\s+(?:for|at)\s+(?P<w3>.+)$", I)
 _STOPWATCH = re.compile(r"^(?P<a>start|begin|stop|pause|reset|restart|resume|check|lap)?\s*(?:the\s+|a\s+)?stop\s?watch"
-                        r"(?:\s+(?P<b>start|stop|status|time|lap|reset))?$|^(?P<c>lap)$", I)
+                        r"(?:\s+(?P<b>start|stop|status|time|lap|reset))?(?:\s+now)?$|^(?P<c>lap)$", I)
 _DEVICES = (("airplane", r"(?:air|aero)plane(?:\s+mode)?|flight\s+mode"), ("wifi", r"wi[\s-]?fi|wireless|internet"),
             ("bluetooth", r"blue\s?tooth"), ("power_mode", r"(?:battery|power)\s+saver"), ("screen", r"screen|display"))
 _SW_VERB = re.compile(r"\b(?:turn|switch|put|make|set|enable|disable|activate|deactivate|start|stop|kill)\b", I)
@@ -935,6 +942,9 @@ def _p9b_intent(t: str) -> Intent | None:
         from jarvis.core import when
 
         got = when.split(m.group("rest"))
+        if not got and (w := _WHEN_FIRST.match(m.group("rest"))):
+            day = (w.group("d1") or w.group("d2") or "").strip()
+            got = when.split(f"{w.group('x')} at {w.group('t')} {day}".strip())
         if got:
             what, when_text, _ = got
             return Intent("remind", "add_reminder", "schedule", {"text": what, "when": when_text}, what)

@@ -268,13 +268,14 @@ def test_screenshot_modes_and_scrot_fallback(desk):
     out = screenshot()
     m = re.fullmatch(r"saved screenshot to (.+/jarvis-\d{8}-\d{6}(?:-\d+)?\.png)", out)
     assert m and os.path.exists(m.group(1)) and str(config.SCREENSHOT_DIR) in out
-    assert desk.calls[-1][:2] == ["gnome-screenshot", "-f"]
+    assert desk.calls[-1][0] == "scrot"  # fastest first
     screenshot("window")
-    assert desk.calls[-1][-1] == "-w"
-    desk.missing.add("gnome-screenshot")
-    out = screenshot("area")
-    assert out.startswith("saved screenshot") and desk.calls[-1][:2] == ["scrot", "-s"]
+    assert desk.calls[-1][1] == "-u"
     desk.missing.add("scrot")
+    out = screenshot("area")
+    assert out.startswith("saved screenshot") and desk.calls[-1][:2] == ["gnome-screenshot", "-f"]
+    assert desk.calls[-1][-1] == "-a"
+    desk.missing.add("gnome-screenshot")
     assert screenshot().startswith("error: no screenshot tool")
 
 
