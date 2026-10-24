@@ -241,6 +241,7 @@ async function handleUtterance(blob) {
   conv.waiting();
   const r = await transcribe(blob);
   if (!r || !r.text) { maybeResume(); return; }
+  if (isEcho(r.text)) { maybeResume(); return; } // the mic heard KURAMA's own voice
   if (SLEEP_RE.test(r.text.trim())) { addUser(r.text, true); goSleep(); return; }
   if (pendingConfirm) {
     const t = r.text.replace(/^[\s,.!?"']+/, "");
@@ -484,7 +485,7 @@ $("composer").addEventListener("submit", (e) => {
   const lang = (mode === "mic" && dictLang) || S.lang;
   dictLang = null;
   caretKnown = false;
-  const speak = !S.mute && (mode === "conv" ? conv.on : mode === "mic" && S.voiceReplies);
+  const speak = !S.mute; // voice on (speaker button) = KURAMA answers out loud in every mode
   if (speak) audioCtx();
   orb.poke(1);
   sendChat(t, { voice: speak || dictated, lang, speak });
@@ -520,7 +521,7 @@ function welcome() {
     const b = el("button", "chip sug");
     b.type = "button";
     b.textContent = s;
-    b.onclick = () => sendChat(s, { lang: S.lang });
+    b.onclick = () => { if (!S.mute) audioCtx(); sendChat(s, { lang: S.lang, speak: !S.mute }); };
     row.append(b);
   }
   w.append(row);
@@ -1217,13 +1218,21 @@ function wakeEvents() {
   wakeES.onmessage = (e) => {
     let ev = null;
     try { ev = JSON.parse(e.data); } catch { return; }
-    if (ev.type === "wake" && asleep) wakeUp(ev.command || "");
+    if (ev.type === "wake" && asleep) wakeUp(ev.command && !isEcho(ev.command) ? ev.command : "");
     if (ev.type === "error" && asleep) { serverWake = false; sleepListen(); } // fall back to the page's mic
   };
 }
+function isEcho(text) { // mostly the words KURAMA itself just said (greeting, reply, question)
+  const words = (text || "").toLowerCase().match(/\p{L}+/gu) || [];
+  const said = (player.said || []).join(" ").toLowerCase();
+  return words.length > 0 && !!said && words.filter((w) => said.includes(w)).length / words.length >= 0.6;
+}
 async function sleepListen() { // asleep: the API's cheap listener, or (fallback) the page's own asleep mode
   if (!asleep) return;
-  for (let i = 0; player.active && i < 120; i++) await new Promise((r) => setTimeout(r, 250)); // never hear our own goodbye
+  for (let quiet = 0, i = 0; quiet < 6 && i < 240; i++) { // 1.5 s of real silence first: never hear our own voice
+    await new Promise((r) => setTimeout(r, 250));
+    quiet = player.active || player.playing ? 0 : quiet + 1;
+  }
   if (!asleep) return;
   if (serverWake) {
     if (conv.on) { conv.stop(); mic.stop(); }
@@ -1301,7 +1310,6 @@ function openSettings(msg) {
   $("set-name").value = botName;
   $("set-api").value = S.apiBase || "";
   $("set-token").value = S.token || "";
-  $("set-voice").checked = !!S.voiceReplies;
   $("set-wake").checked = !!S.wakeListen;
   $("set-low").checked = lowPowerOn();
   $("set-lang").value = S.lang || "auto";
@@ -1324,7 +1332,6 @@ $("set-form").addEventListener("submit", (e) => {
   if (e.submitter?.value !== "save") return;
   S.apiBase = $("set-api").value.trim().replace(/\/+$/, "");
   S.token = $("set-token").value.trim();
-  S.voiceReplies = $("set-voice").checked;
   const wakeWas = S.wakeListen;
   S.wakeListen = $("set-wake").checked;
   if (S.wakeListen && !wakeWas) setTimeout(startListening, 0);
@@ -1424,6 +1431,7 @@ if (params.get("paused") === "1") window.kuramaPause(true); // start paused (tes
 checkHealth().then(() => { startStatus(); loadDevice(); bootVoice(); });
 async function bootVoice() { // first load after KURAMA starts: say hello, then wait (asleep) for the wake word
   if (MINI || params.get("debug") === "1") return;
+  if (S.wakeListen) { mode = "conv"; setMode("conv"); } // talk mode is the default
   let g = "";
   try { g = (await api.greeting()).text || ""; } catch { /* no greeting */ }
   if (!g) { startListening(); return; }
