@@ -193,7 +193,7 @@ DIRECT_REPLY_TOOLS = {"open_url": "open", "open_app": "open", "audio": "audio", 
                       "media_control": "media", "lock_screen": "lock",
                       "screenshot": "screenshot", "send_message_telegram": None}
 WORKSPACE_MIN_LINES = 8
-WORKSPACE_SHOW_ALL = ("list_folder",)  # results the user wants to see in full, to pick from
+WORKSPACE_SHOW_ALL = ("list_folder", "training")  # results the user wants to see in full, to pick from
 TOOL_OUTPUT_FULL_CHARS = 3500  # the user asked for everything ("the whole list"): the LLM gets this much
 WORKSPACE_SKIP_TOOLS = ("read_webpage", "search_knowledge", "ask_knowledge", "recall_session", "jobs",
                         "about_me", "write_document", "skills", "find_capability")
@@ -256,7 +256,9 @@ ROUTER_EXAMPLES: dict[str, tuple[str, ...]] = {
     "knowledge": ("how does my code handle this", "find where my project loads the config", "explain my repo"),
     "usage": ("how many tokens did I use", "give me a summary of today"),
     "jobs": ("write a detailed report in the background", "how is my background job going", "cancel the job"),
-    "watch": ("tell me when the training is done", "notify me when this process exits", "watch this log file"),
+    "watch": ("tell me when the training is done", "notify me when this process exits", "watch this log file",
+              "how is my model training going", "start training and keep an eye on it", "connect my colab notebook",
+              "is the training still running"),
     "daily": ("calculate this for me", "convert dollars to rupees", "how much disk space is used"),
     "devutils": ("turn the notebook into a script", "make requirements.txt from imports", "what changed in my config"),
     "self": ("what can you do", "what are your features", "how do I use you"),
@@ -425,7 +427,7 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
                 "chatgpt", "open google", "www", "http", "https"),
     "watch": ("watch", "watches", "watching", "monitor", "keep an eye", "tell me when", "notify me when",
               "alert me", "let me know when", "training run", "training", "log file", "tail the log",
-              "finishes", "nazar", "नजर", "निगरानी", "हेरिरहनु", "ध्यान राख"),
+              "finishes", "colab", "train my model", "train the model", "epoch", "loss curve", "nazar", "नजर", "निगरानी", "हेरिरहनु", "ध्यान राख"),
     "automation": ("automation", "watchdog", "auto restart",
                    "auto-restart", "keep alive", "keep it running", "if it crashes", "crashed", "crashes",
                    "वर्कफ्लो", "स्वचालन"),
@@ -445,7 +447,8 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
     "toolsmith": "no tool fits a real task: offer to build a small new tool; saved tools list/run/delete",
     "skills": "small tools KURAMA built earlier (saved skills)",
     "system": "system resources (RAM, CPU, disk) and laptop switches: Wi-Fi, Bluetooth, airplane, power mode, screen off",
-    "watch": "watch a process/PID until it exits or tail a training log and alert on errors/progress",
+    "watch": "Training Guard: start/watch ML training runs (local or Google Colab), progress, crash, NaN, stuck, "
+             "finished alerts; watch any process or log",
     "automation": "crash watchdog: keep dev servers running (auto-restart) and their status",
     "audio": "speaker volume, mute, microphone mute",
     "display": "screen brightness, light/dark mode (also automatic at sunset)",
@@ -479,7 +482,7 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
 TOOL_GROUP_GLOSS: dict[str, str] = {
     "general": "time", "weather": "", "files": "folders", "filesearch": "",
     "telegram": "phone", "toolsmith": "new tool", "skills": "", "system": "RAM, CPU",
-    "watch": "process", "automation": "watchdog", "audio": "volume", "display": "brightness",
+    "watch": "training", "automation": "watchdog", "audio": "volume", "display": "brightness",
     "screen": "screenshot", "power": "battery", "clipboard": "", "windows": "",
     "apps": "", "media": "music", "desktop": "wallpaper", "git": "", "dev": "tests", "codequality": "review",
     "devutils": "notebooks",
@@ -539,6 +542,14 @@ LOG_WATCH_DONE_PATTERN = r"(?i)\b(done|finished|completed)\b"
 LOG_WATCH_ALERT_COOLDOWN_S = 60.0  # one error alert per watch per minute (matches are summarized)
 LOG_WATCH_READ_MAX = 256_000  # bytes read per tick per log
 LOG_WATCH_TAIL_LINES = 8  # last lines included in alerts / list_watches
+# Training Guard (jarvis/core/training.py)
+TRAINING_KEEP_AWAKE = True  # block suspend while a local run is watched (systemd-inhibit)
+TRAINING_STALL_MIN = 20  # no new output for this long while the process runs = "may be stuck" (0 = off)
+TRAINING_BATTERY_WARN = 25  # % on battery during a run: tell the user to plug in
+TRAINING_EXPLAIN = True  # a crash gets one short LLM line (cause + fix), cached per error
+COLAB_POLL_S = 60.0  # how often KURAMA checks for Colab pings (only while a Colab run is active)
+COLAB_SILENT_MIN = 25  # no ping for this long = the Colab runtime probably disconnected
+COLAB_PROGRESS_EVERY_S = 300  # the notebook sends progress at most this often (ntfy.sh free limits)
 # Crash watchdog: targets come ONLY from here plus data/watchdog_targets.json (add_watchdog_target,
 # confirm-level, allowlist-checked). Example: {"name": "n8n", "command": "n8n start", "cwd": "~",
 # "match": "n8n"}  ("match" = adopt an already-running process whose command line contains it).

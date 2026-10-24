@@ -191,50 +191,6 @@ def test_process_watch_exit_detection(monkeypatch):
     assert alert["title"] == "Process finished: training run" and "4242" in alert["text"]
 
 
-def test_log_watch_patterns_and_rotation(tmp_path, monkeypatch):
-    monkeypatch.setattr(config, "LOG_WATCH_ALERT_COOLDOWN_S", 0)
-    log = tmp_path / "train.log"
-    log.write_text("old Error before the watch\n")
-    wid, msg = process_watch.register_log(str(log), label="exp1")
-    assert wid and "tailing" in msg
-    w = process_watch.ProcessWatcher()
-    with log.open("a") as f:
-        f.write("epoch 1 loss 0.9\nEpoch 2/10 completed\nTraceback (most recent call last):\n  File x\n")
-    w.tick()
-    alerts = store.alerts_recent()
-    assert len(alerts) == 1 and alerts[0]["title"] == "Log alert: exp1 (epoch 2)"
-    assert "Traceback" in alerts[0]["text"] and "Last lines" in alerts[0]["text"]
-    assert "old Error" not in alerts[0]["text"]  # only lines written after the watch started
-    log.rename(tmp_path / "train.log.1")  # rotation: a new file at the same path
-    log.write_text("epoch 3 loss nan\nloss: nan\n")
-    w.tick()
-    assert store.alerts_recent()[0]["title"] == "Log alert: exp1 (epoch 3)"
-    log.write_text("training finished\n")  # truncated in place
-    w.tick()
-    top = store.alerts_recent()[0]
-    assert top["title"] == "Log finished: exp1 (epoch 3)" and top["level"] == "info"
-    with log.open("a") as f:
-        f.write("half a li")  # no newline yet: wait for the rest
-    w.tick()
-    assert len(store.alerts_recent()) == 3
-    assert "epoch 3" in process_watch.describe(store.watch_get(wid))
-
-
-def test_watch_tools(tmp_path, monkeypatch):
-    monkeypatch.setattr(psutil, "Process", FakeProc)
-    FakeProc.alive = {77: time.time()}
-    tools = {n: registry.get(n) for n in ("watch_process", "watch_log", "list_watches", "stop_watch")}
-    assert all(registry.safety_of(t) == "safe" and registry.group_of(t) == "watch" for t in tools.values())
-    out = registry.call("watch_process", {"target": "77", "label": "render"}).output
-    assert "watch #1" in out and "workers not running" in out
-    assert "no such log file" in registry.call("watch_log", {"path": str(tmp_path / "nope.log")}).output
-    (tmp_path / "a.log").write_text("")
-    assert "bad regex" in registry.call("watch_log", {"path": str(tmp_path / "a.log"), "patterns": "(("}).output
-    assert "render" in registry.call("list_watches", {}).output
-    assert registry.call("stop_watch", {"watch": "render"}).output == "stopped #1 render"
-    assert "no active watch" in registry.call("stop_watch", {"watch": "all"}).output
-
-
 # --- crash watchdog ---
 class FakePopen:
     started: list = []

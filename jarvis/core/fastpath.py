@@ -532,7 +532,18 @@ _NEWS = re.compile(r"^(?:(?:show|tell|give|read)\s+me\s+)?(?:the\s+)?(?:latest\s
                    r"(?:news|headlines)(?:\s+(?:about|on|of|for|in)\s+(?P<topic>.+))?(?:\s+today)?$", I)
 
 
+_TRAIN_STATUS = re.compile(r"^(?:(?:how(?:'s| is| are)|what(?:'s| is)|is|are|check|show(?: me)?|give me)\s+)?"
+                           r"(?:the |my )?(?:model |ml )?(?:training|train(?:ing)? runs?|runs?)(?: going| doing| status|"
+                           r" progress| still running| done| finished| over)*(?: now)?$", I)
+_COLAB = re.compile(r"^(?:set ?up|connect|link|add|give me|show me)\s+(?:the |my )?(?:google )?colab"
+                    r"(?: notebook| cell| snippet| code| training| ping)*$", I)
+
+
 def _daily_intent(t: str) -> Intent | None:
+    if _TRAIN_STATUS.match(t) and re.search(r"train|run", t, I):
+        return Intent("training", "training", "watch", {"action": "status"})
+    if _COLAB.match(t):
+        return Intent("training", "training", "watch", {"action": "colab"})
     if _GESTURE.search(t):
         if _GEST_OFF.match(t):
             return Intent("gesture", "gesture_control", "media", {"action": "off"})
@@ -777,6 +788,12 @@ def render(intent: Intent, ok: bool, output: str, lang: str) -> str:
         return f"Yes, I can help with {intent.label}. These of my tools fit: {', '.join(lines[:4])}. Shall I start?"
     if intent.name == "listdir":
         return _render_listdir(intent, out)
+    if intent.name == "training" and intent.args.get("action") == "colab" and safety.context().get("channel") != "telegram":
+        from jarvis.core import workspace  # the cell is long: the Workspace shows it, the reply stays short
+        if (path := workspace.publish("Colab cell for KURAMA", out)) is not None:
+            intent.args["_published"] = str(path.relative_to(Path(config.OUTPUTS_DIR)))
+        return ("Here's the Colab cell, it's in your workspace. Paste it at the top of your notebook and run it once; "
+                "then call kurama(epoch=..., loss=...) in your loop and I'll keep you posted.")
     return out  # weather / recall / digest / tokens / session: the tool output is already text
 
 

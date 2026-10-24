@@ -1,11 +1,10 @@
-"""watch_process: alert when a PID or named process exits, with its runtime (safe)."""
+"""watch_process: alert when a PID or named process exits, with its runtime (safe).
+
+No longer a tool of its own: `training` calls watch_process() (old name kept as an alias)."""
 from __future__ import annotations
 
-from jarvis.core.registry import tool
 
 
-@tool(group="watch", safety="safe",
-      description="Watch a running process (PID or name) and alert when it exits, with its runtime.")
 def watch_process(target: str, label: str = "") -> str:
     """Watch a process until it exits.
 

@@ -1,10 +1,10 @@
-"""list_watches: active process/log watches and recently finished ones (safe)."""
+"""list_watches: active process/log watches and recently finished ones (safe).
+
+No longer a tool of its own: `training` calls list_watches() (old name kept as an alias)."""
 from __future__ import annotations
 
-from jarvis.core.registry import tool
 
 
-@tool(group="watch", safety="safe", description="List process and log watches and their state.")
 def list_watches() -> str:
     from jarvis.core import store
     from jarvis.workers import process_watch, status

@@ -1,11 +1,10 @@
-"""watch_log: tail a log file and alert on errors / progress / completion (safe)."""
+"""watch_log: tail a log file and alert on errors / progress / completion (safe).
+
+No longer a tool of its own: `training` calls watch_log() (old name kept as an alias)."""
 from __future__ import annotations
 
-from jarvis.core.registry import tool
 
 
-@tool(group="watch", safety="safe",
-      description="Tail a log file (e.g. a training run) and alert on errors, NaN loss, OOM or completion.")
 def watch_log(path: str, patterns: str = "", label: str = "") -> str:
     """Watch a log file.
 

@@ -1,12 +1,12 @@
-"""stop_watch: stop one watch (by number or name) or all of them (safe)."""
+"""stop_watch: stop one watch (by number or name) or all of them (safe).
+
+No longer a tool of its own: `training` calls stop_watch() (old name kept as an alias)."""
 from __future__ import annotations
 
 import time
 
-from jarvis.core.registry import tool
 
 
-@tool(group="watch", safety="safe", description="Stop a process/log watch by number or name, or 'all'.")
 def stop_watch(watch: str) -> str:
     """Stop watching.
 
