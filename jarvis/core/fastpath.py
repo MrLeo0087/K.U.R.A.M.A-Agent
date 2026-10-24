@@ -256,6 +256,14 @@ _MEDIA_OBJ = r"(?: (?:the |my )?(?:music|song|video|playback|track|player|media|
 _SONG = r"(?:song|track|video)"
 _SONG_HI = r"(?:gaana|gana|geet|song|track|गाना|गीत)"
 SWITCHES = [  # (intent name, tool, group, args, patterns); first full match wins
+    ("find_phone", "find_my_phone", "system", {"phone": "iphone"}, _rx(
+        r"(?:find|locate|where(?:'s| is)|track|ring) (?:my |the )?(?:lost |missing )?iphone(?: now)?",
+        r"find my (?:phone|mobile) \(?iphone\)?")),
+    ("find_phone", "find_my_phone", "system", {"phone": "android"}, _rx(
+        r"(?:find|locate|track|ring) (?:my |the )?(?:lost |missing )?(?:phone|mobile|android|cell\s*phone)(?: now)?",
+        r"where(?:'s| is) (?:my |the )?(?:phone|mobile|android|cell\s*phone)(?: now)?",
+        r"(?:open |launch )?(?:google )?find my (?:device|phone|mobile|android)",
+        r"(?:phone|mobile|मोबाइल|फोन) (?:kaha|kahan|khoj|कहाँ|कहां|खोज)(?:\s\w+)?")),
     ("mic", "mic_mute", "audio", {"action": "mute"}, _rx(
         r"(?:mute|turn off|switch off|disable) (?:the |my )?(?:mic|microphone)", r"(?:mic|microphone) (?:off|mute)",
         r"(?:mic|माइक) (?:band karo|band kar do|बंद करो|बन्द गर|बन्द गरिदेउ)")),

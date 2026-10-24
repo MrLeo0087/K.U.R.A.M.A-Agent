@@ -100,3 +100,19 @@ def test_phone_commands_match():
     assert phone.HERE.match("this is home").group("label") == "home"
     assert phone.HELP_RE.match("give me all laptop control commands") and phone.HELP_RE.match("/help")
     assert not phone.HELP_RE.match("open youtube") and not phone.CAMERA.match("what is the weather")
+
+
+def test_find_my_phone_opens_the_page(monkeypatch):
+    import jarvis.tools.general.find_my_phone as fmp
+    opened = []
+    monkeypatch.setattr(fmp, "_open", opened.append)
+    assert "Find My Device" in fmp.find_my_phone(phone="android") and "google.com/android/find" in opened[0]
+    assert "iPhone" in fmp.find_my_phone(phone="iphone") and "icloud.com/find" in opened[1]
+
+
+def test_find_my_phone_fastpath(monkeypatch):
+    from jarvis.core import config, fastpath
+    monkeypatch.setattr(config, "FASTPATH", True)
+    assert fastpath.match("find my phone").args == {"phone": "android"}
+    assert fastpath.match("find my iphone").args == {"phone": "iphone"}
+    assert fastpath.match("where is my laptop") is None  # the laptop, not the phone

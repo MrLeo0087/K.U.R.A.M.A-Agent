@@ -48,6 +48,7 @@ CASES: list[tuple[str, str]] = [
     ("open youtube", "open_url"), ("pause the music", "media_control"), ("play lofi on youtube", "youtube"),
     ("enable hand gesture control", "gesture_control"),
     # files / phone
+    ("find my phone", "find_my_phone"), ("where is my phone", "find_my_phone"),
     ("find my resume pdf", "find_files"), ("what's in my downloads folder", "list_folder"),
     ("make a folder called experiments", "make_folder"), ("send me train.log on telegram", "send_file_telegram"),
     ("send hello to my telegram", "send_message_telegram"), ("what's on my clipboard", "clipboard"),
