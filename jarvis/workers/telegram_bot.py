@@ -18,13 +18,26 @@ from jarvis.core import config, notify, store
 from jarvis.workers.base import Worker
 
 OFFSET_KEY = "telegram_offset"
-HELP = ("I'm KURAMA. Send a question or command as text or a voice note.\n"
-        "Send a file or photo: it's saved on your laptop (caption 'to <folder>' picks the folder).\n"
-        "copy: <text> puts text on the laptop's clipboard; /clip sends you the laptop's clipboard.\n"
-        "/screen: a screenshot of the laptop\n/guard on|off: laptop guard (photo + location if someone uses it)\n"
-        "/where: where the laptop is\n/status (or just 'status'): training epochs/accuracy/ETA, jobs, downloads...\n"
-        "'stop training' / 'stop training now': stops a run (asks first)\n/jobs: background jobs\n"
-        "/help: this message\nRisky actions ask 'Reply yes/no' first.")
+HELP = (
+    "🤖 KURAMA — control your laptop from here\n"
+    "Send any question or command as text or a voice note.\n"
+    "\n📷 Camera & screen\n"
+    "/camera — a photo from the laptop camera\n"
+    "/video [secs] — a short camera clip (default 5s, e.g. /video 8)\n"
+    "/screen — a screenshot of the laptop\n"
+    "\n📍 Find my laptop\n"
+    "/where (or /locate) — where the laptop is, with a map link\n"
+    "/here <name> — label the current Wi-Fi (e.g. /here Home) so /where names it\n"
+    "/guard on | off — watch the laptop; a photo + location if someone uses it\n"
+    "\n📋 Clipboard & files\n"
+    "copy: <text> — put text on the laptop's clipboard\n"
+    "/clip — get the laptop's clipboard\n"
+    "Send a file/photo — saved on the laptop (caption 'to <folder>' picks the folder)\n"
+    "\n⚙️ Status & work\n"
+    "/status (or 'status') — training epochs/accuracy/ETA, jobs, downloads...\n"
+    "'stop training' / 'stop training now' — stop a run (asks first)\n"
+    "/jobs — background jobs\n"
+    "\n/help — this list\nRisky actions ask 'Reply yes/no' first.")
 TEXT_ONLY = "Sorry, I can't use that kind of message."
 # a reply to find_and_send's numbered list: "2", "send 2", "number 2", "all", "send all" (0 tokens)
 PICK = re.compile(r"^\s*(?:send\s+)?(?:(?:no\.?|number|file)\s*)?(\d{1,2}|all|both)\s*[.!]?\s*$", re.I)
@@ -69,6 +82,29 @@ class TelegramBot(Worker):
             store.kv_set(OFFSET_KEY, str(self.offset))
         return updates
 
+    def typing(self) -> None:
+        """Show "typing…" in the chat (lasts ~5 s), so a slow answer doesn't look stuck."""
+        try:
+            notify.telegram_call("sendChatAction", {"chat_id": config.TELEGRAM_CHAT_ID, "action": "typing"})
+        except Exception:
+            pass
+
+    def _keep_typing(self, stop: "threading.Event") -> None:
+        while not stop.is_set():
+            self.typing()
+            if stop.wait(4):  # Telegram clears "typing…" after ~5 s, so refresh a little sooner
+                break
+
+    def reply_with_typing(self, text: str) -> str:
+        """Answer `text` while "typing…" shows, so the user always sees something is happening."""
+        stop = threading.Event()
+        pinger = threading.Thread(target=self._keep_typing, args=(stop,), name="tg-typing", daemon=True)
+        pinger.start()
+        try:
+            return self.answer(text)
+        finally:
+            stop.set()
+
     def send(self, text: str) -> None:
         text = (text or "(no answer)").strip()
         limit = config.TELEGRAM_MAX_REPLY_CHARS
@@ -107,6 +143,7 @@ class TelegramBot(Worker):
         msg = self._own_message(update)
         if msg is None:
             return
+        self.typing()  # at once: "typing…" shows even while a voice note transcribes or a file saves
         text = (msg.get("text") or "").strip()
         if not text:
             from jarvis.core import phone
@@ -125,7 +162,7 @@ class TelegramBot(Worker):
                 return
         self.handled += 1
         self.log.info("message (%d chars)", len(text))
-        self.send(self.answer(text))
+        self.send(self.reply_with_typing(text))
 
     def answer(self, text: str) -> str:
         from jarvis.core import guard, phone
@@ -143,8 +180,16 @@ class TelegramBot(Worker):
                 return phone.screenshot_to_phone()
             if cmd == "/guard":
                 return guard.arm(arg == "on") if arg in ("on", "off") else guard.status()
-            if cmd == "/where":
+            if cmd in ("/where", "/locate", "/find"):
                 return guard.where()
+            if cmd in ("/camera", "/photo"):
+                return guard.send_photo()
+            if cmd in ("/video", "/vid", "/rec", "/record"):
+                return guard.send_clip(int(arg) if arg.isdigit() else 5)
+            if cmd == "/here":
+                from jarvis.core import geolocate
+                label = text.split(maxsplit=1)[1].strip() if len(text.split(maxsplit=1)) > 1 else "home"
+                return geolocate.label_here(label)
             return HELP
         if m := phone.COPY.match(text):  # 0 tokens: phone -> laptop clipboard
             return phone.set_clipboard(m.group("t").strip())
@@ -152,6 +197,17 @@ class TelegramBot(Worker):
             return phone.clipboard_text()
         if phone.SCREEN.match(text):
             return phone.screenshot_to_phone()
+        if phone.CAMERA.match(text):
+            return guard.send_photo()
+        if m := phone.VIDEO.match(text):
+            return guard.send_clip(int(m.group("sec")) if m.group("sec") else 5)
+        if phone.WHERE.match(text):
+            return guard.where()
+        if m := phone.HERE.match(text):
+            from jarvis.core import geolocate
+            return geolocate.label_here(m.group("label"))
+        if phone.HELP_RE.match(text):
+            return HELP
         if (m := PICK.match(text)) and (picked := self.pick_found(m.group(1))):
             return picked
         try:

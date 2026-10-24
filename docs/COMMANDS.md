@@ -63,6 +63,27 @@ the sound settings.
 
 `scripts/kurama-power.sh off` also puts the normal sound settings back.
 
+## Control the laptop from your phone (Telegram)
+
+Send these to the KURAMA bot. Send **/help** (or "give me all laptop control commands") any time to get this list on your phone.
+
+| Command | What it does |
+|---|---|
+| `/camera` (or "send a photo from the laptop camera") | A photo from the laptop's camera |
+| `/video [secs]` (e.g. `/video 8`) | A short camera clip (default 5s) |
+| `/screen` | A screenshot of the laptop |
+| `/where` (or `/locate`, "where is my laptop") | Where the laptop is, with a map link |
+| `/here <name>` (e.g. `/here Home`) | Label the current Wi-Fi so `/where` names that spot exactly |
+| `/guard on` / `/guard off` | Watch the laptop; a photo + location if someone uses it |
+| `copy: <text>` | Put text on the laptop's clipboard |
+| `/clip` | Get the laptop's clipboard |
+| send a file/photo | Saved on the laptop (caption `to <folder>` picks the folder) |
+| `/status` (or "status") | Training, jobs, downloads |
+| `/jobs` | Background jobs |
+
+Location note: without a paid map key, position is street-level only where nearby Wi-Fi is in the public
+database; otherwise it's the city (correct city now). Label your home/known Wi-Fi with `/here` for an exact name.
+
 ## Checking and troubleshooting
 
 | What | Command |

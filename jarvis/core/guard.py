@@ -29,46 +29,106 @@ def arm(on: bool) -> str:
 
 
 def camera() -> str | None:
-    cams = sorted(Path("/dev").glob("video*"))
-    return str(cams[0]) if cams and shutil.which("ffmpeg") else None
+    """The first webcam that can actually capture video (skips metadata-only /dev/video* nodes)."""
+    if not shutil.which("ffmpeg"):
+        return None
+    for dev in sorted(Path("/dev").glob("video*"), key=lambda p: p.name):
+        try:
+            out = subprocess.run(["v4l2-ctl", "-d", str(dev), "--list-formats"], capture_output=True, text=True,
+                                 timeout=3).stdout
+            if "Video Capture" in out or "[0]" in out:
+                return str(dev)
+        except (OSError, subprocess.SubprocessError):
+            return str(dev)  # v4l2-ctl missing: fall back to the first node
+    return None
+
+
+_IN = ["-f", "v4l2", "-input_format", "mjpeg", "-video_size", "1280x720"]  # MJPEG: quick, no slow raw transfer
+
+
+def _busy(stderr: bytes) -> bool:
+    return b"resource busy" in (stderr or b"").lower() or b"Device or resource busy" in (stderr or b"")
+
+
+# the last capture's trouble, for a clear message to the phone ("" = fine, "busy" = camera in use, "none" = no camera)
+last_error = ""
 
 
 def photo() -> Path | None:
     """One webcam frame (skipped frames let the camera adjust its exposure)."""
+    global last_error
     dev = camera()
     if not dev:
+        last_error = "none"
         return None
     d = Path(config.DATA_DIR) / "guard"
     d.mkdir(parents=True, exist_ok=True)
     out = d / f"guard-{time.strftime('%Y%m%d-%H%M%S')}.jpg"
     try:
-        subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-f", "v4l2", "-i", dev, "-vf", "select=gte(n\\,8)",
-                        "-frames:v", "1", str(out)], capture_output=True, timeout=15)
+        r = subprocess.run(["ffmpeg", "-loglevel", "error", "-y", *_IN, "-i", dev, "-vf", "select=gte(n\\,6)",
+                            "-frames:v", "1", str(out)], capture_output=True, timeout=15)
     except (OSError, subprocess.SubprocessError):
+        last_error = "fail"
         return None
+    last_error = "busy" if _busy(r.stderr) else ""
     return out if out.exists() and out.stat().st_size > 0 else None
 
 
-def where() -> str:
-    """Wi-Fi name, public IP and rough location (ip-api.com, free, no key)."""
-    parts = []
+def clip(seconds: float = 5.0) -> Path | None:
+    """A short webcam video (skips the first frames so the exposure settles)."""
+    dev = camera()
+    if not dev:
+        return None
+    d = Path(config.DATA_DIR) / "guard"
+    d.mkdir(parents=True, exist_ok=True)
+    out = d / f"clip-{time.strftime('%Y%m%d-%H%M%S')}.mp4"
+    global last_error
+    secs = max(1.0, min(30.0, float(seconds)))
     try:
-        out = subprocess.run(["nmcli", "-t", "-f", "active,ssid", "dev", "wifi"], capture_output=True, text=True,
-                             timeout=8).stdout
-        ssid = next((ln.split(":", 1)[1] for ln in out.splitlines() if ln.startswith("yes:")), "")
-        parts.append(f"Wi-Fi: {ssid or 'not connected'}")
+        r = subprocess.run(["ffmpeg", "-loglevel", "error", "-y", *_IN, "-i", dev, "-t", f"{secs:.1f}",
+                            "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
+                            "-movflags", "+faststart", str(out)], capture_output=True, timeout=secs + 25)
     except (OSError, subprocess.SubprocessError):
-        pass
-    try:
-        r = notify._http().get("http://ip-api.com/json/?fields=status,query,city,regionName,country,lat,lon,isp",
-                               timeout=8)
-        d = r.json()
-        if d.get("status") == "success":
-            parts.append(f"IP {d['query']} ({d.get('isp', '')}), around {d.get('city')}, {d.get('regionName')}, "
-                         f"{d.get('country')}: https://maps.google.com/?q={d['lat']},{d['lon']}")
-    except Exception:
-        parts.append("public IP unknown (offline?)")
-    return "\n".join(parts)
+        last_error = "fail"
+        return None
+    last_error = "busy" if _busy(r.stderr) else ""
+    return out if out.exists() and out.stat().st_size > 0 else None
+
+
+def _no_camera_msg() -> str:
+    return ("The laptop's camera is busy (another app is using it)." if last_error == "busy"
+            else "I couldn't use the camera (no webcam found)." if last_error == "none"
+            else "I couldn't use the camera (no webcam, or it's busy).")
+
+
+def send_photo() -> str:
+    """Take one webcam photo and send it to Telegram (for 'find my laptop')."""
+    pic = photo()
+    if pic is None:
+        return _no_camera_msg()
+    if not config.TELEGRAM_BOT_TOKEN:
+        return f"Photo saved on the laptop: {pic} (set up Telegram to get it on your phone)."
+    from jarvis.tools.general.send_file_telegram import deliver
+    r = deliver(pic, f"Laptop camera · {time.strftime('%H:%M:%S')}")
+    return "📷 Sent a photo from the laptop camera." if not r.startswith("error") else r
+
+
+def send_clip(seconds: float = 5.0) -> str:
+    """Record a short webcam video and send it to Telegram."""
+    vid = clip(seconds)
+    if vid is None:
+        return _no_camera_msg()
+    if not config.TELEGRAM_BOT_TOKEN:
+        return f"Video saved on the laptop: {vid}."
+    from jarvis.tools.general.send_file_telegram import deliver
+    r = deliver(vid, f"Laptop camera · {int(max(1, min(30, seconds)))}s clip")
+    return "🎥 Sent a video from the laptop camera." if not r.startswith("error") else r
+
+
+def where() -> str:
+    """Where the laptop is: known Wi-Fi spot, Wi-Fi/IP position, place name and a map link (0 tokens, free)."""
+    from jarvis.core import geolocate
+    return geolocate.where_text()
 
 
 def alert(what: str) -> None:

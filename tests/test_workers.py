@@ -342,7 +342,9 @@ def test_telegram_status_and_help(tg, monkeypatch):
     bot = telegram_bot.TelegramBot()
     out = bot.answer("/status")
     assert "Laptop: RAM" in out and "essay about Nepal" in out  # /status = the full overview now
-    assert bot.answer("/help").startswith("I'm KURAMA") and bot.answer("/start@JarvisBot") == telegram_bot.HELP
+    assert bot.answer("/help") == telegram_bot.HELP and bot.answer("/start@JarvisBot") == telegram_bot.HELP
+    assert "/camera" in telegram_bot.HELP and "/where" in telegram_bot.HELP  # the laptop-control list
+    assert bot.answer("give me all laptop control commands") == telegram_bot.HELP
 
 
 class Resp:
