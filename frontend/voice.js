@@ -11,6 +11,18 @@ export function audioCtx() {
   return _ctx;
 }
 
+// The microphone gets its own small 16 kHz context (speech needs no more; ~3x less audio work than 48 kHz), so
+// an always-on wake-word listener stays cheap; TTS playback keeps the full-quality context above.
+let _micCtx = null;
+function micCtx() {
+  if (!_micCtx || _micCtx.state === "closed") {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    try { _micCtx = new AC({ sampleRate: 16000 }); } catch { _micCtx = new AC(); }
+  }
+  if (_micCtx.state === "suspended") _micCtx.resume().catch(() => {});
+  return _micCtx;
+}
+
 // Nothing playing or listening for 20 s: close the context. An open AudioContext keeps WebKit's audio thread
 // rendering silence all day (~12% of a core, measured); the next mic / voice reply opens a fresh one.
 export function audioSleepSoon(ms = 20000) {
@@ -19,7 +31,6 @@ export function audioSleepSoon(ms = 20000) {
     _sleep = 0;
     const c = _ctx;
     _ctx = null;
-    _tapModule = null; // the worklet module belongs to the old context
     c.close().catch(() => {});
   }, ms);
 }
@@ -112,23 +123,25 @@ const TAP_WORKLET = `class KuramaTap extends AudioWorkletProcessor {
   }
 }
 registerProcessor("kurama-tap", KuramaTap);`;
-let _tapModule = null;
 
 export class Mic {
   constructor() { this.stream = null; this.sinks = new Set(); }
   get open() { return !!this.stream; }
 
-  async start() {
+  // plain = no echo cancellation / noise suppression / gain control: much cheaper (the sleeping wake-word
+  // listener never talks, so it needs no echo cancellation)
+  async start({ plain = false } = {}) {
     if (this.stream) return;
+    this.plain = plain;
     if (!navigator.mediaDevices?.getUserMedia) {
       throw new Error(window.isSecureContext === false
         ? "Microphone needs a secure page: open http://127.0.0.1:8000 (or https)."
         : "Microphone not available in this window — open http://127.0.0.1:8000 in a browser, or update the wallpaper app.");
     }
     const stream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
+      audio: { echoCancellation: !plain, noiseSuppression: !plain, autoGainControl: !plain, channelCount: 1 },
     });
-    const ctx = audioCtx();
+    const ctx = micCtx();
     this.src = ctx.createMediaStreamSource(stream);
     this.analyser = ctx.createAnalyser();
     this.analyser.fftSize = 1024;
@@ -140,15 +153,15 @@ export class Mic {
     const feed = (chunk) => { for (const s of this.sinks) s(chunk); };
     try {
       if (!ctx.audioWorklet || typeof AudioWorkletNode === "undefined") throw new Error("no worklet");
-      if (!_tapModule) {
+      if (!ctx.kuramaTap) { // the worklet module is loaded once per context
         const url = URL.createObjectURL(new Blob([TAP_WORKLET], { type: "application/javascript" }));
-        _tapModule = ctx.audioWorklet.addModule(url).finally(() => URL.revokeObjectURL(url));
+        ctx.kuramaTap = ctx.audioWorklet.addModule(url).finally(() => URL.revokeObjectURL(url));
       }
-      await _tapModule;
+      await ctx.kuramaTap;
       this.tap = new AudioWorkletNode(ctx, "kurama-tap", { numberOfInputs: 1, numberOfOutputs: 1, channelCount: 1 });
       this.tap.port.onmessage = (e) => feed(e.data);
     } catch {
-      _tapModule = null;
+      ctx.kuramaTap = null;
       this.tap = ctx.createScriptProcessor(4096, 1, 1);
       this.tap.onaudioprocess = (e) => { if (this.sinks.size) feed(new Float32Array(e.inputBuffer.getChannelData(0))); };
     }
@@ -156,6 +169,12 @@ export class Mic {
     this.tap.connect(this.mute);
     this.rate = ctx.sampleRate;
     this.stream = stream;
+  }
+
+  async restart(opts) { // switch processing (sleep <-> awake) without losing recorders listening on this mic
+    if (this.stream && !!opts?.plain === !!this.plain) return;
+    this.stop();
+    await this.start(opts);
   }
 
   stop() {
@@ -294,6 +313,7 @@ export class Player {
   enqueue(text, lang, gen = this.gen) {
     if (gen !== this.gen || !speakable(text)) return;
     this.items.push({ text, lang, ctrl: null, p: null });
+    this.said = [...(this.said || []).slice(-3), text]; // what KURAMA is saying: echo check for barge-in
     this._pump();
   }
 
@@ -372,16 +392,17 @@ export class Player {
 // ---------- Conversation loop (VAD + barge-in) ----------
 // States: off -> listening -> capturing -> (app: thinking/speaking) -> listening ...
 export class Conversation {
-  constructor(mic, player, { onUtterance, onState, onBargeIn, onAutoOff }) {
+  constructor(mic, player, { onUtterance, onState, onBargeCheck, onAutoOff }) {
     this.mic = mic;
     this.player = player;
     this.rec = new Recorder(mic);
-    this.cb = { onUtterance, onState, onBargeIn, onAutoOff };
+    this.cb = { onUtterance, onState, onBargeCheck, onAutoOff };
     this.on = false;
+    this.asleep = false; // only listening for "wake up KURAMA": short phrases only, no auto-off
     this.state = "off";
     this.timer = 0;
     this.floor = 0.006;
-    this.MIN_SPEECH_MS = 160;
+    this.MIN_SPEECH_MS = 300; // shorter bursts are clicks/bumps/noise, not words
     this.END_SILENCE_MS = 900;
     this.MAX_UTTERANCE_MS = 30000;
     this.RESTART_IDLE_MS = 8000; // restart the recorder during long silences (keeps uploads small)
@@ -409,9 +430,12 @@ export class Conversation {
     if (!this.on) return;
     this.rec.cancel();
     this.rec.start();
-    this.speechMs = 0; this.silenceMs = 0; this.started = false; this.bargeMs = 0;
-    this._set("listening");
+    this.speechMs = 0; this.silenceMs = 0; this.started = false;
+    this.bRec = false; this.bSpeech = 0; this.bSil = 0; this.bOn = false;
+    this._set(this.asleep ? "sleeping" : "listening");
   }
+
+  sleep(on) { this.asleep = !!on; this.lastSpeech = performance.now(); if (this.on && this.state !== "thinking") this.listen(); }
 
   waiting() { if (this.on) this._set("thinking"); } // app is busy (stt / chat / speaking)
 
@@ -427,35 +451,36 @@ export class Conversation {
     if (!this.on) return;
     const now = performance.now(), dt = 50;
     const rms = this.mic.rms();
-    if (this.state === "listening" || this.state === "capturing") {
-      const thr = Math.max(this.floor * 3, 0.012);
+    if (this.state === "listening" || this.state === "capturing" || this.state === "sleeping") {
+      const thr = Math.max(this.floor * 3, 0.016);
       if (!this.started && rms < thr) this.floor = this.floor * 0.97 + rms * 0.03; // adaptive noise floor
       if (rms > thr) {
         this.speechMs += dt; this.silenceMs = 0;
-        if (!this.started && this.speechMs >= this.MIN_SPEECH_MS) { this.started = true; this.capT0 = now; this._set("capturing"); }
+        if (!this.started && this.speechMs >= this.MIN_SPEECH_MS) { this.started = true; this.capT0 = now; if (!this.asleep) this._set("capturing"); }
         if (this.started) this.lastSpeech = now;
       } else {
         if (this.started) this.silenceMs += dt;
         else this.speechMs = Math.max(0, this.speechMs - dt);
       }
+      if (this.asleep && this.started && now - this.capT0 > 5000) { this.listen(); return; } // long talk: not a wake phrase
       if (this.started && (this.silenceMs >= this.END_SILENCE_MS || now - this.capT0 > this.MAX_UTTERANCE_MS)) {
         this._end();
       } else if (!this.started && now - this.rec.t0 > this.RESTART_IDLE_MS) {
         this.rec.cancel(); this.rec.start();
       }
-      if (!this.started && now - this.lastSpeech > this.AUTO_OFF_MS) { this.stop(); this.cb.onAutoOff?.(); }
-    } else if (this.player.playing) {
-      // barge-in: louder than the noise floor by a wide margin (echo cancellation removes most of
-      // KURAMA's own voice) for ~280 ms -> stop talking and listen.
+      if (!this.asleep && !this.started && now - this.lastSpeech > this.AUTO_OFF_MS) { this.lastSpeech = now; this.cb.onAutoOff?.(); }
+    } else if (this.player.playing && !this.asleep) {
+      // While KURAMA speaks it is NOT cut off by noise or echo: a loud stretch is recorded and checked as words
+      // (onBargeCheck): "stop" stops it, a real new request takes over, anything else is ignored.
+      if (!this.bRec) { this.rec.cancel(); this.rec.start(); this.bRec = true; this.bSpeech = 0; this.bSil = 0; this.bOn = false; }
       const thr = Math.max(this.floor * 6, 0.045);
-      this.bargeMs = rms > thr ? this.bargeMs + dt : Math.max(0, this.bargeMs - dt);
-      if (this.bargeMs >= 280) {
-        this.bargeMs = 0;
-        this.player.stop();
-        this.cb.onBargeIn?.();
-        this.lastSpeech = now;
-        this.listen();
+      if (rms > thr) { this.bSpeech += dt; this.bSil = 0; if (!this.bOn && this.bSpeech >= 200) this.bOn = true; }
+      else if (this.bOn) this.bSil += dt;
+      else { this.bSpeech = Math.max(0, this.bSpeech - dt); if (now - this.rec.t0 > 6000) { this.rec.cancel(); this.rec.start(); } }
+      if (this.bOn && (this.bSil >= 600 || this.bSpeech > 6000)) {
+        this.bOn = false; this.bSpeech = 0; this.bSil = 0;
+        this.rec.stop().then((blob) => { if (this.on && this.player.playing) { this.rec.start(); } this.cb.onBargeCheck?.(blob); });
       }
-    }
+    } else if (this.bRec) { this.bRec = false; this.rec.cancel(); }
   }
 }

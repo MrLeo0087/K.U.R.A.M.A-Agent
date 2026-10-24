@@ -92,6 +92,20 @@ def _logprob(result) -> float | None:
     return sum(vals) / len(vals) if vals else None
 
 
+def _no_speech(result) -> float | None:
+    segs = _field(result, "segments", None) or []
+    vals = [float(v) for v in (_field(sg, "no_speech_prob", None) for sg in segs) if v is not None]
+    return sum(vals) / len(vals) if vals else None
+
+
+def is_noise(text: str, no_speech: float | None, logprob: float | None) -> bool:
+    """Background noise that Whisper turned into words: it says "probably not speech", or it is very unsure about
+    a short phrase. Real commands are clear and usually longer."""
+    if no_speech is not None and no_speech > config.STT_NO_SPEECH_MAX:
+        return True
+    return logprob is not None and logprob < config.STT_MIN_LOGPROB and len(text.split()) <= 4
+
+
 def _one(wav: bytes, language: str | None, models: list[str]) -> Transcript:
     """One transcription, trying `models` in order (fallback on error)."""
     client = llm.get_client()
@@ -120,7 +134,8 @@ def _one(wav: bytes, language: str | None, models: list[str]) -> Transcript:
         store.log_llm(model, "stt", 0, 0, ms, True, audio_s=audio_s)
         text = result if isinstance(result, str) else (_field(result, "text", "") or "")
         text = text.strip()
-        if is_hallucination(text):
+        if is_hallucination(text) or (not isinstance(result, str)
+                                        and is_noise(text, _no_speech(result), _logprob(result))):
             text = ""
         raw = language or _field(result, "language", "") or ""
         dur = _field(result, "duration", None) or wav_duration(wav)

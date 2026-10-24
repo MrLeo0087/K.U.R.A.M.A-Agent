@@ -68,6 +68,8 @@ STT_PREFER_FALLBACK_LANGS = ("ne",)  # use large-v3 first for these
 STT_DUAL = os.getenv("JARVIS_STT_DUAL", "1").lower() not in ("0", "false", "no", "off")
 STT_EN_MIN_LOGPROB = -0.6  # auto "English" below this confidence is treated as suspicious
 # Whisper vocabulary hint (biases spelling of names/apps; tested not to break hi/ne detection).
+STT_NO_SPEECH_MAX = 0.6  # Whisper's no_speech_prob above this: background noise, not a command
+STT_MIN_LOGPROB = -1.0  # a short phrase (<= 4 words) Whisper is this unsure about is dropped as noise
 STT_PROMPT = os.getenv("JARVIS_STT_PROMPT",
                        "Kurama, KURAMA, VS Code, Brave, YouTube, GitHub, Nepalgunj, Kathmandu, Pokhara.")
 # Common mishearings fixed after transcription (regex, case-insensitive, word-bounded).

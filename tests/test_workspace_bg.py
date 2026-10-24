@@ -76,3 +76,41 @@ def test_whisper_hallucinations_and_unspoken_text():
     assert tts.clean_for_speech("• /home/leo/newproject/src/main.py") == ""
     assert tts.clean_for_speech("Saved job 1234567 ✅ to ~/a/b.md") == "Saved job to"
     assert tts.clean_for_speech("18% of 2500 = 450") == "18% of 2500 = 450"
+
+
+def test_noise_gate_and_greeting_once(monkeypatch):
+    assert stt.is_noise("uh huh", 0.8, -0.2)  # Whisper says: probably no speech
+    assert stt.is_noise("the the", 0.1, -1.6)  # very unsure short phrase
+    assert not stt.is_noise("open youtube and play some music", 0.1, -0.5)
+    from fastapi.testclient import TestClient
+
+    from jarvis.api.app import create_app
+    from jarvis.api.routes import info
+    from jarvis.core import greeting
+    from tests.test_api import BASE, settings
+    monkeypatch.setattr(info, "_greeted", {"done": False})
+    monkeypatch.setattr(greeting, "build", lambda: "Good morning, it's 9:00 AM. Ready when you are.")
+    c = TestClient(create_app(settings()), base_url=BASE)
+    first = c.get("/api/v1/greeting").json()["text"]
+    assert first.startswith("Good morning, it's 9:00 AM. KURAMA is online.") and c.get("/api/v1/greeting").json()["text"] == ""
+
+
+def test_wake_service_publishes_wake(monkeypatch):
+    import asyncio
+
+    from jarvis.api.routes import wake as wr
+    from jarvis.core import wake
+
+    class Fake:
+        def listen(self, stop):
+            return wake.WakeEvent("hey kurama", "open youtube", "en")
+    monkeypatch.setattr(wake, "WakeListener", Fake)
+    svc = wr.WakeService()
+
+    async def run():
+        q = asyncio.Queue()
+        svc.subs.append((asyncio.get_running_loop(), q))
+        svc.start()
+        return await asyncio.wait_for(q.get(), 3)
+    ev = asyncio.run(run())
+    assert ev == {"type": "wake", "heard": "hey kurama", "command": "open youtube", "lang": "en"}

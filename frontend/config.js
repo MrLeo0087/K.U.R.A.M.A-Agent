@@ -14,6 +14,7 @@ export const DEFAULTS = Object.freeze({
   token: "",
   voiceReplies: true, // speak replies in Mic mode (Conversation mode always speaks)
   mute: false, // the speaker button: true = KURAMA never speaks in this UI (replies stay as text)
+  wakeListen: true, // talk mode on at start, asleep until "wake up KURAMA"; "sleep now" puts it back to sleep
   lowPower: null, // null = follow prefers-reduced-motion
   lang: "auto", // auto | en | ne | hi
 });

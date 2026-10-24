@@ -214,6 +214,28 @@ async def device_info():
     return await run_in_threadpool(device.info)
 
 
+# ---------- greeting: the first dashboard load after KURAMA starts says hello (once per start) ----------
+_greeted = {"done": False}
+
+
+@router.get("/greeting", summary="A spoken hello, only on the first call after KURAMA starts")
+async def greeting():
+    if _greeted["done"]:
+        return {"text": ""}
+    _greeted["done"] = True
+
+    def build() -> str:
+        from jarvis.core import greeting as g
+        from jarvis.core import identity
+        text = g.build()
+        first, _, rest = text.partition(". ")
+        return f"{first}. {identity.name()} is online. {rest}".strip()
+    try:
+        return {"text": await run_in_threadpool(build)}
+    except Exception as e:  # a greeting must never break the page
+        return {"text": "", "error": str(e)[:120]}
+
+
 # ---------- power switch: stop every KURAMA process (scripts/kurama-power.sh; Super+K turns it back on) ----------
 @router.post("/power/off", summary="Turn KURAMA off completely (0 RAM / 0 CPU until turned on again)")
 async def power_off():
