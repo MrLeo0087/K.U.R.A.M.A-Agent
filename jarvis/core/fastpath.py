@@ -589,11 +589,32 @@ def _self_intent(t: str) -> Intent | None:
     return None
 
 
+_ERR_ASK = re.compile(r"^(?:(?:can you |please )?(?:explain|fix|solve|debug|check)|what(?:'s| is| does))\s+(?:this |the |my "
+                      r"|that )?(?:error|traceback|exception|bug)(?: mean| means| say| on my clipboard)?$", I)
+_ERR_FIXED = re.compile(r"^i (?:fixed|solved) (?:it|that|this|the error|that error)(?: by| with|:)\s+(?P<fix>.+)$", I)
+
+
+def error_intent(text: str) -> Intent | None:
+    """A pasted traceback, 'explain this error' (clipboard) or 'I fixed it by ...' -> fix_error (0 routing tokens)."""
+    raw = text.strip()
+    if "Traceback (most recent call last)" in raw or (len(raw.splitlines()) >= 2 and re.search(
+            r"^\s*\w*(?:Error|Exception):", raw, re.M)):
+        return Intent("error", "fix_error", "dev", {"action": "explain", "text": raw[-4000:]})
+    t = normalize(raw)
+    if _ERR_ASK.match(t):
+        return Intent("error", "fix_error", "dev", {"action": "explain"})
+    if m := _ERR_FIXED.match(t):
+        return Intent("error", "fix_error", "dev", {"action": "fixed", "text": m.group("fix")})
+    return None
+
+
 def match(text: str) -> Intent | None:
     """The single high-confidence intent for text, or None."""
     from jarvis.core import selfknow
     if selfknow.looks_like_password_try(text):  # raw text: the password answer is checked before anything else
         return Intent("unlock", "_unlock", "self", {"text": text})
+    if ei := error_intent(text):
+        return ei
     t = normalize(text)
     if not t or len(t) > 200:
         return None

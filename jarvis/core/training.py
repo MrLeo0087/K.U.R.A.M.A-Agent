@@ -340,32 +340,16 @@ def colab_poll(since: str) -> list[dict]:
 
 
 # ---------------------------------------------------------------- crash explanation (the only LLM use)
-EXPLAIN_PROMPT = ("A training run crashed. In ONE short line (max 25 words), give the most likely cause and the fix. "
-                  "No preamble.")
-
-
 def explain(error: str, tail: list[str]) -> str:
-    """One line 'cause -> fix' for a crash, cached per error message (kv), '' when off or unavailable."""
+    """'cause -> fix' for a crash from the error memory (0 tokens when seen before, with the user's own fix),
+    else one short fast-tier call that is remembered; '' when off or unavailable."""
     if not config.TRAINING_EXPLAIN or not error:
         return ""
-    import hashlib
+    from jarvis.core import errmem
 
-    key = "explain:" + hashlib.sha1(re.sub(r"\d+", "N", error).encode()).hexdigest()[:16]
-    if hit := store.kv_get(key):
-        return hit
-    from jarvis.core import llm
-
-    context = "\n".join(tail[-12:])[-1200:]
-    try:
-        reply = llm.chat([{"role": "system", "content": EXPLAIN_PROMPT},
-                          {"role": "user", "content": f"Error: {error}\nLast lines:\n{context}"}],
-                         tier="fast", purpose="training_explain", max_tokens=200, temperature=0)
-    except Exception:
-        return ""
-    line = " ".join(str(reply).split())[:220]
-    if line:
-        store.kv_set(key, line)
-    return line
+    r = errmem.explain("\n".join([*tail[-12:], error]))
+    text = r.get("explanation") or ""
+    return text + (f" You fixed it before by: {r['fix']}" if r.get("fix") else "")
 
 
 # ---------------------------------------------------------------- status for "how's training?"

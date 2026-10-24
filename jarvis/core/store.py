@@ -67,6 +67,10 @@ CREATE TABLE IF NOT EXISTS profile (
     key TEXT PRIMARY KEY, value TEXT NOT NULL, source TEXT, created REAL, updated REAL,
     hits INTEGER DEFAULT 0, last_used REAL
 );
+CREATE TABLE IF NOT EXISTS errors (
+    sig TEXT PRIMARY KEY, error TEXT, kind TEXT, explanation TEXT, fix TEXT, where_ TEXT,
+    count INTEGER DEFAULT 1, first_seen REAL, last_seen REAL
+);
 """
 # P7: FTS5 over chat messages (external content, kept in sync by triggers).
 _MESSAGES_FTS = """

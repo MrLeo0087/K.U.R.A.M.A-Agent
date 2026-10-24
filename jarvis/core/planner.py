@@ -279,6 +279,8 @@ def is_command(clause: str) -> bool:
 
 def is_multi(text: str) -> bool:
     """Cheap multi-intent flag: a separator plus at least two command-like clauses."""
+    if "Traceback (most recent call last)" in text or re.search(r"^\s*File \"[^\"]+\", line \d+", text, re.M):
+        return False  # a pasted traceback is one thing to explain, not several tasks
     clauses = split_clauses(text)
     if len(clauses) < 2:
         return False
