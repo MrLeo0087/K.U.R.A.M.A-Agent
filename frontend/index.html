@@ -66,6 +66,9 @@
           <span class="card-title">Conversation</span>
           <span class="head-tools">
             <span id="chat-state" class="chat-state" role="status"><i></i><span>Connecting</span></span>
+            <button id="btn-find" class="icon-btn" type="button" aria-label="Find a tool (Ctrl+K)" title="Find a tool · Ctrl+K">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
+            </button>
             <button id="btn-voice" class="icon-btn" type="button" aria-pressed="true" aria-label="KURAMA voice on (click to mute)" title="Voice on · click to mute">
               <svg class="v-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>
               <svg class="v-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M17 9l5 6M22 9l-5 6"/></svg>
@@ -151,6 +154,16 @@
       </div>
     </section>
   </div>
+
+  <dialog id="finder" class="finder" aria-label="Find a tool">
+    <div class="finder-head">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
+      <input id="finder-q" type="search" placeholder="What do you want to do? e.g. send a file, python project, news…" autocomplete="off" spellcheck="false">
+      <span id="finder-count" class="finder-count"></span>
+    </div>
+    <ul id="finder-list" class="finder-list" role="listbox"></ul>
+    <p class="finder-foot">Enter = try the first one · Esc = close · <span class="chip safe">safe</span> runs directly, <span class="chip confirm">confirm</span> asks you first</p>
+  </dialog>
 
   <dialog id="ws-big" class="ws-big" aria-labelledby="ws-big-title">
     <div class="ws-big-head"><h2 id="ws-big-title">Workspace</h2>

@@ -191,6 +191,10 @@ SELF_PENDING_S = 180  # how long a "say the password" question waits for the ans
 ASSISTANT_NAMES = ("kurama",)  # always answered to, besides the current name; stripped from commands
 HOME_PLACE = os.getenv("JARVIS_HOME_PLACE", "Kathmandu")  # default for weather
 HTTP_TIMEOUT_S = 5.0
+# Hand-gesture media/YouTube control: the user's module, run in its own venv (OpenCV + MediaPipe stay out of KURAMA).
+GESTURE_DIR = Path(os.getenv("KURAMA_GESTURE_DIR", "/media/leo/Project1/Project/Gen_AI/Big_project/02_K.U.R.A.M.A/"
+                                                   "Version_4/Extra_tools_file/Youtube_vision_control"))
+VISION_PYTHON = os.getenv("KURAMA_VISION_PYTHON", str(ROOT / "data" / "vision_venv" / "bin" / "python"))
 IMAGE_TIMEOUT_S = 90  # per image service
 # Image services tried in order (GET <url>?prompt=...; returns the picture). The user's Cloudflare workers first,
 # then Pollinations (free, no key). Override with JARVIS_IMAGE_APIS="url1;url2".
@@ -233,6 +237,10 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
              "how can i", "suggest", "your data", "you store", "you save", "your output", "your memory",
              "your limitation", "your limits", "how do you work", "your architecture", "how are you built",
              "change your name", "call yourself", "your password", "आफ्नो बारेमा", "तिम्रो नाम", "तुम्हारा नाम"),
+    "daily": ("calculate", "calculator", "% of", "percent of", "convert currency", "convert money", " to miles", " to km", "square root",
+              "currency", "exchange rate", "dollar", "rupee", "usd", "npr", "inr", "euro", "news", "headline",
+              "focus", "pomodoro", "concentrate", "study session", "disk space", "free space", "cleanup", "clean up",
+              "storage full", "what is using"),
     "image": ("generate image", "generate an image", "image of", "picture of", "photo of", "drawing of",
               "draw ", "illustration", "painting of", "तस्वीर", "चित्र"),
     "general": ("time", "date", "day is it", "clock", "what day", "o'clock", "baje",
@@ -279,7 +287,7 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
     "apps": ("force quit", "force close", "not responding", "frozen", "hung", "end process", "terminate",
              "open", "close", "launch", "focus", "app", "application", "workspace", "kill", "browser",
              "terminal"),
-    "media": ("on youtube", "youtube video", "youtube ma", "youtube pe", "youtube par", "यूट्यूब", "युट्युब",
+    "media": ("gesture", "hand control", "hand gesture", "vision control", "control with my hand", "on youtube", "youtube video", "youtube ma", "youtube pe", "youtube par", "यूट्यूब", "युट्युब",
               "next video", "playlists", "play", "pause", "resume", "unpause", "music", "song", "next track", "previous track",
               "next song", "previous song", "skip", "playing", "playlist", "गाना", "गीत"),
     "git": ("git", "commit", "branch", "repo", "repository", "git status", "git log", "diff",
@@ -366,7 +374,7 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
     "speech": "read text or the clipboard aloud",
     "windows": "snap, maximize, minimize, restore or list windows",
     "apps": "open, close, focus or force-kill apps; launch a named workspace of apps and sites",
-    "media": "music and video playback (play, pause, next, previous, what's playing), YouTube, playlists",
+    "media": "music and video playback (play, pause, next, previous, what's playing), YouTube, playlists, hand-gesture media control (camera)",
     "git": "git status, log, diff, commit and branches",
     "dev": "tests, new projects, Python environment checks",
     "codequality": "dependency doctor (unpinned/outdated/vulnerable/unused), secrets scan, pre-commit gate, "
@@ -381,6 +389,7 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
     "jobs": "long writing jobs (essays, articles, reports) and background job status/cancel/resume",
     "schedule": "reminders and scheduled commands at a time or repeating; list or cancel them",
     "image": "generate a picture or drawing from a description",
+    "daily": "calculator and unit conversion, currency rates, news headlines, focus/pomodoro timer, disk cleanup scan",
     "self": "about the assistant itself (abilities, outputs/data locations, limits, how it works), which tool "
             "fits a task, guidance when the user is stuck, change the assistant's name",
 }
@@ -388,16 +397,17 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
 # "" = the group name says it all.
 TOOL_GROUP_GLOSS: dict[str, str] = {
     "general": "time", "weather": "", "files": "folders", "filesearch": "",
-    "telegram": "phone", "toolsmith": "new tool", "skills": "", "system": "RAM, CPU, disk",
-    "watch": "process", "automation": "n8n", "audio": "volume", "display": "brightness, theme",
+    "telegram": "phone", "toolsmith": "new tool", "skills": "", "system": "RAM, CPU",
+    "watch": "process", "automation": "n8n", "audio": "volume", "display": "brightness",
     "screen": "screenshot", "power": "battery", "clipboard": "", "speech": "", "windows": "",
-    "apps": "", "media": "music", "desktop": "DND, wallpaper", "git": "", "dev": "tests, venv", "codequality": "review",
+    "apps": "", "media": "music", "desktop": "wallpaper", "git": "", "dev": "tests", "codequality": "review",
     "devutils": "docstrings",
     "web": "search, wiki", "memory": "notes",
     "knowledge": "my code", "usage": "tokens", "browser": "",
     "jobs": "writing",
     "schedule": "remind",
     "image": "",
+    "daily": "math, news",
     "self": "about me",
 }
 

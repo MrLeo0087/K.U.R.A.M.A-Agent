@@ -356,6 +356,9 @@ DIGEST = _rx(
     r"(?:(?:give|show|tell|read) me |what(?:'s| is) |send me )?(?:my |the |today'?s |todays )?(?:daily )?digest"
     r"(?: for (?P<date>today|yesterday))?(?: today)?",
     r"(?:summari[sz]e|recap) my day", r"(?:give me |show me )?(?:my |a |the )?(?:daily|day'?s) (?:summary|recap)",
+    r"(?:summari[sz]e|recap)(?: the| my)? (?:today(?:'?s)?(?: day)?|the day|this day|day)(?: so far)?",
+    r"(?:give me |show me |tell me )?(?:a |the )?(?:summary|recap) of (?:today|the day|my day)(?: so far)?",
+    r"what (?:did|have) (?:we|i|you) (?:do|done|did) today(?: so far)?", r"how was (?:my|our) day(?: today)?",
 )
 TOKENS = _rx(
     r"how many tokens (?:did|have) (?:i|we|you) (?:use|used|spend|spent|burn|burned)"
@@ -476,6 +479,33 @@ _ARCH = re.compile(r"^(?:how do you work|how are you (?:built|made)|(?:what is|e
 _HAVE_TOOL = re.compile(r"^do you have (?:a |any )?(?:tool|feature|way|option)s? (?:for|to|that can)\s+(?P<need>.+)$", I)
 
 
+_GESTURE = re.compile(r"\b(?:gesture|hand (?:control|gesture|sign)s?|(?:youtube |media )?vision control|"
+                      r"media control (?:through|with|by|using) (?:my |the )?hands?|control (?:media|youtube|music|it) "
+                      r"(?:through|with|by|using) (?:my |the )?hands?)\b", I)
+_GEST_ON = re.compile(r"^(?:please\s+)?(?:enable|start|turn on|switch on|open|activate|launch|run|on)\b", I)
+_GEST_OFF = re.compile(r"^(?:please\s+)?(?:disable|stop|turn off|switch off|close|deactivate|kill|end|off)\b", I)
+_MATH = re.compile(r"^(?:what(?:'s| is)\s+|calculate\s+|compute\s+)?(?P<e>[\d(][\d\s.+\-*/×÷^()%,]*(?:\s*%\s*of\s*[\d.,]+)?|"
+                   r"[\d.]+\s*%\s*of\s*[\d.,]+|sqrt\s*\(?[\d.]+\)?|[\d.]+\s*°?\s*[a-z]+\s+(?:to|in|into)\s+°?[a-z]+)$", I)
+_NEWS = re.compile(r"^(?:(?:show|tell|give|read)\s+me\s+)?(?:the\s+)?(?:latest\s+|today'?s\s+|top\s+)?"
+                   r"(?:news|headlines)(?:\s+(?:about|on|of|for|in)\s+(?P<topic>.+))?(?:\s+today)?$", I)
+
+
+def _daily_intent(t: str) -> Intent | None:
+    if _GESTURE.search(t):
+        if _GEST_OFF.match(t):
+            return Intent("gesture", "gesture_control", "media", {"action": "off"})
+        if _GEST_ON.match(t) or re.match(r"^(?:i want|can you|could you)\b", t, I):
+            return Intent("gesture", "gesture_control", "media", {"action": "on"})
+    if (m := _MATH.match(t)) and re.search(r"\d", t) and (re.search(r"[+\-*/×÷^%]|sqrt|\bto\b|\bin\b|into", t)):
+        return Intent("calc", "calculate", "daily", {"expression": m.group("e")})
+    if m := _NEWS.match(t):
+        topic = (m.group("topic") or "").strip()
+        if topic.lower() in ("nepal", "nepali"):
+            topic = ""
+        return Intent("news", "news_headlines", "daily", {"topic": topic})
+    return None
+
+
 def _self_intent(t: str) -> Intent | None:
     from jarvis.core import selfknow
     if selfknow.looks_like_password_try(t):
@@ -510,6 +540,8 @@ def match(text: str) -> Intent | None:
         return None
     if si := _self_intent(t):
         return si
+    if di := _daily_intent(t):
+        return di
     if m := _full(TIME_LOCAL, t):
         want_date = bool(re.search(r"\b(?:date|day|today)\b|गते|तारीख|बार", t, I))
         return Intent("time", "get_time", "general", {"_date": True} if want_date else {})

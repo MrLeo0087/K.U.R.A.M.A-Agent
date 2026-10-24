@@ -576,6 +576,12 @@ def schedule_get(sched_id: int) -> dict | None:
     return dict(rows[0]) if rows else None
 
 
+def tool_counts_between(t0: float, t1: float, limit: int = 6) -> list[tuple[str, int]]:
+    """Most used tools in [t0, t1) (for the day summary)."""
+    return [(r[0], r[1]) for r in _exec("SELECT tool, COUNT(*) FROM tool_calls WHERE ts>=? AND ts<? AND tool IS NOT NULL "
+                                        "GROUP BY tool ORDER BY 2 DESC LIMIT ?", (t0, t1, limit))]
+
+
 def schedules_list(enabled_only: bool = True, limit: int = 50) -> list[dict]:
     where = "WHERE enabled=1 " if enabled_only else ""
     return [dict(r) for r in _exec(f"SELECT * FROM schedules {where}ORDER BY next_run LIMIT ?", (limit,))]

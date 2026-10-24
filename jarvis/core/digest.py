@@ -7,6 +7,8 @@ voice-friendly summary. Delivered by jarvis/workers/daily_digest.py and the dail
 """
 from __future__ import annotations
 
+import contextlib
+
 import logging
 import subprocess
 from datetime import datetime
@@ -97,6 +99,16 @@ def build_digest(date: str = "today", now: datetime | None = None, use_llm: bool
     if use["fastpath_hits"]:
         tok += f"; fast path saved ~{use['tokens_saved_est']:,}"
     lines.append(tok + ".")
+    with contextlib.suppress(Exception):
+        if tools := store.tool_counts_between(t0, t1):
+            lines.append("Tools used: " + ", ".join(f"{n.replace('_', ' ')} x{c}" for n, c in tools) + ".")
+    if label == "today":
+        with contextlib.suppress(Exception):
+            soon = [r for r in store.schedules_list(limit=10) if r.get("next_run") and r["next_run"] < t1 + 86400]
+            if soon:
+                lines.append("Coming up: " + "; ".join(
+                    f"{datetime.fromtimestamp(r['next_run']).strftime('%I:%M %p').lstrip('0')} {r['text'][:50]}"
+                    for r in soon[:4]) + ".")
     if git:
         lines.append("Git: " + "; ".join(f"{g['repo']} {_n(g['commits'], 'commit')} (last: \"{g['last']}\")"
                                          for g in git) + ".")

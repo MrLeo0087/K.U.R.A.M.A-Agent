@@ -910,6 +910,71 @@ setInterval(loadWall, 60000);
 $("ws-close").onclick = () => $("ws-big").close();
 $("ws-big").addEventListener("click", (e) => { if (e.target === $("ws-big")) $("ws-big").close(); });
 
+// ---------- tool finder: search every KURAMA tool by what you want to do (Ctrl+K) ----------
+const finder = { tools: null };
+const EXAMPLE = {
+  generate_image: "generate an image of ", scaffold_project: "create a new python project called ", send_file_telegram: "send this file to Telegram: ",
+  web_search: "search for ", weather: "weather in ", get_time: "time in ", open_url: "open ", open_app: "open ",
+  remember: "remember ", add_reminder: "remind me to  at ", news_headlines: "latest news about ", calculate: "what is ",
+  convert_currency: "convert 100 dollars to rupees", focus_timer: "start a 25 minute focus session", cleanup_scan: "what is using my disk space",
+  gesture_control: "enable hand gesture control", daily_digest: "summarize today", write_document: "write an essay about ",
+  set_wallpaper: "change my wallpaper", screenshot: "take a screenshot", volume: "set volume to 50", find_files: "find file ",
+};
+const words = (t) => (t.toLowerCase().match(/[a-z0-9]+/g) || []).filter((w) => w.length > 1);
+async function finderLoad() {
+  if (finder.tools) return finder.tools;
+  const d = await api.tools();
+  finder.tools = d.groups.flatMap((g) => g.tools.map((t) => ({ ...t, group: g.group, nice: t.name.replace(/_/g, " "),
+    hay: `${t.name.replace(/_/g, " ")} ${t.description} ${g.group}`.toLowerCase() })));
+  return finder.tools;
+}
+function finderRender() {
+  const q = $("finder-q").value.trim();
+  const ws_ = words(q);
+  let list = finder.tools || [];
+  if (ws_.length) {
+    list = list.map((t) => ({ t, s: ws_.reduce((a, w) => a + (t.nice.includes(w) ? 3 : t.hay.includes(w) ? 1 : 0), 0) }))
+      .filter((x) => x.s > 0).sort((a, b) => b.s - a.s).map((x) => x.t);
+  }
+  $("finder-count").textContent = `${list.length} tool${list.length === 1 ? "" : "s"}`;
+  const ul = $("finder-list");
+  ul.innerHTML = "";
+  if (!list.length) {
+    ul.innerHTML = `<li class="finder-none">No tool for that yet — just ask ${esc(botName)}; it can search the web or build a small tool for you.</li>`;
+    return;
+  }
+  for (const t of list.slice(0, 40)) {
+    const li = el("li", "finder-item");
+    li.setAttribute("role", "option");
+    li.innerHTML = `<div class="fi-main"><b>${esc(t.nice)}</b><span class="chip ${esc(t.safety)}">${esc(t.safety)}</span><small>${esc(t.group)}</small></div><p>${esc(t.description)}</p>`;
+    li.onclick = () => finderTry(t);
+    ul.append(li);
+  }
+}
+function finderTry(t) {
+  $("finder").close();
+  setMode("text");
+  input.value = EXAMPLE[t.name] || `${t.nice} `;
+  autosize();
+  input.focus();
+  input.setSelectionRange(input.value.length, input.value.length);
+}
+async function openFinder() {
+  if (!$("finder").open) $("finder").showModal();
+  $("finder-q").focus();
+  try { await finderLoad(); finderRender(); }
+  catch { $("finder-list").innerHTML = '<li class="finder-none">Can\'t reach the API.</li>'; }
+}
+$("btn-find").onclick = () => openFinder();
+$("finder-q").addEventListener("input", () => finderRender());
+$("finder-q").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); const first = $("finder-list").querySelector(".finder-item"); if (first) first.click(); }
+});
+$("finder").addEventListener("click", (e) => { if (e.target === $("finder")) $("finder").close(); });
+document.addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K")) { e.preventDefault(); openFinder(); }
+});
+
 // ---------- assistant name (default KURAMA; Settings or "change your name to ...") ----------
 // botName is declared at the top (used by early UI code)
 function setBotName(n) {

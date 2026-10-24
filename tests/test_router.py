@@ -22,7 +22,7 @@ def test_keyword_rules(no_llm):
 def test_rules_drop_groups_without_tools(no_llm, monkeypatch):
     real = router.registry.groups
     monkeypatch.setattr(router.registry, "groups", lambda: [g for g in real() if g != "web"])
-    r = router.route("look up the latest news")  # pretend 'web' has no tools
+    r = router.route("look up the population of japan")  # pretend 'web' has no tools
     assert (r.groups, r.method) == ([], "rules")
     monkeypatch.setattr(router.registry, "groups", real)
     assert router.route("how is my system doing").groups == ["system"]  # P6: resource_status

@@ -523,3 +523,21 @@ body.paused *, body.paused *::before, body.paused *::after { animation-play-stat
 .ws-big-view .ws-img { cursor: default; }
 .ws-big-view .ws-text { font-size: 15px; max-width: 760px; margin: 0 auto; }
 .low-power .ws-view { animation: none !important; }
+
+/* ---------- tool finder (Ctrl+K) ---------- */
+.finder { width: min(680px, 92vw); max-height: 76vh; padding: 0; border-radius: 16px; display: none; top: 12vh; margin: 0 auto; }
+.finder[open] { display: flex; flex-direction: column; animation: finderIn 0.28s var(--ease) both; }
+@keyframes finderIn { from { opacity: 0; transform: translateY(-10px) scale(0.98); } }
+.finder-head { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.finder-head svg { width: 18px; height: 18px; stroke: var(--accent); fill: none; stroke-width: 1.8; flex: 0 0 auto; }
+.finder-head input { flex: 1; min-width: 0; background: transparent; border: 0; outline: 0; color: var(--text); font: inherit; font-size: 15px; }
+.finder-count { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.finder-list { list-style: none; overflow: auto; padding: 6px; margin: 0; flex: 1; min-height: 0; }
+.finder-item { padding: 10px 12px; border-radius: 10px; cursor: pointer; transition: background 0.15s; }
+.finder-item:hover, .finder-item:focus-visible { background: rgba(255, 255, 255, 0.05); }
+.fi-main { display: flex; align-items: center; gap: 8px; }
+.fi-main b { font-weight: 500; text-transform: capitalize; }
+.fi-main small { margin-left: auto; color: var(--muted); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; }
+.finder-item p { margin: 3px 0 0; font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+.finder-none { padding: 18px; color: var(--muted); font-size: 13px; text-align: center; }
+.finder-foot { margin: 0; padding: 10px 16px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--muted); }
