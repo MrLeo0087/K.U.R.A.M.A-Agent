@@ -78,6 +78,7 @@ function orbState() {
 }
 
 function stateText(st) {
+  if (st === "idle" && Date.now() < orbNoteUntil) return orbNoteText;
   if (online === false) return "Offline — check the API in settings";
   if (online === null) return "Connecting…";
   if (asleep || conv.state === "sleeping") return `Talk mode — say “hey ${botName}” to start`;
@@ -503,11 +504,39 @@ $("m-text").onclick = () => { setMode("text"); input.focus(); };
 $("m-mic").onclick = () => toggleMic();
 $("m-conv").onclick = () => toggleConv();
 $("btn-clear").onclick = () => { log.innerHTML = ""; log.append(welcome()); };
+// the orb: click = a shockwave + the dust bursts and returns, and a one-line status under the name;
+// double-click = talk to KURAMA now. While it speaks / works, a click still stops it; minimized = restore.
 $("orb").onclick = () => {
   if (minimized) { hostSay("restore"); return; }
-  if (player.active) player.stop(); else if (busy) abortChat();
-  updateState();
+  orb.burst();
+  if (player.active) { player.stop(); updateState(); return; }
+  if (busy) { abortChat(); updateState(); return; }
+  orbNote(quickStatus());
 };
+$("orb").ondblclick = (e) => {
+  e.preventDefault();
+  if (minimized || MINI || player.active || busy) return;
+  orb.burst();
+  wakeUp(""); // talk mode, listening right away ("Yes? I'm listening.")
+};
+let orbNoteText = "", orbNoteUntil = 0;
+function orbNote(text, ms = 6000) {
+  orbNoteText = text; orbNoteUntil = Date.now() + ms;
+  updateState();
+  retrigger($("voice-state"), "fl-a", "fl-b");
+  setTimeout(updateState, ms + 50);
+}
+function quickStatus() { // what's going on, in one line (no API call: the panels already know)
+  const parts = [], now = dash?.now || [];
+  const tr = now.find((x) => x.kind === "train");
+  if (tr) parts.push(`${tr.title}: ${tr.sub.split(",").slice(0, 2).join(",")}`);
+  else if (now.length) parts.push(`${now.length} running`);
+  if (lastStatus?.ram) parts.push(`RAM ${Math.round(lastStatus.ram.percent)}%`);
+  if (lastStatus?.cpu) parts.push(`CPU ${Math.round(lastStatus.cpu.percent)}%`);
+  const next = (dash?.today || []).find((c) => c.next);
+  if (next) parts.push(`next ${next.text} ${next.time}`);
+  return (parts.join(" · ") || "All quiet") + " — double-click to talk";
+}
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && recording) { e.preventDefault(); cancelRecording(); return; } // cancel, insert nothing
   if (e.key === "Escape" && !document.querySelector("dialog[open]")) {
@@ -650,6 +679,19 @@ function setRing(id, pct) {
   $(id).classList.toggle("hot", v >= 85);
 }
 
+function setSum(id, text, live = false) { // the one-line summary a collapsed card shows
+  const n = $(id);
+  if (n.textContent !== text) n.textContent = text;
+  n.classList.toggle("live", !!live);
+}
+function renderLaptopSum() {
+  const b = lastStatus?.battery, w = devLast?.wifi;
+  const parts = [];
+  if (b) parts.push(`${Math.round(b.percent)}%${b.plugged ? " ⚡" : ""}`);
+  parts.push(w ? `Wi-Fi ${w.signal}%` : devLast ? (devLast.ip ? "wired" : "offline") : "");
+  setSum("sum-laptop", parts.filter(Boolean).join(" · "), b && !b.plugged && b.percent <= 20);
+}
+
 function renderStatus(s) {
   lastStatus = s;
   setConn(true);
@@ -678,6 +720,9 @@ function renderStatus(s) {
   $("down").textContent = fmtRate(net.rx_bps);
   $("up").textContent = fmtRate(net.tx_bps);
   $("uptime").textContent = "up " + fmtDur(s.uptime?.system_s);
+  setSum("sum-system", `CPU ${Math.round(cpu.percent ?? 0)}% · RAM ${Math.round(ram.percent ?? 0)}% · Disk ${Math.round(disk.percent ?? 0)}%`,
+    (cpu.percent ?? 0) >= 85 || (ram.percent ?? 0) >= 90);
+  renderLaptopSum();
   const j = s.jarvis || {};
   $("t-rss").textContent = j.rss_mb != null ? Math.round(j.rss_mb) : "–";
   const tk = s.tokens || {};
@@ -748,6 +793,7 @@ async function loadWeather() {
   $("wx-place").textContent = (it?.place || "Nepalgunj").toUpperCase();
   if (ok) tweenTo("wx-temp", it.temp_c, 0); else $("wx-temp").textContent = "--";
   $("wx-desc").textContent = ok ? it.desc || "" : "unavailable";
+  setSum("sum-weather", ok ? `${Math.round(it.temp_c)}° · ${it.desc || ""}` : "unavailable");
   $("wx-sub").textContent = ok ? `Feels ${Math.round(it.feels_c)}° · ${Math.round(it.humidity)}% · ${Math.round(it.wind_kmh)} km/h` : "";
   const k = ok ? wxKind(it) : "cloud", ic = $("wx-icon");
   if (alive() || ic.dataset.k !== k) { ic.dataset.k = k; ic.innerHTML = WX_SVG[k]; } // re-insert = replay the one-shot animation
@@ -787,6 +833,7 @@ async function loadDevice() {
     setBar("d-vol-bar", v && !v.muted ? v.percent : 0);
     $("d-vol-sub").textContent = v ? (v.muted ? "muted" : `speaker · screen ${d.brightness ?? "–"}%`) : "–";
     renderBatSub();
+    renderLaptopSum();
     $("dev-up").textContent = "up " + fmtDur(d.uptime_s);
   } catch { /* API still starting: try again next round */ }
   devTimer = setTimeout(loadDevice, 30000);
@@ -882,7 +929,8 @@ for (const b of document.querySelectorAll("[data-sw]")) {
 const ws = { items: [], cur: -1, seen: new Set(), loaded: false, tab: "all" };
 const wsTitle = (name) => name.replace(/^.*\//, "").replace(/^\d{8}-\d{4,6}-?/, "").replace(/\.[a-z0-9]+$/i, "").replace(/[-_]+/g, " ").trim() || name;
 const LONG_REPLY = (t) => t && (t.split("\n").filter((l) => l.trim()).length >= 4 || t.length > 420);
-const WS_MAX = 24;
+const WS_MAX = 100; // kept in the panel (the files themselves stay in data/outputs for good)
+const WS_SHOW = 10; // listed per tab: the last 10 documents, 10 pictures, 10 code files...
 const WS_TABS = [["all", "All"], ["doc", "Docs"], ["code", "Code"], ["image", "Images"], ["data", "Data"]];
 function wsType(it) {
   if (it.kind === "image") return "image";
@@ -914,13 +962,15 @@ function wsList() {
   for (const x of ws.items) counts[x.type] = (counts[x.type] || 0) + 1;
   $("ws-tabs").innerHTML = WS_TABS.filter(([k]) => k === "all" || counts[k])
     .map(([k, n]) => `<button type="button" role="tab" data-wstab="${k}" aria-selected="${ws.tab === k}">${n}${k !== "all" ? `<small>${counts[k]}</small>` : ""}</button>`).join("");
-  const list = wsShown().slice(0, 4);
+  const list = wsShown().slice(0, WS_SHOW);
   const ul = $("ws-list");
   ul.innerHTML = list.length ? "" : '<li class="empty">Nothing here yet.</li>';
   for (const it of list) {
     const li = el("li", it === ws.items[ws.cur] ? "sel" : "");
     const ext = (it.name || "").split(".").pop().toUpperCase();
-    li.innerHTML = `<span class="ft t-${it.type}">${esc(it.type === "image" ? "IMG" : it.name ? ext.slice(0, 4) : "TXT")}</span>
+    const badge = it.type === "image" && it.src ? `<img src="${esc(it.src)}" alt="" loading="lazy" decoding="async">`
+      : esc(it.name ? ext.slice(0, 4) : "TXT");
+    li.innerHTML = `<span class="ft t-${it.type}">${badge}</span>
       <div class="grow"><div class="n ell"></div><div class="d"></div></div><span class="z"></span>`;
     li.querySelector(".n").textContent = it.title;
     li.querySelector(".d").textContent = it.mtime ? fmtAgo(it.mtime) : "from the chat";
@@ -963,6 +1013,7 @@ async function wsShow(it) {
   wsList();
   const view = $("ws-view");
   await wsBody(it, view);
+  wsActs(); // now the line count is known
   view.scrollTop = 0;
   retrigger(view, "ws-in-a", "ws-in-b"); // one short fade in
   if ($("ws-big").open) wsBig();
@@ -972,7 +1023,9 @@ function wsActs() { // what you can do with the selected result
   const it = ws.items[ws.cur], box = $("ws-acts");
   if (!it) { box.innerHTML = ""; return; }
   const file = !!it.name;
-  box.innerHTML = `<span class="tiny grow ell">${esc(it.type === "image" ? "picture" : it.text ? `${(it.text.match(/\n/g) || []).length + 1} lines` : it.type)}</span>`
+  const kind = { image: "picture", code: "code", data: "data", doc: "document" }[it.type] || it.type;
+  const lines = it.text ? ` · ${(it.text.match(/\n/g) || []).length + 1} lines` : "";
+  box.innerHTML = `<span class="tiny grow ell">${esc(kind + lines + (it.size ? ` · ${fmtSize(it.size)}` : ""))}</span>`
     + (file && it.type !== "image" ? '<button type="button" class="act" data-ws="open_vscode">VS Code</button>' : "")
     + (file && it.type === "image" ? '<button type="button" class="act" data-ws="open">Open</button>' : "")
     + (it.type !== "image" ? '<button type="button" class="act ghost" data-ws="copy">Copy</button>' : "")
@@ -988,7 +1041,13 @@ async function wsAction(name) {
   doAction({ name, path: it.name });
 }
 $("ws-acts").addEventListener("click", (e) => { const b = e.target.closest("[data-ws]"); if (b) wsAction(b.dataset.ws); });
-$("ws-tabs").addEventListener("click", (e) => { const b = e.target.closest("[data-wstab]"); if (b) { ws.tab = b.dataset.wstab; wsList(); } });
+$("ws-tabs").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-wstab]");
+  if (!b) return;
+  ws.tab = b.dataset.wstab;
+  const cur = ws.items[ws.cur], list = wsShown();
+  if (list.length && !list.includes(cur)) wsShow(list[0]); else wsList(); // show this tab's newest
+});
 
 function wsBig() {
   const it = ws.items[ws.cur];
@@ -1011,7 +1070,7 @@ async function loadOutputs() {
   if (outputsBusy) return;
   outputsBusy = true;
   try {
-    const items = (await api.outputs(WS_MAX)).items || [];
+    const items = (await api.outputs(100)).items || [];
     const fresh = items.filter((x) => !ws.seen.has("o" + x.name + x.mtime)).reverse(); // oldest first
     for (const x of fresh) {
       wsAdd({ key: "o" + x.name + x.mtime, kind: x.kind, title: wsTitle(x.name), name: x.name, mtime: x.mtime, size: x.size,
@@ -1070,10 +1129,12 @@ function renderApps(a) {
     <div class="bar"><i style="transform:scaleX(${(x.bytes / max).toFixed(3)})"></i></div></li>`).join("")
     + (ik.count ? `<li class="fix"><span>${ik.count} idle Jupyter kernel${ik.count > 1 ? "s" : ""} · ${ik.mb} MB</span><button type="button" class="act" data-ask="free some RAM">Free</button></li>` : "");
   $("apps-sub").textContent = lastStatus?.ram ? `${Math.round(lastStatus.ram.percent)}% used` : "";
+  setSum("sum-apps", `${list[0].name} ${gbOf(list[0].bytes)}` + (ik.count ? ` · ${ik.mb} MB to free` : ""), !!ik.count);
 }
 function renderCoding(c) {
   const box = $("code-body");
-  if (!c.project) { box.innerHTML = '<p class="empty">No project yet: say “protect my project”.</p>'; $("code-snap").textContent = ""; return; }
+  if (!c.project) { box.innerHTML = '<p class="empty">No project yet: say “protect my project”.</p>'; $("code-snap").textContent = ""; setSum("sum-coding", "no project"); return; }
+  setSum("sum-coding", `${c.project} · ${c.changed ? `${c.changed} changed` : "clean"}${c.error ? " · ⚠ error" : ""}`, !!c.error);
   $("code-snap").textContent = c.snapshot ? `snapshot ${c.snapshot === "now" ? "just now" : c.snapshot + " ago"}` : "";
   const e = c.error;
   box.innerHTML = `<div class="proj"><b class="ell">${esc(c.project)}</b>${c.branch ? `<span class="branch">${esc(c.branch)}</span>` : ""}</div>
@@ -1102,7 +1163,9 @@ function renderNow(items, classes) {
     const next = !nextDone && (c.next || c.at); if (next) nextDone = true;
     return `<span class="chip2 k-${c.kind}${next ? " next" : ""}" data-id="${c.id ?? ""}"><b>${c.kind === "timer" ? left(c.at) : esc(c.time || "")}</b>${esc(c.text)}</span>`;
   }).join("");
-  const n = items.length;
+  const n = items.length, first = items[0], nextChip = chips.find((c) => c.next || c.at) || chips[0];
+  setSum("sum-now", first ? `${first.title}${first.right ? ` · ${first.right}` : ""}${n > 1 ? ` +${n - 1}` : ""}`
+    : nextChip ? `next: ${nextChip.text} ${nextChip.kind === "timer" ? left(nextChip.at) : nextChip.time || ""}` : "all quiet", !!first);
   $("today-count").textContent = n ? `${n} running` : chips.length ? `${chips.length} today` : "all quiet";
   if (!n && !chips.length) ul.innerHTML = '<li class="empty">Nothing running. Training, downloads and jobs show up here.</li>';
 }
@@ -1114,7 +1177,7 @@ function renderSwitches(sw) {
     b.title = `${b.textContent} is ${on ? "on" : "off"}: click to turn it ${on ? "off" : "on"}`;
   }
 }
-$("switches").addEventListener("click", async (e) => {
+document.addEventListener("click", async (e) => {
   const b = e.target.closest("[data-switch]");
   if (!b) return;
   e.stopPropagation(); // a switch is not "open the card"
@@ -1201,11 +1264,11 @@ async function sheetHtml(panel) {
   if (panel === "laptop") {
     const w = d.wifi, v = d.volume, b = d.battery, sw = d.switches || {};
     const sws = Object.entries({ wifi: "Wi-Fi", bluetooth: "Bluetooth", dnd: "Do not disturb", night: "Night light", saver: "Battery saver", guard: "Laptop guard" })
-      .map(([k, n]) => `<span class="tg${sw[k] ? " on" : ""}">${n}</span>`).join("");
+      .map(([k, n]) => `<button type="button" class="tg${k === "guard" ? " cool" : ""}${sw[k] ? " on" : ""}" data-switch="${k}">${n}</button>`).join("");
     return `<div class="sgrid">${tile("Battery", tbl([["Health", b ? `${b.health}%${b.cycles ? ` · ${b.cycles} cycles` : ""}` : "–"], ["Power mode", esc(sw.power_mode || "–")]]))}
       ${tile("Network", tbl([["Wi-Fi", w ? `${esc(w.ssid)} · ${w.signal}%` : "off"], ["IP", esc(d.ip || "offline")]]) + '<div class="btns"><button type="button" class="act ghost" data-ask="check my internet">Check internet</button><button type="button" class="act ghost" data-ask="internet speed test">Speed test</button></div>')}
       ${tile("Sound & screen", tbl([["Volume", v ? `${v.percent}%${v.muted ? " (muted)" : ""}` : "–"], ["Brightness", d.brightness != null ? `${d.brightness}%` : "–"]]))}
-      ${tile("Switches", `<div class="toggles">${sws}</div><p class="tiny">Use the switches on the card to change them.</p>`, "span2")}
+      ${tile("Switches", `<div class="toggles">${sws}</div><p class="tiny">Click a switch to turn it on or off.</p>`, "span2")}
       ${tile("Device", tbl([["Model", esc(d.model || "–")], ["System", esc(d.os || "–")], ["Up", fmtDur(d.uptime_s)]]))}</div>`;
   }
   if (panel === "system") {
@@ -1409,7 +1472,7 @@ $("btn-hide").onclick = () => { if (!hostSay("hide")) window.close(); };
 window.kuramaMinimized = (on) => { // dashboard: hide the panels, keep the orb (click it to restore)
   minimized = !!on;
   document.body.classList.toggle("minimized", minimized);
-  $("orb").title = minimized ? "Click to restore KURAMA" : "Click to stop talking";
+  $("orb").title = minimized ? "Click to restore KURAMA" : "Click: status · double-click: talk to me";
   if (minimized && !asleep) setMode("text"); // one mic user at a time; the wake word (asleep) keeps listening
   applyActivity();
 };

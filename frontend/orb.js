@@ -131,6 +131,26 @@ export class Orb {
     this.fast = true;
   }
 
+  // click on the orb: a shockwave (3 rings) + a spray of sparks from the core; the background dust bursts out
+  // and is pulled back in (dust.burst). Rate-limited; low power gets a flash only.
+  burst() {
+    const now = performance.now();
+    if (now - (this.lastBurst || 0) < 350) return;
+    this.lastBurst = now;
+    if (!this.running || this.lowPower) { this.flash(); return; }
+    const S = this.S;
+    for (let i = 0; i < 3 && this.ripples.length < 8; i++) {
+      this.ripples.push({ r: S * 0.17, v: S * (0.95 - i * 0.22), a: 0.7 - i * 0.16 });
+    }
+    for (let i = 0; i < 24 && this.parts.length < MAX_PARTS; i++) {
+      const a = Math.random() * TAU;
+      this.parts.push({ k: 1, r: S * 0.16, a, v: S * (0.55 + Math.random() * 0.75), life: 0, ttl: 0.6 + Math.random() * 0.7, sz: 0.9 + Math.random() * 0.8 });
+    }
+    this.fast = true;
+    if (this.fx && this.fx.burst) this.fx.burst(now);
+    this._sync();
+  }
+
   _mixStatic() {
     const c = MODE_COOL[this.mode] || 0;
     this.st[0].style.opacity = String(1 - 0.85 * c);

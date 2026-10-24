@@ -93,6 +93,17 @@ export class Dust {
 
   still() { this.frame(performance.now(), 0, null); }
 
+  // the orb was clicked: every mote is flung outward, then (after a beat) pulled back toward the orb
+  burst(now) {
+    const { ox, oy, k } = this;
+    for (const p of this.ps) {
+      const dx = p.x - ox, dy = p.y - oy, d = Math.hypot(dx, dy) + 0.001;
+      const f = (520 * k) / (1 + d / (240 * k));
+      p.vx += (dx / d) * f; p.vy += (dy / d) * f;
+    }
+    this.pullFrom = now + 650; this.pullUntil = now + 2600;
+  }
+
   // one step + draw; `orb` gives state / eased level (null = static frame)
   frame(now, dt, orb) {
     if (now - this.measuredAt > 4000) this._measure();
@@ -102,8 +113,14 @@ export class Dust {
     const relax = Math.min(1, dt * 0.8), m = 6 * k;
     this.ph = (this.ph + dt * (TAU / 7)) % TAU;
 
+    const pull = this.pullUntil && now > this.pullFrom && now < this.pullUntil
+      ? Math.sin(Math.PI * (now - this.pullFrom) / (this.pullUntil - this.pullFrom)) : 0;
     for (const p of this.ps) {
       p.vx += (p.bx - p.vx) * relax; p.vy += (p.by - p.vy) * relax;
+      if (pull) { // after a click: drawn back in, with a swirl
+        const dx = p.x - ox, dy = p.y - oy, d = Math.hypot(dx, dy) + 0.001, ux = dx / d, uy = dy / d;
+        p.vx += (-ux * 90 - uy * 30) * pull * k * dt; p.vy += (-uy * 90 + ux * 30) * pull * k * dt;
+      }
       if (listen || speak || think) {
         const dx = p.x - ox, dy = p.y - oy, d = Math.hypot(dx, dy) + 0.001, ux = dx / d, uy = dy / d;
         if (listen) { // pulled in, with a gentle swirl

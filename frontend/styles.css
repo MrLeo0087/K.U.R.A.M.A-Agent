@@ -793,3 +793,24 @@ body.paused dialog[open] { animation: none !important; } /* a dialog opened whil
 .link:hover { color: var(--accent-2); text-decoration: underline; }
 @media (max-width: 900px) { .sgrid { grid-template-columns: 1fr; } .tile.span2 { grid-column: auto; } }
 @media (max-height: 1000px) { .wx-hours { margin-top: 8px; padding-top: 7px; } .apps li { padding: 4px 0; } }
+
+/* ---------- calm mode: secondary cards are one line (title · the one number that matters); click = details ---------- */
+.col .card.collapsed { padding: 11px 18px; }
+.col .card.collapsed > :not(.card-title) { display: none !important; }
+.col .card.collapsed .card-title { margin: 0; }
+.col .card.collapsed .pill { display: none; }
+.card-title .sum { display: none; }
+.card.collapsed .card-title .sum { display: block; order: 2; max-width: 68%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 12.5px; letter-spacing: 0.01em; text-transform: none; color: var(--text); opacity: 0.85; font-variant-numeric: tabular-nums; }
+.card.collapsed .card-title .sum.live { color: var(--accent-2); opacity: 1; }
+.card.collapsed .card-title .sum.live::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 7px;
+  vertical-align: 1px; background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+.col .card.collapsed::before { --l: 9px; --c: rgba(255, 179, 102, 0.35); }
+.col.left .clock-block { margin-bottom: 6px; }
+.col.left, .col.right { gap: 12px; }
+
+/* workspace: the main panel on the right; the list scrolls through the last 10 */
+.ws-card .files { max-height: 236px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(255, 140, 50, 0.25) transparent; }
+.ws-card .files::-webkit-scrollbar { width: 5px; } .ws-card .files::-webkit-scrollbar-thumb { background: rgba(255, 140, 50, 0.25); border-radius: 3px; }
+.ws-card .ws-view.pv { min-height: 140px; }
+.ft img { width: 30px; height: 30px; border-radius: 7px; object-fit: cover; display: block; }

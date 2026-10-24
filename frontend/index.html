@@ -27,8 +27,8 @@
         <div id="date" class="date"></div>
       </header>
 
-      <div class="card weather-card" id="weather" data-sheet="weather" tabindex="0" role="button" aria-label="Weather: open the forecast">
-        <div class="card-title"><span id="wx-place">NEPALGUNJ</span><span class="more" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg></span></div>
+      <div class="card weather-card collapsed" id="weather" data-sheet="weather" tabindex="0" role="button" aria-label="Weather: open the forecast">
+        <div class="card-title"><span id="wx-place">NEPALGUNJ</span><span id="sum-weather" class="sum"></span><span class="more" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg></span></div>
         <div class="wx-now">
           <span id="wx-icon" class="wx-icon" aria-hidden="true"></span>
           <div class="wx-temp"><b id="wx-temp">--</b><span>°C</span></div>
@@ -37,18 +37,18 @@
         <div id="wx-hours" class="wx-hours" aria-label="Next hours"></div>
       </div>
 
-      <div class="card apps-card" id="apps" data-sheet="apps" tabindex="0" role="button" aria-label="Memory by app: open details">
-        <div class="card-title">Memory <span id="apps-sub" class="pill"></span><span class="more" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg></span></div>
+      <div class="card apps-card collapsed" id="apps" data-sheet="apps" tabindex="0" role="button" aria-label="Memory by app: open details">
+        <div class="card-title">Memory <span id="sum-apps" class="sum"></span><span id="apps-sub" class="pill"></span><span class="more" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg></span></div>
         <ul id="apps-list" class="apps"><li class="empty">Measuring…</li></ul>
       </div>
 
-      <div class="card code-card" id="coding" data-sheet="coding" tabindex="0" role="button" aria-label="Coding: open details">
-        <div class="card-title">Coding <span id="code-snap" class="pill"></span><span class="more" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg></span></div>
+      <div class="card code-card collapsed" id="coding" data-sheet="coding" tabindex="0" role="button" aria-label="Coding: open details">
+        <div class="card-title">Coding <span id="sum-coding" class="sum"></span><span id="code-snap" class="pill"></span><span class="more" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg></span></div>
         <div id="code-body" class="code-body"><p class="empty">Looking for your project…</p></div>
       </div>
 
-      <div class="card dev-card" id="laptop" data-sheet="laptop" tabindex="0" role="button" aria-label="This laptop: open details">
-        <div class="card-title">Laptop <span id="dev-up" class="pill"></span><span class="more" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg></span></div>
+      <div class="card dev-card collapsed" id="laptop" data-sheet="laptop" tabindex="0" role="button" aria-label="This laptop: open details">
+        <div class="card-title">Laptop <span id="sum-laptop" class="sum"></span><span id="dev-up" class="pill"></span><span class="more" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg></span></div>
         <div class="tri3">
           <div><span class="label">BATTERY</span><b><span id="d-batp">–</span><small class="u">%</small></b><div class="bar thin"><i id="d-bat-bar"></i></div><small id="d-bat">–</small></div>
           <div><span class="label">WI-FI</span><b><span id="d-wifi">–</span><small class="u">%</small></b><div class="bar thin"><i id="d-wifi-bar"></i></div><small id="d-ssid">–</small></div>
@@ -65,7 +65,7 @@
     <!-- centre: orb + conversation -->
     <main class="center">
       <div class="core">
-        <div id="orb" class="orb" title="Click to stop talking">
+        <div id="orb" class="orb" title="Click: status · double-click: talk to me">
           <div class="halo" aria-hidden="true"></div>
           <canvas id="orb-canvas" aria-hidden="true"></canvas>
         </div>
@@ -131,8 +131,8 @@
 
     <!-- right: performance + jobs -->
     <section class="col right" aria-label="System, now and workspace">
-      <div class="card perf" id="system" data-sheet="system" tabindex="0" role="button" aria-label="System: open details">
-        <div class="card-title">System <span id="uptime" class="pill"></span><span class="more" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg></span></div>
+      <div class="card perf collapsed" id="system" data-sheet="system" tabindex="0" role="button" aria-label="System: open details">
+        <div class="card-title">System <span id="sum-system" class="sum"></span><span id="uptime" class="pill"></span><span class="more" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg></span></div>
         <div class="rings">
           <div class="rg" id="rg-cpu"><svg viewBox="0 0 64 64"><circle class="trk" cx="32" cy="32" r="27"/><circle class="arc" cx="32" cy="32" r="27"/></svg><div class="v"><b id="cpu">0</b><small>%</small></div><div class="k">CPU</div></div>
           <div class="rg" id="rg-ram"><svg viewBox="0 0 64 64"><circle class="trk" cx="32" cy="32" r="27"/><circle class="arc" cx="32" cy="32" r="27"/></svg><div class="v"><b id="ram">0</b><small>%</small></div><div class="k">MEMORY</div></div>
@@ -150,8 +150,8 @@
         </div>
       </div>
 
-      <div class="card today-card" id="today" data-sheet="now" tabindex="0" role="button" aria-label="Now and today: open details">
-        <div class="card-title">Now &amp; today <span id="today-count" class="pill"></span><span class="more" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg></span></div>
+      <div class="card today-card collapsed" id="today" data-sheet="now" tabindex="0" role="button" aria-label="Now and today: open details">
+        <div class="card-title">Now &amp; today <span id="sum-now" class="sum"></span><span id="today-count" class="pill"></span><span class="more" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg></span></div>
         <ul id="now-list" class="nowl"></ul>
         <div id="today-chips" class="tchips"></div>
         <div id="today-sw" class="today-sw" hidden>
