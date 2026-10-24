@@ -457,19 +457,34 @@ class ProcessWatcher(Worker):
                                               f"crashed. {training.progress_text(st)}".strip(), "warning")
 
     # ---------- laptop ----------
+    INHIBIT_WHY = "--why=watching a training run"
+
     def keep_awake(self, on: bool) -> None:
-        """While local work is watched, block sleep (a launched run carries its own systemd-inhibit)."""
+        """While local work is watched, block sleep (a launched run carries its own systemd-inhibit). The blocker
+        lives at most 10 min and is renewed while needed, and stale copies (a worker that was killed) are removed
+        first, so blockers can never pile up."""
         alive = self.inhibitor is not None and self.inhibitor.poll() is None
         if on and not alive and config.TRAINING_KEEP_AWAKE and shutil.which("systemd-inhibit"):
+            self.reap_inhibitors()
             try:
                 self.inhibitor = subprocess.Popen(
-                    ["systemd-inhibit", "--what=sleep:idle", "--who=KURAMA", "--why=watching a training run",
-                     "--mode=block", "sleep", "infinity"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    ["systemd-inhibit", "--what=sleep:idle", "--who=KURAMA", self.INHIBIT_WHY,
+                     "--mode=block", "sleep", "600"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             except OSError as e:
                 self.log.info("could not block sleep: %s", e)
         elif not on and alive:
             self.inhibitor.terminate()
             self.inhibitor = None
+
+    def reap_inhibitors(self) -> None:
+        mine = self.inhibitor.pid if self.inhibitor is not None else None
+        for p in psutil.process_iter(["pid", "cmdline"]):
+            c = p.info.get("cmdline") or []
+            if c[:1] == ["systemd-inhibit"] and self.INHIBIT_WHY in c and p.info["pid"] != mine:
+                try:
+                    p.terminate()
+                except psutil.Error:
+                    pass
 
     def check_battery(self, active: list[dict]) -> None:
         try:

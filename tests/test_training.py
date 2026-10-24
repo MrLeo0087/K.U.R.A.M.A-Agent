@@ -275,3 +275,22 @@ def test_colab_cell_is_valid_python():
     cell = training.colab_cell("kurama-test", "run1")
     compile(cell, "cell", "exec")
     assert '"kurama-test"' in cell and "KuramaKeras" in cell and "kurama_should_stop" in cell
+
+
+def test_keep_awake_reaps_stale_blockers(monkeypatch):
+    killed, started = [], []
+
+    class P:
+        def __init__(self, pid, cmd):
+            self.info = {"pid": pid, "cmdline": cmd}
+
+        def terminate(self):
+            killed.append(self.info["pid"])
+    stale = ["systemd-inhibit", "--what=sleep:idle", "--who=KURAMA", pw.ProcessWatcher.INHIBIT_WHY, "--mode=block", "sleep", "infinity"]
+    monkeypatch.setattr(pw.psutil, "process_iter", lambda attrs=None: [P(11, stale), P(12, ["bash"])])
+    monkeypatch.setattr(config, "TRAINING_KEEP_AWAKE", True)
+    monkeypatch.setattr(pw.shutil, "which", lambda b: "/usr/bin/" + b)
+    monkeypatch.setattr(pw.subprocess, "Popen", lambda args, **k: started.append(args) or SimpleNamespace(poll=lambda: None, pid=99))
+    w = pw.ProcessWatcher()
+    w.keep_awake(True)
+    assert killed == [11] and started[0][-2:] == ["sleep", "600"]
