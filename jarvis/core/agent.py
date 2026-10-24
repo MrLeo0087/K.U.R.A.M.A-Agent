@@ -232,7 +232,7 @@ class Agent:
     def _join_node(self, state: AgentState) -> dict:
         lang = state.get("lang") or planner.detect_lang(state["user_text"])
         results = sorted(state.get("results") or [], key=lambda r: r.get("idx", 0))
-        quick = [r["answer"].strip() for r in results if r["kind"] == "quick" and r.get("answer")]
+        quick = fastpath.merge_opens([r["answer"].strip() for r in results if r["kind"] == "quick" and r.get("answer")])
         longs = [job_started_text(r["job_id"], r["title"], r.get("job_kind", "write"), lang)
                  for r in results if r["kind"] == "long"]
         self.last["jobs"] = [r["job_id"] for r in results if r["kind"] == "long"]

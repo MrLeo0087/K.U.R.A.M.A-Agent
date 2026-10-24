@@ -12,6 +12,7 @@
   <script type="module" src="app.js"></script>
 </head>
 <body data-state="idle">
+  <div id="wall" class="wall" aria-hidden="true"></div>
   <div class="bg-grid" aria-hidden="true"></div>
   <div class="bg-glow" aria-hidden="true"></div>
   <canvas id="bg-dust" class="bg-dust" aria-hidden="true"></canvas>
@@ -141,8 +142,12 @@
           </span>
         </div>
         <ul id="jobs" class="jobs"></ul>
-        <div id="ws-tabs" class="ws-tabs" role="tablist"></div>
-        <div id="ws-view" class="ws-view"><p class="ws-empty">Pictures, poems and writing you ask for appear here.</p></div>
+        <div class="ws-stage">
+          <div id="ws-view" class="ws-view"><p class="ws-empty">Pictures, poems and writing you ask for appear here.</p></div>
+          <button id="ws-prev" class="ws-nav prev" type="button" aria-label="Newer" hidden>‹</button>
+          <button id="ws-next" class="ws-nav next" type="button" aria-label="Older" hidden>›</button>
+        </div>
+        <div class="ws-foot"><span id="ws-name" class="ws-name"></span><span id="ws-dots" class="ws-dots"></span></div>
       </div>
     </section>
   </div>

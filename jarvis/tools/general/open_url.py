@@ -4,6 +4,7 @@ from __future__ import annotations
 import re
 import shutil
 import subprocess
+from urllib.parse import quote
 
 from jarvis.core.registry import tool
 
@@ -19,6 +20,8 @@ SITES = {
     "maps": "https://maps.google.com", "google maps": "https://maps.google.com",
     "drive": "https://drive.google.com", "google drive": "https://drive.google.com",
     "groq": "https://console.groq.com", "amazon": "https://www.amazon.com",
+    "sofascore": "https://www.sofascore.com", "daraz": "https://www.daraz.com.np", "tiktok": "https://www.tiktok.com",
+    "cricbuzz": "https://www.cricbuzz.com", "espn": "https://www.espn.com", "chess": "https://www.chess.com",
     "यूट्यूब": "https://www.youtube.com", "युट्युब": "https://www.youtube.com",
 }
 
@@ -33,6 +36,19 @@ def resolve(target: str) -> str | None:
         return t
     if re.match(r"^(?:www\.)?[\w-]+(?:\.[\w-]+)+(?:/\S*)?$", t):
         return "https://" + t
+    if re.sub(r"[\s-]+", "", key) in SITES:  # "sofa score", "you tube"
+        return SITES[re.sub(r"[\s-]+", "", key)]
+    import difflib
+    if close := difflib.get_close_matches(re.sub(r"[\s-]+", "", key), list(SITES), n=1, cutoff=0.82):
+        return SITES[close[0]]  # "sofiscore" -> sofascore, "facebok" -> facebook
+    return None
+
+
+def find_site(target: str) -> str | None:
+    """Any other site name ("hamro patro"): DuckDuckGo's "I'm feeling ducky" jumps straight to the top hit."""
+    key = re.sub(r"\s+(?:website|site|web\s*site)$", "", target.strip().strip("\"'").lower())
+    if re.match(r"^[\w][\w .&'-]{1,40}$", key) and len(key.split()) <= 4:
+        return "https://duckduckgo.com/?q=" + quote("\\" + key + " official site")
     return None
 
 
@@ -45,15 +61,15 @@ def _open(url: str) -> None:
                      start_new_session=True)
 
 
-@tool(group="browser", safety="safe", description="Open a website (URL or a name like youtube, github, gmail) in the browser.")
+@tool(group="browser", safety="safe", description="Open a website in the browser: a URL, a domain or ANY site name (unknown names are found automatically).")
 def open_url(target: str) -> str:
     """Open a site in the default browser.
 
     Args:
-        target: A URL, a domain (example.com) or a known site name (youtube, google, github, gmail, chatgpt).
+        target: A URL, a domain (example.com) or just the site's name as the user said it (e.g. sofascore).
     """
-    url = resolve(target)
+    url = resolve(target) or find_site(target)
     if url is None:
         return f"error: don't know a website called {target!r}; give a URL or domain"
     _open(url)
-    return f"opened {url}"
+    return f"opened {target if 'duckduckgo.com' in url else url}"

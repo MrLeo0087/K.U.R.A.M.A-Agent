@@ -201,12 +201,18 @@ def is_result_tail(clause: str) -> bool:
     return bool(RESULT_TAIL.match(clause.strip()))
 
 
+_IMG_TASK = re.compile(r"\b(?:image|picture|photo|drawing|painting|illustration|draw|artwork)\b", re.I)
+_WALL_TAIL = re.compile(r"^\s*(?:and\s+|then\s+)?(?:please\s+)?(?:make|set|use|keep|put|apply)\s+(?:it|this|that|"
+                        r"the (?:image|picture|photo))?\s*(?:as\s+)?(?:my\s+|the\s+)?(?:desktop\s+)?(?:wallpaper|background)\b",
+                        re.I)
+
+
 def merge_tails(tasks: list[dict]) -> list[dict]:
     """Glue "give me the result"-style tasks onto the previous task; remap depends_on indices."""
     out: list[dict] = []
     remap: dict[int, int] = {}
     for i, t in enumerate(tasks):
-        if out and is_result_tail(t["text"]):
+        if out and (is_result_tail(t["text"]) or (_IMG_TASK.search(out[-1]["text"]) and _WALL_TAIL.match(t["text"]))):
             out[-1] = {**out[-1], "text": f"{out[-1]['text'].rstrip(' .,')} and {t['text'].strip()}"}
             remap[i] = len(out) - 1
             continue
@@ -266,6 +272,9 @@ def is_multi(text: str) -> bool:
     clauses = split_clauses(text)
     if len(clauses) < 2:
         return False
+    if _IMG_TASK.search(clauses[0]) and _WALL_TAIL.match(clauses[-1]) and not any(
+            re.match(r"\s*(?:open|play|send|search|close|start|launch)\b", c, re.I) for c in clauses[1:-1]):
+        return False  # "draw X and set it as my wallpaper" is ONE request (generate_image(set_as_wallpaper))
     return sum(1 for c in clauses if is_command(c)) >= 2
 
 

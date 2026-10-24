@@ -56,20 +56,22 @@ def fetch_image(prompt: str, width: int, height: int) -> bytes:
 
 @tool(group="image", safety="safe",
       description="Generate a picture from a text description (free); runs in the background, shows in the workspace.")
-def generate_image(prompt: str, width: int = 1024, height: int = 768) -> str:
+def generate_image(prompt: str, set_as_wallpaper: bool = False, width: int = 0, height: int = 0) -> str:
     """Create an image.
 
     Args:
         prompt: What the picture should show, in English; include a style only if the user asked for one.
-        width: Pixels, 256 to 1536.
-        height: Pixels, 256 to 1536.
+        set_as_wallpaper: True when the user also wants it as the desktop wallpaper (done when the image is ready).
+        width: Pixels, 256 to 1920 (0 = default; wallpapers default to 1920x1080).
+        height: Pixels, 256 to 1920.
     """
     from jarvis.core import jobs
 
     prompt = (prompt or "").strip()
     if not prompt:
         return "error: tell me what the picture should show"
-    w, h = (max(256, min(int(v or 768), 1536)) for v in (width, height))
+    dw, dh = (1920, 1080) if set_as_wallpaper else (1024, 768)
+    w, h = max(256, min(int(width or dw), 1920)), max(256, min(int(height or dh), 1920))
 
     def job(ctx):
         ctx.progress("drawing")
@@ -79,7 +81,13 @@ def generate_image(prompt: str, width: int = 1024, height: int = 768) -> str:
         ext = "png" if data[:4] == b"\x89PNG" else "jpg"
         path = out / f"{datetime.now():%Y%m%d-%H%M%S}-{_slug(prompt)}.{ext}"
         path.write_bytes(data)
+        if set_as_wallpaper:
+            from jarvis.tools.general import set_wallpaper
+            ctx.progress("setting wallpaper")
+            set_wallpaper.apply(path)
         return str(path)
 
-    j = jobs.get_manager().submit(f"image: {prompt[:40]}", "image", job, prompt)
+    j = jobs.get_manager().submit(f"{'wallpaper' if set_as_wallpaper else 'image'}: {prompt[:40]}", "image", job, prompt)
+    if set_as_wallpaper:
+        return f"I'm making your picture now (job #{j.id}) and will set it as your wallpaper as soon as it's ready."
     return f"I'm making your picture now (job #{j.id}). It will appear in the workspace in a few seconds."

@@ -409,6 +409,7 @@ async function sendChat(text, { voice = false, lang = null, speak = false } = {}
           bot.done(ev);
           wsFromReply(text, bot.text);
           setTimeout(loadOutputs, 800); // a tool may have just saved a file
+          setTimeout(loadWall, 1500);
           break;
       }
     }
@@ -658,6 +659,7 @@ function renderJobs(jb) {
   const ul = $("jobs");
   ul.innerHTML = "";
   loadOutputs(); // a job finished or started: its output may be new
+  loadWall(); // ...or it set a new wallpaper
   if (!items.length) return;
   for (const x of items) {
     const li = el("li");
@@ -756,26 +758,36 @@ const ws = { items: [], cur: -1, seen: new Set(), loaded: false };
 const wsTitle = (name) => name.replace(/^.*\//, "").replace(/^\d{8}-\d{4,6}-?/, "").replace(/\.[a-z0-9]+$/i, "").replace(/[-_]+/g, " ").trim() || name;
 const LONG_REPLY = (t) => t && (t.split("\n").filter((l) => l.trim()).length >= 4 || t.length > 420);
 
+const WS_MAX = 8; // the workspace keeps the last 8 results; swipe / arrows / wheel to go through them
+
 function wsAdd(item, show) {
   if (ws.seen.has(item.key)) return;
   ws.seen.add(item.key);
   ws.items.unshift(item);
-  if (ws.items.length > 12) ws.items.length = 12;
+  if (ws.items.length > WS_MAX) ws.items.length = WS_MAX;
   if (show || ws.cur < 0) wsShow(0); else { ws.cur = Math.min(ws.cur + 1, ws.items.length - 1); wsTabs(); }
 }
 
-function wsTabs() {
-  const box = $("ws-tabs");
-  box.innerHTML = "";
-  ws.items.slice(0, 6).forEach((it, i) => {
-    const b = el("button", "ws-tab" + (i === ws.cur ? " on" : ""));
-    b.type = "button"; b.setAttribute("role", "tab");
-    b.innerHTML = `<i class="k-${it.kind}"></i>`;
-    b.append(document.createTextNode(it.title));
-    b.title = it.title;
-    b.onclick = () => wsShow(i);
-    box.append(b);
+function wsTabs() { // footer: name + dots, and the arrows
+  const n = ws.items.length, it = ws.items[ws.cur];
+  $("ws-name").textContent = it ? it.title : "";
+  const dots = $("ws-dots");
+  dots.innerHTML = "";
+  ws.items.forEach((x, i) => {
+    const d = el("button", "ws-dot" + (i === ws.cur ? " on" : "") + (x.kind === "image" ? " img" : ""));
+    d.type = "button"; d.title = x.title; d.setAttribute("aria-label", `Result ${i + 1} of ${n}: ${x.title}`);
+    d.onclick = () => wsShow(i);
+    dots.append(d);
   });
+  $("ws-prev").hidden = ws.cur <= 0;
+  $("ws-next").hidden = ws.cur >= n - 1;
+}
+
+function wsStep(d) {
+  const i = ws.cur + d;
+  if (i < 0 || i >= ws.items.length) return;
+  ws.dir = d;
+  wsShow(i);
 }
 
 async function wsBody(it, box) {
@@ -783,7 +795,8 @@ async function wsBody(it, box) {
   if (it.kind === "image") {
     const img = el("img", "ws-img");
     img.alt = it.title; img.src = it.src; img.decoding = "async";
-    img.onclick = () => wsBig();
+    img.draggable = false;
+    img.onclick = () => { if (!ws.dragged) wsBig(); };
     box.append(img);
     return;
   }
@@ -804,7 +817,9 @@ async function wsShow(i) {
   const view = $("ws-view");
   await wsBody(it, view);
   view.scrollTop = 0;
-  retrigger(view, "ws-in-a", "ws-in-b"); // one short fade-in
+  view.dataset.dir = ws.dir > 0 ? "next" : ws.dir < 0 ? "prev" : "";
+  ws.dir = 0;
+  retrigger(view, "ws-in-a", "ws-in-b"); // one short slide/fade in
   if ($("ws-big").open) wsBig();
 }
 
@@ -828,18 +843,68 @@ async function loadOutputs() {
   if (outputsBusy) return;
   outputsBusy = true;
   try {
-    const items = (await api.outputs(8)).items || [];
+    const items = (await api.outputs(WS_MAX)).items || [];
     const fresh = items.filter((x) => !ws.seen.has("o" + x.name + x.mtime)).reverse(); // oldest first
     for (const x of fresh) {
       wsAdd({ key: "o" + x.name + x.mtime, kind: x.kind, title: wsTitle(x.name), src: api.outputUrl(x.name) },
         ws.loaded && x === fresh[fresh.length - 1]); // jump to a NEW result; at startup just list them
     }
+    if (!ws.loaded && fresh.length) wsShow(0); // startup: open on the newest
     ws.loaded = true;
   } catch { /* API down: keep what we have */ }
   finally { outputsBusy = false; }
 }
 loadOutputs();
 $("ws-expand").onclick = () => wsBig();
+$("ws-prev").onclick = () => wsStep(-1);
+$("ws-next").onclick = () => wsStep(1);
+{ // swipe (touch / mouse drag) and horizontal wheel / two-finger trackpad swipe
+  const v = $("ws-view");
+  let x0 = null, wheelAt = 0;
+  v.addEventListener("pointerdown", (e) => { x0 = e.clientX; });
+  v.addEventListener("pointerup", (e) => {
+    if (x0 === null) return;
+    const dx = e.clientX - x0; x0 = null;
+    ws.dragged = Math.abs(dx) > 50;
+    if (ws.dragged) { wsStep(dx < 0 ? 1 : -1); setTimeout(() => { ws.dragged = false; }, 0); }
+  });
+  v.addEventListener("pointercancel", () => { x0 = null; });
+  v.addEventListener("wheel", (e) => {
+    if (Math.abs(e.deltaX) < 30 || Math.abs(e.deltaX) < Math.abs(e.deltaY)) return;
+    e.preventDefault();
+    const now = performance.now();
+    if (now - wheelAt < 450) return;
+    wheelAt = now;
+    wsStep(e.deltaX > 0 ? 1 : -1);
+  }, { passive: false });
+  $("ws").addEventListener("keydown", (e) => {
+    if (e.key === "ArrowLeft") wsStep(-1);
+    if (e.key === "ArrowRight") wsStep(1);
+  });
+}
+document.addEventListener("keydown", (e) => {
+  if (!$("ws-big").open) return;
+  if (e.key === "ArrowLeft") wsStep(-1);
+  if (e.key === "ArrowRight") wsStep(1);
+});
+
+// ---------- a wallpaper Jarvis made is drawn behind the dashboard (this window covers the real desktop) ----------
+let wallMtime = -1;
+async function loadWall() {
+  try {
+    const w = await api.wallpaperInfo();
+    const m = w.kurama ? w.mtime : 0;
+    if (m === wallMtime) return;
+    wallMtime = m;
+    const box = $("wall");
+    if (!m) { box.classList.remove("on"); return; }
+    const img = new Image();
+    img.onload = () => { box.style.backgroundImage = `url("${img.src}")`; box.classList.add("on"); };
+    img.src = api.wallpaperUrl(m);
+  } catch { /* keep the current background */ }
+}
+loadWall();
+setInterval(loadWall, 60000);
 $("ws-close").onclick = () => $("ws-big").close();
 $("ws-big").addEventListener("click", (e) => { if (e.target === $("ws-big")) $("ws-big").close(); });
 

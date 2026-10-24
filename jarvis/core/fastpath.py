@@ -431,17 +431,25 @@ def _days(m: re.Match, text: str) -> int:
 
 
 _IMAGE = re.compile(r"^(?:can you\s+|could you\s+)?(?:generate|create|make|draw|paint|design|render)\s+(?:me\s+)?"
-                    r"(?:an?\s+)?(?:ai\s+)?(?:image|picture|photo|pic|drawing|painting|illustration|artwork)s?\s+"
+                    r"(?:an?\s+|the\s+)?(?:ai\s+)?(?:image|picture|photo|pic|drawing|painting|illustration|artwork)s?\s+"
                     r"(?:of|about|showing|with|for)\s+(?P<p>.{3,})$", I)
 _DRAW = re.compile(r"^(?:can you\s+)?draw\s+(?:me\s+)?(?P<p>.{3,})$", I)
 
 
+WALL_TAIL = re.compile(r"[\s,]*(?:\band\b|\bthen\b)?\s*(?:please\s+)?(?:make|set|use|keep|put|apply)\s+"
+                       r"(?:it|this|that|the (?:image|picture|photo))?\s*(?:as\s+)?(?:my\s+|the\s+)?(?:desktop\s+)?"
+                       r"(?:wallpaper|background)\b.*$", I)
+
+
 def image_intent(t: str) -> Intent | None:
+    wall = bool(WALL_TAIL.search(t))
+    t = WALL_TAIL.sub("", t) if wall else t
     m = _IMAGE.match(t) or _DRAW.match(t)
     if not m or re.search(r"\b(?:and|then)\s+(?:send|open|set)\b", t, I):  # multi-step: let the planner split it
         return None
     prompt = m.group("p").strip(" .,!?")
-    return Intent("image", "generate_image", "image", {"prompt": prompt}, prompt)
+    args = {"prompt": prompt, "set_as_wallpaper": True} if wall else {"prompt": prompt}
+    return Intent("image", "generate_image", "image", args, prompt)
 
 
 def match(text: str) -> Intent | None:
@@ -591,6 +599,34 @@ def render(intent: Intent, ok: bool, output: str, lang: str) -> str:
     if intent.name == "name":
         return _say("name", lang, intent.label)
     return out  # weather / recall / digest / tokens / session: the tool output is already text
+
+
+_AND = {"en": " and ", "hi": " और ", "ne": " र "}
+
+
+def merge_opens(answers: list[str]) -> list[str]:
+    """["Sure, opening YouTube.", "Sure, opening Facebook."] -> ["Sure, opening YouTube and Facebook."]."""
+    out: list[str] = []
+    run: tuple[str, list[str]] | None = None  # (lang, names)
+    pats = {lg: re.compile("^" + re.escape(tpl).replace(re.escape("{x}"), "(.+?)") + "$")
+            for lg, tpl in _T["open"].items()}
+
+    def flush():
+        if run:
+            lg, names = run
+            joined = names[0] if len(names) == 1 else ", ".join(names[:-1]) + _AND.get(lg, " and ") + names[-1]
+            out.append(_T["open"][lg].format(x=joined))
+    for a in answers:
+        hit = next(((lg, m.group(1)) for lg, p in pats.items() if (m := p.match(a.strip()))), None)
+        if hit and run and run[0] == hit[0]:
+            run[1].append(re.sub(r"\s+(?:website|web site|site)$", "", hit[1], flags=I))
+            continue
+        flush()
+        run = (hit[0], [re.sub(r"\s+(?:website|web site|site)$", "", hit[1], flags=I)]) if hit else None
+        if not hit:
+            out.append(a)
+    flush()
+    return out
 
 
 def _internal(intent: Intent) -> tuple[bool, str]:

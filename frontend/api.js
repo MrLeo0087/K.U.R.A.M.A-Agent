@@ -44,6 +44,8 @@ export class Api {
   profile() { return this.request("/api/v1/profile"); }
   jobs() { return this.request("/api/v1/jobs?limit=20"); }
   fetchWeather() { return this.request("/api/v1/weather"); }
+  wallpaperInfo() { return this.request("/api/v1/wallpaper/info"); }
+  wallpaperUrl(v) { return this.url(`/api/v1/wallpaper?v=${encodeURIComponent(v)}`, true); }
   outputs(limit = 12) { return this.request(`/api/v1/outputs?limit=${limit}`); }
   outputUrl(name) { return this.url(`/api/v1/outputs/file?name=${encodeURIComponent(name)}`, true); }
   cancelJob(id) { return this.request(`/api/v1/jobs/${encodeURIComponent(id)}/cancel`, { method: "POST", body: {} }); }

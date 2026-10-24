@@ -182,3 +182,26 @@ async def output_file(name: str = Query(..., max_length=300)):
         return JSONResponse({"error": "not found"}, status_code=404)
     media = None if p.suffix.lower() in _IMG else "text/plain; charset=utf-8"
     return FileResponse(p, media_type=media, headers={"Cache-Control": "no-cache"})
+
+
+# ---------- desktop wallpaper: the UI draws it behind the dashboard (the KURAMA window covers the real desktop) ----------
+def _wallpaper_path():
+    from jarvis.tools.general import set_wallpaper
+    p = set_wallpaper.current()
+    return p if p and p.is_file() and p.suffix.lower() in _IMG else None
+
+
+@router.get("/wallpaper/info", summary="Current desktop wallpaper (mtime changes when it changes)")
+async def wallpaper_info():
+    p = await run_in_threadpool(_wallpaper_path)
+    ours = bool(p) and _outputs_dir() in p.resolve().parents  # a picture Jarvis made: the UI shows it behind the panels
+    return {"set": bool(p), "kurama": ours, "name": p.name if p else "", "mtime": p.stat().st_mtime if p else 0}
+
+
+@router.get("/wallpaper", summary="The current desktop wallpaper image")
+async def wallpaper():
+    from fastapi.responses import FileResponse
+    p = await run_in_threadpool(_wallpaper_path)
+    if not p:
+        return JSONResponse({"error": "no wallpaper image"}, status_code=404)
+    return FileResponse(p, headers={"Cache-Control": "max-age=86400"})

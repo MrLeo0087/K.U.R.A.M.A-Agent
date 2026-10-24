@@ -369,8 +369,9 @@ def test_open_url_mocked(monkeypatch):
     assert registry.call("open_url", {"target": "YouTube"}).output == "opened https://www.youtube.com"
     assert open_url.resolve("github.com/foo") == "https://github.com/foo"
     assert open_url.resolve("https://example.org/a") == "https://example.org/a"
-    assert "error" in registry.call("open_url", {"target": "my thing"}).output
-    assert opened == ["https://www.youtube.com"]
+    assert registry.call("open_url", {"target": "hamro patro"}).output == "opened hamro patro"  # found by search
+    assert "error" in registry.call("open_url", {"target": "???"}).output
+    assert opened[0] == "https://www.youtube.com" and opened[1].startswith("https://duckduckgo.com/")
     assert registry.get("open_url").metadata["safety"] == "safe"
     assert "browser" in router.rule_groups("open youtube")
 

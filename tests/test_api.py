@@ -395,3 +395,23 @@ def test_image_style_default_and_user_style():
     from jarvis.tools.general.generate_image import styled
     assert "cinematic vector" in styled("a tiger in the himalayas")
     assert styled("a tiger, watercolor") == "a tiger, watercolor"
+
+
+def test_open_url_any_site_name():
+    from jarvis.tools.general.open_url import find_site, resolve
+    assert resolve("SoFiScore") == "https://www.sofascore.com"
+    assert resolve("hamro patro") is None and find_site("hamro patro").startswith("https://duckduckgo.com/?q=")
+
+
+def test_merge_open_replies_and_image_wallpaper_flow():
+    from jarvis.core import fastpath, planner
+    assert fastpath.merge_opens(["Sure, opening YouTube.", "Sure, opening Facebook."]) == [
+        "Sure, opening YouTube and Facebook."]
+    i = fastpath.match("generate the image of a coder workspace and make it as my wallpaper")
+    assert i.tool == "generate_image" and i.args["set_as_wallpaper"] and "wallpaper" not in i.args["prompt"]
+    assert len(planner.merge_tails([{"text": "draw a fox"}, {"text": "set it as my wallpaper"}])) == 1
+
+
+def test_image_wallpaper_request_is_single():
+    from jarvis.core import planner
+    assert not planner.is_multi("generate the image of a calm workspace and very cinematic light and make it my wallpaper")
