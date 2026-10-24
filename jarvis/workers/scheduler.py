@@ -1,6 +1,6 @@
 """Scheduler worker (P9b): every config.SCHEDULER_INTERVAL_S (15 s) fire due reminders / scheduled
-commands (reminders.run_due). Items missed while KURAMA was off fire once on start if < 1 h late, else
-they are marked missed and the user is told. On start it also tells the user once about background
+commands (reminders.run_due), plus a heads-up config.REMINDER_LEAD_S (10 min) before each reminder. Items
+missed while KURAMA was off fire once on start if < 1 h late, else they are marked missed and the user is told. On start it also tells the user once about background
 jobs interrupted by the last quit/restart."""
 from __future__ import annotations
 
@@ -30,6 +30,8 @@ class Scheduler(Worker):
             self.log.warning("interrupted-jobs check failed: %s", e)
 
     def tick(self) -> None:
+        for sid in reminders.heads_up(self._now()):
+            self.log.info("schedule #%d heads-up", sid)
         for item in reminders.run_due(self._now()):
             if item["action"] == "fired":
                 self.fired += 1

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import collections
 import logging
+import re
 import shutil
 import subprocess
 import threading
@@ -144,6 +145,37 @@ def notify(title: str, text: str = "", level: str = "info", source: str = "", de
             log.warning("could not save alert: %s", e)
     log.info("[%s] %s: %s -> %s", level, title, text[:200].replace("\n", " | "), ",".join(sent) or "-")
     return sent
+
+
+# --- what KURAMA told the user on its own (so the agent can answer "why didn't you tell me earlier?") ---
+_ASKS_PAST = re.compile(r"\b(?:remind|alert|notif|messag|told|tell me|earlier|sent|warn|missed|job|why did|why didn)",
+                        re.I)
+
+
+def recent_sent(window_s: float, limit: int = 4) -> list[dict]:
+    """Alerts that actually reached the user (desktop / Telegram) in the last window_s, newest first."""
+    try:
+        rows = store.alerts_recent(limit * 3)
+    except Exception:
+        return []
+    now = time.time()
+    reached = lambda r: bool({"desktop", "telegram"} & set((r.get("channels") or "").split(",")))  # noqa: E731
+    return [r for r in rows if now - r["ts"] <= window_s and reached(r)][:limit]
+
+
+def context_line(user_text: str, channel: str = "") -> str:
+    """One system-prompt line listing those messages, only when the turn may be about them (~40-80 tokens):
+    the user mentions reminders/alerts/messages, or writes on Telegram within 3 h of one."""
+    rows = recent_sent(config.NOTIFY_CONTEXT_S)
+    if not rows:
+        return ""
+    fresh = time.time() - rows[0]["ts"] < 3 * 3600
+    if not (_ASKS_PAST.search(user_text or "") or (channel == "telegram" and fresh)):
+        return ""
+    items = "; ".join(f"[{time.strftime('%a %I:%M %p', time.localtime(r['ts']))}] {r['title']}: "
+                      f"{(r.get('text') or '').splitlines()[0][:110] if r.get('text') else ''}"
+                      for r in reversed(rows))
+    return f"Messages you sent the user on your own recently (desktop/Telegram): {items}."
 
 
 def reset() -> None:

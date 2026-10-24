@@ -32,8 +32,8 @@ from typing import Annotated, Any, Callable, Iterator, TypedDict
 from langchain_core.messages import (AIMessage, BaseMessage, HumanMessage, SystemMessage,
                                      ToolMessage)
 
-from jarvis.core import (config, fastpath, identity, selfknow, jobs, llm, meta, planner, profile, registry, router, safety,
-                         store)
+from jarvis.core import (config, fastpath, identity, selfknow, jobs, llm, meta, notify, planner, profile, registry, router,
+                         safety, store)
 
 log = logging.getLogger("jarvis.agent")
 
@@ -417,6 +417,9 @@ class Agent:
             if line:
                 system += " " + line
                 self.last["profile_tokens"] = self.last.get("profile_tokens", 0) + profile.estimate_tokens(line)
+            told = notify.context_line(user_text, self.channel)  # reminders/alerts it sent on its own
+            if told:
+                system += " " + told
         return [SystemMessage(content=system), *recent, HumanMessage(content=user_text)]
 
     # --- sessions + profile (P7) ---
@@ -427,6 +430,8 @@ class Agent:
         if not self.persist:
             return
         now = time.time()
+        if self.session_id is None and not self.history and self.channel:
+            self._resume(now)
         if self.session_id is not None and now - self._last_turn > config.SESSION_IDLE_S:
             self.end_session(blocking=False)
             with self._lock:
@@ -440,6 +445,23 @@ class Agent:
             self.last["facts"] = facts
         elif self._SELF_TALK.search(user_text) and not user_text.rstrip().endswith("?"):
             self._self_talk = (self._self_talk + [user_text[:200]])[-6:]
+
+    def _resume(self, now: float) -> None:
+        """After a restart, carry on this channel's last chat (if it was within SESSION_IDLE_S): its recent turns
+        and summary come back, so "what I asked you before" still works on Telegram."""
+        try:
+            sess = store.session_latest(self.channel)
+            if not sess or now - (sess.get("end") or 0) > config.SESSION_IDLE_S:
+                return
+            rows = store.session_messages(sess["id"], limit=500)[-2 * config.HISTORY_TURNS:]
+        except Exception as e:
+            log.warning("could not resume the %s chat: %s", self.channel, e)
+            return
+        kinds = {"user": HumanMessage, "assistant": AIMessage}
+        with self._lock:
+            self.history = [kinds[r["role"]](content=r["text"]) for r in rows if r["role"] in kinds]
+            self.summary = sess.get("summary") or ""
+        self.session_id, self._last_turn = sess["id"], sess.get("end") or now
 
     def _persist_turn(self, user_text: str, answer: str) -> None:
         if not self.persist:

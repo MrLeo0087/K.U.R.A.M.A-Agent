@@ -28,6 +28,26 @@ def roots() -> list[Path]:
     return [Path(p).expanduser() for p in config.SEARCH_ROOTS if Path(p).expanduser().is_dir()]
 
 
+_DATA_FS = {"ext4", "ext3", "ext2", "btrfs", "xfs", "f2fs", "fuseblk", "ntfs", "ntfs3", "exfat", "vfat"}
+
+
+def all_disks() -> list[Path]:
+    """Home + every data disk that is mounted now (/media/<user>/*, /mnt/*, ...): "my whole laptop" for file
+    search and for sending files. System mounts (/, /boot, snaps) are left out; / itself is covered by home."""
+    out = [Path.home()]
+    try:
+        import psutil
+
+        for part in psutil.disk_partitions(all=False):
+            mp = Path(part.mountpoint)
+            if part.fstype.lower() in _DATA_FS and str(mp).startswith(("/media/", "/mnt/", "/run/media/")):
+                out.append(mp)
+    except Exception:
+        pass
+    out += [r for r in roots() if r not in out]
+    return [p for p in dict.fromkeys(out) if p.is_dir()]
+
+
 def _score(name: str, want: str) -> float:
     a, b = norm(name), norm(want)
     if not b:

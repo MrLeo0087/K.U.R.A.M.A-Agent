@@ -92,7 +92,7 @@ def test_reminder_fires_once(sent):
     assert reminders.run_due(NOW_TS + 30) == []
     assert reminders.run_due(NOW_TS + 61)[0]["action"] == "fired"
     assert reminders.run_due(NOW_TS + 120) == []
-    assert sent == [("Reminder", "call mom", {"level": "info", "source": "scheduler"})]
+    assert len(sent) == 1 and sent[0][0].startswith("⏰ Reminder (") and sent[0][1].startswith("call mom")
     row = store.schedules_list(enabled_only=False)[0]
     assert row["enabled"] == 0 and row["note"] == "done"
 
@@ -112,9 +112,22 @@ def test_missed_item_policy(sent):
     out = reminders.run_due(at(2026, 10, 23, 17, 30))  # pay rent 30 min late: fires; stretch 1.5 h late: missed
     assert {o["action"] for o in out} == {"fired", "missed"}
     titles = [s[0] for s in sent]
-    assert "Reminder" in titles and "Missed reminder" in titles
+    assert any(t.startswith("⏰ Reminder") for t in titles) and "Missed reminder" in titles
+    assert "was off" in next(s[1] for s in sent if s[0] == "Missed reminder")
     notes = {r["text"]: r["note"] for r in store.schedules_list(enabled_only=False)}
     assert notes == {"pay rent": "done", "stretch": "missed"}
+
+
+def test_heads_up_once_before_reminder(sent, monkeypatch):
+    monkeypatch.setattr(reminders.config, "REMINDER_LEAD_S", 600.0)
+    reminders.add("morning walk", "at 6 pm", now=NOW_TS)
+    due = at(2026, 10, 23, 18, 0)
+    assert reminders.heads_up(due - 900) == []  # 15 min before: too early
+    sid = reminders.heads_up(due - 540)  # 9 min before
+    assert len(sid) == 1 and sent[-1][0] == "🔔 In 9 min (6:00 PM)" and "morning walk" in sent[-1][1]
+    assert reminders.heads_up(due - 300) == []  # only once
+    reminders.add("tea", "in 5 minutes", now=NOW_TS)  # set inside the lead window: no heads-up
+    assert reminders.heads_up(NOW_TS + 60) == []
 
 
 def test_command_runs_with_confirm_denied(sent, monkeypatch):
@@ -168,7 +181,7 @@ def test_scheduler_worker_tick(sent):
 
     reminders.add("tea", "in 1 minute", now=NOW_TS)
     w = Scheduler(now=lambda: NOW_TS + 90)
-    assert w.run_once() and w.fired == 1 and sent[0][1] == "tea"
+    assert w.run_once() and w.fired == 1 and sent[0][1].startswith("tea")
     from jarvis.workers import supervisor
     assert "scheduler" in supervisor.WORKERS and "scheduler" in config.WORKERS_ENABLED
 

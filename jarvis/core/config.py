@@ -253,7 +253,8 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
               "move file", "copy file", "trash", "फाइल", "फोल्डर", "मिटाओ", "मेटाउ"),
     "filesearch": ("find file", "find files", "find the file", "locate", "named", "grep", "ripgrep", "where is",
                    "which file", "containing", "search files", "search for files"),
-    "telegram": ("telegram", "to my phone", "on my phone", "send it to my phone", "टेलिग्राम", "फोनमा पठाउ",
+    "telegram": ("telegram", "to my phone", "on my phone", "send it to my phone", "send me", "send it to me",
+                 "and send", "from my laptop", "टेलिग्राम", "फोनमा पठाउ",
                  "फोनमा", "फोन पर भेज", "फ़ोन पर भेज", "phone ma pathau", "phone pe bhej"),
     "toolsmith": ("make a tool", "make tool", "create a tool", "build a tool", "new tool", "skills", "skill",
                   "saved tools", "my tools"),
@@ -612,6 +613,8 @@ PLAYLISTS: dict[str, str] = {  # spoken name -> URL or local music folder
 # --- P9b --- reminders / scheduled commands, RAM-aware jobs, resume
 SCHEDULER_INTERVAL_S = 15.0  # scheduler worker tick
 SCHEDULE_MISSED_GRACE_S = 3600.0  # items later than this (laptop off) are marked missed, not run
+REMINDER_LEAD_S = 60.0 * float(os.getenv("KURAMA_REMINDER_LEAD_MIN", "10"))  # heads-up this long before a reminder
+NOTIFY_CONTEXT_S = 12 * 3600.0  # the agent knows the messages it sent the user in this window
 JOB_RESOURCE_GATE = os.getenv("JARVIS_JOB_GATE", "1").lower() not in ("0", "false", "no", "off")
 JOB_MIN_FREE_MB = int(os.getenv("JARVIS_JOB_MIN_FREE_MB", "800"))  # queued jobs wait below this free RAM
 JOB_MAX_LOAD_PER_CORE = 1.5  # ...or while the 1-min load average exceeds cores x this

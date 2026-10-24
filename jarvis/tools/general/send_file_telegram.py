@@ -13,9 +13,11 @@ PHOTO_MAX = 10 * 1024 * 1024  # Bot API sendPhoto limit
 
 def check_path(path: str) -> Path:
     """Resolved file path; raises ValueError unless it exists, is a file, <= 50 MB and is under SHARE_ROOTS."""
+    from jarvis.core.paths import all_disks
+
     p = _files.resolve(path)
-    if not any(_files.inside(p, Path(r)) for r in config.SHARE_ROOTS):
-        raise ValueError(f"I can only send files from your home folder or project drive, not {p}")
+    if not any(_files.inside(p, Path(r)) for r in (*config.SHARE_ROOTS, *all_disks())):
+        raise ValueError(f"I can only send files from your home folder or your data disks, not {p}")
     if not p.is_file():
         raise ValueError(f"{p} doesn't exist or isn't a file")
     if p.stat().st_size > config.TELEGRAM_FILE_MAX_MB * 1024 * 1024:
@@ -37,11 +39,19 @@ def send_file_telegram(path: str, caption: str = "") -> str:
         return f"error: {e}"
     if err := _tg.ready():
         return err
+    return deliver(p, caption)
+
+
+def deliver(p: Path, caption: str = "") -> str:
+    """Upload one checked file to the user's chat (photos as pictures, the rest as documents)."""
     photo = p.suffix.lower() in PHOTO_EXT and p.stat().st_size <= PHOTO_MAX
     method, field = ("sendPhoto", "photo") if photo else ("sendDocument", "document")
     payload = {"chat_id": config.TELEGRAM_CHAT_ID, **({"caption": caption[:1000]} if caption else {})}
-    with open(p, "rb") as fh:
-        ok = notify.telegram_call(method, payload, files={field: (p.name, fh)})
+    try:
+        with open(p, "rb") as fh:
+            ok = notify.telegram_call(method, payload, files={field: (p.name, fh)})
+    except RuntimeError as e:
+        return f"error: Telegram didn't accept {p.name}: {e}"
     if not ok:
         return f"error: Telegram didn't accept {p.name} (check the bot token/chat id or your internet)"
     return f"Sent {p.name} to Telegram."

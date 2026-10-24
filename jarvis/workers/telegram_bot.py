@@ -10,6 +10,7 @@ The agent (LangChain) is imported only when the first real question arrives.
 from __future__ import annotations
 
 import collections
+import re
 import threading
 import time
 
@@ -22,6 +23,8 @@ HELP = ("I'm KURAMA. Send a question or command as text.\n"
         "/jobs: background jobs\n/help: this message\n"
         "Risky actions ask 'Reply yes/no' first. Only text is supported.")
 TEXT_ONLY = "Sorry, only text messages are supported."
+# a reply to find_and_send's numbered list: "2", "send 2", "number 2", "all", "send all" (0 tokens)
+PICK = re.compile(r"^\s*(?:send\s+)?(?:(?:no\.?|number|file)\s*)?(\d{1,2}|all|both)\s*[.!]?\s*$", re.I)
 
 
 class TelegramBot(Worker):
@@ -117,11 +120,24 @@ class TelegramBot(Worker):
             if cmd == "/jobs":
                 return jobs_text()
             return HELP
+        if (m := PICK.match(text)) and (picked := self.pick_found(m.group(1))):
+            return picked
         try:
             return self.agent().run(text, mode="text")
         except Exception as e:
             self.log.exception("agent failed")
             return f"Sorry, that failed: {type(e).__name__}: {str(e)[:200]}"
+
+    @staticmethod
+    def pick_found(choice: str) -> str | None:
+        """Send item N (or all) of the last find_and_send list; None when there is no recent list."""
+        from jarvis.core import safety
+        from jarvis.tools.general import find_and_send as fs
+
+        if not fs.last_list():
+            return None
+        res = safety.execute("find_and_send", {"pick": -1 if choice.lower() in ("all", "both") else int(choice)})
+        return res.output if res.ok else (res.error or res.output)
 
     def agent(self):
         if self._agent is None:

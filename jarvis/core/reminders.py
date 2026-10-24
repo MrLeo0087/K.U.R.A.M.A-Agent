@@ -39,7 +39,7 @@ def add(text: str, when_text: str, kind: str = "reminder", now: float | None = N
                 "(try 'at 5 pm', 'in 20 minutes', 'tomorrow at 9', 'every weekday at 9:30')")
     if w.ts <= now_ts:
         return f"error: {when_text!r} is in the past"
-    sid = store.schedule_add(text, kind, w.ts, w.repeat)
+    sid = store.schedule_add(text, kind, w.ts, w.repeat, created=now_ts)
     desc = w.describe(_dt(now_ts))
     if kind == "command":
         return (f"Scheduled #{sid} {desc}: \"{text}\". Steps that need your confirmation won't run "
@@ -115,11 +115,38 @@ def run_command(text: str) -> str:
     return str(answer)[:1500]
 
 
+def _hm(ts: float) -> str:
+    return datetime.fromtimestamp(ts).strftime("%I:%M %p").lstrip("0")
+
+
 def fire(row: dict) -> list[str]:
     if row.get("kind") == "command":
         result = run_command(row["text"])
         return notify.notify(f"Scheduled: {row['text'][:60]}", result, level="info", source="scheduler")
-    return notify.notify("Reminder", row["text"], level="info", source="scheduler")
+    return notify.notify(f"⏰ Reminder ({_hm(row['next_run'])})", f"{row['text']}\nIt's time, go do it now.",
+                         level="info", source="scheduler")
+
+
+def heads_up(now: float | None = None) -> list[int]:
+    """Telegram/desktop heads-up config.REMINDER_LEAD_S before each reminder, once per occurrence (kept in
+    `note` as lead:<due ts>). Skipped for reminders set closer than that to their time."""
+    now = now if now is not None else time.time()
+    lead, sent = config.REMINDER_LEAD_S, []
+    if lead <= 0:
+        return sent
+    for r in store.schedules_list(enabled_only=True, limit=50):
+        due = r.get("next_run") or 0
+        if r.get("kind") == "command" or not (now < due <= now + lead):
+            continue
+        mark = f"lead:{int(due)}"
+        if r.get("note") == mark or due - (r.get("created") or 0) < lead + 60:
+            continue
+        store.schedule_update(r["id"], note=mark)  # first: never send it twice
+        mins = max(1, round((due - now) / 60))
+        notify.notify(f"🔔 In {mins} min ({_hm(due)})", f"{r['text']}\nGet ready: I'll remind you again at {_hm(due)}.",
+                      level="info", source="scheduler")
+        sent.append(r["id"])
+    return sent
 
 
 def run_due(now: float | None = None) -> list[dict]:
@@ -136,9 +163,10 @@ def run_due(now: float | None = None) -> list[dict]:
         else:
             store.schedule_update(r["id"], last_run=now, enabled=0, note="missed" if missed else "done")
         if missed:
-            due = datetime.fromtimestamp(r["next_run"]).strftime("%a %H:%M")
+            due = datetime.fromtimestamp(r["next_run"]).strftime("%a ") + _hm(r["next_run"])
             what = "reminder" if r.get("kind") != "command" else "scheduled command (not run)"
-            notify.notify(f"Missed {what}", f"{r['text']} (was due {due})", level="warning", source="scheduler")
+            notify.notify(f"Missed {what}", f"{r['text']} (was due {due}). I couldn't tell you on time because "
+                          "the laptop or KURAMA was off then.", level="warning", source="scheduler")
             done.append({"id": r["id"], "action": "missed"})
             continue
         try:

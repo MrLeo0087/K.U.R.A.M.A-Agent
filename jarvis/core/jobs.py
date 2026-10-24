@@ -9,8 +9,6 @@ from __future__ import annotations
 
 import collections
 import logging
-import shutil
-import subprocess
 import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -289,7 +287,7 @@ class Announcer:
             print(line, flush=True)
         else:
             print(f"\n{line}", flush=True)
-        notify(line)
+        notify(job)
 
     def pop(self) -> tuple[str, str] | None:
         """Next (spoken text, lang) or None."""
@@ -305,17 +303,21 @@ class Announcer:
 ANNOUNCER = Announcer()
 
 
-def notify(text: str) -> None:
+def notify(job: Job) -> None:
+    """A finished / failed background job: desktop (config.JOBS_NOTIFY) and Telegram, so it reaches the user away
+    from the laptop too."""
     if not config.JOBS_NOTIFY:
         return
-    exe = shutil.which("notify-send")
-    if not exe:
-        return
+    from jarvis.core import notify as _n
+
+    if job.status == "done":
+        title, text, level = f"✅ Done: {job.title}", f"Saved to {job.output_path}" if job.output_path else "", "info"
+    else:
+        title, text, level = f"Job failed: {job.title}", (job.error or "")[:300], "warning"
     try:
-        subprocess.Popen([exe, "KURAMA", text], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                         start_new_session=True)
-    except OSError as e:
-        log.debug("notify-send failed: %s", e)
+        _n.notify(title, text, level=level, source="jobs")
+    except Exception as e:  # a notification must never break the job runner
+        log.debug("job notify failed: %s", e)
 
 
 def set_mode(mode: str) -> None:

@@ -429,6 +429,12 @@ def current_session() -> int | None:
     return _session_id
 
 
+def session_latest(channel: str) -> dict | None:
+    """The most recent session of a channel ("telegram", ...), to carry a chat over a restart."""
+    rows = _exec("SELECT * FROM sessions WHERE channel=? ORDER BY start DESC LIMIT 1", (channel,))
+    return dict(rows[0]) if rows else None
+
+
 def session_touch(session_id: int, turns: int = 1) -> None:
     _exec("UPDATE sessions SET end=?, turns=turns+? WHERE id=?", (time.time(), int(turns), session_id))
 
@@ -555,12 +561,12 @@ def notes_between(t0: float, t1: float) -> list[dict]:
 SCHEDULE_FIELDS = ("text", "kind", "next_run", "repeat", "last_run", "enabled", "note")
 
 
-def schedule_add(text: str, kind: str, next_run: float, repeat: str = "none") -> int:
+def schedule_add(text: str, kind: str, next_run: float, repeat: str = "none", created: float | None = None) -> int:
     with _lock:
         if _conn is None:
             init(_path)
         cur = _conn.execute("INSERT INTO schedules(text,kind,next_run,repeat,created,enabled,note) "  # type: ignore[union-attr]
-                            "VALUES (?,?,?,?,?,1,'')", (text, kind, next_run, repeat or "none", time.time()))
+                            "VALUES (?,?,?,?,?,1,'')", (text, kind, next_run, repeat or "none", created or time.time()))
         return int(cur.lastrowid)
 
 
