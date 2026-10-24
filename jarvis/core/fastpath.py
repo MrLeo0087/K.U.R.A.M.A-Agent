@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from jarvis.core import config, safety, store
+from jarvis.core import notes as notes_mod
 
 log = logging.getLogger("jarvis.fastpath")
 
@@ -581,7 +582,35 @@ _NET_BACK = re.compile(r"^(?:tell|notify|ping|message) me when (?:the )?(?:inter
                        r"(?:is|comes) back(?: on)?$", I)
 
 
+_NOTES_SHOW = re.compile(r"^(?:show|give|read|open)(?: me)? (?:my |the )?(?:(?P<s>[\w+#. ]{1,30}?) )?notes?"
+                         r"(?: (?:from|for|of) (?P<w>today|yesterday|this week|last week|this month|the last \d+ days))?$",
+                         I)
+_LECTURE_START = re.compile(r"^(?:start )?record(?:ing)? (?:the |this |my |today'?s )?(?P<on1>online )?(?:lecture|class)"
+                            r"(?: (?:called|on|about) (?P<t>(?!zoom|meet|google meet|youtube|teams|the laptop|laptop)\S.*?))?"
+                            r"(?P<online> (?:from|on|in) (?:the |my )?"
+                            r"(?:laptop|computer|zoom|meet|google meet|youtube|teams))?$", I)
+_LECTURE_STOP = re.compile(r"^stop (?:the |my )?(?:recording|lecture recording|lecture|class recording)$", I)
+_LECTURE_SUM = re.compile(r"^summari[sz]e (?:my |the |today'?s |last )?(?:lecture|class)$", I)
+_DAYS = {"today": 1, "yesterday": 2, "this week": 7, "last week": 14, "this month": 31}
+
+
 def _daily_intent(t: str) -> Intent | None:
+    if (m := notes_mod.NOTE.match(t)) and not t.lower().startswith(("note that", "remember")):
+        return Intent("note", "study_notes", "study", {"action": "add", "text": m.group("t").strip(),
+                                                       "subject": (m.group("s1") or m.group("s2") or "").strip()})
+    if m := _NOTES_SHOW.match(t):
+        w = (m.group("w") or "this week").lower()
+        days = int(re.search(r"\d+", w).group()) if re.search(r"\d+", w) else _DAYS.get(w, 7)
+        subj = (m.group("s") or "").strip()
+        return Intent("notes", "study_notes", "study", {"action": "show", "subject": "" if subj.lower() in (
+            "all", "study", "my", "the") else subj, "days": days})
+    if m := _LECTURE_START.match(t):
+        return Intent("lecture", "lecture", "study", {"action": "start", "title": (m.group("t") or "").strip(),
+                                                      "source": "laptop" if m.group("online") or m.group("on1") else "mic"})
+    if _LECTURE_STOP.match(t):
+        return Intent("lecture", "lecture", "study", {"action": "stop"})
+    if _LECTURE_SUM.match(t):
+        return Intent("lecture", "lecture", "study", {"action": "summarize"})
     if _NET.match(t):
         return Intent("net", "internet_doctor", "system", {"action": "check"})
     if _NET_SPEED.match(t):
@@ -1039,7 +1068,9 @@ def switch_intent(t: str) -> Intent | None:
     """"turn off bluetooth", "bluetooth off bro", "disable wifi", and the follow-up "turn it off" (0 tokens)."""
     low = t.lower()
     device = next((name for name, rx in _DEVICES if re.search(r"\b(?:" + rx + r")\b", low)), None)
-    if re.search(r"\b(?:is|are|was|status|whether|check)\b", low) and not _SW_VERB.search(low):
+    question = re.match(r"^(?:is|are|was|check|what(?:'s| is)|tell me|show me|can you (?:tell|check|give))\b", low) \
+        or re.search(r"\b(?:status|whether)\b", low)
+    if question and not _SW_VERB.search(low) and "password" not in low:
         # "is bluetooth on?", "bluetooth status": a question, answered by reading the switch
         return Intent("control", "laptop_toggle", "system", {"setting": device, "state": "status"}) \
             if device in ("wifi", "bluetooth", "airplane", "power_mode") else None

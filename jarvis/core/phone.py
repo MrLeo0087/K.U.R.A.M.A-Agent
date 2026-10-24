@@ -40,7 +40,13 @@ def download(file_id: str, max_mb: float = 20.0) -> tuple[bytes, str]:
 
 
 def _folder(caption: str) -> Path:
-    """'to downloads/papers' or 'save in project1 tara' in the caption picks the folder; else the phone inbox."""
+    """'note DSA' files a photo with your DSA notes; 'to downloads/papers' or 'save in project1 tara' picks the folder;
+    else the phone inbox."""
+    if n := re.match(r"^\s*(?:study )?notes?(?:\s+(?:for|in|on))?\s+(?P<s>[\w+#. ]{1,30})\s*$", caption or "", re.I):
+        from jarvis.core import notes
+        d = notes.root() / notes._canon(n.group("s"))  # noqa: SLF001
+        (d / "images").mkdir(parents=True, exist_ok=True)
+        return d / "images"
     m = re.search(r"\b(?:to|in|into)\s+(?P<f>.+)$", caption or "", re.I)
     if m:
         from jarvis.core.paths import smart_path
