@@ -539,7 +539,15 @@ _COLAB = re.compile(r"^(?:set ?up|connect|link|add|give me|show me)\s+(?:the |my
                     r"(?: notebook| cell| snippet| code| training| ping)*$", I)
 
 
+_CMD_ALERTS = re.compile(r"^(?:(?:turn|switch|put)\s+)?(?P<a>on|off|enable|disable|stop)?\s*(?:the\s+)?"
+                         r"(?:long[- ])?command alerts?(?:\s+(?P<b>on|off|status))?$", I)
+
+
 def _daily_intent(t: str) -> Intent | None:
+    if (m := _CMD_ALERTS.match(t)) and (m.group("a") or m.group("b")):
+        a = (m.group("a") or m.group("b")).lower()
+        return Intent("cmdalerts", "command_alerts", "watch",
+                      {"action": {"enable": "on", "disable": "off", "stop": "off"}.get(a, a)})
     if _TRAIN_STATUS.match(t) and re.search(r"train|run", t, I):
         return Intent("training", "training", "watch", {"action": "status"})
     if _COLAB.match(t):

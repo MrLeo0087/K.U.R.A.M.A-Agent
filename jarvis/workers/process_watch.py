@@ -20,7 +20,7 @@ from pathlib import Path
 
 import psutil
 
-from jarvis.core import config, notify, store, training
+from jarvis.core import cmdalerts, config, notify, store, training
 from jarvis.workers.base import Worker
 
 SOURCE = "process_watch"  # in TELEGRAM_INFO_SOURCES: finished runs reach the phone too
@@ -177,6 +177,10 @@ class ProcessWatcher(Worker):
             return {}
 
     def tick(self) -> None:
+        try:
+            cmdalerts.check()  # long terminal commands that just finished (one stat() when nothing new)
+        except Exception as e:
+            self.log.info("command alerts failed: %s", e)
         active = store.watches_list(("active",))
         for w in active:
             try:

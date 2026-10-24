@@ -427,7 +427,7 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
                 "chatgpt", "open google", "www", "http", "https"),
     "watch": ("watch", "watches", "watching", "monitor", "keep an eye", "tell me when", "notify me when",
               "alert me", "let me know when", "training run", "training", "log file", "tail the log",
-              "finishes", "colab", "train my model", "train the model", "epoch", "loss curve", "nazar", "नजर", "निगरानी", "हेरिरहनु", "ध्यान राख"),
+              "finishes", "colab", "command alerts", "long command", "terminal command", "train my model", "train the model", "epoch", "loss curve", "nazar", "नजर", "निगरानी", "हेरिरहनु", "ध्यान राख"),
     "automation": ("automation", "watchdog", "auto restart",
                    "auto-restart", "keep alive", "keep it running", "if it crashes", "crashed", "crashes",
                    "वर्कफ्लो", "स्वचालन"),
@@ -547,6 +547,9 @@ TRAINING_KEEP_AWAKE = True  # block suspend while a local run is watched (system
 TRAINING_STALL_MIN = 20  # no new output for this long while the process runs = "may be stuck" (0 = off)
 TRAINING_BATTERY_WARN = 25  # % on battery during a run: tell the user to plug in
 TRAINING_EXPLAIN = True  # a crash gets one short LLM line (cause + fix), cached per error
+CMD_ALERTS = True  # report long terminal commands (needs the bash hook: "turn on command alerts")
+CMD_ALERT_MIN = 2.0  # minutes: shorter commands are not reported
+CMD_ALERT_PHONE = os.getenv("KURAMA_CMD_ALERT_PHONE", "away")  # Telegram too: always | away (screen locked) | never
 COLAB_POLL_S = 60.0  # how often KURAMA checks for Colab pings (only while a Colab run is active)
 COLAB_SILENT_MIN = 25  # no ping for this long = the Colab runtime probably disconnected
 COLAB_PROGRESS_EVERY_S = 300  # the notebook sends progress at most this often (ntfy.sh free limits)
