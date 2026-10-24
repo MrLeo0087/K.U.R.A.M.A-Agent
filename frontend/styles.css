@@ -554,3 +554,20 @@ h1.name { animation: tracking 1.8s cubic-bezier(.2, .8, .2, 1) 0.3s both; }
 @keyframes slideL { from { opacity: 0; transform: translateX(-24px); } }
 @keyframes slideR { from { opacity: 0; transform: translateX(24px); } }
 .low-power .orb, .low-power h1.name, .low-power .layout > .col { animation: none; }
+
+/* ---------- minimized: only the orb stays on the desktop (click it to restore) ---------- */
+body.minimized .col, body.minimized .chat { display: none; }
+body.minimized .orb { cursor: pointer; }
+
+/* ---------- mini KURAMA (?mini=1): just the conversation, in the small panel over every app ---------- */
+.mini-on { display: none !important; }
+body.mini .mini-on { display: inline-flex !important; }
+body.mini .mini-off, body.mini .wall, body.mini .bg-grid, body.mini .bg-dust, body.mini .col, body.mini .core { display: none !important; }
+body.mini { overflow: hidden; }
+body.mini .layout { display: block; height: 100%; min-height: 0; padding: 0; }
+body.mini .center { display: block; height: 100%; }
+body.mini .chat { width: 100%; height: 100%; border-radius: 0; border: 1px solid rgba(255, 122, 26, 0.28); animation: none; }
+body.mini .messages { height: auto; flex: 1 1 auto; min-height: 0; }
+body.mini .suggest { justify-content: center; }
+body.mini .chat-head { padding: 8px 8px 8px 16px; }
+body.mini .chat-state { margin-right: 2px; }

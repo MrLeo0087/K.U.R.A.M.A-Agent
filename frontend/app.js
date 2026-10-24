@@ -13,13 +13,16 @@ let botName = "KURAMA"; // the assistant's name (/api/v1/identity)
 const lowPowerOn = () => (S.lowPower === null ? reducedMotion : !!S.lowPower);
 const api = new Api(() => S);
 if (params.get("wallpaper") === "1") document.body.classList.add("wallpaper");
+const MINI = params.get("mini") === "1"; // the small chat panel of mini KURAMA (no orb, stats or workspace)
+document.body.classList.toggle("mini", MINI);
+let minimized = false; // the dashboard is minimized to the floating button (window.kuramaMinimized)
 
 // ---------- orb ----------
 const orb = new Orb($("orb-canvas"), { halo: document.querySelector("#orb .halo"), lowPower: lowPowerOn(), reducedMotion });
 document.body.classList.toggle("low-power", lowPowerOn());
 const dust = new Dust($("bg-dust"), { orbEl: $("orb"), lowPower: lowPowerOn() });
-if (params.get("dust") !== "0") orb.attach(dust); // one loop drives the orb and the background field (?dust=0: off)
-orb.start();
+if (params.get("dust") !== "0" && !MINI) orb.attach(dust); // one loop drives the orb and the background field (?dust=0: off)
+if (!MINI) orb.start();
 
 // ---------- voice plumbing ----------
 const mic = new Mic();
@@ -51,7 +54,7 @@ const FORCE_ORB = params.get("debug") === "1" ? params.get("orb") : null; // ?de
 const FORCE_MODE = params.get("debug") === "1" ? { text: "text", mic: "mic", chat: "conv", conv: "conv" }[params.get("mode")] || null : null; // &mode=text|mic|chat
 let dictLang = null; // language of text dictated into the box (mic mode), used when it is sent
 let caretKnown = false; // the user has placed the caret in the box (else dictation appends)
-const alive = () => !lowPowerOn() && !reducedMotion && !paused && !document.hidden; // small CSS flourishes allowed
+const alive = () => !MINI && !lowPowerOn() && !reducedMotion && !paused && !document.hidden; // small CSS flourishes allowed
 // restart a one-shot CSS animation by alternating two classes that use identical keyframes
 function retrigger(node, a, b) {
   if (!node || !alive()) return;
@@ -122,7 +125,7 @@ function setMode(m) {
   if (mode === "mic" && m !== "mic" && recording) { recording = false; recorder.cancel(); mic.stop(); clearInterval(recTimer); }
   mode = m;
   for (const [id, v] of [["m-text", "text"], ["m-mic", "mic"], ["m-conv", "conv"]]) $(id).setAttribute("aria-pressed", String(mode === v));
-  $("input").placeholder = mode === "conv" && conv.on ? "Just talk — or type here…" : mode === "mic" ? "Click the mic to talk, or type…" : `Ask ${botName.toUpperCase()} anything…`;
+  $("input").placeholder = mode === "conv" && conv.on ? "Just talk — or type here…" : mode === "mic" ? "Click the mic to talk, or type…" : `Ask ${botName.toUpperCase()}${MINI ? "" : " anything"}…`;
   updateState();
 }
 
@@ -461,13 +464,18 @@ $("m-text").onclick = () => { setMode("text"); input.focus(); };
 $("m-mic").onclick = () => toggleMic();
 $("m-conv").onclick = () => toggleConv();
 $("btn-clear").onclick = () => { log.innerHTML = ""; log.append(welcome()); };
-$("orb").onclick = () => { if (player.active) player.stop(); else if (busy) abortChat(); updateState(); };
+$("orb").onclick = () => {
+  if (minimized) { hostSay("restore"); return; }
+  if (player.active) player.stop(); else if (busy) abortChat();
+  updateState();
+};
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && recording) { e.preventDefault(); cancelRecording(); return; } // cancel, insert nothing
   if (e.key === "Escape" && !document.querySelector("dialog[open]")) {
     if (player.active) player.stop();
     else if (busy) abortChat();
     else if (conv.on) setMode("text");
+    else if (MINI) hostSay("hide");
     updateState();
   }
   if (e.altKey && (e.key === "m" || e.key === "M")) { e.preventDefault(); toggleMic(); }
@@ -714,7 +722,7 @@ async function pollOnce() {
 
 function startStatus() {
   stopStatus();
-  if (document.hidden || paused) return;
+  if (document.hidden || paused || MINI || minimized) return;
   try {
     es = api.statusStream();
     es.onmessage = (e) => { try { renderStatus(JSON.parse(e.data)); } catch { /* ignore */ } };
@@ -743,6 +751,7 @@ function wxKind(it) {
   return "cloud";
 }
 async function loadWeather() {
+  if (MINI) return;
   let it = null;
   try { it = (await api.fetchWeather()).items?.[0] || null; } catch { it = null; }
   const ok = !!it && !it.error && it.temp_c != null;
@@ -844,6 +853,7 @@ function wsFromReply(request, reply) {
 
 let outputsBusy = false;
 async function loadOutputs() {
+  if (MINI) return;
   if (outputsBusy) return;
   outputsBusy = true;
   try {
@@ -895,6 +905,7 @@ document.addEventListener("keydown", (e) => {
 // ---------- a wallpaper KURAMA made is drawn behind the dashboard (this window covers the real desktop) ----------
 let wallMtime = -1;
 async function loadWall() {
+  if (MINI) return;
   try {
     const w = await api.wallpaperInfo();
     const m = w.kurama ? w.mtime : 0;
@@ -984,7 +995,8 @@ function setBotName(n) {
   botName = n;
   document.querySelector("h1.name").textContent = n.toUpperCase();
   document.title = n.toUpperCase();
-  input.placeholder = `Ask ${n.toUpperCase()} anything…`;
+  input.placeholder = `Ask ${n.toUpperCase()}${MINI ? "" : " anything"}…`;
+  if (MINI) $("chat-title").textContent = n.toUpperCase();
 }
 function loadName() { api.identity().then((r) => setBotName(r.name)).catch(() => {}); }
 loadName();
@@ -1010,6 +1022,7 @@ setInterval(loadWeather, 600000);
 // ---------- clock (ticks every second, aligned to the second) ----------
 let clockTimer = 0;
 function tick() {
+  if (MINI) return;
   const now = new Date();
   const parts = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }).split(" ");
   const [hh, mm] = parts[0].split(":");
@@ -1027,8 +1040,8 @@ function stopClock() { clearTimeout(clockTimer); clockTimer = 0; }
 function applyActivity() {
   const idle = paused || document.hidden;
   document.body.classList.toggle("paused", idle);
-  orb.pause(paused);
-  if (idle) { stopStatus(); stopClock(); } else { if (!clockTimer) tick(); if (!es && !pollTimer) startStatus(); }
+  orb.pause(paused || MINI);
+  if (idle || minimized) { stopStatus(); stopClock(); } else { if (!clockTimer) tick(); if (!es && !pollTimer) startStatus(); }
   syncAmbient();
 }
 
@@ -1046,6 +1059,25 @@ function pulseClass(node, cls, ms) { if (!node) return; node.classList.add(cls);
 function syncAmbient() { clearTimeout(ambTimer); ambTimer = alive() ? setTimeout(ambient, 3000) : 0; }
 window.kuramaPause = (on) => { paused = !!on; applyActivity(); return paused; };
 document.addEventListener("visibilitychange", applyActivity);
+
+// ---------- mini KURAMA: the floating button + small chat panel over every app (scripts/kurama_wallpaper.py) ----------
+const host = window.webkit?.messageHandlers?.kurama; // only inside the KURAMA GTK windows
+function hostSay(msg) { if (!host) return false; host.postMessage(msg); return true; }
+$("btn-mini").onclick = () => { if (!hostSay("minimize")) window.open("?mini=1", "kurama-mini", "width=400,height=600"); };
+$("btn-full").onclick = () => { if (!hostSay("restore")) window.close(); };
+$("btn-hide").onclick = () => { if (!hostSay("hide")) window.close(); };
+window.kuramaMinimized = (on) => { // dashboard: hide the panels, keep the orb (click it to restore)
+  minimized = !!on;
+  document.body.classList.toggle("minimized", minimized);
+  $("orb").title = minimized ? "Click to restore KURAMA" : "Click to stop talking";
+  if (minimized) setMode("text"); // one microphone user at a time: the mini panel takes over
+  applyActivity();
+};
+window.kuramaMiniShown = (on) => { // mini panel opened / hidden
+  if (on) { input.focus(); return; }
+  if (recording) cancelRecording();
+  if (conv.on) setMode("text"); // never keep listening while the panel is hidden
+};
 
 // ---------- settings drawer ----------
 const dlg = $("settings");
@@ -1165,6 +1197,7 @@ async function checkHealth() {
   }
 }
 setMode("text");
+if (MINI) { $("chat-title").textContent = botName; input.focus(); }
 tick();
 if (params.get("paused") === "1") window.kuramaPause(true); // start paused (testing)
 checkHealth().then(startStatus);

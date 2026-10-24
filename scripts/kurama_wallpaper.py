@@ -9,20 +9,29 @@ Runs with the *system* Python (python3-gi, gir1.2-webkit2-4.1, optional gir1.2-w
 While a maximized / full-screen window covers the desktop (checked with libwnck every ~2 s) the page is
 paused through window.kuramaPause(true): the orb loop, clock, status stream and CSS animations stop, so
 the wallpaper costs ~0 CPU while you work. The page stays clickable: chat works from the desktop.
+
+Minimize (the button in the chat header) hides the dashboard panels and shows mini KURAMA: a small round
+button that floats above every app (drag it anywhere, right-click for a menu). Clicking it opens a small
+chat-only panel (same page with ?mini=1: text, mic and conversation mode) over whatever you are using.
 """
 from __future__ import annotations
 
 import argparse
 import contextlib
+import json
+import math
 import os
 import sys
+from pathlib import Path
 from urllib.parse import urlsplit
 
+import cairo
 import gi
 
 gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 gi.require_version("WebKit2", "4.1")
+gi.require_foreign("cairo")
 from gi.repository import Gdk, GLib, Gtk, WebKit2  # noqa: E402
 
 try:  # libwnck tells us when windows cover the desktop
@@ -34,6 +43,9 @@ except (ValueError, ImportError):
 PORT = os.getenv("JARVIS_API_PORT", "8000")
 DEFAULT_URL = os.getenv("KURAMA_UI_URL", f"http://127.0.0.1:{PORT}/?lowpower=0&wallpaper=1")
 CHECK_MS = 2000
+STATE_FILE = Path(__file__).resolve().parent.parent / "data" / "mini.json"  # minimized? + button position
+BUBBLE = 56  # floating button size (px)
+PANEL_W, PANEL_H = 400, 600  # mini chat panel
 
 
 def desktop_covered(screen) -> bool:
@@ -81,6 +93,36 @@ def origin_of(uri: str) -> str:
     return f"{u.scheme}://{u.netloc}".lower()
 
 
+def load_state() -> dict:
+    try:
+        return json.loads(STATE_FILE.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def save_state(state: dict) -> None:
+    with contextlib.suppress(OSError):
+        STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        STATE_FILE.write_text(json.dumps(state))
+
+
+def workarea():
+    display = Gdk.Display.get_default()
+    return (display.get_primary_monitor() or display.get_monitor(0)).get_workarea()
+
+
+def clamp(v, lo, hi):
+    return max(lo, min(int(v), hi))
+
+
+def message_text(res) -> str:
+    """Text of a window.webkit.messageHandlers.kurama.postMessage(...) call (JavascriptResult or JSCValue)."""
+    try:
+        return (res.get_js_value() if hasattr(res, "get_js_value") else res).to_string()
+    except Exception:
+        return ""
+
+
 def run_js(view, code: str) -> None:
     if hasattr(view, "evaluate_javascript"):  # WebKitGTK >= 2.40
         view.evaluate_javascript(code, -1, None, None, None, None, None)
@@ -92,8 +134,14 @@ class Wallpaper:
     def __init__(self, url: str, as_window: bool) -> None:
         self.url = url
         self.paused: bool | None = None
+        self.state = load_state()
+        self.mini: Mini | None = None
         self.win = Gtk.Window(title="KURAMA")
-        self.view = WebKit2.WebView()
+        # the page asks for minimize / restore / hide through window.webkit.messageHandlers.kurama
+        self.ucm = WebKit2.UserContentManager()
+        self.ucm.register_script_message_handler("kurama")
+        self.ucm.connect("script-message-received::kurama", self.on_message)
+        self.view = WebKit2.WebView(user_content_manager=self.ucm)
         self.view.set_background_color(Gdk.RGBA(0.024, 0.027, 0.043, 1))
         s = self.view.get_settings()
         try:  # GPU compositing keeps the orb and bars smooth with little CPU (KURAMA_WP_GPU=0 to disable)
@@ -134,6 +182,8 @@ class Wallpaper:
                 GLib.timeout_add(CHECK_MS, self.check_covered)
         self.win.connect("destroy", Gtk.main_quit)
         self.win.show_all()
+        if self.state.get("minimized"):
+            self.minimize()
 
     # The API may start after us at login: keep retrying until the page loads
     def on_failed(self, *_):
@@ -141,14 +191,17 @@ class Wallpaper:
         return False
 
     def on_load(self, _view, event):
-        if event == WebKit2.LoadEvent.FINISHED and self.paused:
-            run_js(self.view, "window.kuramaPause && window.kuramaPause(true)")
+        if event == WebKit2.LoadEvent.FINISHED:
+            if self.paused:
+                run_js(self.view, "window.kuramaPause && window.kuramaPause(true)")
+            if self.mini:
+                run_js(self.view, "window.kuramaMinimized && window.kuramaMinimized(true)")
 
-    def on_permission(self, _view, req):
+    def on_permission(self, view, req):
         # microphone (audio only) for Mic/Conversation mode, only for our own page's origin
         ok = (isinstance(req, WebKit2.UserMediaPermissionRequest)
               and req.get_property("is-for-audio-device") and not req.get_property("is-for-video-device")
-              and origin_of(self.view.get_uri()) == origin_of(self.url))
+              and origin_of(view.get_uri()) == origin_of(self.url))
         req.allow() if ok else req.deny()
         return True
 
@@ -162,6 +215,31 @@ class Wallpaper:
             return True
         return False
 
+    # ---------- minimize / restore ----------
+    def on_message(self, _ucm, res):
+        msg = message_text(res)
+        if msg == "minimize":
+            self.minimize()
+        elif msg == "restore":
+            self.restore()
+        elif msg == "hide" and self.mini:
+            self.mini.hide_panel()
+
+    def minimize(self):
+        if self.mini is None:
+            self.mini = Mini(self)
+        self.state["minimized"] = True
+        save_state(self.state)
+        run_js(self.view, "window.kuramaMinimized && window.kuramaMinimized(true)")
+
+    def restore(self):
+        if self.mini is not None:
+            self.mini.close()
+            self.mini = None
+        self.state["minimized"] = False
+        save_state(self.state)
+        run_js(self.view, "window.kuramaMinimized && window.kuramaMinimized(false)")
+
     def check_covered(self):
         try:
             covered = desktop_covered(self.screen)
@@ -171,6 +249,180 @@ class Wallpaper:
             self.paused = covered
             run_js(self.view, f"window.kuramaPause && window.kuramaPause({str(covered).lower()})")
         return True
+
+
+class Mini:
+    """Mini KURAMA: a round button above every window (drag to move, click = chat, right-click = menu) and a
+    small chat panel. The panel's WebView shares the wallpaper's web process (related-view), so it adds little
+    RAM; it is created on first click and dropped on restore. The button itself is a few lines of cairo."""
+
+    def __init__(self, wp: Wallpaper) -> None:
+        self.wp = wp
+        self.panel = self.view = None
+        self.drag = None  # [root x, root y, window x, window y, moved]
+        self.hover = False
+        b = self.bubble = Gtk.Window(title="KURAMA mini")
+        b.set_decorated(False)
+        b.set_resizable(False)
+        b.set_skip_taskbar_hint(True)
+        b.set_skip_pager_hint(True)
+        b.set_type_hint(Gdk.WindowTypeHint.DOCK)  # above normal and keep-above windows, never focused
+        b.set_keep_above(True)
+        b.set_accept_focus(False)
+        b.stick()
+        b.set_size_request(BUBBLE, BUBBLE)
+        visual = b.get_screen().get_rgba_visual()
+        if visual is not None:  # transparent corners = a round button (needs a compositor)
+            b.set_visual(visual)
+        b.set_app_paintable(True)
+        b.add_events(Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.BUTTON_RELEASE_MASK
+                     | Gdk.EventMask.POINTER_MOTION_MASK | Gdk.EventMask.ENTER_NOTIFY_MASK
+                     | Gdk.EventMask.LEAVE_NOTIFY_MASK)
+        b.connect("draw", self.on_draw)
+        b.connect("button-press-event", self.on_press)
+        b.connect("motion-notify-event", self.on_motion)
+        b.connect("button-release-event", self.on_release)
+        b.connect("enter-notify-event", lambda *_: self.set_hover(True))
+        b.connect("leave-notify-event", lambda *_: self.set_hover(False))
+        wa = workarea()
+        x, y = wp.state.get("x"), wp.state.get("y")
+        if x is None or y is None:  # first time: right edge, a bit below the middle
+            x, y = wa.x + wa.width - BUBBLE - 18, wa.y + int(wa.height * 0.62)
+        b.move(clamp(x, wa.x, wa.x + wa.width - BUBBLE), clamp(y, wa.y, wa.y + wa.height - BUBBLE))
+        b.show_all()
+
+    @property
+    def open(self) -> bool:
+        return self.panel is not None and self.panel.get_visible()
+
+    # ---------- the button ----------
+    def on_draw(self, _w, cr):
+        c = BUBBLE / 2
+        cr.set_operator(cairo.OPERATOR_SOURCE)
+        cr.set_source_rgba(0, 0, 0, 0)
+        cr.paint()
+        cr.set_operator(cairo.OPERATOR_OVER)
+        cr.arc(c, c, c - 1, 0, 2 * math.pi)
+        cr.set_source_rgba(0.035, 0.037, 0.06, 0.94)
+        cr.fill()
+        glow = cairo.RadialGradient(c, c, c * 0.3, c, c, c)
+        glow.add_color_stop_rgba(0, 1, 0.43, 0.08, 0.38 if self.hover or self.open else 0.22)
+        glow.add_color_stop_rgba(1, 1, 0.43, 0.08, 0)
+        cr.arc(c, c, c - 1, 0, 2 * math.pi)
+        cr.set_source(glow)
+        cr.fill()
+        core = cairo.RadialGradient(c * 0.86, c * 0.8, 1, c, c, c * 0.42)  # the KURAMA orb
+        core.add_color_stop_rgb(0, 1, 0.82, 0.6)
+        core.add_color_stop_rgb(0.5, 1, 0.48, 0.1)
+        core.add_color_stop_rgb(1, 0.64, 0.23, 0)
+        cr.arc(c, c, c * 0.36, 0, 2 * math.pi)
+        cr.set_source(core)
+        cr.fill()
+        cr.set_line_width(1.6)
+        cr.set_dash([c * 0.62, c * 0.22])
+        cr.set_source_rgba(1, 0.48, 0.1, 1 if self.hover or self.open else 0.7)
+        cr.arc(c, c, c - 4, -math.pi / 2, 1.5 * math.pi)
+        cr.stroke()
+        return True
+
+    def set_hover(self, on: bool) -> None:
+        self.hover = on
+        self.bubble.queue_draw()
+
+    def on_press(self, _w, ev):
+        if ev.type != Gdk.EventType.BUTTON_PRESS:  # ignore the extra double-click event
+            return True
+        if ev.button == 3:
+            self.menu(ev)
+        elif ev.button == 1:
+            x, y = self.bubble.get_position()
+            self.drag = [ev.x_root, ev.y_root, x, y, False]
+        return True
+
+    def on_motion(self, _w, ev):
+        d = self.drag
+        if not d:
+            return False
+        dx, dy = ev.x_root - d[0], ev.y_root - d[1]
+        if not d[4] and abs(dx) + abs(dy) < 5:  # a click, not a drag (yet)
+            return True
+        d[4] = True
+        wa = workarea()
+        self.bubble.move(clamp(d[2] + dx, wa.x, wa.x + wa.width - BUBBLE), clamp(d[3] + dy, wa.y, wa.y + wa.height - BUBBLE))
+        if self.open:
+            self.place_panel()
+        return True
+
+    def on_release(self, _w, ev):
+        d, self.drag = self.drag, None
+        if ev.button != 1 or not d:
+            return True
+        if d[4]:
+            self.wp.state["x"], self.wp.state["y"] = self.bubble.get_position()
+            save_state(self.wp.state)
+        else:
+            self.hide_panel() if self.open else self.show_panel(ev.time)
+        return True
+
+    def menu(self, ev):
+        m = Gtk.Menu()
+        for label, fn in (("Hide chat" if self.open else "Open chat", lambda *_: self.hide_panel() if self.open else self.show_panel()),
+                          ("Restore full KURAMA", lambda *_: self.wp.restore())):
+            item = Gtk.MenuItem(label=label)
+            item.connect("activate", fn)
+            m.append(item)
+        m.show_all()
+        m.attach_to_widget(self.bubble)
+        m.popup_at_pointer(ev)
+
+    # ---------- the chat panel ----------
+    def ensure_panel(self) -> None:
+        if self.panel is not None:
+            return
+        p = self.panel = Gtk.Window(title="KURAMA")
+        p.set_decorated(False)
+        p.set_skip_taskbar_hint(True)
+        p.set_skip_pager_hint(True)
+        p.set_keep_above(True)
+        p.stick()
+        p.set_default_size(PANEL_W, min(PANEL_H, workarea().height - 40))
+        p.connect("delete-event", lambda *_: self.hide_panel() or True)
+        v = self.view = WebKit2.WebView(related_view=self.wp.view, user_content_manager=self.wp.ucm)
+        v.set_settings(self.wp.view.get_settings())
+        v.set_background_color(Gdk.RGBA(0.024, 0.027, 0.043, 1))
+        v.connect("permission-request", self.wp.on_permission)
+        v.connect("decide-policy", self.wp.on_policy)
+        u = urlsplit(self.wp.url)
+        v.load_uri(f"{u.scheme}://{u.netloc}/?mini=1")
+        p.add(v)
+
+    def place_panel(self) -> None:
+        bx, by = self.bubble.get_position()
+        wa = workarea()
+        w, h = self.panel.get_size()
+        left = bx + BUBBLE / 2 > wa.x + wa.width / 2  # open towards the middle of the screen
+        x = bx - w - 10 if left else bx + BUBBLE + 10
+        self.panel.move(clamp(x, wa.x + 8, wa.x + wa.width - w - 8), clamp(by + BUBBLE - h, wa.y + 8, wa.y + wa.height - h - 8))
+
+    def show_panel(self, time: int = 0) -> None:
+        self.ensure_panel()
+        self.panel.show_all()
+        self.place_panel()
+        self.panel.present_with_time(time or Gtk.get_current_event_time())
+        run_js(self.view, "window.kuramaMiniShown && window.kuramaMiniShown(true)")
+        self.bubble.queue_draw()
+
+    def hide_panel(self) -> None:
+        if self.open:
+            run_js(self.view, "window.kuramaMiniShown && window.kuramaMiniShown(false)")  # stops the mic
+            self.panel.hide()
+        self.bubble.queue_draw()
+
+    def close(self) -> None:
+        if self.panel is not None:
+            self.panel.destroy()
+        self.bubble.destroy()
+        self.panel = self.view = None
 
 
 def main() -> int:
