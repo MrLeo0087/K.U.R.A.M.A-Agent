@@ -31,3 +31,16 @@ def test_device_endpoint_is_cached(monkeypatch):
     assert c.get("/api/v1/device").json()["model"] == "Laptop"
     c.get("/api/v1/device")
     assert len(calls) == 1
+
+
+def test_power_off_spawns_detached_switch(monkeypatch):
+    import subprocess
+
+    from fastapi.testclient import TestClient
+
+    from jarvis.api.app import create_app
+    from tests.test_api import BASE, settings
+    seen = {}
+    monkeypatch.setattr(subprocess, "Popen", lambda argv, **kw: seen.update(argv=argv, **kw))
+    r = TestClient(create_app(settings()), base_url=BASE).post("/api/v1/power/off", json={})
+    assert r.json()["ok"] and "kurama-power.sh off" in seen["argv"][-1] and seen["start_new_session"]

@@ -214,6 +214,19 @@ async def device_info():
     return await run_in_threadpool(device.info)
 
 
+# ---------- power switch: stop every KURAMA process (scripts/kurama-power.sh; Super+K turns it back on) ----------
+@router.post("/power/off", summary="Turn KURAMA off completely (0 RAM / 0 CPU until turned on again)")
+async def power_off():
+    import subprocess
+
+    from jarvis.api.settings import ROOT
+    # detached and a moment later, so this reply gets out before the server itself is stopped
+    subprocess.Popen(["bash", "-c", "sleep 0.6; exec scripts/kurama-power.sh off"], cwd=str(ROOT),
+                     start_new_session=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                     stderr=subprocess.DEVNULL)
+    return {"ok": True, "message": "KURAMA is turning off. Press Super+K or click the KURAMA app to turn it on."}
+
+
 # ---------- assistant name (default KURAMA; the user can change it) ----------
 @router.get("/identity", summary="The assistant's current name")
 async def identity_get():

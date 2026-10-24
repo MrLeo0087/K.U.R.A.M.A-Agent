@@ -581,3 +581,12 @@ body.mini .chat-state { margin-right: 2px; }
 .dev-rows li b { margin-left: auto; font-weight: 400; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
 .dev-rows li b.dim { color: var(--dim); }
 @media (max-height: 900px) { .dev-rows li:nth-child(n+3) { display: none; } }
+
+/* ---------- power switch (top-right corner; click twice to turn KURAMA off) ---------- */
+.power { position: fixed; top: 10px; right: 14px; z-index: 5; width: 28px; height: 28px; display: grid; place-items: center;
+  border-radius: 50%; border: 1px solid var(--line); background: rgba(10, 11, 16, 0.5); color: var(--dim); cursor: pointer;
+  opacity: 0.55; transition: opacity 0.25s, color 0.25s, border-color 0.25s, background 0.25s; }
+.power svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.power:hover, .power:focus-visible { opacity: 1; color: var(--accent-2); border-color: rgba(255, 122, 26, 0.45); }
+.power.armed, #btn-power-mini.armed { opacity: 1; color: var(--danger); border-color: rgba(255, 93, 93, 0.6); background: rgba(255, 93, 93, 0.1); }
+body.minimized .power { opacity: 0.35; }

@@ -1132,6 +1132,23 @@ function restoreMiniLog() {
   } catch { /* ignore */ }
 }
 
+// ---------- power switch: first click arms it (3 s), second click turns every KURAMA process off ----------
+let powerArmed = 0;
+function powerClick(btn) {
+  if (!powerArmed) {
+    btn.classList.add("armed");
+    toast("Click again to turn KURAMA off completely (Super+K turns it back on).");
+    powerArmed = setTimeout(() => { powerArmed = 0; btn.classList.remove("armed"); }, 3000);
+    return;
+  }
+  clearTimeout(powerArmed); powerArmed = 0;
+  setMode("text");
+  player.stop();
+  api.powerOff().then((r) => toast(r.message)).catch(() => toast("Couldn't reach KURAMA to turn it off."));
+}
+$("btn-power").onclick = (e) => powerClick(e.currentTarget);
+$("btn-power-mini").onclick = (e) => powerClick(e.currentTarget);
+
 // ---------- settings drawer ----------
 const dlg = $("settings");
 function openSettings(msg) {
