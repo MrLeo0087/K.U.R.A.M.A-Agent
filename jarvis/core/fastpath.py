@@ -175,11 +175,13 @@ def search_intent(t: str) -> Intent | None:
     return Intent("search", "open_url", "browser", {"target": url}, f"{SEARCH_NAMES[eng]}|{q}")
 
 
+_ON_LAPTOP = r"(?: (?:of|off|on|in|from) (?:my|the|this) (?:laptop|computer|pc|system))?"  # "the camera of my laptop"
 OPEN = _rx(
     r"(?P<verb>open|launch|start|run|fire up|bring up|go to)(?: up)? (?:the |my )?(?P<target>.+?)"
-    r"(?: (?:app|application|for me))?",
+    r"(?: (?:app|application|for me))?" + _ON_LAPTOP,
     r"(?P<target>.+?) (?P<verb>kholo|khol|kholdo|khola|kholnu|kholdeu|chalao|chala|खोलो|खोल|खोल्नु|खोलदेउ|खोल्देउ|चलाओ)",
 )
+CLOSE = _rx(r"(?P<verb>close|quit|exit) (?:the |my )?(?P<target>.+?)(?: (?:app|application|window|windows))?" + _ON_LAPTOP)
 _BAD_TARGET = re.compile(r"(?:\band\b|\bthen\b|,|\bnew\b|\btab\b|\bfile\b|\bfolder\b|\bdoor\b|\btests?\b|"
                          r"\bcommand\b|\bscript\b|^(?:a|an|it|this|that)\b)", I)
 
@@ -491,7 +493,7 @@ _HAVE_TOOL = re.compile(r"^do you have (?:a |any )?(?:tool|feature|way|option)s?
 
 _GESTURE = re.compile(r"\b(?:gesture|hand (?:control|gesture|sign)s?|(?:youtube |media )?vision control|"
                       # Whisper mishears "gesture control system": jesture, geauster, jigsaw, jaxxor, adjector...
-                      r"(?:[jg]e[as]?[su]?t[eu]?(?:r|re|rer|or)|geauster|jigsaw|jaxx?or|adjector|ajector|digester)s? "
+                      r"(?:[jg]e[as]?[su]?t[eu]?(?:r|re|rer|or)|geauster|jigsaw|jaxx?or|jackser|handset|adjector|ajector|digester)s? "
                       r"(?:control|system)|hand \w+ (?:control|system)|control system|"
                       r"(?:youtube|media) (?:media )?controll?er|"
                       r"media control (?:through|with|by|using) (?:my |the )?hands?|control (?:media|youtube|music|it) "
@@ -595,7 +597,20 @@ def match(text: str) -> Intent | None:
         return si
     if m := _full(OPEN, t):
         return _open_intent(m.group("target").strip(" ,"), m.group("verb").lower())
+    if m := _full(CLOSE, t):
+        return _close_intent(m.group("target").strip(" ,"))
     return None
+
+
+def _close_intent(target: str) -> Intent | None:
+    if not target or len(target.split()) > 4 or _BAD_TARGET.search(target):
+        return None
+    from jarvis.tools.general import _apps
+
+    entry, score = _apps.find_app(target)
+    if entry is None or score < _apps.FASTPATH_MIN_SCORE:
+        return None
+    return Intent("close", "close_app", "apps", {"name": target}, target)  # say it the way the user did
 
 
 def _open_intent(target: str, verb: str) -> Intent | None:
@@ -622,6 +637,8 @@ _T = {
     "open": {"en": "Sure, opening {x}.", "hi": "ज़रूर, {x} खोल रहा हूँ।", "ne": "हुन्छ, {x} खोल्दैछु।"},
     "search": {"en": "Sure, opening {e} results for {q}.", "hi": "ज़रूर, {e} पर {q} के नतीजे खोल रहा हूँ।",
                "ne": "हुन्छ, {e} मा {q} को नतिजा खोल्दैछु।"},
+    "close": {"en": "Done, I closed {x}.", "hi": "{x} बंद कर दिया।", "ne": "{x} बन्द गरें।"},
+    "not_open": {"en": "{x} isn't open.", "hi": "{x} खुला नहीं है।", "ne": "{x} खुलेको छैन।"},
     "open_fail": {"en": "Sorry, I couldn't open {x}.", "hi": "माफ़ कीजिए, {x} नहीं खुल सका।",
                   "ne": "माफ गर्नुहोस्, {x} खोल्न सकिनँ।"},
     "no_place": {"en": "Sorry, I couldn't find a place called {x}.", "hi": "माफ़ कीजिए, {x} नाम की जगह नहीं मिली।",
@@ -694,6 +711,10 @@ def render(intent: Intent, ok: bool, output: str, lang: str) -> str:
         return _say("remember", lang, intent.label)
     if intent.name == "open":
         return _say("open", lang, intent.label)
+    if intent.name == "close":
+        if out.startswith("no open window"):
+            return _say("not_open", lang, intent.label[:1].upper() + intent.label[1:])
+        return _say("close", lang, intent.label)
     if intent.name == "search":
         eng, q = intent.label.split("|", 1)
         return _T["search"].get(lang, _T["search"]["en"]).format(e=eng, q=q)

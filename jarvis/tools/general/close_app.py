@@ -1,11 +1,12 @@
-"""close_app: close an app's windows gracefully via wmctrl (confirm: may lose unsaved work)."""
+"""close_app: close an app's windows gracefully via wmctrl (safe: like clicking X, the app still asks about
+unsaved work; force-killing is kill_app, which needs a yes)."""
 from __future__ import annotations
 
 from jarvis.core.registry import tool
 from jarvis.tools.general import _apps
 
 
-@tool(group="apps", safety="confirm", description="Close all open windows of an app by name (may lose unsaved work).")
+@tool(group="apps", safety="safe", description="Close all open windows of an app by name (like clicking X).")
 def close_app(name: str) -> str:
     """Close an app's windows.
 

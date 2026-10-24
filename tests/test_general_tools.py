@@ -78,7 +78,7 @@ def fast_on(monkeypatch):
 # --- registration ---
 def test_tools_registered():
     want = {"weather": ("weather", "safe"), "get_time": ("general", "safe"), "open_app": ("apps", "safe"),
-            "close_app": ("apps", "confirm"), "focus_app": ("apps", "safe"), "remember": ("memory", "safe"),
+            "close_app": ("apps", "safe"), "focus_app": ("apps", "safe"), "remember": ("memory", "safe"),
             "recall": ("memory", "safe"), "forget": ("memory", "confirm")}
     for name, (group, level) in want.items():
         t = registry.get(name)
@@ -146,9 +146,7 @@ def test_close_and_focus_app(apps, monkeypatch):
     monkeypatch.setattr(_apps, "list_windows", lambda: wins)
     sent: list[list[str]] = []
     monkeypatch.setattr(_apps, "wmctrl", sent.append)
-    assert not safety.execute("close_app", {"name": "vs code"}, confirm=lambda p: False).ok
-    assert sent == []
-    res = safety.execute("close_app", {"name": "vs code"}, confirm=lambda p: True)
+    res = safety.execute("close_app", {"name": "vs code"}, confirm=lambda p: False)  # safe: never asks
     assert res.output == "closed 2 window(s) of Visual Studio Code"
     assert sent == [["-i", "-c", "0x1"], ["-i", "-c", "0x2"]]
     sent.clear()
