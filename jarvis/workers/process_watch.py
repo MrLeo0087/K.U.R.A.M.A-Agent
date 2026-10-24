@@ -334,6 +334,11 @@ class ProcessWatcher(Worker):
             return
         store.watch_update(w["id"], state=st)
 
+    # ---------- downloads ----------
+    def check_dl(self, w: dict) -> None:
+        from jarvis.core import automation
+        automation.check_download(w)
+
     # ---------- websites ----------
     def check_web(self, w: dict) -> None:
         from jarvis.core import webwatch

@@ -16,6 +16,13 @@ class TimeMachine(Worker):
     def tick(self) -> None:
         for line in timemachine.auto_snapshots():
             self.log.info("%s", line)
+        from jarvis.core import automation  # daily Downloads sorting / weekly backups (slow ones live here)
+        for job in (automation.sort_auto_tick, automation.backup_tick):
+            try:
+                if msg := job():
+                    self.log.info("%s", msg)
+            except Exception as e:
+                self.log.warning("%s failed: %s", job.__name__, e)
 
     def info(self) -> dict:
         return {"projects": len(timemachine.projects())}

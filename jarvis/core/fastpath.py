@@ -618,7 +618,20 @@ def _study_intent(t: str) -> Intent | None:
     return None
 
 
+_DL = re.compile(r"^download (?P<u>https?://\S+)(?: (?:to|into|in) (?P<f>.+?))?(?P<n> tonight| at night| overnight)?$", I)
+_TIDY = re.compile(r"^(?:sort|tidy|clean|organi[sz]e)(?: up)? (?:my |the )?downloads?(?: folder)?$", I)
+_BACKUP = re.compile(r"^(?:back ?up|backup) (?:my (?:projects|files|work|code)|everything|now)$", I)
+
+
 def _daily_intent(t: str) -> Intent | None:
+    if m := _DL.match(t):
+        return Intent("auto", "download_file", "automation", {"action": "add", "url": m.group("u"),
+                                                              "folder": m.group("f") or "",
+                                                              "when": "tonight" if m.group("n") else "now"})
+    if _TIDY.match(t):
+        return Intent("auto", "tidy_downloads", "automation", {"action": "run"})
+    if _BACKUP.match(t):
+        return Intent("auto", "backup", "automation", {"action": "run"})
     if si := _study_intent(t):
         return si
     if (m := notes_mod.NOTE.match(t)) and not t.lower().startswith(("note that", "remember")):

@@ -271,6 +271,8 @@ ROUTER_EXAMPLES: dict[str, tuple[str, ...]] = {
     "devutils": ("turn the notebook into a script", "make requirements.txt from imports", "what changed in my config"),
     "self": ("what can you do", "what are your features", "how do I use you"),
     "toolsmith": ("make a new tool for this", "build a small script tool that does it"),
+    "automation": ("download this dataset tonight", "clean up my downloads folder", "back up my projects",
+                   "keep my server running"),
     "study": ("note this down for my physics class", "show my DSA notes from this week", "record today's class",
               "transcribe the lecture", "summarize the lecture", "what did the teacher say today",
               "what classes do I have tomorrow", "when is my next class", "test me on what I studied"),
@@ -443,7 +445,8 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
     "watch": ("watch", "watches", "watching", "monitor", "keep an eye", "tell me when", "notify me when",
               "alert me", "let me know when", "training run", "training", "log file", "tail the log",
               "finishes", "colab", "command alerts", "long command", "terminal command", "train my model", "train the model", "epoch", "loss curve", "nazar", "नजर", "निगरानी", "हेरिरहनु", "ध्यान राख"),
-    "automation": ("automation", "watchdog", "auto restart",
+    "automation": ("automation", "watchdog", "auto restart", "download", "downloads folder", "tidy", "organize my",
+                   "backup", "back up",
                    "auto-restart", "keep alive", "keep it running", "if it crashes", "crashed", "crashes",
                    "वर्कफ्लो", "स्वचालन"),
     "jobs": ("job", "jobs", "background", "working on", "progress", "job status", "cancel",
@@ -466,7 +469,8 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
               "switches: Wi-Fi, Bluetooth, airplane, power mode, screen off",
     "watch": "Training Guard: start/watch ML training runs (local or Google Colab), progress, crash, NaN, stuck, "
              "finished alerts; watch any process or log",
-    "automation": "crash watchdog: keep dev servers running (auto-restart) and their status",
+    "automation": "crash watchdog for dev servers; download manager (big files now or tonight, resumes); tidy the "
+                  "Downloads folder; backups to another drive",
     "audio": "speaker volume, mute, microphone mute",
     "display": "screen brightness, light/dark mode (also automatic at sunset)",
     "desktop": "do not disturb, night light, wallpaper, focus (pomodoro) session",
@@ -507,7 +511,7 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
 TOOL_GROUP_GLOSS: dict[str, str] = {
     "general": "time", "weather": "", "files": "folders", "filesearch": "",
     "telegram": "phone", "toolsmith": "new tool", "skills": "", "system": "slow, wifi",
-    "watch": "training", "automation": "watchdog", "audio": "volume", "display": "brightness",
+    "watch": "training", "automation": "backup", "audio": "volume", "display": "brightness",
     "screen": "screenshot", "power": "battery", "clipboard": "", "windows": "",
     "apps": "", "media": "music", "desktop": "wallpaper", "git": "", "dev": "tests", "codequality": "review",
     "devutils": "notebooks", "study": "lectures",
@@ -594,6 +598,9 @@ NOTES_CLASSIFY = True  # a note without a subject: one tiny call picks one of yo
 LECTURE_MAX_MIN = 180  # a recording stops by itself after this long
 LECTURE_LANG = os.getenv("KURAMA_LECTURE_LANG", "")  # "" = auto; "en", "ne" or "hi" to force Whisper
 TIMETABLE_LEAD_MIN = 10  # heads-up this long before each class
+DOWNLOAD_DIR = "~/Downloads"  # download manager default folder
+DOWNLOAD_NIGHT_HOUR = 1  # "tonight" downloads start at this hour
+BACKUP_EVERY_DAYS = 7  # automatic backup interval (also runs when the backup drive appears)
 COLAB_POLL_S = 60.0  # how often KURAMA checks for Colab pings (only while a Colab run is active)
 COLAB_SILENT_MIN = 25  # no ping for this long = the Colab runtime probably disconnected
 COLAB_PROGRESS_EVERY_S = 300  # the notebook sends progress at most this often (ntfy.sh free limits)
