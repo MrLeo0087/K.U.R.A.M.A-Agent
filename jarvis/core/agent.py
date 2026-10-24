@@ -237,7 +237,7 @@ class Agent:
         quick = fastpath.merge_opens([r["answer"].strip() for r in results if r["kind"] == "quick" and r.get("answer")])
         longs = [job_started_text(r["job_id"], r["title"], r.get("job_kind", "write"), lang)
                  for r in results if r["kind"] == "long"]
-        self.last["jobs"] = [r["job_id"] for r in results if r["kind"] == "long"]
+        self.last.setdefault("jobs", []).extend(r["job_id"] for r in results if r["kind"] == "long")
         return {"answer": " ".join(quick + longs).strip() or NO_ANSWER}
 
     def warm(self) -> None:
@@ -294,10 +294,20 @@ class Agent:
         try:
             reply = self._chat(msgs, kw, state.get("stream", False), hold)
         except llm.LLMError as e:
-            if not tools or "tool" not in str(e).lower() or kw.get("tool_choice") == "none":
+            if not tools or "tool" not in str(e).lower():
                 raise
             log.warning("tool call generation failed, retrying without tools: %s", e)
-            reply = self._chat(msgs, {**kw, "tool_choice": "none"}, state.get("stream", False), hold)
+            # tool_choice="none" is not always obeyed ("Tool choice is none, but model called a tool"):
+            # the last resort sends no tools at all, so the model can only answer in text
+            nxt = {**kw, "tool_choice": "none"} if kw.get("tool_choice") != "none" else \
+                {k: v for k, v in kw.items() if k not in ("tools", "tool_choice")}
+            try:
+                reply = self._chat(msgs, nxt, state.get("stream", False), hold)
+            except llm.LLMError as e2:
+                if "tools" not in nxt or "tool" not in str(e2).lower():
+                    raise
+                reply = self._chat(msgs, {k: v for k, v in kw.items() if k not in ("tools", "tool_choice")},
+                                   state.get("stream", False), hold)
         ai = reply.message or AIMessage(content=reply.text)
         calls = [] if last_round else list(ai.tool_calls)
         bad = [] if last_round else list(getattr(ai, "invalid_tool_calls", None) or [])
@@ -391,7 +401,9 @@ class Agent:
             else:
                 res = safety.execute(name, args, confirm=confirm,
                                      ctx={"user_text": state["user_text"], "lang": state.get("lang"),
-                                          "mode": state.get("mode", "text"),
+                                          "mode": state.get("mode", "text"), "channel": self.channel,
+                                          "published": self.last.setdefault("workspace", []),
+                                          "jobs": self.last.setdefault("jobs", []),
                                           "request": state.get("request") or state["user_text"]})
                 content, ok = res.output, res.ok
             self.last.setdefault("tools", []).append({"name": name, "ok": ok})

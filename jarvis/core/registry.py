@@ -290,7 +290,14 @@ class Registry:
         except Exception as e:
             log.exception("tool %s failed", name)
             return ToolResult(False, truncate(f"error: {type(e).__name__}: {e}"), f"{type(e).__name__}: {e}")
-        return ToolResult(True, truncate(_to_text(out), (t.metadata or {}).get("max_chars")))
+        full = _to_text(out)
+        note = ""
+        try:  # a long result goes to the Workspace card in full; the LLM gets a truncated copy + a note
+            from jarvis.core import workspace
+            note = workspace.offer(name, full)
+        except Exception as e:
+            log.warning("workspace publish failed: %s", e)
+        return ToolResult(True, truncate(full, (t.metadata or {}).get("max_chars")) + note)
 
 
 REGISTRY = Registry()

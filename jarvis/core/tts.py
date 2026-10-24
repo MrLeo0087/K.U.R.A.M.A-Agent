@@ -31,7 +31,10 @@ _DONE = object()
 # danda । (always final), or a newline. Closing quotes/brackets stay with their sentence.
 _END = re.compile(r"[.!?]+[\"')\]]*\s+|[।॥]+[\"')\]]*\s*|\n+")
 _FENCE = re.compile(r"```.*?```", re.S)
-_EMOJI = re.compile("[\U0001F000-\U0001FAFF☀-➿️‍]+")
+_EMOJI = re.compile("[\U0001F000-\U0001FAFF☀-➿⬀-⯿️‍]+")
+# file paths (/home/x/y.py, ~/a/b, C:\\x\\y) and long numbers/ids are shown on screen, never read out
+_PATH = re.compile(r"(?<![\w])(?:~|\.{1,2})?/[\w.@+\-]+(?:/[\w.@+\-]*)+|\b[A-Za-z]:\\[^\s]+")
+_LONGNUM = re.compile(r"#?\b\d[\d,._:-]{4,}\b|\b[0-9a-f]{12,}\b")
 
 
 def clean_for_speech(text: str) -> str:
@@ -40,6 +43,8 @@ def clean_for_speech(text: str) -> str:
     text = re.sub(r"`([^`]*)`", r"\1", text)
     text = re.sub(r"!?\[([^\]]+)\]\([^)]+\)", r"\1", text)  # [label](url) -> label
     text = re.sub(r"https?://\S+", "a link", text)
+    text = _PATH.sub("", text)
+    text = _LONGNUM.sub("", text)
     text = re.sub(r"^\s*#{1,6}\s*", "", text, flags=re.M)  # headings
     text = re.sub(r"^\s*(?:[-*+•]|\d+[.)])\s+", "", text, flags=re.M)  # list bullets/numbers
     text = re.sub(r"[*_~>|#]+", "", text)

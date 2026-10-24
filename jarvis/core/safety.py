@@ -11,7 +11,9 @@ import logging
 import re
 import select
 import sys
+import threading
 import time
+from pathlib import Path
 from typing import Any, Callable
 
 from jarvis.core import config, registry, store
@@ -161,7 +163,56 @@ def execute(name: str, args: Any = None, confirm: ConfirmFn | None = None,
                         "denied", "confirm", clean)
     token = _CTX.set({**(ctx or {}), "confirm": confirm or deny_all})
     try:
-        res = reg.call(name, clean)
+        res = _call_or_background(reg, name, clean, ctx or {})
     finally:
         _CTX.reset(token)
     return done(res, "allowed" if res.ok else "error", level, clean)
+
+
+BACKGROUND_NOTE = ("Still working after {s:.0f} s, so this keeps running in the background as job #{id}. Tell the user "
+                   "in one short sentence that you're doing it in the background, they can keep talking to you, and "
+                   "you'll tell them when it's done. Don't wait for it and don't make up the result.")
+
+
+def _call_or_background(reg: registry.Registry, name: str, clean: Any, ctx: dict) -> ToolResult:
+    """Run the tool; if it is still busy after config.TOOL_BACKGROUND_AFTER_S, hand it to a background job so the
+    turn (and the voice loop) is free again. The job saves the result (Workspace) and announces it when done."""
+    wait = config.TOOL_BACKGROUND_AFTER_S
+    if (not wait or name in config.TOOL_NO_BACKGROUND or "jobs" not in ctx
+            or threading.current_thread().name.startswith(("job", "tool-"))):
+        return reg.call(name, clean)
+    box: dict[str, ToolResult] = {}
+    finished = threading.Event()
+    run_ctx = contextvars.copy_context()  # keeps _CTX (confirm hook, workspace shelf) in the worker thread
+
+    def work() -> None:
+        try:
+            box["res"] = run_ctx.run(reg.call, name, clean)
+        except Exception as e:  # reg.call already catches tool errors; this is a last guard
+            box["res"] = ToolResult(False, f"error: {type(e).__name__}: {e}", str(e))
+        finally:
+            finished.set()
+
+    threading.Thread(target=work, name=f"tool-{name}", daemon=True).start()
+    if finished.wait(wait):
+        return box["res"]
+    from jarvis.core import jobs, workspace
+
+    def follow(jc: Any) -> str | None:
+        while not finished.wait(1.0):
+            jc.check()  # "cancel job N" stops waiting (the tool thread itself can't be killed)
+        res = box["res"]
+        if not res.ok:
+            raise RuntimeError(res.output[:300])
+        shelf = list(ctx.get("published") or [])
+        if shelf:  # the tool already put its full result in the workspace
+            return str(Path(config.OUTPUTS_DIR) / shelf[-1])
+        path = workspace.publish(f"{name.replace('_', ' ')}: {(ctx.get('user_text') or '')[:60]}", res.output)
+        return str(path) if path else None
+
+    args_txt = ", ".join(str(v)[:30] for v in (clean.values() if isinstance(clean, dict) else [clean]) if v)
+    job = jobs.get_manager().submit(f"{name.replace('_', ' ')}{': ' + args_txt if args_txt else ''}"[:80],
+                                    "tool", follow, request=ctx.get("user_text", ""), lang=ctx.get("lang") or "en")
+    ctx["jobs"].append(job.id)
+    log.info("tool %s still running after %.0f s: continues as job #%d", name, wait, job.id)
+    return ToolResult(True, BACKGROUND_NOTE.format(s=wait, id=job.id))

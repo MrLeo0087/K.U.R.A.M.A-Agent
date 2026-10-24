@@ -3,7 +3,8 @@
 Each chat turn runs Agent.stream in its own thread and pushes events onto an asyncio.Queue that the
 SSE response drains:
   {type:"delta", text} {type:"tool", name, ok, ms} {type:"confirm", id, prompt}
-  {type:"confirm_timeout", id} {type:"error", text} {type:"done", text, route, tier, tokens, ms, lang}
+  {type:"confirm_timeout", id} {type:"error", text}
+  {type:"done", text, route, tier, tokens, ms, lang, workspace: [output names], jobs: [ids started this turn]}
 Confirmations: a "web" confirm hook (also used for text/voice modes in this process, where stdin is
 not the user) parks the agent thread on an Event until POST /api/v1/confirm or the timeout (deny).
 The agent is imported lazily (first request, or a background warm-up) so the API itself stays light.
@@ -177,7 +178,8 @@ class Engine:
                 reply = "".join(parts).strip()
                 turn.push({"type": "done", "text": reply, "route": _route(last.get("route")), "tier": tier,
                            "tokens": _turn_tokens(ts0), "ms": int((time.monotonic() - t0) * 1000),
-                           "lang": reply_lang(reply, last.get("lang") or lang)})
+                           "lang": reply_lang(reply, last.get("lang") or lang),
+                           "workspace": list(last.get("workspace") or []), "jobs": list(last.get("jobs") or [])})
             except Exception as e:
                 log.exception("chat turn failed")
                 turn.push({"type": "error", "text": f"Something went wrong: {type(e).__name__}: {str(e)[:200]}"})

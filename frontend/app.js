@@ -413,7 +413,8 @@ async function sendChat(text, { voice = false, lang = null, speak = false } = {}
           if (split) { const rest = split.flush(); if (rest) player.enqueue(rest, hint || ev.lang, gen); }
           bot.done(ev);
           wsFromReply(text, bot.text);
-          setTimeout(loadOutputs, 800); // a tool may have just saved a file
+          if (ev.jobs?.length) watchJobs(ev.jobs); // background work: tell the user when it's done
+          setTimeout(loadOutputs, 800); // a tool may have just saved a file (long results go to the workspace)
           setTimeout(loadWall, 1500);
           if (/\bname\b/i.test(text)) setTimeout(loadName, 500); // "change your name to ..."
           break;
@@ -580,7 +581,7 @@ const netSpark = new Spark($("net-spark"),
 addEventListener("resize", () => { cpuSpark.draw(); netSpark.draw(); });
 
 // ---------- status ----------
-let es = null, pollTimer = 0, retryTimer = 0, procSort = "rss", lastStatus = null, lastJobsKey = "";
+let es = null, pollTimer = 0, retryTimer = 0, procSort = "rss", lastStatus = null, lastJobsKey = "", procGlitchAt = 0;
 
 function setConn(ok) {
   if (online === ok) return;
@@ -692,13 +693,18 @@ function renderProcs() {
   if (!list.length) return;
   const max = Math.max(0.1, ...list.map((p) => (procSort === "cpu" ? p.cpu : p.rss_mb)));
   const ul = $("procs");
-  const order = procSort + list.map((p) => p.pid).join(",");
-  if (ul.dataset.order !== order) { ul.dataset.order = order; retrigger(ul, "ro-a", "ro-b"); } // rows slide in on reorder
+  const before = (ul.dataset.order || "").split(",");
+  const pids = list.map((p) => String(p.pid));
+  const moved = procSort === ul.dataset.sort && pids.join(",") !== before.join(",") && alive() && Date.now() - procGlitchAt > 10000;
+  if (moved) procGlitchAt = Date.now();
+  ul.dataset.order = pids.join(",");
   ul.dataset.sort = procSort;
-  ul.innerHTML = list.map((p) => {
+  const gl = (procGlitchAt & 1) ? "gl-a" : "gl-b"; // alternate names so the one-shot replays
+  ul.innerHTML = list.map((p, i) => {
     const v = procSort === "cpu" ? p.cpu : p.rss_mb;
     const mem = p.rss_mb >= 1024 ? `${(p.rss_mb / 1024).toFixed(1)} GB` : `${Math.round(p.rss_mb)} MB`;
-    return `<li title="pid ${p.pid}"><span class="n">${esc(p.name)}</span><span class="c">${p.cpu.toFixed(1)}%</span><span class="m">${mem}</span><i class="w" style="transform:scaleX(${(v / max).toFixed(3)})"></i></li>`;
+    const cls = moved && before[i] !== pids[i] ? ` class="${gl}"` : "";
+    return `<li${cls} title="pid ${p.pid}"><span class="n">${esc(p.name)}</span><span class="c">${p.cpu.toFixed(1)}%</span><span class="m">${mem}</span><i class="w" style="transform:scaleX(${(v / max).toFixed(3)})"></i></li>`;
   }).join("");
   $("procs-count").textContent = s.processes?.count ? `${s.processes.count} total` : "";
 }
@@ -1130,6 +1136,37 @@ function restoreMiniLog() {
     if (!log.children.length) log.append(welcome());
     scrollDown(true);
   } catch { /* ignore */ }
+}
+
+// ---------- background jobs started by a turn: a chat line (+ voice) when each one finishes ----------
+const watched = new Set();
+let jobsTimer = 0;
+function watchJobs(ids) {
+  for (const id of ids) watched.add(Number(id));
+  if (!jobsTimer) jobsTimer = setTimeout(pollJobs, 3000);
+}
+async function pollJobs() {
+  jobsTimer = 0;
+  try {
+    for (const r of (await api.jobs()).jobs || []) {
+      if (!watched.has(r.id) || r.status === "queued" || r.status === "running") continue;
+      watched.delete(r.id);
+      if (r.status !== "cancelled") announceJob(r);
+    }
+  } catch { /* API busy: try again */ }
+  if (watched.size) jobsTimer = setTimeout(pollJobs, 4000);
+}
+function announceJob(r) {
+  const ok = r.status === "done";
+  const title = r.title || "your task";
+  const msg = ok ? `Done: ${title}.${r.output_path ? (MINI ? " It's in the workspace on your desktop." : " It's in your workspace.") : ""}`
+    : `Sorry, ${title} failed${r.error ? `: ${r.error.slice(0, 120)}` : "."}`;
+  const b = new BotBubble();
+  b.append(msg);
+  b.finish();
+  scrollDown(true);
+  if (!S.mute) { audioCtx(); player.enqueue(msg, S.lang === "auto" ? null : S.lang); }
+  if (ok) loadOutputs();
 }
 
 // ---------- power switch: first click arms it (3 s), second click turns every KURAMA process off ----------

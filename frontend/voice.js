@@ -250,6 +250,12 @@ export class SentenceSplitter {
 }
 
 // ---------- TTS player ----------
+// Only real words are spoken: file paths, links, emoji and long numbers stay on screen (the server cleans the rest).
+const UNSPOKEN = /https?:\/\/\S+|(?:~|\.{1,2})?\/[\w.@+-]+(?:\/[\w.@+-]*)+|#?\b\d[\d,._:-]{4,}\b|[\u{1F000}-\u{1FAFF}\u2600-\u27BF\uFE0F\u200D]/gu;
+export function speakable(text) {
+  return letters((text || "").replace(UNSPOKEN, " ")) >= 2;
+}
+
 export class Player {
   constructor(api, { onStart, onIdle } = {}) {
     this.api = api;
@@ -286,7 +292,7 @@ export class Player {
   }
 
   enqueue(text, lang, gen = this.gen) {
-    if (gen !== this.gen || !text || !text.trim()) return;
+    if (gen !== this.gen || !speakable(text)) return;
     this.items.push({ text, lang, ctrl: null, p: null });
     this._pump();
   }

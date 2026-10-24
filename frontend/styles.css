@@ -182,14 +182,13 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
   background: radial-gradient(ellipse at 50% 70%, rgba(255, 122, 26, 0.22), transparent 70%);
   opacity: var(--glow, 0.15); transition: opacity 1.5s var(--ease); }
 .perf { isolation: isolate; }
-/* top processes: rows slide in when the order changes */
-.procs.ro-a li { animation: inL 0.45s var(--ease) both; }
-.procs.ro-b li { animation: inL2 0.45s var(--ease) both; }
-.procs li:nth-child(2) { animation-delay: 0.04s; }
-.procs li:nth-child(3) { animation-delay: 0.08s; }
-.procs li:nth-child(4) { animation-delay: 0.12s; }
-.procs li:nth-child(5) { animation-delay: 0.16s; }
-@keyframes inL2 { from { opacity: 0; transform: translateX(-14px); } to { opacity: 1; transform: none; } }
+/* top processes: a short, subtle glitch on the rows that moved (at most every ~10 s), nothing else */
+.procs li.gl-a { animation: pglitch 0.32s steps(2, end) 1; }
+.procs li.gl-b { animation: pglitch2 0.32s steps(2, end) 1; }
+@keyframes pglitch { 0% { transform: translateX(-2px); opacity: 0.6; text-shadow: 1px 0 rgba(255, 90, 40, 0.6), -1px 0 rgba(80, 200, 255, 0.45); }
+  50% { transform: translateX(1px); opacity: 0.9; } 100% { transform: none; opacity: 1; text-shadow: none; } }
+@keyframes pglitch2 { 0% { transform: translateX(2px); opacity: 0.6; text-shadow: -1px 0 rgba(255, 90, 40, 0.6), 1px 0 rgba(80, 200, 255, 0.45); }
+  50% { transform: translateX(-1px); opacity: 0.9; } 100% { transform: none; opacity: 1; text-shadow: none; } }
 .spark { display: block; width: 100%; height: 42px; }
 .spark.short { height: 30px; }
 .charging { margin-left: 4px; color: var(--accent-2); }

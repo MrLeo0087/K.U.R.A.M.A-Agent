@@ -1,0 +1,59 @@
+import time
+
+from jarvis.core import config, jobs, registry, safety, stt, tts, workspace
+
+
+def _reg(fn, name="slow_tool"):
+    r = registry.Registry(packages=())
+    r._discovered = True
+    r.tool(fn, name=name, group="general")
+    return r
+
+
+def test_long_result_goes_to_workspace_with_note(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "OUTPUTS_DIR", tmp_path)
+    reg = _reg(lambda query: "\n".join(f"/home/x/{i}/main.py" for i in range(30)), "find_things")
+    shelf = []
+    res = safety.execute("find_things", {"query": "main.py"}, reg=reg,
+                         ctx={"user_text": "find main.py", "published": shelf, "jobs": []})
+    assert res.ok and "workspace window" in res.output and len(shelf) == 1
+    saved = (tmp_path / shelf[0]).read_text()
+    assert saved.count("/main.py") == 30  # the full list, not the truncated copy
+    tele = safety.execute("find_things", {"query": "x"}, reg=reg, ctx={"published": [], "channel": "telegram"})
+    assert "workspace" not in tele.output  # the phone can't see the workspace
+
+
+def test_slow_tool_continues_as_background_job(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "OUTPUTS_DIR", tmp_path)
+    monkeypatch.setattr(config, "TOOL_BACKGROUND_AFTER_S", 0.2)
+
+    def slow(x: str = "") -> str:
+        time.sleep(0.8)
+        return "scan finished: 3 big folders"
+    reg = _reg(slow)
+    started = []
+    t0 = time.monotonic()
+    res = safety.execute("slow_tool", {"x": "home"}, reg=reg, ctx={"user_text": "scan my disk", "jobs": started})
+    assert time.monotonic() - t0 < 0.6 and "background as job #" in res.output and len(started) == 1
+    job = jobs.get_manager().get(started[0])
+    for _ in range(40):
+        if job.status in ("done", "failed"):
+            break
+        time.sleep(0.1)
+    assert job.status == "done" and "scan finished" in open(job.output_path).read()
+
+
+def test_quick_tool_and_no_turn_context_stay_inline(monkeypatch):
+    monkeypatch.setattr(config, "TOOL_BACKGROUND_AFTER_S", 0.2)
+    reg = _reg(lambda x="": "ok")
+    assert safety.execute("slow_tool", {}, reg=reg, ctx={"jobs": []}).output == "ok"
+    assert workspace.offer("slow_tool", "a\n" * 20) == ""  # outside a dashboard turn: nothing published
+
+
+def test_whisper_hallucinations_and_unspoken_text():
+    assert stt.is_hallucination("Thank you for watching!")
+    assert stt.is_hallucination("KURAMA, KURAMA, VS Code, Brave, YouTube, Kathmandu, Pokhara.")
+    assert not stt.is_hallucination("open VS Code and YouTube")
+    assert tts.clean_for_speech("• /home/leo/newproject/src/main.py") == ""
+    assert tts.clean_for_speech("Saved job 1234567 ✅ to ~/a/b.md") == "Saved job to"
+    assert tts.clean_for_speech("18% of 2500 = 450") == "18% of 2500 = 450"

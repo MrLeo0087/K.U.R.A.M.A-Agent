@@ -76,14 +76,16 @@ def find_files(query: str, path: str = "", kind: Literal["name", "folder", "cont
     bases = [_proc.resolve_dir(path)] if (path or "").strip() else all_disks()
     base = bases[0] if len(bases) == 1 else " and ".join(str(b) for b in bases)
     limit = max(1, min(int(limit or 20), 50))
+    if not (path or "").strip():
+        limit = 200  # whole-laptop search: the full list goes to the Workspace card, the LLM sees the top
     what = {"name": "files", "folder": "folders", "content": "hits"}[kind]
     if kind != "content":
         found, late = search_names(query, bases, limit, "d" if kind == "folder" else "f")
         partial = f" (timed out after {TIMEOUT}s; partial, narrow the path)" if late else ""
         if not found:
             return f"no {what} matching {query!r} under {base}{partial}"
-        head = f"{len(found)}{'+' if len(found) == limit else ''} {what} under {base}{partial}:"
-        return _proc.clip("\n".join([head, *(_clean(f) for f in found)]))
+        head = f"{len(found)}{'+' if len(found) == limit else ''} {what} named like {query!r}{partial}:"
+        return "\n".join([head, *(_clean(f) for f in found)])
     argv = content_argv(query, limit)
     out, partial = "", ""
     for b in bases:

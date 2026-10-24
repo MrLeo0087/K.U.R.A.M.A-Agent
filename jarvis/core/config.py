@@ -173,6 +173,15 @@ VOICE_MAX_TOKENS = 200
 # --- agent (P3) ---
 TOOL_PACKAGES = ("interactive", "general", "external")  # jarvis/tools/<pkg>/<one file per tool>
 TOOL_OUTPUT_MAX_CHARS = 800  # tool results are truncated to this before going back to the LLM
+# Workspace card: tool results with this many lines (or longer than TOOL_OUTPUT_MAX_CHARS) are shown there in full
+WORKSPACE_MIN_LINES = 8
+WORKSPACE_SKIP_TOOLS = ("read_webpage", "search_knowledge", "ask_knowledge", "recall_session", "job_result",
+                        "about_me", "write_document", "use_skill", "find_capability")
+# A tool still running after this many seconds keeps going as a background job; the user can keep talking and
+# is told when it's done (0 = off)
+TOOL_BACKGROUND_AFTER_S = float(os.getenv("KURAMA_TOOL_BG_AFTER_S", "6"))
+TOOL_NO_BACKGROUND = ("start_job", "generate_image", "write_document", "resume_job", "cancel_job", "make_tool",
+                      "focus_timer", "gesture_control", "power_off", "suspend_computer")
 AGENT_MAX_TOOL_ROUNDS = 4  # llm -> tools loops per request, then the model must answer
 AGENT_MAX_TOKENS = 400
 AGENT_SUMMARY_BATCH_TURNS = 3  # fold this many old turns into the rolling summary at once

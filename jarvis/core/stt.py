@@ -26,11 +26,20 @@ LANG_MAP: dict[str, str] = {
     "hindi": "hi", "hi": "hi", "urdu": "hi", "ur": "hi",
 }
 
-# Classic Whisper hallucinations on silence/noise.
-_HALLUCINATIONS = {
-    "", "you", "thank you", "thank you.", "thanks for watching!", "thanks for watching.",
-    "bye.", "bye", ".", "okay.", "uh", "um", "thank you for watching.",
-}
+# Classic Whisper hallucinations on silence/noise (compared without punctuation/case).
+_HALLUCINATIONS = {"", "you", "thank you", "thanks", "bye", "okay", "uh", "um", "hmm"}
+_HALLUCINATION_RE = re.compile(r"(?:thanks?(?: you)? (?:so much )?for watching|please subscribe|like and subscribe|"
+                               r"subtitles? by|captions? by|amara\.org|see you (?:in the )?next (?:video|time))", re.I)
+
+
+def is_hallucination(text: str) -> bool:
+    """Whisper on silence: stock YouTube phrases, or an echo of our own vocabulary prompt (config.STT_PROMPT,
+    e.g. "KURAMA, KURAMA, VS Code, Brave, YouTube, Kathmandu, Pokhara.")."""
+    norm = re.sub(r"[^\w\s]", " ", text.lower()).split()
+    if " ".join(norm) in _HALLUCINATIONS or _HALLUCINATION_RE.search(text):
+        return True
+    vocab = set(re.sub(r"[^\w\s]", " ", (config.STT_PROMPT or "").lower()).split())
+    return len(norm) >= 3 and vocab and sum(w in vocab for w in norm) / len(norm) >= 0.8
 
 
 class STTError(RuntimeError):
@@ -111,7 +120,7 @@ def _one(wav: bytes, language: str | None, models: list[str]) -> Transcript:
         store.log_llm(model, "stt", 0, 0, ms, True, audio_s=audio_s)
         text = result if isinstance(result, str) else (_field(result, "text", "") or "")
         text = text.strip()
-        if text.lower() in _HALLUCINATIONS:
+        if is_hallucination(text):
             text = ""
         raw = language or _field(result, "language", "") or ""
         dur = _field(result, "duration", None) or wav_duration(wav)
