@@ -7,3 +7,6 @@ data/
 *.db
 logs/
 .pytest_cache/
+
+# large local archives (GitHub rejects files > 100 MB)
+*.zip
