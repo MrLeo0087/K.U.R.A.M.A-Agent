@@ -546,7 +546,7 @@ _CMD_ALERTS = re.compile(r"^(?:(?:turn|switch|put)\s+)?(?P<a>on|off|enable|disab
 
 
 _WHERE = re.compile(r"^(?:so |ok |okay )?(?:where (?:was|were) (?:i|we)(?: (?:on|with|in)(?: (?P<p>.+?))?)?|what was i "
-                    r"(?:working on|doing)(?: in (?P<p2>.+?))?|(?:resume|continue) (?:my )?(?:work|project|coding)"
+                    r"(?:working on|doing)(?: (?:in|on|with) (?:the |my )?(?P<p2>.+?)(?: project)?)?|(?:resume|continue) (?:my )?(?:work|project|coding)"
                     r"(?: on (?P<p3>.+?))?)$", I)
 _CHANGED = re.compile(r"^what (?:did i|have i) change(?:d)?(?: in (?P<p>(?!the last)\S.*?))?(?: (?:since|in the last|during the "
                       r"last|over the last) (?P<w>.+?))?$", I)
@@ -559,7 +559,8 @@ _FREE_RAM = re.compile(r"^(?:free|clean|clear)(?: up)? (?:some )?(?:ram|memory)$
 _PORT = re.compile(r"^(?:what(?:'s| is)|who(?:'s| is)) (?:running |listening )?(?:on|using) port (?P<p>\d{2,5})$", I)
 
 
-_WEBWATCH = re.compile(r"^(?:watch|monitor|keep an eye on|track|tell me when) (?:the (?:page|site|website) )?"
+_WEBWATCH = re.compile(r"^(?:watch|monitor|keep an eye on|track|tell me when|tell me when (?:this|the) (?:page|site|"
+                       r"website) changes:?) (?:the (?:page|site|website) )?"
                        r"(?P<url>https?://\S+|[\w-]+(?:\.[\w-]+)+(?:/\S*)?)(?: (?:changes|updates))?"
                        r"(?: (?:for|and tell me when it (?:says|mentions|shows)|when it (?:says|mentions|shows)) "
                        r"(?P<w>.+?))?$", I)
@@ -619,15 +620,30 @@ def _study_intent(t: str) -> Intent | None:
 
 
 _DL = re.compile(r"^download (?P<u>https?://\S+)(?: (?:to|into|in) (?P<f>.+?))?(?P<n> tonight| at night| overnight)?$", I)
+_CLEAN = re.compile(r"^(?:clean|clear|empty|delete|remove|free)(?: up)? (?:the |my |all )?(?P<c>pip cache|hugging ?face "
+                    r"cache|hf cache|torch cache|trash|old checkpoints|checkpoints|duplicates|duplicate files|old "
+                    r"downloads|pycache|old venvs|venvs)$", I)
+_CLEAN_CAT = {"pip cache": "pip_cache", "huggingface cache": "hf_cache", "hugging face cache": "hf_cache",
+              "hf cache": "hf_cache", "torch cache": "torch_cache", "trash": "trash", "old checkpoints": "checkpoints",
+              "checkpoints": "checkpoints", "duplicates": "duplicates", "duplicate files": "duplicates",
+              "old downloads": "old_downloads", "pycache": "pycache", "old venvs": "dead_venvs", "venvs": "dead_venvs"}
 _TIDY = re.compile(r"^(?:sort|tidy|clean|organi[sz]e)(?: up)? (?:my |the )?downloads?(?: folder)?$", I)
 _BACKUP = re.compile(r"^(?:back ?up|backup) (?:my (?:projects|files|work|code)|everything|now)$", I)
 
 
+_JOT = re.compile(r"^(?:jot|note|write|put) (?:this |it )?down (?:for|in|under) (?P<s>[\w+#.]+)[:,]? (?P<t>.+)$", I)
+
+
 def _daily_intent(t: str) -> Intent | None:
+    if m := _JOT.match(t):  # "jot down for physics newton's third law": a study note (one-word subject)
+        return Intent("note", "study_notes", "study", {"action": "add", "text": m.group("t"), "subject": m.group("s")})
     if m := _DL.match(t):
         return Intent("auto", "download_file", "automation", {"action": "add", "url": m.group("u"),
                                                               "folder": m.group("f") or "",
                                                               "when": "tonight" if m.group("n") else "now"})
+    if m := _CLEAN.match(t):
+        return Intent("auto", "disk_cleaner", "daily", {"action": "clean",
+                                                        "category": _CLEAN_CAT[m.group("c").lower()]})
     if _TIDY.match(t):
         return Intent("auto", "tidy_downloads", "automation", {"action": "run"})
     if _BACKUP.match(t):

@@ -244,6 +244,8 @@ def check(path: str, label: str = "") -> str:
     from jarvis.core.paths import smart_path
 
     p = Path(path).expanduser()
+    if not p.exists() and Path("/" + path).exists():  # the model dropped the leading slash
+        p = Path("/" + path)
     if not p.exists():
         p = smart_path(path) or p
     if not p.exists():

@@ -373,6 +373,8 @@ def describe(w: dict) -> str:
     else:
         head += f", {w['status']})"
     prog = progress_text(st)
+    if w["kind"] == "colab" and not st.get("last_msg") and w["status"] == "active":
+        prog = "waiting for the first message (run the KURAMA cell in Colab)"
     tail = (st.get("tail") or [""])[-1][:120] if not prog else ""
     extra = f": {prog}" if prog else (f": {w['result']}" if w.get("result") and w["status"] != "active" else "")
     if st.get("error") and w["status"] != "done":

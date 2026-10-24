@@ -104,12 +104,16 @@ def context() -> dict:
 
 def ask(prompt: str) -> bool:
     """Ask the user from inside a tool (the caller's confirm hook); no hook or an error means no."""
-    fn = _CTX.get().get("confirm") or deny_all
+    ctx = _CTX.get()
+    fn = ctx.get("confirm") or deny_all
+    ctx["asking"] = ctx.get("asking", 0) + 1  # time spent waiting for the user's yes/no is not "slow tool" time
     try:
         return bool(fn(prompt))
     except Exception as e:
         log.warning("confirmation failed: %s", e)
         return False
+    finally:
+        ctx["asking"] -= 1
 
 
 def describe(tool: registry.BaseTool, args: dict) -> str:
@@ -195,7 +199,14 @@ def _call_or_background(reg: registry.Registry, name: str, clean: Any, ctx: dict
             finished.set()
 
     threading.Thread(target=work, name=f"tool-{name}", daemon=True).start()
-    if finished.wait(wait):
+    live = _CTX.get()  # the same dict the tool thread sees: it says when the tool is waiting on the user
+    busy = 0.0
+    while not finished.wait(0.25):
+        if not live.get("asking"):
+            busy += 0.25
+        if busy >= wait:
+            break
+    else:
         return box["res"]
     from jarvis.core import jobs, workspace
 

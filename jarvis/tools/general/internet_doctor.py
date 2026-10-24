@@ -11,7 +11,8 @@ from jarvis.core.registry import tool
 
 @tool(group="system", safety="safe",
       description="Internet doctor: find why the internet is slow or not working (Wi-Fi, router, provider, DNS), "
-                  "speed test, reconnect Wi-Fi, switch to public DNS, or tell the user when the internet is back.")
+                  "speed test, or tell the user when it is back. Use reconnect / fix_dns ONLY when the check found "
+                  "that problem or the user asks for it.")
 def internet_doctor(action: Literal["check", "speed", "reconnect", "fix_dns", "notify_when_back"] = "check") -> str:
     """Internet doctor.
 

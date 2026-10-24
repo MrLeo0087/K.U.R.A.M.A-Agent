@@ -160,3 +160,18 @@ def test_streamed_turn_with_template_reply_is_not_empty(monkeypatch):
     monkeypatch.setattr(llm, "chat", fake_chat)
     out = "".join(agent.Agent(persist=False).stream("send hello to my telegram", mode="voice"))
     assert out == "Done, I sent it to your Telegram."  # was "(no reply)"
+
+
+def test_waiting_for_the_users_yes_is_not_slow(monkeypatch):
+    """A tool that asks the user is not sent to the background while the question is open."""
+    monkeypatch.setattr(config, "TOOL_BACKGROUND_AFTER_S", 0.2)
+
+    def asks(x: str = "") -> str:
+        return "changed it" if safety.ask("Change the DNS?") else "not changed"
+    reg = _reg(asks)
+
+    def slow_yes(prompt):
+        time.sleep(0.8)  # the user thinks for a while
+        return True
+    res = safety.execute("slow_tool", {}, reg=reg, confirm=slow_yes, ctx={"jobs": []})
+    assert res.output == "changed it"
