@@ -1,6 +1,6 @@
 import json
 
-from jarvis.core import config, store
+from jarvis.core import config, fastpath, store
 from jarvis.tools.general import find_and_send as fs
 from jarvis.tools.general import send_file_telegram as sft
 
@@ -141,3 +141,23 @@ def test_switch_phrases_accents_and_follow_ups(monkeypatch):
     store.kv_set("last_switch", json.dumps({"device": "bluetooth", "t": time.time()}))
     assert m("Then turn off this.") == ("laptop_toggle", {"setting": "bluetooth", "state": "off"})
     assert m("switch off the laptop") == ("power_off", {"action": "shutdown"})
+
+
+def test_list_folder_nested_multi_and_closest(monkeypatch, tmp_path):
+    from jarvis.core import paths
+    from jarvis.tools.interactive.list_folder import list_folder
+    (tmp_path / "Project1" / "Tara").mkdir(parents=True)
+    (tmp_path / "Project1" / "Tara" / "notes.txt").write_text("x")
+    (tmp_path / "Music").mkdir()
+    (tmp_path / "Music" / "song.mp3").write_text("x")
+    monkeypatch.setattr(paths, "roots", lambda: [tmp_path])
+    monkeypatch.setattr(config, "PATH_ALIASES", {})
+    out = list_folder("project1 and tara")  # Tara inside Project1
+    assert out.startswith(str(tmp_path / "Project1" / "Tara")) and "1. notes.txt" in out
+    both = list_folder("music and tara")  # not nested: both folders, one pick list
+    assert "1. song.mp3" in both and "2. notes.txt" in both
+    near = list_folder("Tarra folder")
+    assert "notes.txt" in near
+    assert list_folder("zzqqxx").startswith("error")
+    it = fastpath.match("Can you give me list of all file in project1 and tara folder")
+    assert (it.tool, it.args) == ("list_folder", {"path": "project1 and tara"})

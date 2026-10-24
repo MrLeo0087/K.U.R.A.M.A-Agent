@@ -364,8 +364,8 @@ class Agent:
             return False
         if not (router.looks_like_command(text) or state.get("groups")):
             return False
-        if any(isinstance(m, ToolMessage) and m.name == "make_tool" for m in state["messages"]):
-            return False
+        if any(isinstance(m, ToolMessage) and m.name != meta.NAME for m in state["messages"]):
+            return False  # a real tool (or make_tool) already ran this turn: its answer stands
         return any(t.name == "make_tool" for t in registry.schemas_for(["toolsmith"]))
 
     @staticmethod
@@ -653,6 +653,8 @@ class Agent:
                              "route": router.Route([res.intent.group], "fastpath", False, res.latency_ms)}
             else:
                 self.last.setdefault("tools", []).append(entry)
+            if res.workspace:
+                self.last.setdefault("workspace", []).extend(res.workspace)
         return res
 
     # --- public API ---

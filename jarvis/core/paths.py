@@ -89,7 +89,8 @@ def find_child(base: Path, want: str, depth: int = 2, dirs_only: bool = True) ->
     return best[2] if best else None
 
 
-def find_children(base: Path, want: str, depth: int = 2, dirs_only: bool = True, k: int = 4) -> list[Path]:
+def find_children(base: Path, want: str, depth: int = 2, dirs_only: bool = True, k: int = 4,
+                  min_score: float | None = None) -> list[Path]:
     """Up to k good matches under base (best first), for backtracking over ambiguous names."""
     found: list[tuple[float, int, Path]] = []
     q: deque[tuple[Path, int]] = deque([(base, 1)])
@@ -105,12 +106,24 @@ def find_children(base: Path, want: str, depth: int = 2, dirs_only: bool = True,
             if e.name.startswith(".") or e.name in _SKIP:
                 continue
             is_dir = e.is_dir(follow_symlinks=False)
-            if (not dirs_only or is_dir) and (sc := _score(e.name, want)) >= config.PATH_MATCH_MIN:
+            if (not dirs_only or is_dir) and (sc := _score(e.name, want)) >= (min_score or config.PATH_MATCH_MIN):
                 found.append((sc, -lvl, Path(e.path)))
             if is_dir and lvl < depth:
                 q.append((Path(e.path), lvl + 1))
     found.sort(key=lambda t: (t[0], t[1]), reverse=True)
     return [p for _, _, p in found[:k]]
+
+
+def similar_dirs(want: str, k: int = 4) -> list[Path]:
+    """Folders whose names look like `want` (looser than smart_path), best first: "did you mean ...?"."""
+    segs = segments(want)
+    if not segs:
+        return []
+    found: list[Path] = []
+    for r in roots():
+        found += find_children(r, segs[-1], depth=3, dirs_only=True, k=k, min_score=0.5)
+    found.sort(key=lambda p: _score(p.name, segs[-1]), reverse=True)
+    return list(dict.fromkeys(found))[:k]
 
 
 def _walk(cur: Path, segs: list[str], want: str) -> Path | None:

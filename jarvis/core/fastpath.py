@@ -13,6 +13,7 @@ import logging
 import re
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from jarvis.core import config, safety, store
 
@@ -36,6 +37,7 @@ class FastResult:
     intent: Intent
     ok: bool
     latency_ms: int
+    workspace: list[str] = field(default_factory=list)  # results saved for the dashboard's Workspace card
 
 
 # --- normalisation ---
@@ -54,7 +56,7 @@ refresh_names()
 
 
 _DEVICE_TAIL = re.compile(r"\s+(?:of|in|from|for)\s+(?:my|the|this)\s+(?:laptop|computer|pc|system|display|"
-                          r"screen|desktop|monitor|device)(?=[\s,?.!।]*$)", I)
+                          r"screen|monitor|device)(?=[\s,?.!।]*$)", I)
 
 
 def normalize(text: str) -> str:
@@ -160,6 +162,25 @@ SEARCH_URLS = {"google": "https://www.google.com/search?q={q}",
                "youtube": "https://www.youtube.com/results?search_query={q}",
                "wikipedia": "https://en.wikipedia.org/w/index.php?search={q}"}
 SEARCH_NAMES = {"google": "Google", "youtube": "YouTube", "wikipedia": "Wikipedia"}
+
+
+# "give me a list of all files in project1 and tara folder", "what's in my downloads folder", "list the music folder"
+_LISTDIR = _rx(
+    r"(?:(?:give|show|tell|send)(?: me)? |list |get(?: me)? )?(?:a |the )?(?:full |complete )?(?:list(?:ing)? of )?(?:all )?"
+    r"(?:the )?(?:files?|folders?|contents?|everything|items?)(?: and (?:files?|folders?))? (?:in|inside|of|from|under) "
+    r"(?:the |my )?(?P<path>.+?)(?: folders?| directory| directories| drive)?",
+    r"what(?:'s| is| are)(?: there)? (?:in|inside) (?:the |my )?(?P<path>.+?) (?:folders?|directory|drive)",
+    r"list (?:the |my )?(?P<path>.+?) (?:folders?|directory|drive)(?:'s)?(?: contents| files)?")
+
+
+def listdir_intent(t: str) -> Intent | None:
+    m = _full(_LISTDIR, t)
+    if not m:
+        return None
+    path = m.group("path").strip(" ,")
+    if not path or len(path.split()) > 8 or re.search(r"\b(?:web|internet|google|youtube|news)\b", path, I):
+        return None
+    return Intent("listdir", "list_folder", "filesearch", {"path": path}, path)
 
 
 def search_intent(t: str) -> Intent | None:
@@ -597,6 +618,8 @@ def match(text: str) -> Intent | None:
         return sysi
     if ii := image_intent(t):
         return ii
+    if li := listdir_intent(t):
+        return li
     if si := search_intent(t):
         return si
     if m := _full(OPEN, t):
@@ -735,7 +758,25 @@ def render(intent: Intent, ok: bool, output: str, lang: str) -> str:
             return ("I don't have a tool for that yet. I can search the web for the steps, or build a small new "
                     "tool for it if you like.")
         return f"Yes, I can help with {intent.label}. These of my tools fit: {', '.join(lines[:4])}. Shall I start?"
+    if intent.name == "listdir":
+        return _render_listdir(intent, out)
     return out  # weather / recall / digest / tokens / session: the tool output is already text
+
+
+def _render_listdir(intent: Intent, out: str) -> str:
+    """Short folder listings are said as they are; long ones get a one-line overview and go to the Workspace."""
+    lines = out.splitlines()
+    if len(lines) < 8:  # "/media/.../Tara : 6 folders, 0 files" -> "Tara has 6 folders, 0 files."
+        return "\n".join(re.sub(r"^(/\S.*?) : (\d.*)$", lambda m: f"{Path(m.group(1)).name} has {m.group(2)}.", ln)
+                         for ln in lines)
+    from jarvis.core import workspace
+
+    path = workspace.publish(f"folder: {intent.label[:60]}", out)
+    if path is not None:
+        intent.args["_published"] = str(path.relative_to(Path(config.OUTPUTS_DIR)))
+    heads = [ln.split(" : ", 1) for ln in lines if " : " in ln and ln.split(" : ", 1)[1][:1].isdigit()]
+    said = "; ".join(f"{Path(p).name} has {n}" for p, n in heads[:3]) or "Here's the list"
+    return f"{said}. The full numbered list is in your workspace; say 'send 3' to get one."
 
 
 _AND = {"en": " and ", "hi": " और ", "ne": " र "}
@@ -805,6 +846,7 @@ def try_answer(text: str, lang: str | None = None, confirm=None, mode: str = "te
     if intent.name in ("time", "weather") and "couldn't find a place" in (output or ""):
         return None  # unknown place: let the LLM path try (it can fix spelling)
     answer = render(intent, ok, output, lang or "en")
+    published = [intent.args.pop("_published")] if "_published" in intent.args else []
     if mode == "voice" and intent.name in _VOICE_FIRST_LINE:
         answer = answer.split("\n", 1)[0]
     ms = int((time.monotonic() - t0) * 1000)
@@ -812,7 +854,7 @@ def try_answer(text: str, lang: str | None = None, confirm=None, mode: str = "te
         store.log_routing(text, [intent.group], "fastpath", ms)
     except Exception as e:
         log.warning("could not log routing: %s", e)
-    return FastResult(answer, intent, ok, ms)
+    return FastResult(answer, intent, ok, ms, published)
 
 
 # --- P9b --- reminders: "remind me to X at/in ...", "remind me at ... to X", list, cancel
