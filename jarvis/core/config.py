@@ -253,7 +253,8 @@ ROUTER_EXAMPLES: dict[str, tuple[str, ...]] = {
     "apps": ("open the calculator app", "close spotify", "the app froze, kill it"),
     "media": ("pause the music", "next track please", "play my playlist"),
     "screen": ("capture my screen", "screenshot of this window"),
-    "power": ("how much charge is left", "lock the screen", "shut down the computer", "put it to sleep"),
+    "power": ("how much charge is left", "lock the screen", "shut down the computer", "put it to sleep",
+              "guard my laptop while I am away", "where is my laptop", "anti theft"),
     "image": ("make an image of a cat in space", "create a picture of mountains", "draw a logo"),
     "web": ("search online for", "look this up on the internet", "who won the match yesterday",
             "latest news about technology"),
@@ -461,7 +462,8 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
     "display": "screen brightness, light/dark mode (also automatic at sunset)",
     "desktop": "do not disturb, night light, wallpaper, focus (pomodoro) session",
     "screen": "take a screenshot (full screen, window or area)",
-    "power": "battery status, lock the screen, sleep/suspend, shut down, restart, log out",
+    "power": "battery status, lock the screen, sleep/suspend, shut down, restart, log out; laptop guard (anti-theft "
+             "photo + location) and where the laptop is",
     "clock": "timers, alarms (with sound) and a stopwatch",
     "clipboard": "read or write the clipboard, clipboard history",
     "windows": "snap, maximize, minimize, restore or list windows",
@@ -524,7 +526,7 @@ SHELL_ALLOWLIST = ("ls", "cat", "head", "tail", "wc", "grep", "rg", "fdfind", "f
 # --- Background core (P6): python -m jarvis.workers ---
 WORKERS_ENABLED: tuple[str, ...] = tuple(
     w.strip() for w in os.getenv("JARVIS_WORKERS", "process_watch,resource_guard,crash_watchdog,"
-                                 "telegram_bot,daily_digest,auto_theme,scheduler,timemachine").split(",") if w.strip())
+                                 "telegram_bot,daily_digest,auto_theme,scheduler,timemachine,guard").split(",") if w.strip())
 WORKER_MIN_INTERVAL_S = 5.0  # no daemon polls faster than this
 WORKER_MAX_BACKOFF_S = 300.0  # error backoff cap (interval * 2^errors)
 WORKER_LOG_BYTES = 1_000_000  # rotating log per worker: ~1 MB x 3
@@ -565,6 +567,8 @@ WHERE_WAS_I_LLM = True  # "where was I?" turns the facts into 2-3 plain sentence
 DOCTOR_RAM_WARN = 85  # % RAM used = a finding
 DOCTOR_TEMP_WARN = 90  # °C CPU = a finding
 DOCTOR_KERNEL_IDLE_MIN = 30  # a Jupyter kernel this old with ~0% CPU counts as idle
+GUARD_INTERVAL_S = 5.0  # laptop guard checks (only while armed)
+PHONE_INBOX = os.getenv("KURAMA_PHONE_INBOX", "~/Downloads/Phone")  # files sent from the phone land here
 COLAB_POLL_S = 60.0  # how often KURAMA checks for Colab pings (only while a Colab run is active)
 COLAB_SILENT_MIN = 25  # no ping for this long = the Colab runtime probably disconnected
 COLAB_PROGRESS_EVERY_S = 300  # the notebook sends progress at most this often (ntfy.sh free limits)

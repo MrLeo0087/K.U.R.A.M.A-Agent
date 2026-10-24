@@ -298,7 +298,7 @@ def test_telegram_ignores_other_chats_and_routes_text(tg):
     assert bot.available() is None
     bot._agent = FakeAgent("x" * 5000)
     tg["updates"] = [[upd(10, "rm everything", chat=999), upd(11, "what time is it?"),
-                      upd(12, voice={"file_id": "v"})]]
+                      upd(12, sticker={"file_id": "v"})]]
     bot.tick()
     assert bot._agent.calls == [("what time is it?", "text")]  # chat 999 ignored silently
     assert len(tg["sent"]) == 2 and len(tg["sent"][0]) <= config.TELEGRAM_MAX_REPLY_CHARS

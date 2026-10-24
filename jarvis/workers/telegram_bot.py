@@ -18,11 +18,13 @@ from jarvis.core import config, notify, store
 from jarvis.workers.base import Worker
 
 OFFSET_KEY = "telegram_offset"
-HELP = ("I'm KURAMA. Send a question or command as text.\n"
-        "/status: system resources, watches, jobs and workers\n"
-        "/jobs: background jobs\n/help: this message\n"
-        "Risky actions ask 'Reply yes/no' first. Only text is supported.")
-TEXT_ONLY = "Sorry, only text messages are supported."
+HELP = ("I'm KURAMA. Send a question or command as text or a voice note.\n"
+        "Send a file or photo: it's saved on your laptop (caption 'to <folder>' picks the folder).\n"
+        "copy: <text> puts text on the laptop's clipboard; /clip sends you the laptop's clipboard.\n"
+        "/screen: a screenshot of the laptop\n/guard on|off: laptop guard (photo + location if someone uses it)\n"
+        "/where: where the laptop is\n/status: resources, watches, jobs, workers\n/jobs: background jobs\n"
+        "/help: this message\nRisky actions ask 'Reply yes/no' first.")
+TEXT_ONLY = "Sorry, I can't use that kind of message."
 # a reply to find_and_send's numbered list: "2", "send 2", "number 2", "all", "send all" (0 tokens)
 PICK = re.compile(r"^\s*(?:send\s+)?(?:(?:no\.?|number|file)\s*)?(\d{1,2}|all|both)\s*[.!]?\s*$", re.I)
 
@@ -106,20 +108,48 @@ class TelegramBot(Worker):
             return
         text = (msg.get("text") or "").strip()
         if not text:
-            self.send(TEXT_ONLY)
-            return
+            from jarvis.core import phone
+            if msg.get("voice"):  # a voice note: Whisper turns it into text, then it's a normal message
+                try:
+                    text = phone.voice_text(msg)
+                except Exception as e:
+                    self.send(f"Sorry, I couldn't hear that voice note: {e}")
+                    return
+                if not text:
+                    self.send("I couldn't make out any words in that voice note.")
+                    return
+                self.send(f"🎤 {text}")
+            else:  # a file / photo / video: saved on the laptop (its caption may name the folder)
+                self.send(phone.save_incoming(msg) or TEXT_ONLY)
+                return
         self.handled += 1
         self.log.info("message (%d chars)", len(text))
         self.send(self.answer(text))
 
     def answer(self, text: str) -> str:
+        from jarvis.core import guard, phone
         if text.startswith("/"):
             cmd = text.split()[0].split("@")[0].lower()
+            arg = text.split()[1].lower() if len(text.split()) > 1 else ""
             if cmd == "/status":
                 return status_text()
             if cmd == "/jobs":
                 return jobs_text()
+            if cmd == "/clip":
+                return phone.clipboard_text()
+            if cmd == "/screen":
+                return phone.screenshot_to_phone()
+            if cmd == "/guard":
+                return guard.arm(arg == "on") if arg in ("on", "off") else guard.status()
+            if cmd == "/where":
+                return guard.where()
             return HELP
+        if m := phone.COPY.match(text):  # 0 tokens: phone -> laptop clipboard
+            return phone.set_clipboard(m.group("t").strip())
+        if phone.CLIP.match(text):
+            return phone.clipboard_text()
+        if phone.SCREEN.match(text):
+            return phone.screenshot_to_phone()
         if (m := PICK.match(text)) and (picked := self.pick_found(m.group(1))):
             return picked
         try:
