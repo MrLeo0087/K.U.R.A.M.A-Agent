@@ -363,7 +363,7 @@ class Agent:
                 delta = next(gen)
             except StopIteration as stop:
                 text = "".join(parts)
-                if held and not meta.looks_like_refusal(text):
+                if held and text and not meta.looks_like_refusal(text):
                     writer(text)
                 return stop.value or llm.Reply(text, "", [])
             parts.append(delta)
@@ -662,12 +662,14 @@ class Agent:
             for kind, chunk in self.graph.stream(state, self._config(),
                                                  stream_mode=["custom", "values"]):
                 if kind == "custom":
+                    if not chunk:
+                        continue
                     parts.append(chunk)
                     yield chunk
                 else:
                     final = chunk
             answer = (final or {}).get("answer") or ""
-            if answer and not parts:  # nothing streamed (fallback text): emit it whole
+            if answer and not "".join(parts).strip():  # nothing streamed (template/fallback text): emit it whole
                 parts.append(answer)
                 yield answer
         finally:

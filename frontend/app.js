@@ -1215,6 +1215,7 @@ let wakeES = null, serverWake = true; // the API listens while asleep (cheap); f
 function wakeEvents() {
   if (wakeES) return;
   wakeES = api.wakeEvents();
+  wakeES.onopen = () => { if (asleep && serverWake) api.wakeSleep().catch(() => {}); }; // API restarted: listen again
   wakeES.onmessage = (e) => {
     let ev = null;
     try { ev = JSON.parse(e.data); } catch { return; }

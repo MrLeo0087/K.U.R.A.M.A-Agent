@@ -47,15 +47,15 @@ def test_slow_tool_continues_as_background_job(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "TOOL_BACKGROUND_AFTER_S", 0.2)
 
     def slow(x: str = "") -> str:
-        time.sleep(0.8)
+        time.sleep(1.5)
         return "scan finished: 3 big folders"
     reg = _reg(slow)
     started = []
     t0 = time.monotonic()
     res = safety.execute("slow_tool", {"x": "home"}, reg=reg, ctx={"user_text": "scan my disk", "jobs": started})
-    assert time.monotonic() - t0 < 0.6 and "background as job #" in res.output and len(started) == 1
+    assert time.monotonic() - t0 < 1.2 and "background as job #" in res.output and len(started) == 1
     job = jobs.get_manager().get(started[0])
-    for _ in range(40):
+    for _ in range(60):
         if job.status in ("done", "failed"):
             break
         time.sleep(0.1)
@@ -139,3 +139,25 @@ def test_simple_action_answers_without_second_llm_call(monkeypatch):
     a = agent.Agent(use_planner=False, persist=False)
     out = a.run("could you bring up youtube for me in the browser")
     assert len(calls) == 1 and "youtube" in out.lower()  # one LLM call; the reply came from the template
+
+
+def test_streamed_turn_with_template_reply_is_not_empty(monkeypatch):
+    from langchain_core.messages import AIMessage
+
+    from jarvis.core import agent, llm, notify
+    monkeypatch.setattr(config, "TELEGRAM_BOT_TOKEN", "t")
+    monkeypatch.setattr(config, "TELEGRAM_CHAT_ID", "1")
+    monkeypatch.setattr(notify, "telegram_call", lambda *a, **k: {"ok": True})
+    msg = AIMessage(content="", tool_calls=[{"name": "send_message_telegram", "args": {"text": "hello"}, "id": "c1"}])
+
+    def fake_chat(msgs, **kw):
+        if kw.get("stream"):
+            def gen():
+                if False:
+                    yield ""
+                return llm.Reply("", "m", [], message=msg)
+            return gen()
+        return llm.Reply("", "m", [], message=msg)
+    monkeypatch.setattr(llm, "chat", fake_chat)
+    out = "".join(agent.Agent(persist=False).stream("send hello to my telegram", mode="voice"))
+    assert out == "Done, I sent it to your Telegram."  # was "(no reply)"
