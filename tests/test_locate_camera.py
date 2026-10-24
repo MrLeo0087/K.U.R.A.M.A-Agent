@@ -28,7 +28,7 @@ def test_scan_parses_escaped_bssids(no_net):
 
 def test_where_reports_place_and_map(no_net, monkeypatch):
     monkeypatch.setattr(geolocate, "_geolocate", lambda aps: {"lat": 28.05, "lon": 81.6167, "accuracy": 25000, "source": "ip"})
-    monkeypatch.setattr(geolocate, "place_name", lambda lat, lon: "Nepalgunj-10")
+    monkeypatch.setattr(geolocate, "place_name", lambda lat, lon, acc=0: "Nepalgunj-10")
     txt = geolocate.where_text()
     assert "Nepalgunj-10" in txt and "±25 km" in txt and "via IP" in txt
     assert "maps.google.com/?q=28.05000,81.61670" in txt
@@ -38,7 +38,7 @@ def test_where_reports_place_and_map(no_net, monkeypatch):
 def test_known_wifi_names_the_spot(no_net, tmp_path, monkeypatch):
     from jarvis.core import store
     monkeypatch.setattr(geolocate, "_geolocate", lambda aps: {"lat": 28.05, "lon": 81.6167, "accuracy": 25000, "source": "ip"})
-    monkeypatch.setattr(geolocate, "place_name", lambda lat, lon: "Nepalgunj-10")
+    monkeypatch.setattr(geolocate, "place_name", lambda lat, lon, acc=0: "Nepalgunj-10")
     assert "Home" in geolocate.label_here("Home")
     assert json.loads(store.kv_get(geolocate._PLACES_KEY))["58:56:C2:7E:A7:0C"] == "Home"
     assert "At: Home" in geolocate.where_text()

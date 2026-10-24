@@ -11,7 +11,7 @@ from jarvis.core import config, locationlog, store
 
 @pytest.fixture(autouse=True)
 def _place(monkeypatch):
-    monkeypatch.setattr("jarvis.core.geolocate.place_name", lambda lat, lon: f"spot-{lat:.2f}")
+    monkeypatch.setattr("jarvis.core.geolocate.place_name", lambda lat, lon, acc=0: f"spot-{lat:.2f}")
 
 
 def test_record_dedupes_nearby_points():

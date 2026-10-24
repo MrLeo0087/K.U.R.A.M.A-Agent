@@ -90,7 +90,7 @@ def record_phone(lat: float, lon: float, accuracy: int = 0, live: bool = False) 
     place = ""
     try:
         from jarvis.core import geolocate
-        place = geolocate.place_name(lat, lon)
+        place = geolocate.place_name(lat, lon, accuracy)
     except Exception:
         place = ""
     return record("phone", lat, lon, accuracy, "live" if live else "shared", place)

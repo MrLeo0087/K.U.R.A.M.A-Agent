@@ -89,8 +89,10 @@ def _geolocate(aps: list[dict]) -> dict | None:
             "accuracy": int(d.get("accuracy", 0) or 0), "source": source}
 
 
-def place_name(lat: float, lon: float) -> str:
-    url = f"{NOMINATIM}?format=jsonv2&lat={lat:.5f}&lon={lon:.5f}&zoom=16&accept-language=en"
+def place_name(lat: float, lon: float, accuracy: int = 0) -> str:
+    # coarse (IP) fixes jitter between calls, so name only the city/town, not a random ward; precise (Wi-Fi) -> street
+    zoom = 10 if accuracy >= 5000 else 13 if accuracy >= 1500 else 16
+    url = f"{NOMINATIM}?format=jsonv2&lat={lat:.4f}&lon={lon:.4f}&zoom={zoom}&accept-language=en"
     try:
         req = urllib.request.Request(url, headers={"User-Agent": _UA})
         with urllib.request.urlopen(req, timeout=12) as r:
@@ -98,10 +100,13 @@ def place_name(lat: float, lon: float) -> str:
     except Exception as e:
         log.info("reverse geocode failed: %s", e)
         return ""
-    if "name" in d and d["name"]:
-        a = d.get("address") or {}
-        tail = a.get("city") or a.get("town") or a.get("county") or a.get("state") or ""
-        return f"{d['name']}, {tail}".strip(", ") if tail and tail not in d["name"] else d["name"]
+    a = d.get("address") or {}
+    city = a.get("city") or a.get("town") or a.get("municipality") or a.get("village") or ""
+    if accuracy >= 1500:  # coarse: the city (+ district) is all we honestly know
+        region = a.get("state_district") or a.get("county") or a.get("state") or ""
+        return city or region or (d.get("display_name") or "").split(",")[0]
+    if d.get("name"):
+        return f"{d['name']}, {city}".strip(", ") if city and city not in d["name"] else d["name"]
     return (d.get("display_name") or "").split(",")[0]
 
 
@@ -154,7 +159,7 @@ def locate(use_cache: bool = True) -> dict:
         return {}
     g, osm = maps(geo["lat"], geo["lon"])
     out = {**geo, "ssid": cur["ssid"], "known": _places().get(cur["bssid"], ""),
-           "place": place_name(geo["lat"], geo["lon"]), "map": g, "osm": osm}
+           "place": place_name(geo["lat"], geo["lon"], geo["accuracy"]), "map": g, "osm": osm}
     _cache.update(at=now, bssid=cur["bssid"], loc=out)
     return out
 
