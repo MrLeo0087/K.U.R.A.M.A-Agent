@@ -13,6 +13,7 @@ export const DEFAULTS = Object.freeze({
   apiBase: API_BASE,
   token: "",
   voiceReplies: true, // speak replies in Mic mode (Conversation mode always speaks)
+  mute: false, // the speaker button: true = Jarvis never speaks in this UI (replies stay as text)
   lowPower: null, // null = follow prefers-reduced-motion
   lang: "auto", // auto | en | ne | hi
 });

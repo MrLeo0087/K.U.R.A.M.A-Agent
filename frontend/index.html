@@ -65,6 +65,10 @@
           <span class="card-title">Conversation</span>
           <span class="head-tools">
             <span id="chat-state" class="chat-state" role="status"><i></i><span>Connecting</span></span>
+            <button id="btn-voice" class="icon-btn" type="button" aria-pressed="true" aria-label="Jarvis voice on (click to mute)" title="Voice on · click to mute">
+              <svg class="v-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>
+              <svg class="v-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M17 9l5 6M22 9l-5 6"/></svg>
+            </button>
             <button id="btn-clear" class="icon-btn" type="button" aria-label="Clear conversation" title="Clear">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>
             </button>
@@ -128,12 +132,28 @@
         </div>
       </div>
 
-      <div class="card jobs-card">
-        <div class="card-title">Background jobs <span id="jobs-count" class="muted-right"></span></div>
-        <ul id="jobs" class="jobs"><li class="empty">Nothing running</li></ul>
+      <div class="card ws-card" id="ws" aria-label="Workspace">
+        <div class="card-title">Workspace
+          <span class="muted-right ws-tools"><span id="jobs-count"></span>
+            <button id="ws-expand" class="icon-btn" type="button" aria-label="Open large" title="Open large">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg>
+            </button>
+          </span>
+        </div>
+        <ul id="jobs" class="jobs"></ul>
+        <div id="ws-tabs" class="ws-tabs" role="tablist"></div>
+        <div id="ws-view" class="ws-view"><p class="ws-empty">Pictures, poems and writing you ask for appear here.</p></div>
       </div>
     </section>
   </div>
+
+  <dialog id="ws-big" class="ws-big" aria-labelledby="ws-big-title">
+    <div class="ws-big-head"><h2 id="ws-big-title">Workspace</h2>
+      <span class="ws-big-tools"><a id="ws-open" class="icon-btn" target="_blank" rel="noopener" title="Open file" aria-label="Open file">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg></a>
+      <button id="ws-close" class="icon-btn" type="button" aria-label="Close">✕</button></span></div>
+    <div id="ws-big-view" class="ws-big-view"></div>
+  </dialog>
 
   <div id="offline" class="offline" hidden>Can't reach the Jarvis API — start it with <code>scripts/jarvis-start.sh</code> or check settings</div>
 

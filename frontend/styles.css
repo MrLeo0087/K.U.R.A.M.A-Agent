@@ -465,3 +465,46 @@ body.paused *, body.paused *::before, body.paused *::after { animation-play-stat
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
+/* ---------- voice toggle ---------- */
+#btn-voice .v-off { display: none; }
+#btn-voice.muted .v-on { display: none; }
+#btn-voice.muted .v-off { display: block; }
+#btn-voice.muted { color: var(--danger, #ff6b6b); }
+
+/* ---------- workspace: big result panel (right column, fills the remaining height) ---------- */
+.col.right .ws-card { flex: 1 1 auto; min-height: 260px; display: flex; flex-direction: column; }
+.ws-tools { display: inline-flex; align-items: center; gap: 8px; }
+.ws-tools .icon-btn { width: 24px; height: 24px; }
+.ws-card .jobs:empty { display: none; }
+.ws-card .jobs li.run .s { color: var(--accent); }
+.ws-tabs { display: flex; gap: 6px; overflow-x: auto; padding: 8px 0; scrollbar-width: none; }
+.ws-tabs::-webkit-scrollbar { display: none; }
+.ws-tab { flex: 0 0 auto; max-width: 140px; display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px;
+  border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--muted); font: inherit;
+  font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;
+  transition: color 0.2s, border-color 0.2s, background 0.2s; }
+.ws-tab:hover { color: var(--text); }
+.ws-tab.on { color: var(--text); border-color: var(--accent); background: rgba(255, 255, 255, 0.04); }
+.ws-tab i { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex: 0 0 auto; }
+.ws-tab i.k-image { background: var(--accent-2); }
+.ws-view { flex: 1 1 auto; min-height: 0; overflow: auto; border-radius: 10px; border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.18); padding: 12px; }
+.ws-view.ws-in-a { animation: wsin 0.45s var(--ease) both; }
+.ws-view.ws-in-b { animation: wsin2 0.45s var(--ease) both; }
+@keyframes wsin { from { opacity: 0; transform: translateY(6px); } }
+@keyframes wsin2 { from { opacity: 0; transform: translateY(6px); } }
+.ws-empty { color: var(--muted); font-size: 13px; text-align: center; margin-top: 30%; }
+.ws-img { display: block; width: 100%; height: 100%; object-fit: contain; border-radius: 6px; cursor: zoom-in; }
+.ws-text { font-size: 13px; line-height: 1.6; white-space: normal; }
+.ws-text h1, .ws-text h2, .ws-text h3 { font-size: 14px; margin: 8px 0 4px; color: var(--accent-2); font-weight: 500; }
+.ws-text p { margin: 0 0 8px; }
+.ws-big { width: min(1100px, 92vw); height: min(86vh, 900px); padding: 0; border-radius: 14px; display: none; }
+.ws-big[open] { display: flex; flex-direction: column; }
+.ws-big-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.ws-big-head h2 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ws-big-tools { display: inline-flex; gap: 6px; }
+.ws-big-view { flex: 1; min-height: 0; overflow: auto; padding: 16px 24px; }
+.ws-big-view .ws-img { cursor: default; }
+.ws-big-view .ws-text { font-size: 15px; max-width: 760px; margin: 0 auto; }
+.low-power .ws-view { animation: none !important; }

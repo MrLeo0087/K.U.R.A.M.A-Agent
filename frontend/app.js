@@ -228,7 +228,7 @@ async function handleUtterance(blob) {
     answerConfirm(pendingConfirm, yes);
     return;
   }
-  sendChat(r.text, { voice: true, lang: r.lang, speak: true });
+  sendChat(r.text, { voice: true, lang: r.lang, speak: !S.mute });
 }
 
 // ---------- chat ----------
@@ -407,6 +407,8 @@ async function sendChat(text, { voice = false, lang = null, speak = false } = {}
         case "done":
           if (split) { const rest = split.flush(); if (rest) player.enqueue(rest, hint || ev.lang, gen); }
           bot.done(ev);
+          wsFromReply(text, bot.text);
+          setTimeout(loadOutputs, 800); // a tool may have just saved a file
           break;
       }
     }
@@ -447,7 +449,7 @@ $("composer").addEventListener("submit", (e) => {
   const lang = (mode === "mic" && dictLang) || S.lang;
   dictLang = null;
   caretKnown = false;
-  const speak = mode === "conv" ? conv.on : mode === "mic" && S.voiceReplies;
+  const speak = !S.mute && (mode === "conv" ? conv.on : mode === "mic" && S.voiceReplies);
   if (speak) audioCtx();
   orb.poke(1);
   sendChat(t, { voice: speak || dictated, lang, speak });
@@ -655,13 +657,15 @@ function renderJobs(jb) {
   lastJobsKey = key;
   const ul = $("jobs");
   ul.innerHTML = "";
-  if (!items.length) { ul.innerHTML = '<li class="empty">Nothing running</li>'; return; }
+  loadOutputs(); // a job finished or started: its output may be new
+  if (!items.length) return;
   for (const x of items) {
     const li = el("li");
     li.innerHTML = '<span class="p"></span><span class="q"></span><span class="s"></span>';
     li.querySelector(".p").textContent = `#${x.id}`;
     li.querySelector(".q").textContent = x.title || x.kind || "job";
     li.querySelector(".s").textContent = x.progress || x.status;
+    li.classList.add("run");
     li.title = "Open background jobs";
     li.onclick = () => openInfo("jobs");
     ul.append(li);
@@ -746,6 +750,115 @@ async function loadWeather() {
   if (alive() || ic.dataset.k !== k) { ic.dataset.k = k; ic.innerHTML = WX_SVG[k]; } // re-insert = replay the one-shot animation
 }
 loadWeather();
+
+// ---------- workspace: the newest picture / poem / essay, shown big (outputs from /api/v1/outputs + long replies) ----------
+const ws = { items: [], cur: -1, seen: new Set(), loaded: false };
+const wsTitle = (name) => name.replace(/^.*\//, "").replace(/^\d{8}-\d{4,6}-?/, "").replace(/\.[a-z0-9]+$/i, "").replace(/[-_]+/g, " ").trim() || name;
+const LONG_REPLY = (t) => t && (t.split("\n").filter((l) => l.trim()).length >= 4 || t.length > 420);
+
+function wsAdd(item, show) {
+  if (ws.seen.has(item.key)) return;
+  ws.seen.add(item.key);
+  ws.items.unshift(item);
+  if (ws.items.length > 12) ws.items.length = 12;
+  if (show || ws.cur < 0) wsShow(0); else { ws.cur = Math.min(ws.cur + 1, ws.items.length - 1); wsTabs(); }
+}
+
+function wsTabs() {
+  const box = $("ws-tabs");
+  box.innerHTML = "";
+  ws.items.slice(0, 6).forEach((it, i) => {
+    const b = el("button", "ws-tab" + (i === ws.cur ? " on" : ""));
+    b.type = "button"; b.setAttribute("role", "tab");
+    b.innerHTML = `<i class="k-${it.kind}"></i>`;
+    b.append(document.createTextNode(it.title));
+    b.title = it.title;
+    b.onclick = () => wsShow(i);
+    box.append(b);
+  });
+}
+
+async function wsBody(it, box) {
+  box.innerHTML = "";
+  if (it.kind === "image") {
+    const img = el("img", "ws-img");
+    img.alt = it.title; img.src = it.src; img.decoding = "async";
+    img.onclick = () => wsBig();
+    box.append(img);
+    return;
+  }
+  if (it.text == null && it.src) {
+    try { const r = await fetch(it.src); it.text = r.ok ? await r.text() : "(couldn't load this file)"; }
+    catch { it.text = "(couldn't load this file)"; }
+  }
+  const doc = el("div", "ws-text");
+  doc.innerHTML = renderMarkdown(it.text || "");
+  box.append(doc);
+}
+
+async function wsShow(i) {
+  const it = ws.items[i];
+  if (!it) return;
+  ws.cur = i;
+  wsTabs();
+  const view = $("ws-view");
+  await wsBody(it, view);
+  view.scrollTop = 0;
+  retrigger(view, "ws-in-a", "ws-in-b"); // one short fade-in
+  if ($("ws-big").open) wsBig();
+}
+
+function wsBig() {
+  const it = ws.items[ws.cur];
+  if (!it) return;
+  $("ws-big-title").textContent = it.title;
+  const a = $("ws-open");
+  a.hidden = !it.src; if (it.src) a.href = it.src;
+  wsBody(it, $("ws-big-view"));
+  if (!$("ws-big").open) $("ws-big").showModal();
+}
+
+function wsFromReply(request, reply) {
+  if (!LONG_REPLY(reply)) return;
+  wsAdd({ key: "r" + Date.now(), kind: "text", title: request.slice(0, 48), text: reply }, true);
+}
+
+let outputsBusy = false;
+async function loadOutputs() {
+  if (outputsBusy) return;
+  outputsBusy = true;
+  try {
+    const items = (await api.outputs(8)).items || [];
+    const fresh = items.filter((x) => !ws.seen.has("o" + x.name + x.mtime)).reverse(); // oldest first
+    for (const x of fresh) {
+      wsAdd({ key: "o" + x.name + x.mtime, kind: x.kind, title: wsTitle(x.name), src: api.outputUrl(x.name) },
+        ws.loaded && x === fresh[fresh.length - 1]); // jump to a NEW result; at startup just list them
+    }
+    ws.loaded = true;
+  } catch { /* API down: keep what we have */ }
+  finally { outputsBusy = false; }
+}
+loadOutputs();
+$("ws-expand").onclick = () => wsBig();
+$("ws-close").onclick = () => $("ws-big").close();
+$("ws-big").addEventListener("click", (e) => { if (e.target === $("ws-big")) $("ws-big").close(); });
+
+// ---------- voice on/off (speaker button) ----------
+function renderMute() {
+  const b = $("btn-voice");
+  b.classList.toggle("muted", !!S.mute);
+  b.setAttribute("aria-pressed", String(!S.mute));
+  b.title = S.mute ? "Voice off · click to let Jarvis speak" : "Voice on · click to mute";
+  b.setAttribute("aria-label", S.mute ? "Jarvis voice off (click to unmute)" : "Jarvis voice on (click to mute)");
+}
+$("btn-voice").onclick = () => {
+  S.mute = !S.mute;
+  saveSettings(S);
+  if (S.mute) player.stop();
+  renderMute();
+  toast(S.mute ? "Voice off: Jarvis will reply in text only." : "Voice on.");
+};
+renderMute();
 setInterval(loadWeather, 600000);
 
 // ---------- clock (ticks every second, aligned to the second) ----------

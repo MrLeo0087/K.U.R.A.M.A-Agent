@@ -184,6 +184,17 @@ FASTPATH = os.getenv("JARVIS_FASTPATH", "1").lower() not in ("0", "false", "no",
 ASSISTANT_NAMES = ("jarvis", "kurama")  # wake/address words stripped from commands
 HOME_PLACE = os.getenv("JARVIS_HOME_PLACE", "Kathmandu")  # default for weather
 HTTP_TIMEOUT_S = 5.0
+IMAGE_TIMEOUT_S = 90  # per image service
+# Image services tried in order (GET <url>?prompt=...; returns the picture). The user's Cloudflare workers first,
+# then Pollinations (free, no key). Override with JARVIS_IMAGE_APIS="url1;url2".
+IMAGE_APIS = tuple(u for u in os.getenv("JARVIS_IMAGE_APIS", ";".join((
+    "https://broad-moon-2502.lifejorney1500.workers.dev/",
+    "https://image-api.satorugojo0087.workers.dev/",
+    "https://image-ai.iamleo0087.workers.dev/",
+    "pollinations",
+))).split(";") if u.strip())
+# Added when the user names no style of their own.
+IMAGE_DEFAULT_STYLE = "cinematic vector art, high contrast, bold clean shapes, dramatic lighting, rich colors"
 WEATHER_CACHE_S = 600  # weather results are reused for 10 min
 UI_WEATHER_PLACES = tuple(os.getenv("JARVIS_UI_WEATHER", "Nepalgunj, Nepal").split(";"))  # UI weather card
 GEO_CACHE_S = 86_400  # geocoder results are reused for a day
@@ -209,6 +220,8 @@ WORKSPACES: dict[str, dict[str, list[str]]] = {
 }
 # Keyword rules: group -> words/phrases (matched on word boundaries, case-insensitive).
 ROUTER_RULES: dict[str, tuple[str, ...]] = {
+    "image": ("generate image", "generate an image", "image of", "picture of", "photo of", "drawing of",
+              "draw ", "illustration", "painting of", "तस्वीर", "चित्र"),
     "general": ("time", "date", "day is it", "clock", "what day", "o'clock", "baje",
                 "kitne baje", "kati bajyo", "bajyo", "samay", "समय", "बजे", "बज्यो", "तारीख", "मिति",
                 "time in", "time of", "टाइम", "कितने बजे", "कति बजे"),
@@ -354,6 +367,7 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
     "browser": "open a website or URL in the browser",
     "jobs": "long writing jobs (essays, articles, reports) and background job status/cancel/resume",
     "schedule": "reminders and scheduled commands at a time or repeating; list or cancel them",
+    "image": "generate a picture or drawing from a description",
 }
 # Tiny glosses for the request_tools meta-tool (sent on every unmatched turn, so each word costs):
 # "" = the group name says it all.
@@ -368,6 +382,7 @@ TOOL_GROUP_GLOSS: dict[str, str] = {
     "knowledge": "my code", "usage": "tokens", "browser": "",
     "jobs": "writing",
     "schedule": "remind",
+    "image": "picture",
 }
 
 # Words that suggest multi-step reasoning (router asks for the smart tier).

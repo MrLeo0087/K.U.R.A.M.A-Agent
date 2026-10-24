@@ -146,3 +146,39 @@ async def weather_now(place: str = Query("", description="city, e.g. 'Nepalgunj,
                 res.append({"place": p.split(",")[0].strip(), "error": type(e).__name__})
         return res
     return {"items": await run_in_threadpool(run)}
+
+
+# ---------- workspace: finished outputs (essays, poems, code, images) under data/outputs ----------
+_IMG = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+_TXT = {".md", ".txt", ".py", ".json", ".csv", ".html", ".js", ".sh"}
+
+
+def _outputs_dir():
+    from jarvis.core import config
+    return config.OUTPUTS_DIR.resolve()
+
+
+@router.get("/outputs", summary="Newest finished outputs for the workspace panel")
+async def outputs(limit: int = Query(12, ge=1, le=100)):
+    def run():
+        root = _outputs_dir()
+        if not root.is_dir():
+            return []
+        files = [p for p in root.rglob("*") if p.is_file() and p.suffix.lower() in _IMG | _TXT
+                 and not p.name.startswith((".", "bench-"))]
+        files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        return [{"name": str(p.relative_to(root)), "kind": "image" if p.suffix.lower() in _IMG else "text",
+                 "mtime": p.stat().st_mtime, "size": p.stat().st_size} for p in files[:limit]]
+    return {"items": await run_in_threadpool(run)}
+
+
+@router.get("/outputs/file", summary="One output file (text or image); only paths inside data/outputs")
+async def output_file(name: str = Query(..., max_length=300)):
+    from fastapi.responses import FileResponse
+
+    root = _outputs_dir()
+    p = (root / name).resolve()
+    if root not in p.parents or not p.is_file() or p.suffix.lower() not in _IMG | _TXT:
+        return JSONResponse({"error": "not found"}, status_code=404)
+    media = None if p.suffix.lower() in _IMG else "text/plain; charset=utf-8"
+    return FileResponse(p, media_type=media, headers={"Cache-Control": "no-cache"})

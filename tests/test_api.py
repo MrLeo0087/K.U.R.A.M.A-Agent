@@ -359,3 +359,39 @@ def test_weather_card(client, monkeypatch):
                                                                     "is_day": 1}})
     items = client.get("/api/v1/weather").json()["items"]
     assert items[0]["place"] == "Nepalgunj" and items[0]["temp_c"] == 31.2 and items[0]["desc"]
+
+
+def test_outputs_workspace(client, monkeypatch, tmp_path):
+    from jarvis.core import config
+    monkeypatch.setattr(config, "OUTPUTS_DIR", tmp_path)
+    (tmp_path / "images").mkdir()
+    (tmp_path / "poem.md").write_text("# Poem\nroses", encoding="utf-8")
+    (tmp_path / "images" / "fox.jpg").write_bytes(b"\xff\xd8\xff")
+    items = client.get("/api/v1/outputs").json()["items"]
+    assert {i["name"]: i["kind"] for i in items} == {"poem.md": "text", "images/fox.jpg": "image"}
+    assert "roses" in client.get("/api/v1/outputs/file", params={"name": "poem.md"}).text
+    assert client.get("/api/v1/outputs/file", params={"name": "../../.env"}).status_code == 404
+
+
+def test_generate_image_job(monkeypatch, tmp_path):
+    from jarvis.core import config, jobs
+    from jarvis.tools.general import generate_image as gi
+    monkeypatch.setattr(config, "OUTPUTS_DIR", tmp_path)
+    monkeypatch.setattr(gi, "fetch_image", lambda p, w, h: b"\x89PNG....")
+
+    class Mgr:
+        def submit(self, title, kind, fn, request="", lang="en"):
+            class Ctx:
+                def progress(self, _): pass
+            self.out = fn(Ctx())
+            return type("J", (), {"id": 7})()
+    m = Mgr()
+    monkeypatch.setattr(jobs, "get_manager", lambda: m)
+    assert "job #7" in gi.generate_image(prompt="a red fox")
+    assert m.out.endswith(".png") and (tmp_path / "images").is_dir()
+
+
+def test_image_style_default_and_user_style():
+    from jarvis.tools.general.generate_image import styled
+    assert "cinematic vector" in styled("a tiger in the himalayas")
+    assert styled("a tiger, watercolor") == "a tiger, watercolor"

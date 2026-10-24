@@ -430,6 +430,20 @@ def _days(m: re.Match, text: str) -> int:
     return 1
 
 
+_IMAGE = re.compile(r"^(?:can you\s+|could you\s+)?(?:generate|create|make|draw|paint|design|render)\s+(?:me\s+)?"
+                    r"(?:an?\s+)?(?:ai\s+)?(?:image|picture|photo|pic|drawing|painting|illustration|artwork)s?\s+"
+                    r"(?:of|about|showing|with|for)\s+(?P<p>.{3,})$", I)
+_DRAW = re.compile(r"^(?:can you\s+)?draw\s+(?:me\s+)?(?P<p>.{3,})$", I)
+
+
+def image_intent(t: str) -> Intent | None:
+    m = _IMAGE.match(t) or _DRAW.match(t)
+    if not m or re.search(r"\b(?:and|then)\s+(?:send|open|set)\b", t, I):  # multi-step: let the planner split it
+        return None
+    prompt = m.group("p").strip(" .,!?")
+    return Intent("image", "generate_image", "image", {"prompt": prompt}, prompt)
+
+
 def match(text: str) -> Intent | None:
     """The single high-confidence intent for text, or None."""
     t = normalize(text)
@@ -466,6 +480,8 @@ def match(text: str) -> Intent | None:
         return p9
     if sysi := _system_intent(t):
         return sysi
+    if ii := image_intent(t):
+        return ii
     if si := search_intent(t):
         return si
     if m := _full(OPEN, t):
