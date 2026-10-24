@@ -46,6 +46,23 @@ CHECK_MS = 2000
 STATE_FILE = Path(__file__).resolve().parent.parent / "data" / "mini.json"  # minimized? + button position
 BUBBLE = 56  # floating button size (px)
 PANEL_W, PANEL_H = 400, 600  # mini chat panel
+PANEL_KEEP_S = 180  # a hidden panel is closed after this long (frees its page); reopening restores the chat
+WEB_MEM_MB = int(os.getenv("KURAMA_WP_MEM_MB", "320"))  # web process memory budget (WebKit's default: 3 GB)
+
+
+def lean_context():
+    """WebKit only frees caches / runs a full GC when a process nears its memory limit, and the default limit
+    is 3 GB, so an all-day page just keeps growing. A small budget makes it clean up early (from ~35%),
+    harder above ~55%, and never kills the page. Nothing visible changes."""
+    mps = WebKit2.MemoryPressureSettings.new()
+    mps.set_memory_limit(WEB_MEM_MB)
+    mps.set_conservative_threshold(0.35)
+    mps.set_strict_threshold(0.55)
+    mps.set_kill_threshold(0)
+    mps.set_poll_interval(10)
+    with contextlib.suppress(Exception):  # the network process too (before any data manager exists)
+        WebKit2.WebsiteDataManager.set_memory_pressure_settings(mps)
+    return WebKit2.WebContext(memory_pressure_settings=mps)
 
 
 def desktop_covered(screen) -> bool:
@@ -141,7 +158,7 @@ class Wallpaper:
         self.ucm = WebKit2.UserContentManager()
         self.ucm.register_script_message_handler("kurama")
         self.ucm.connect("script-message-received::kurama", self.on_message)
-        self.view = WebKit2.WebView(user_content_manager=self.ucm)
+        self.view = WebKit2.WebView(web_context=lean_context(), user_content_manager=self.ucm)
         self.view.set_background_color(Gdk.RGBA(0.024, 0.027, 0.043, 1))
         s = self.view.get_settings()
         try:  # GPU compositing keeps the orb and bars smooth with little CPU (KURAMA_WP_GPU=0 to disable)
@@ -260,6 +277,7 @@ class Mini:
         self.wp = wp
         self.panel = self.view = None
         self.drag = None  # [root x, root y, window x, window y, moved]
+        self.reaper = 0  # timer that closes the hidden panel
         self.hover = False
         b = self.bubble = Gtk.Window(title="KURAMA mini")
         b.set_decorated(False)
@@ -405,6 +423,9 @@ class Mini:
         self.panel.move(clamp(x, wa.x + 8, wa.x + wa.width - w - 8), clamp(by + BUBBLE - h, wa.y + 8, wa.y + wa.height - h - 8))
 
     def show_panel(self, time: int = 0) -> None:
+        if self.reaper:
+            GLib.source_remove(self.reaper)
+            self.reaper = 0
         self.ensure_panel()
         self.panel.show_all()
         self.place_panel()
@@ -414,11 +435,23 @@ class Mini:
 
     def hide_panel(self) -> None:
         if self.open:
-            run_js(self.view, "window.kuramaMiniShown && window.kuramaMiniShown(false)")  # stops the mic
+            run_js(self.view, "window.kuramaMiniShown && window.kuramaMiniShown(false)")  # stops the mic, saves the chat
             self.panel.hide()
+            if not self.reaper:
+                self.reaper = GLib.timeout_add_seconds(PANEL_KEEP_S, self.drop_panel)
         self.bubble.queue_draw()
 
+    def drop_panel(self):
+        """Hidden for a while: close the panel's page (~45 MB); the next click reopens it with the chat restored."""
+        self.reaper = 0
+        if self.panel is not None and not self.panel.get_visible():
+            self.panel.destroy()
+            self.panel = self.view = None
+        return False
+
     def close(self) -> None:
+        if self.reaper:
+            GLib.source_remove(self.reaper)
         if self.panel is not None:
             self.panel.destroy()
         self.bubble.destroy()

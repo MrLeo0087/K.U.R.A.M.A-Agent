@@ -3,7 +3,7 @@ import { Api } from "./api.js";
 import { loadSettings, saveSettings } from "./config.js";
 import { Dust } from "./dust.js";
 import { Orb } from "./orb.js";
-import { Conversation, Mic, Player, Recorder, SentenceSplitter, audioCtx, insertAtCursor } from "./voice.js";
+import { Conversation, Mic, Player, Recorder, SentenceSplitter, audioCtx, audioSleepSoon, insertAtCursor } from "./voice.js";
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -101,6 +101,7 @@ function updateState() {
   $("send").setAttribute("aria-label", busy ? "Stop" : "Send");
   $("m-mic").classList.toggle("rec", recording);
   $("m-conv").classList.toggle("live", mode === "conv" && conv.on);
+  if (!mic.open && !player.active && !recording) audioSleepSoon(); // free the audio thread when idle
 }
 
 function flashError() {
@@ -1074,10 +1075,31 @@ window.kuramaMinimized = (on) => { // dashboard: hide the panels, keep the orb (
   applyActivity();
 };
 window.kuramaMiniShown = (on) => { // mini panel opened / hidden
+  document.body.classList.toggle("paused", !on); // freeze CSS animations while hidden
   if (on) { input.focus(); return; }
   if (recording) cancelRecording();
   if (conv.on) setMode("text"); // never keep listening while the panel is hidden
+  saveMiniLog();
 };
+// The hidden panel is closed after a few minutes to free its memory; its chat comes back from here.
+const MINI_LOG = "kurama.mini.log";
+function saveMiniLog() {
+  try {
+    if (log.querySelector(".msg")) localStorage.setItem(MINI_LOG, JSON.stringify({ t: Date.now(), html: log.innerHTML }));
+    else localStorage.removeItem(MINI_LOG);
+  } catch { /* storage off: the chat just starts fresh */ }
+}
+function restoreMiniLog() {
+  try {
+    const s = JSON.parse(localStorage.getItem(MINI_LOG) || "null");
+    if (!s || Date.now() - s.t > 12 * 3600e3) return;
+    log.innerHTML = s.html;
+    log.querySelectorAll("#welcome, .dots").forEach((n) => n.remove()); // no stale "thinking" dots
+    log.querySelectorAll("button").forEach((b) => { b.disabled = true; }); // old confirm buttons are stale
+    if (!log.children.length) log.append(welcome());
+    scrollDown(true);
+  } catch { /* ignore */ }
+}
 
 // ---------- settings drawer ----------
 const dlg = $("settings");
@@ -1197,7 +1219,7 @@ async function checkHealth() {
   }
 }
 setMode("text");
-if (MINI) { $("chat-title").textContent = botName; input.focus(); }
+if (MINI) { $("chat-title").textContent = botName; restoreMiniLog(); input.focus(); }
 tick();
 if (params.get("paused") === "1") window.kuramaPause(true); // start paused (testing)
 checkHealth().then(startStatus);

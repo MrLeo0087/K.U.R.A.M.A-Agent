@@ -3,10 +3,25 @@
 // the orb can pulse with the voice), and the Conversation-mode VAD loop with barge-in.
 
 let _ctx = null;
+let _sleep = 0;
 export function audioCtx() {
+  clearTimeout(_sleep); _sleep = 0;
   if (!_ctx) _ctx = new (window.AudioContext || window.webkitAudioContext)();
   if (_ctx.state === "suspended") _ctx.resume().catch(() => {});
   return _ctx;
+}
+
+// Nothing playing or listening for 20 s: close the context. An open AudioContext keeps WebKit's audio thread
+// rendering silence all day (~12% of a core, measured); the next mic / voice reply opens a fresh one.
+export function audioSleepSoon(ms = 20000) {
+  if (!_ctx || _sleep) return;
+  _sleep = setTimeout(() => {
+    _sleep = 0;
+    const c = _ctx;
+    _ctx = null;
+    _tapModule = null; // the worklet module belongs to the old context
+    c.close().catch(() => {});
+  }, ms);
 }
 
 function rmsOf(analyser, buf) {
@@ -250,7 +265,7 @@ export class Player {
 
   _ensure() {
     const ctx = audioCtx();
-    if (!this.analyser) {
+    if (!this.analyser || this.analyser.context !== ctx) {
       this.analyser = ctx.createAnalyser();
       this.analyser.fftSize = 512;
       this.buf = new Float32Array(this.analyser.fftSize);
