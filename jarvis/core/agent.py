@@ -361,11 +361,12 @@ class Agent:
         from langgraph.config import get_stream_writer
 
         writer = get_stream_writer()
+        abort = self._abort  # this turn's flag (a stale turn closing later must not cut a new one)
         gen = llm.chat(msgs, stream=True, **kw)
         parts: list[str] = []
         held = hold  # buffer until the first sentence shows it is not a refusal
         while True:
-            if self._abort.is_set():  # consumer went away (barge-in): stop generating
+            if abort.is_set():  # consumer went away (barge-in): stop generating
                 gen.close()
                 return llm.Reply("".join(parts), "", [])
             try:
@@ -664,7 +665,7 @@ class Agent:
             yield fast.answer
             return
         state = self._state(user_text, mode, lang, True)
-        self._abort.clear()
+        abort = self._abort = threading.Event()  # per turn: an old turn's late close can't stop this one
         parts: list[str] = []
         final: dict | None = None
         try:
@@ -683,9 +684,8 @@ class Agent:
                 yield answer
         finally:
             if final is None or not final.get("answer"):
-                self._abort.set()  # stopped early (barge-in / error): tell the graph thread to quit
-                if parts:
-                    self._remember(user_text, "".join(parts).strip())
+                abort.set()  # stopped early (barge-in / error): tell the graph thread to quit
+                # a cut-off reply is not kept: one-word answers in history teach the model to answer in one word
         if final and final.get("answer"):
             self._remember(user_text, final["answer"])
 

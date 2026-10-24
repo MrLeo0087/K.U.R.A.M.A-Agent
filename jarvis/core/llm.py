@@ -354,6 +354,8 @@ def chat(messages: Sequence[Any], tier: str = "fast", stream: bool = False, tool
     tools: LangChain tools (or OpenAI-format dicts); extra may hold tool_choice.
     priority: "interactive" | "background" for the rate limiter (default: the thread's context)."""
     models = _chain(tier)
+    if tier == "voice":
+        extra.setdefault("timeout", config.VOICE_TIMEOUT_S)
     msgs = to_messages(messages)
     rate = (priority or ratelimit.current_priority(), _estimate_prompt(msgs),
             max_tokens or config.LLM_MAX_TOKENS)

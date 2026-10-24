@@ -165,13 +165,14 @@ class Engine:
             try:
                 ag = self.agent()
                 seen, used, parts = 0, set(), []
-                for delta in ag.stream(text, mode=mode, lang=lang):
-                    seen = self._emit_tools(turn, ag, seen, ts0, used)
-                    if turn.closed:
-                        break  # closing the generator tells the agent to stop
-                    if delta:
-                        parts.append(delta)
-                        turn.push({"type": "delta", "text": delta})
+                with contextlib.closing(ag.stream(text, mode=mode, lang=lang)) as deltas:
+                    for delta in deltas:
+                        seen = self._emit_tools(turn, ag, seen, ts0, used)
+                        if turn.closed:
+                            break  # closing the generator (now, not at the next GC) tells the agent to stop
+                        if delta:
+                            parts.append(delta)
+                            turn.push({"type": "delta", "text": delta})
                 self._emit_tools(turn, ag, seen, ts0, used)
                 last = getattr(ag, "last", None) or {}
                 tier = last.get("tier") or ("fastpath" if last.get("fastpath") else "")

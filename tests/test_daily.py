@@ -49,3 +49,12 @@ def test_fastpath_phrases(monkeypatch):
                        ("what is 18% of 2500", "calculate"), ("latest news about cricket", "news_headlines")]:
         it = fastpath.match(text)
         assert it is not None and it.tool == tool, text
+
+
+def test_gesture_mishearings():
+    for text in ("Can you enable the Media Adjector Control System?", "Enable the YouTube Media Controller.",
+                 "Can you enable the hand jigsaw system?", "Can you enable the Jaxxor control system?",
+                 "enabel geauster control system"):
+        it = fastpath.match(text)
+        assert it is not None and (it.tool, it.args) == ("gesture_control", {"action": "on"}), text
+    assert fastpath.match("Wariyo").tool == "about_me"

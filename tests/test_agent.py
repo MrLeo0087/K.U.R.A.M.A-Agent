@@ -152,3 +152,15 @@ def test_warm_builds_graph(fake):
 def test_system_prompt_is_short():
     text = agent.SYSTEM_PROMPT + agent.VOICE_SUFFIX.format(lang="Nepali (Devanagari script)")
     assert len(text) / 4 < 250
+
+
+def test_stale_turn_close_does_not_cut_next_turn(fake):
+    fake(AIMessage(content="Once upon a time there was a fox."), AIMessage(content="I am doing well, thanks."))
+    a = agent.Agent()
+    old = a.stream("tell me a story", mode="voice", lang="en")
+    next(old)  # the client left mid-reply; the generator is closed later (e.g. at GC)
+    new = a.stream("how are you", mode="voice", lang="en")
+    first = next(new)
+    old.close()  # used to set the shared abort flag and cut the new reply after one word
+    assert (first + "".join(new)).strip() == "I am doing well, thanks."
+    assert [m.content for m in a.history if isinstance(m, AIMessage)] == ["I am doing well, thanks."]  # cut-off not kept

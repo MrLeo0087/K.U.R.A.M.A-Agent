@@ -70,13 +70,14 @@ STT_EN_MIN_LOGPROB = -0.6  # auto "English" below this confidence is treated as 
 # Whisper vocabulary hint (biases spelling of names/apps; tested not to break hi/ne detection).
 STT_NO_SPEECH_MAX = 0.6  # Whisper's no_speech_prob above this: background noise, not a command
 STT_PROMPT = os.getenv("JARVIS_STT_PROMPT",
-                       "Kurama, KURAMA, VS Code, Bluetooth, Brave, YouTube, Wi-Fi, GitHub, Nepalgunj, Kathmandu, Pokhara.")
+                       "Kurama, KURAMA, VS Code, Bluetooth, Brave, YouTube, Wi-Fi, gesture control, GitHub, Nepalgunj, Kathmandu, Pokhara.")
 # Common mishearings fixed after transcription (regex, case-insensitive, word-bounded).
 STT_FIXES: dict[str, str] = {
     r"\b(?:b\.?\s?s\.?|be\s?as|versus|vs\.?|v\.\s?s\.)\s+(?:code|cold|cord|court|coat)\b": "VS Code",
     r"\bvisual\s+studio(?:\s+code)?\b": "VS Code",
     r"\bbear\s+skull\b": "VS Code",
     r"\b(?:karama|kurma|corama|kurrama)\b": "Kurama",
+    r"^\s*(?:wariyo|warriyo|huarion|hu\s?ar\s?yu|who\s?r\s?u)\s*[?.!]*\s*$": "Who are you?",
     r"\bslip\b(?=\s+(?:my|the|this|now|mode|kurama|laptop|computer)\b|\s*[.!?]*$)": "sleep",  # "slip my laptop"
     r"^\s*hut\s+down\b": "shut down",
     # "turn off/on" as Whisper often hears it with an accent: "tone of", "tron off", "torn of", "pon up"
@@ -109,6 +110,7 @@ STT_DAILY_AUDIO_SECONDS = 25_000  # Groq free tier ~28,800 audio-seconds/day
 
 # --- LLM call behaviour ---
 LLM_TIMEOUT_S = 30.0
+VOICE_TIMEOUT_S = 10.0  # spoken chat: give up sooner (then retry/fall back) instead of 30 s of silence
 LLM_MAX_TOKENS = 1024
 LLM_TEMPERATURE = 0.6
 LLM_MAX_RETRIES = 3  # retries on the last model in a chain

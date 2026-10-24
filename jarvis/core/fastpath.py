@@ -490,9 +490,13 @@ _HAVE_TOOL = re.compile(r"^do you have (?:a |any )?(?:tool|feature|way|option)s?
 
 
 _GESTURE = re.compile(r"\b(?:gesture|hand (?:control|gesture|sign)s?|(?:youtube |media )?vision control|"
+                      # Whisper mishears "gesture control system": jesture, geauster, jigsaw, jaxxor, adjector...
+                      r"(?:[jg]e[as]?[su]?t[eu]?(?:r|re|rer|or)|geauster|jigsaw|jaxx?or|adjector|ajector|digester)s? "
+                      r"(?:control|system)|hand \w+ (?:control|system)|control system|"
+                      r"(?:youtube|media) (?:media )?controll?er|"
                       r"media control (?:through|with|by|using) (?:my |the )?hands?|control (?:media|youtube|music|it) "
                       r"(?:through|with|by|using) (?:my |the )?hands?)\b", I)
-_GEST_ON = re.compile(r"^(?:please\s+)?(?:enable|start|turn on|switch on|open|activate|launch|run|on)\b", I)
+_GEST_ON = re.compile(r"^(?:please\s+)?(?:enable|enabel|enble|inable|start|turn on|switch on|open|activate|launch|run|on)\b", I)
 _GEST_OFF = re.compile(r"^(?:please\s+)?(?:disable|stop|turn off|switch off|close|deactivate|kill|end|off)\b", I)
 _MATH = re.compile(r"^(?:what(?:'s| is)\s+|calculate\s+|compute\s+)?(?P<e>[\d(][\d\s.+\-*/×÷^()%,]*(?:\s*%\s*of\s*[\d.,]+)?|"
                    r"[\d.]+\s*%\s*of\s*[\d.,]+|sqrt\s*\(?[\d.]+\)?|[\d.]+\s*°?\s*[a-z]+\s+(?:to|in|into)\s+°?[a-z]+)$", I)
