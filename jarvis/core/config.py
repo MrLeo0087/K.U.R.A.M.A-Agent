@@ -272,7 +272,8 @@ ROUTER_EXAMPLES: dict[str, tuple[str, ...]] = {
     "self": ("what can you do", "what are your features", "how do I use you"),
     "toolsmith": ("make a new tool for this", "build a small script tool that does it"),
     "study": ("note this down for my physics class", "show my DSA notes from this week", "record today's class",
-              "transcribe the lecture", "summarize the lecture", "what did the teacher say today"),
+              "transcribe the lecture", "summarize the lecture", "what did the teacher say today",
+              "what classes do I have tomorrow", "when is my next class", "test me on what I studied"),
 }
 ROUTER_URL_GROUP = "browser"  # group for messages containing a URL/domain
 ROUTER_SITE_OVER_APPS = True  # "open youtube": a known site/URL drops the apps group (browser wins)
@@ -334,7 +335,8 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
              "your limitation", "your limits", "how do you work", "your architecture", "how are you built",
              "change your name", "call yourself", "your password", "आफ्नो बारेमा", "तिम्रो नाम", "तुम्हारा नाम"),
     "study": ("note for", "study note", "my notes", "notes from", "record the lecture", "record this lecture",
-              "record the class", "record this class", "lecture", "transcript", "stop the recording", "stop recording"),
+              "record the class", "record this class", "lecture", "transcript", "stop the recording", "stop recording",
+              "timetable", "time table", "class schedule", "next class", "my classes", "quiz", "flashcard", "revise"),
     "daily": ("calculate", "calculator", "% of", "percent of", "convert currency", "convert money", " to miles", " to km", "square root",
               "currency", "exchange rate", "dollar", "rupee", "usd", "npr", "inr", "euro",
               "disk space", "free space", "cleanup", "clean up",
@@ -493,7 +495,8 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
     "jobs": "long writing jobs (essays, articles, reports) and background job status/cancel/resume",
     "schedule": "reminders and scheduled commands at a time or repeating; list or cancel them",
     "image": "generate a picture or drawing from a description",
-    "study": "study notes by subject (save, show this week's), lecture recorder (record a class, transcript, summary)",
+    "study": "study notes by subject, lecture recorder (record a class, transcript, summary), class timetable "
+             "(today, tomorrow, next class, reminders), quiz from my notes with spaced repetition",
     "daily": "calculator, unit and currency conversion, disk space cleaner (ML caches, old checkpoints, old venvs, "
              "duplicates, trash)",
     "self": "about the assistant itself (abilities, outputs/data locations, limits, how it works), which tool "
@@ -590,6 +593,7 @@ NOTES_DIR = os.getenv("KURAMA_NOTES_DIR", "~/Notes")  # study notes and lecture 
 NOTES_CLASSIFY = True  # a note without a subject: one tiny call picks one of your subjects (~120 tokens)
 LECTURE_MAX_MIN = 180  # a recording stops by itself after this long
 LECTURE_LANG = os.getenv("KURAMA_LECTURE_LANG", "")  # "" = auto; "en", "ne" or "hi" to force Whisper
+TIMETABLE_LEAD_MIN = 10  # heads-up this long before each class
 COLAB_POLL_S = 60.0  # how often KURAMA checks for Colab pings (only while a Colab run is active)
 COLAB_SILENT_MIN = 25  # no ping for this long = the Colab runtime probably disconnected
 COLAB_PROGRESS_EVERY_S = 300  # the notebook sends progress at most this often (ntfy.sh free limits)

@@ -18,6 +18,7 @@ from pathlib import Path
 
 from jarvis.core import config, safety, store
 from jarvis.core import notes as notes_mod
+from jarvis.core import study as study_mod
 
 log = logging.getLogger("jarvis.fastpath")
 
@@ -591,10 +592,35 @@ _LECTURE_START = re.compile(r"^(?:start )?record(?:ing)? (?:the |this |my |today
                             r"(?:laptop|computer|zoom|meet|google meet|youtube|teams))?$", I)
 _LECTURE_STOP = re.compile(r"^stop (?:the |my )?(?:recording|lecture recording|lecture|class recording)$", I)
 _LECTURE_SUM = re.compile(r"^summari[sz]e (?:my |the |today'?s |last )?(?:lecture|class)$", I)
+_TT = re.compile(r"^(?:what (?:classes )?do i have|what(?:'s| is) on|my classes|(?:show )?(?:my )?(?:time ?table|class "
+                 r"schedule))(?: for| on)? ?(?P<w>today|tomorrow|this week|the week|week)?$", I)
+_NEXT_CLASS = re.compile(r"^(?:when(?:'s| is) )?(?:my )?next class$|^what(?:'s| is) (?:my )?next class$", I)
+_QUIZ = re.compile(r"^(?:quiz|test) me(?: on (?P<s>.+?))?$|^(?P<m>make|create|generate) (?:a )?(?:quiz|questions|flash ?cards)"
+                   r" (?:from|for|on) (?:my )?(?P<s2>.+?)(?: notes)?$", I)
+_QUIZ_MOVES = {"show the answer": "answer", "show answer": "answer", "what is the answer": "answer", "i got it": "right",
+               "i got it right": "right", "got it": "right", "correct": "right", "i got it wrong": "wrong",
+               "wrong": "wrong", "i didn't know": "wrong", "i did not know": "wrong", "quiz stats": "stats"}
 _DAYS = {"today": 1, "yesterday": 2, "this week": 7, "last week": 14, "this month": 31}
 
 
+def _study_intent(t: str) -> Intent | None:
+    if m := _TT.match(t):
+        w = (m.group("w") or "today").lower()
+        return Intent("study", "timetable", "study", {"action": "week" if "week" in w else w})
+    if _NEXT_CLASS.match(t):
+        return Intent("study", "timetable", "study", {"action": "next"})
+    if m := _QUIZ.match(t):
+        if m.group("m"):
+            return Intent("study", "quiz", "study", {"action": "make", "subject": m.group("s2").strip()})
+        return Intent("study", "quiz", "study", {"action": "ask", "subject": (m.group("s") or "").strip()})
+    if (move := _QUIZ_MOVES.get(t.lower().strip(" .!"))) and store.kv_get("quiz_current"):
+        return Intent("study", "quiz", "study", {"action": move})
+    return None
+
+
 def _daily_intent(t: str) -> Intent | None:
+    if si := _study_intent(t):
+        return si
     if (m := notes_mod.NOTE.match(t)) and not t.lower().startswith(("note that", "remember")):
         return Intent("note", "study_notes", "study", {"action": "add", "text": m.group("t").strip(),
                                                        "subject": (m.group("s1") or m.group("s2") or "").strip()})
@@ -716,6 +742,8 @@ def match(text: str) -> Intent | None:
         return Intent("unlock", "_unlock", "self", {"text": text})
     if ei := error_intent(text):
         return ei
+    if len(study_mod.parse(text)) >= 2:  # a pasted timetable
+        return Intent("study", "timetable", "study", {"action": "set", "text": text})
     t = normalize(text)
     if not t or len(t) > 200:
         return None

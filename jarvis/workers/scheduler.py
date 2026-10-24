@@ -30,6 +30,12 @@ class Scheduler(Worker):
             self.log.warning("interrupted-jobs check failed: %s", e)
 
     def tick(self) -> None:
+        try:
+            from jarvis.core import study
+            for subject in study.check_reminders():
+                self.log.info("class heads-up: %s", subject)
+        except Exception as e:
+            self.log.warning("timetable check failed: %s", e)
         for sid in reminders.heads_up(self._now()):
             self.log.info("schedule #%d heads-up", sid)
         for item in reminders.run_due(self._now()):
