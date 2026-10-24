@@ -11,18 +11,6 @@ export function audioCtx() {
   return _ctx;
 }
 
-// The microphone gets its own small 16 kHz context (speech needs no more; ~3x less audio work than 48 kHz), so
-// an always-on wake-word listener stays cheap; TTS playback keeps the full-quality context above.
-let _micCtx = null;
-function micCtx() {
-  if (!_micCtx || _micCtx.state === "closed") {
-    const AC = window.AudioContext || window.webkitAudioContext;
-    try { _micCtx = new AC({ sampleRate: 16000 }); } catch { _micCtx = new AC(); }
-  }
-  if (_micCtx.state === "suspended") _micCtx.resume().catch(() => {});
-  return _micCtx;
-}
-
 // Nothing playing or listening for 20 s: close the context. An open AudioContext keeps WebKit's audio thread
 // rendering silence all day (~12% of a core, measured); the next mic / voice reply opens a fresh one.
 export function audioSleepSoon(ms = 20000) {
@@ -141,7 +129,7 @@ export class Mic {
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: !plain, noiseSuppression: !plain, autoGainControl: !plain, channelCount: 1 },
     });
-    const ctx = micCtx();
+    const ctx = audioCtx(); // full rate: a 16 kHz context made speech recognition noticeably worse
     this.src = ctx.createMediaStreamSource(stream);
     this.analyser = ctx.createAnalyser();
     this.analyser.fftSize = 1024;

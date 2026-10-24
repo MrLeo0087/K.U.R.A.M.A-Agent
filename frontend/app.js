@@ -107,7 +107,7 @@ function updateState() {
   $("send").setAttribute("aria-label", busy ? "Stop" : "Send");
   $("m-mic").classList.toggle("rec", recording);
   $("m-conv").classList.toggle("live", mode === "conv" && conv.on);
-  if (!player.active) audioSleepSoon(); // free the playback audio thread when idle (the mic has its own context)
+  if (!mic.open && !player.active && !recording) audioSleepSoon(); // free the audio thread when idle (asleep = API listens)
 }
 
 function flashError() {
