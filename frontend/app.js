@@ -1104,9 +1104,16 @@ const EXAMPLE = {
   generate_image: "generate an image of ", scaffold_project: "create a new python project called ", send_file_telegram: "send this file to Telegram: ",
   web_search: "search for ", weather: "weather in ", get_time: "time in ", open_url: "open ", open_app: "open ",
   remember: "remember ", add_reminder: "remind me to  at ", calculate: "what is ",
-  focus_mode: "start a 25 minute focus session", cleanup_scan: "what is using my disk space",
+  focus_mode: "start a 25 minute focus session", 
   gesture_control: "enable hand gesture control", daily_digest: "summarize today", write_document: "write an essay about ",
   set_wallpaper: "change my wallpaper", screenshot: "take a screenshot", audio: "set volume to 50", find_files: "find file ",
+  training: "how is my training going", run_training: "start training with python train.py and watch it",
+  command_alerts: "turn on command alerts", fix_error: "what does this error mean", python_env: "install ",
+  check_dataset: "check my dataset ", time_machine: "what did I change in the last 2 hours", where_was_i: "where was I",
+  laptop_doctor: "why is my laptop slow", internet_doctor: "why is my internet slow", disk_cleaner: "what is using my disk space",
+  download_file: "download  tonight", tidy_downloads: "sort my downloads", backup: "back up my projects",
+  laptop_guard: "guard my laptop", web_watch: "watch  for ", study_notes: "note for : ", lecture: "record the lecture",
+  timetable: "what do I have tomorrow", quiz: "quiz me",
 };
 const words = (t) => (t.toLowerCase().match(/[a-z0-9]+/g) || []).filter((w) => w.length > 1);
 async function finderLoad() {

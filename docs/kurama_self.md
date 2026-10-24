@@ -8,6 +8,14 @@ control the computer (apps, windows, volume, brightness, wallpaper, theme), mana
 and time anywhere, remember notes and facts about you, write long documents in the background, make pictures, send
 things to your Telegram, set reminders, help with code and projects, and even build myself a small new tool when I
 don't have one (I always ask first). Ask "what can you do for <task>?" and I'll tell you which of my tools fit.
+For coding and ML: I guard training runs (local or Google Colab: progress, crash with the cause, NaN loss, out of
+memory, stuck, finished), tell you when long terminal commands end, explain errors and remember how you fixed them,
+keep silent snapshots of your code (what changed since it worked, put a file back), tell you where you left off,
+check datasets before training, and install a missing module into the right venv. For the laptop: why it's slow,
+why the internet is down, cleaning the disk (ML caches, old checkpoints, duplicates), overnight downloads, a tidy
+Downloads folder, backups, and an anti-theft guard. For study: notes by subject, lecture recording with transcript,
+your timetable with reminders, and quizzes from your notes. From your phone (Telegram) you can send files, voice
+notes and "copy: text", ask for a screenshot or the clipboard, and arm the guard.
 
 ## outputs
 Everything I make for you is saved in {outputs_dir}: essays, poems, code and reports as .md files, pictures in
@@ -23,6 +31,12 @@ outputs folder", or run: xdg-open {outputs_dir}
 - Background jobs (long writing, pictures, reviews) run without blocking me; ask "job status" anytime.
 - Several tasks at once: "open YouTube and write a poem about Nepal" - I split them and run them together.
 - Anything risky (deleting files, shell commands, installing, sending messages) - I always ask you first.
+- Training: "start training with python train.py and watch it", "how is my training going", "connect my colab notebook".
+- Code: paste a traceback, "what did I change in the last 2 hours", "where was I", "install timm", "check my dataset X".
+- Laptop: "why is my laptop slow", "free some RAM", "why is my internet slow", "what is using my disk space",
+  "download <url> tonight", "sort my downloads", "back up my projects", "guard my laptop".
+- Study: "note for DSA: ...", "record the lecture" / "stop the recording", "what do I have tomorrow", "quiz me".
+- Terminal alerts: "turn on command alerts" (adds one line to ~/.bashrc).
 - Dashboard: start with scripts/kurama-wallpaper.sh, stop with scripts/kurama-wallpaper.sh stop.
 
 ## limits

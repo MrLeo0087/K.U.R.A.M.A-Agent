@@ -87,6 +87,22 @@ Repo: /media/leo/Project1/New_project/KURAMA, branch master. The venv is Python 
   - Header buttons: tool finder (Ctrl+K), voice mute, clear, info, settings, minimize.
   - Animations are one-shot. Infinite CSS animations are banned because WebKitGTK repaints in software.
 
+## Added on 2026-10-24 (big session; details in PROGRESS.md)
+- **Routing:** keyword rules -> `semantic.py` (bge-small by meaning, 0 tokens, plain-chat class) -> 8b classifier.
+  `scripts/eval_routing.py` measures it (101 cases + 30 held-out, both 100% at the time of writing).
+- **Coding/ML:** `training.py` + workers/process_watch.py (Training Guard: run/proc/log/colab via ntfy.sh, crash ->
+  error memory), `cmdalerts.py` (bash hook, not installed until the owner says "turn on command alerts"),
+  `errmem.py` (fix_error), `timemachine.py` (+ worker, shadow repos in data/timemachine, code/text only),
+  where_was_i, `datacheck.py` (check_dataset), python_env (install into the project venv).
+- **Laptop:** `doctor.py` (laptop_doctor), `netdoctor.py` (internet_doctor), `diskclean.py` (disk_cleaner),
+  `automation.py` (download_file, tidy_downloads, backup), `guard.py` (+ worker; laptop_guard), `phone.py` (Telegram:
+  voice notes, files in, clipboard, /screen, /guard, /where).
+- **Study:** `notes.py` (study_notes, ~/Notes), `lecture.py` (record + Whisper transcript job), `study.py`
+  (timetable + quiz).
+- **Merged tools:** many small tools became one tool with an `action`; old names live on in `registry.alias`.
+- Workers now: process_watch, resource_guard, crash_watchdog, telegram_bot, daily_digest, auto_theme, scheduler,
+  timemachine, guard (n8n removed).
+
 ## Owner preferences
 - Be fast and spend few tokens. Fix exactly what is asked; no long explorations; short reports.
 - Build one phase at a time, then stop for the user to test. Commit at the end of each step and update PROGRESS.md.
