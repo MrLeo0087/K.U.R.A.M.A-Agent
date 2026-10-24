@@ -1,11 +1,10 @@
-"""resource_status: "how's my system doing" (RAM, swap, CPU, disk, KURAMA RSS, workers) (safe)."""
+"""resource_status: KURAMA's own health (RAM, swap, CPU, disk, KURAMA RSS, workers).
+
+No longer a tool of its own: `laptop_doctor` (action=kurama) calls it (old name kept as an alias)."""
 from __future__ import annotations
 
-from jarvis.core.registry import tool
 
 
-@tool(group="system", safety="safe",
-      description="System health: RAM, swap, CPU load, disk use, KURAMA memory, top memory hogs, workers.")
 def resource_status() -> str:
     from jarvis.workers import resource_guard, status
 

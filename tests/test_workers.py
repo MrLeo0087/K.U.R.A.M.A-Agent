@@ -273,7 +273,7 @@ def test_resource_guard_hysteresis(monkeypatch):
 def test_resource_status_tool(monkeypatch):
     monkeypatch.setattr(resource_guard, "snapshot", lambda cpu_avg=None: dict(SNAP))
     monkeypatch.setattr(resource_guard, "top_memory", lambda n=3: [("chrome", 1, 1500.0)])
-    t = registry.get("resource_status")
+    t = registry.get("laptop_doctor")  # resource_status is an alias of laptop_doctor(action=kurama) now
     assert registry.group_of(t) == "system" and registry.safety_of(t) == "safe"
     out = registry.call("resource_status", {}).output
     assert "RAM 50% (4.0/8.0 GB)" in out and "chrome 1500 MB" in out and "workers: not running" in out

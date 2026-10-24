@@ -550,7 +550,20 @@ _CHANGED = re.compile(r"^what (?:did i|have i) change(?:d)?(?: in (?P<p>(?!the l
                       r"last|over the last) (?P<w>.+?))?$", I)
 
 
+_DOCTOR = re.compile(r"^(?:why is|why's) (?:my |the )?(?:laptop|computer|pc|system|machine)(?: so| very| really)? "
+                     r"(?:slow|laggy|lagging|hanging|stuck|hot|heating)(?: now| today)?$|^(?:check|diagnose) "
+                     r"(?:my |the )?(?:laptop|computer|pc|system)(?: health| speed)?$", I)
+_FREE_RAM = re.compile(r"^(?:free|clean|clear)(?: up)? (?:some )?(?:ram|memory)$", I)
+_PORT = re.compile(r"^(?:what(?:'s| is)|who(?:'s| is)) (?:running |listening )?(?:on|using) port (?P<p>\d{2,5})$", I)
+
+
 def _daily_intent(t: str) -> Intent | None:
+    if _DOCTOR.match(t):
+        return Intent("doctor", "laptop_doctor", "system", {"action": "check"})
+    if _FREE_RAM.match(t):
+        return Intent("doctor", "laptop_doctor", "system", {"action": "free_ram"})
+    if m := _PORT.match(t):
+        return Intent("doctor", "laptop_doctor", "system", {"action": "port", "target": m.group("p")})
     if m := _WHERE.match(t):
         return Intent("where", "where_was_i", "git", {"project": m.group("p") or m.group("p2") or m.group("p3") or ""})
     if m := _CHANGED.match(t):

@@ -227,6 +227,7 @@ ROUTER_CHAT_EXAMPLES: tuple[str, ...] = (
 # A few natural ways people ask, per group (what keywords can't list). Short and different from each other.
 ROUTER_EXAMPLES: dict[str, tuple[str, ...]] = {
     "system": ("my laptop feels slow and laggy", "what is eating my memory", "check cpu and ram usage",
+               "what is using port 8000", "free up some memory", "my laptop is getting hot",
                "turn wifi off", "is bluetooth on", "airplane mode", "switch to power saver"),
     "audio": ("it is too quiet, I can barely hear", "the sound is way too loud", "make it a little louder",
               "mute my mic"),
@@ -451,7 +452,8 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
     "telegram": "send a file (by path or name) or a message to the user's Telegram (phone)",
     "toolsmith": "no tool fits a real task: offer to build a small new tool; saved tools list/run/delete",
     "skills": "small tools KURAMA built earlier (saved skills)",
-    "system": "system resources (RAM, CPU, disk) and laptop switches: Wi-Fi, Bluetooth, airplane, power mode, screen off",
+    "system": "laptop doctor (why it is slow: RAM, CPU, heat, disk; free RAM, ports, stop a process) and laptop "
+              "switches: Wi-Fi, Bluetooth, airplane, power mode, screen off",
     "watch": "Training Guard: start/watch ML training runs (local or Google Colab), progress, crash, NaN, stuck, "
              "finished alerts; watch any process or log",
     "automation": "crash watchdog: keep dev servers running (auto-restart) and their status",
@@ -560,6 +562,9 @@ TIMEMACHINE = True  # snapshot changed projects into private shadow git repos (d
 TIMEMACHINE_EVERY_S = 600  # how often the timemachine worker looks for changed projects
 TIMEMACHINE_MAX_MB = 1  # bigger files are never stored (only code and text are kept anyway)
 WHERE_WAS_I_LLM = True  # "where was I?" turns the facts into 2-3 plain sentences (~400 tokens)
+DOCTOR_RAM_WARN = 85  # % RAM used = a finding
+DOCTOR_TEMP_WARN = 90  # °C CPU = a finding
+DOCTOR_KERNEL_IDLE_MIN = 30  # a Jupyter kernel this old with ~0% CPU counts as idle
 COLAB_POLL_S = 60.0  # how often KURAMA checks for Colab pings (only while a Colab run is active)
 COLAB_SILENT_MIN = 25  # no ping for this long = the Colab runtime probably disconnected
 COLAB_PROGRESS_EVERY_S = 300  # the notebook sends progress at most this often (ntfy.sh free limits)
