@@ -137,5 +137,8 @@ def answer(r: dict) -> str:
     seen = f" You've hit this {r['count']} times." if r.get("count", 1) > 1 else ""
     body = r.get("explanation") or "I couldn't explain it right now (the model is busy); try again in a minute."
     fix = f"\nLast time you fixed it by: {r['fix']}" if r.get("fix") else ""
+    if r.get("kind") in ("ModuleNotFoundError", "ImportError") and (m := re.search(r"No module named ['\"]?([\w.]+)",
+                                                                                 r.get("error", ""))):
+        fix += f"\nSay 'install {m.group(1)}' and I'll add it to this project's venv."
     where = f" (at {r['where']})" if r.get("where") else ""
     return f"{head}{where}\n{body}{seen}{fix}"

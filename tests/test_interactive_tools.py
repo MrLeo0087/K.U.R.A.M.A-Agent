@@ -31,11 +31,11 @@ def repo(tmp_path):
 
 def test_tools_registered_with_groups_and_safety():
     tools = {t.name: t for t in registry.schemas_for(["dev", "git", "filesearch"])}
-    expect = {"scaffold_project": "confirm", "env_doctor": "safe", "find_files": "safe",
+    expect = {"scaffold_project": "confirm", "python_env": "safe", "find_files": "safe",
               "git_info": "safe", "git_change": "confirm", "run_tests": "safe"}
     assert {n: registry.safety_of(tools[n]) for n in expect} == expect
     assert registry.group_of(tools["find_files"]) == "filesearch"
-    assert registry.group_of(tools["git_change"]) == "git" and registry.group_of(tools["env_doctor"]) == "dev"
+    assert registry.group_of(tools["git_change"]) == "git" and registry.group_of(tools["python_env"]) == "dev"
 
 
 def test_git_status_log_and_diff(repo):

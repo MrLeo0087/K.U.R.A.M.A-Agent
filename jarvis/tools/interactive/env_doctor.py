@@ -1,4 +1,6 @@
-"""env_doctor: CPU-only environment check (python, venv, pip, disk, RAM/swap, CLIs, Groq key) (safe)."""
+"""env_doctor: CPU-only environment check (python, venv, pip, disk, RAM/swap, CLIs, Groq key).
+
+No longer a tool of its own: `python_env` (action=check) calls it (old name kept as an alias)."""
 from __future__ import annotations
 
 import json
@@ -10,7 +12,6 @@ from importlib import metadata
 from pathlib import Path
 
 from jarvis.core import config
-from jarvis.core.registry import tool
 from jarvis.tools.interactive import _proc
 
 CLIS = ("git", "rg", "fdfind", "ffmpeg", "ffplay", "xdotool", "wmctrl", "xclip", "pactl",
@@ -33,7 +34,6 @@ def _outdated() -> str:
         return f"outdated check failed ({str(e)[:40]})"
 
 
-@tool(group="dev", safety="safe", description="Environment doctor: python/venv/pip, disk, RAM/swap, CLI tools, API key check.")
 def env_doctor(path: str = ".", check_outdated: bool = False) -> str:
     """Check the dev environment.
 

@@ -472,7 +472,8 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
     "media": "music and video playback (play, pause, next, previous, what's playing), YouTube, playlists, hand-gesture media control (camera)",
     "git": "git status, log, diff, commit and branches; code time machine (automatic snapshots: what changed since "
            "a time, restore a file); where was I (resume a project)",
-    "dev": "tests, new projects, Python environment checks, explain an error/traceback and remember the fix, "
+    "dev": "tests, new projects, Python environment check and installing a missing module into the right venv, "
+           "explain an error/traceback and remember the fix, "
            "check a dataset (CSV/images) before training",
     "codequality": "dependency doctor (unpinned/outdated/vulnerable/unused), secrets scan, pre-commit gate, "
                    "repo hygiene, AI code review of a diff/file/commit",

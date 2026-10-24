@@ -567,7 +567,19 @@ _DATASET = re.compile(r"^(?:check|inspect|analy[sz]e|look at|examine|validate)\s
                       r"csv|images?)\s+(?:at |in |file |folder )?(?P<p>\S.*?)(?: (?:before|for) training)?$", I)
 
 
+_INSTALL = re.compile(r"^(?:please )?(?:pip )?install (?:the )?(?:package |module |library )?(?P<p>[\w.\-\[\]=<>]+)"
+                      r"(?: (?:in|into|for) (?:the |my )?(?P<f>.+?)(?: project| venv)?)?$", I)
+
+
 def _daily_intent(t: str) -> Intent | None:
+    if m := _INSTALL.match(t):
+        pkg = m.group("p")
+        if pkg.lower() in ("it", "this", "that", "them"):  # "install it" right after a ModuleNotFoundError
+            last = store._exec("SELECT error FROM errors WHERE sig=?", (store.kv_get("errmem_last") or "",))
+            pkg = last[0][0] if last and "No module named" in last[0][0] else ""
+        if pkg and pkg.lower() not in ("app", "the"):
+            return Intent("install", "python_env", "dev", {"action": "install", "package": pkg,
+                                                           "folder": m.group("f") or "."})
     if m := _DATASET.match(t):
         return Intent("dataset", "check_dataset", "dev", {"path": m.group("p").strip(" '\"")})
     if m := _WEBWATCH.match(t):
