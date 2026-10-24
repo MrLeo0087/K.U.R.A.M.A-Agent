@@ -366,13 +366,14 @@ def test_fastpath_system_answers_without_llm(desk, monkeypatch):
     def boom(*a, **k):
         raise AssertionError("the fast path must not call the LLM")
     monkeypatch.setattr(llm, "chat", boom)
-    assert fastpath.try_answer("volume up", lang="en").answer == "Done, the volume is at 60%."
+    assert "60%" in fastpath.try_answer("volume up", lang="en").answer
+    assert "Done" not in fastpath.try_answer("what is the volume", lang="en").answer  # a question gets the fact
     assert fastpath.try_answer("set volume to 25", lang="hi").answer == "आवाज़ 25% पर है।"
     assert fastpath.try_answer("mute", lang="en").answer == "Okay, sound is muted."
     assert fastpath.try_answer("mute mic", lang="ne").answer == "माइक बन्द गरें।"
     assert fastpath.try_answer("pause", lang="en").answer == "Okay, paused."
     assert fastpath.try_answer("what's playing", lang="en").answer == "Paused: Artist - Song."
-    assert fastpath.try_answer("brightness to 80", lang="en").answer == "Done, brightness is at 80%."
+    assert "80%" in fastpath.try_answer("brightness to 80", lang="en").answer
     assert fastpath.try_answer("take a screenshot", lang="en").answer.startswith("Done! Your screenshot")
     assert fastpath.try_answer("lock the screen", lang="en").answer == "Sure, locking the screen."
     desk.bright_denied = True

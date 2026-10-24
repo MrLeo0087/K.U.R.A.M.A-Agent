@@ -12,6 +12,7 @@ def tmp_store(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "NOTIFY_DESKTOP", False)
     monkeypatch.setattr(config, "SOUNDS", False)  # no alarm sounds from tests
     monkeypatch.setattr(config, "FASTPATH", False)  # LLM-path tests stay on the LLM path; fastpath tests enable it
+    monkeypatch.setattr(config, "SEMANTIC_ROUTER", False)  # no embedding model in tests unless a test opts in
     monkeypatch.setattr(config, "STT_DUAL", False)  # single-pass STT unless a test opts in
     monkeypatch.setattr(config, "JOB_RESOURCE_GATE", False, raising=False)  # P9b: jobs never wait on real RAM
     from jarvis.tools.general import open_url

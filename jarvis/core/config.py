@@ -208,6 +208,60 @@ AGENT_MAX_TOKENS = 400
 AGENT_SUMMARY_BATCH_TURNS = 3  # fold this many old turns into the rolling summary at once
 CONFIRM_TIMEOUT_S = 20.0  # unanswered confirmations are denied
 ROUTER_MAX_GROUPS = 3
+# Semantic router (jarvis/core/semantic.py): tool groups by meaning, 0 LLM tokens. Used when no keyword rule
+# matches (instead of the LLM classifier) and to add a strongly meant group the keywords missed.
+SEMANTIC_ROUTER = os.getenv("KURAMA_SEMANTIC_ROUTER", "1").lower() not in ("0", "false", "no", "off")
+SEMANTIC_MIN = 0.66  # best similarity needed to trust a group (bge-small cosine; calibrated on real phrasings)
+SEMANTIC_MARGIN = 0.03  # runners-up this close to the best one are sent too
+SEMANTIC_ADD_MIN = 0.76  # with keyword matches, a different group is added only when this sure
+SEMANTIC_OVER_CHAT = 0.03  # a group must beat the best plain-chat example by this much
+# Plain conversation (no tools): a group has to look more like the request than these do.
+ROUTER_CHAT_EXAMPLES: tuple[str, ...] = (
+    "hi there", "how are you doing", "thank you so much", "good morning", "good night, see you",
+    "tell me a joke", "I feel bored", "I am sad today", "motivate me", "give me some advice about life",
+    "what should I eat", "write a poem", "tell me a story", "translate this sentence",
+    "explain how neural networks learn", "what is machine learning", "difference between a list and a tuple",
+    "why is the sky blue", "explain recursion with an example", "what is 2 plus 2", "who invented the telephone",
+    "help me understand this concept", "how does attention work in transformers", "what is the capital of japan",
+)
+# A few natural ways people ask, per group (what keywords can't list). Short and different from each other.
+ROUTER_EXAMPLES: dict[str, tuple[str, ...]] = {
+    "system": ("my laptop feels slow and laggy", "what is eating my memory", "check cpu and ram usage",
+               "turn wifi off", "is bluetooth on", "airplane mode", "switch to power saver"),
+    "audio": ("it is too quiet, I can barely hear", "the sound is way too loud", "make it a little louder",
+              "mute my mic"),
+    "display": ("the screen hurts my eyes", "make the screen dimmer", "use the dark theme"),
+    "desktop": ("change my desktop picture", "silence notifications for a while", "start a study session",
+                "warm the screen colors at night"),
+    "weather": ("do I need an umbrella today", "how hot is it outside", "forecast for the weekend"),
+    "general": ("what day is it", "what time is it in london"),
+    "git": ("did my changes get committed", "what branch is this", "commit my work", "show recent commits"),
+    "dev": ("run the test suite", "start a new python project", "check my python setup and venv"),
+    "codequality": ("review my code changes", "scan the repo for leaked passwords", "check my dependencies"),
+    "filesearch": ("where is that pdf I downloaded", "find my file named report", "what is inside this folder"),
+    "files": ("create a folder", "move this file to documents", "delete this file", "rename the file"),
+    "telegram": ("send it to my phone", "message me on telegram", "share this file to my mobile"),
+    "schedule": ("remind me later to call mom", "what reminders do I have", "cancel that reminder"),
+    "clock": ("set an alarm for the morning", "start a countdown", "start the stopwatch"),
+    "clipboard": ("what is on my clipboard", "copy that text", "what did I copy before"),
+    "windows": ("move this window to the left half", "maximize the window", "switch to the browser window"),
+    "apps": ("open the calculator app", "close spotify", "the app froze, kill it"),
+    "media": ("pause the music", "next track please", "play my playlist"),
+    "screen": ("capture my screen", "screenshot of this window"),
+    "power": ("how much charge is left", "lock the screen", "shut down the computer", "put it to sleep"),
+    "image": ("make an image of a cat in space", "create a picture of mountains", "draw a logo"),
+    "web": ("search online for", "look this up on the internet", "who won the match yesterday",
+            "latest news about technology"),
+    "memory": ("remember that my wifi password is", "what did I tell you about", "what did we discuss last time"),
+    "knowledge": ("how does my code handle this", "find where my project loads the config", "explain my repo"),
+    "usage": ("how many tokens did I use", "give me a summary of today"),
+    "jobs": ("write a detailed report in the background", "how is my background job going", "cancel the job"),
+    "watch": ("tell me when the training is done", "notify me when this process exits", "watch this log file"),
+    "daily": ("calculate this for me", "convert dollars to rupees", "how much disk space is used"),
+    "devutils": ("turn the notebook into a script", "make requirements.txt from imports", "what changed in my config"),
+    "self": ("what can you do", "what are your features", "how do I use you"),
+    "toolsmith": ("make a new tool for this", "build a small script tool that does it"),
+}
 ROUTER_URL_GROUP = "browser"  # group for messages containing a URL/domain
 ROUTER_SITE_OVER_APPS = True  # "open youtube": a known site/URL drops the apps group (browser wins)
 FASTPATH = os.getenv("JARVIS_FASTPATH", "1").lower() not in ("0", "false", "no", "off")  # regex intents, 0 tokens

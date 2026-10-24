@@ -10,7 +10,7 @@ import re
 import time
 from dataclasses import dataclass, field
 
-from jarvis.core import config, llm, registry, store
+from jarvis.core import config, llm, registry, semantic, store
 
 log = logging.getLogger("jarvis.router")
 
@@ -199,8 +199,12 @@ def route(text: str, log_it: bool = True) -> Route:
     if matched:
         r.method = "rules"
         r.groups = refine(text, site_over_apps(text, [g for g in matched if g in available]))
+        if len(r.groups) < config.ROUTER_MAX_GROUPS and (more := semantic.extra(text, r.groups)) in available:
+            r.groups.append(more)  # the meaning wants a group the keywords missed
     elif "web" in available and _WEB_QUESTION.search(text):
         r.method, r.groups = "rules", ["web"]
+    elif available and not is_small_talk(text) and (sem := [g for g in semantic.match(text) if g in available]):
+        r.method, r.groups = "semantic", sem  # by meaning, 0 tokens (was the LLM classifier)
     elif available and looks_like_command(text):
         r.method = "classifier"
         groups, reasoning = classify(text, available)

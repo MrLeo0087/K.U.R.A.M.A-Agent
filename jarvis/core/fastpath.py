@@ -10,6 +10,7 @@ English plus common romanized/Devanagari Hindi and Nepali. Disable with config.F
 from __future__ import annotations
 
 import logging
+import random
 import re
 import time
 from dataclasses import dataclass, field
@@ -670,8 +671,17 @@ _T = {
                  "ne": "माफ गर्नुहोस्, {x} नामको ठाउँ भेटिएन।"},
     "failed": {"en": "Sorry, that didn't work: {x}", "hi": "माफ़ कीजिए, यह नहीं हुआ: {x}",
                "ne": "माफ गर्नुहोस्, भएन: {x}"},
-    "volume": {"en": "Done, the volume is at {x}%.", "hi": "आवाज़ {x}% पर है।", "ne": "भोल्युम {x}% मा छ।"},
-    "brightness": {"en": "Done, brightness is at {x}%.", "hi": "ब्राइटनेस {x}% पर है।", "ne": "ब्राइटनेस {x}% मा छ।"},
+    "volume": {"en": ("Done, the volume is at {x}%.", "Volume set to {x}%.", "Okay, {x}% volume."),
+               "hi": "आवाज़ {x}% पर है।", "ne": "भोल्युम {x}% मा छ।"},
+    "brightness": {"en": ("Done, brightness is at {x}%.", "Brightness set to {x}%.", "Okay, {x}% brightness."),
+                   "hi": "ब्राइटनेस {x}% पर है।", "ne": "ब्राइटनेस {x}% मा छ।"},
+    # answers to a question ("what is the volume?"): no "Done", just the fact
+    "volume_now": {"en": ("The volume is at {x}%.", "It's at {x}% right now."), "hi": "आवाज़ अभी {x}% पर है।",
+                   "ne": "भोल्युम अहिले {x}% मा छ।"},
+    "brightness_now": {"en": ("Brightness is at {x}%.", "The screen is at {x}% brightness."),
+                       "hi": "ब्राइटनेस अभी {x}% पर है।", "ne": "ब्राइटनेस अहिले {x}% मा छ।"},
+    "sound_state": {"en": "The sound is {x}.", "hi": "आवाज़ {x} है।", "ne": "आवाज {x} छ।"},
+    "mic_state": {"en": "Your microphone is {x}.", "hi": "माइक {x} है।", "ne": "माइक {x} छ।"},
     "muted": {"en": "Okay, sound is muted.", "hi": "आवाज़ बंद कर दी।", "ne": "आवाज बन्द गरें।"},
     "unmuted": {"en": "Sound is back on.", "hi": "आवाज़ चालू कर दी।", "ne": "आवाज फेरि चालू भयो।"},
     "mic_muted": {"en": "Okay, your microphone is muted.", "hi": "माइक बंद कर दिया।", "ne": "माइक बन्द गरें।"},
@@ -690,9 +700,17 @@ _SYSTEM = {"volume", "brightness", "mute", "mic", "media", "screenshot", "lock",
 
 
 def _render_system(intent: Intent, out: str, lang: str) -> str:
+    asked = intent.args.get("action") in ("get", "status")  # a question, not a command
     if intent.name in ("volume", "brightness"):
         m = re.search(r"(\d+)%", out)
-        return _say(intent.name, lang, m.group(1)) if m else out
+        if not m:
+            return out
+        reply = _say(intent.name + ("_now" if asked else ""), lang, m.group(1))
+        return reply + (" Sound is muted, though." if asked and "muted" in out and lang == "en" else "")
+    if intent.name in ("mute", "mic") and asked:
+        state = "unmuted" if "unmuted" in out else "muted"
+        return _say("sound_state" if intent.name == "mute" else "mic_state", lang,
+                    {"unmuted": "on", "muted": "muted"}[state] if lang == "en" else state)
     if intent.name in ("mute", "mic"):
         key = "unmuted" if "unmuted" in out else "muted"
         return _say(key if intent.name == "mute" else "mic_" + key, lang, "")
@@ -710,7 +728,8 @@ _TIME_OUT = re.compile(r"^It's (?P<h12>\d+:\d\d) (?P<ampm>AM|PM) on (?P<day>\w+)
 
 def _say(key: str, lang: str, x: str) -> str:
     t = _T[key]
-    return t.get(lang, t["en"]).format(x=x)
+    v = t.get(lang, t["en"])
+    return (random.choice(v) if isinstance(v, tuple) else v).format(x=x)  # a few wordings: less robotic
 
 
 def render(intent: Intent, ok: bool, output: str, lang: str) -> str:
