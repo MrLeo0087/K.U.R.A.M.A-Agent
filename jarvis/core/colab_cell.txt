@@ -1,0 +1,163 @@
+# --- KURAMA training link: run this cell ONCE at the top of your Colab notebook, then start training ---
+# Keras:   model.fit(..., callbacks=[KuramaKeras()])        PyTorch: kurama(epoch=e, loss=l, acc=a) each epoch and
+#          `if kurama_should_stop(): break`                   HF Trainer: Trainer(..., callbacks=[KuramaCallback()])
+# At the end: kurama("done") ... and kurama_send("best.pt") sends a checkpoint to your laptop.
+# Optional: Colab Secrets (key icon) KURAMA_TG_TOKEN + KURAMA_TG_CHAT = alerts reach your phone even if the laptop is off.
+import json, os, threading, time, urllib.request, _thread
+KURAMA_TOPIC, KURAMA_RUN, KURAMA_EVERY = "{topic}", "{run}", {every}
+_K = {"last": 0.0, "stop": False, "nan": False, "ctl": "", "tg": None, "files": {}}
+try:
+    from google.colab import userdata
+    _K["tg"] = (userdata.get("KURAMA_TG_TOKEN"), userdata.get("KURAMA_TG_CHAT"))
+except Exception:
+    pass
+
+
+def _k_post(data, headers=None, url=None):
+    try:
+        req = urllib.request.Request(url or "https://ntfy.sh/" + KURAMA_TOPIC, data=data, headers=headers or {})
+        return urllib.request.urlopen(req, timeout=60).read()
+    except Exception:
+        return b""
+
+
+def _k_phone(text):
+    """Straight to Telegram (only with the Colab secrets), so it works while the laptop is off."""
+    if _K["tg"] and all(_K["tg"]):
+        tok, chat = _K["tg"]
+        _k_post(json.dumps({"chat_id": chat, "text": text}).encode(), {"Content-Type": "application/json"},
+                f"https://api.telegram.org/bot{tok}/sendMessage")
+        return True
+    return False
+
+
+def kurama(event="progress", force=False, **metrics):
+    """Tell KURAMA how training goes: kurama(epoch=3, epochs=30, loss=0.4, acc=0.9); kurama("done") at the end."""
+    nums = {k: (float(v) if isinstance(v, (int, float)) else str(v)[:300]) for k, v in metrics.items()}
+    bad = [k for k, v in nums.items() if isinstance(v, float) and v != v and "loss" in k]
+    if bad and not _K["nan"]:
+        _K["nan"], event, force = True, "nan", True
+    if event == "progress" and not force and time.time() - _K["last"] < KURAMA_EVERY:
+        return
+    _K["last"] = time.time()
+    data = {"event": event, "run": KURAMA_RUN, **nums}
+    msg = {"start": "started", "done": "finished", "error": "CRASHED", "nan": "loss became NaN",
+           "stopped": "stopped (you asked)"}.get(event)
+    if msg and _k_phone(f"Colab {KURAMA_RUN}: {msg} " + ", ".join(f"{k}={v:.4g}" if isinstance(v, float) else f"{k}={v}"
+                                                              for k, v in nums.items())[:3500]):
+        data["direct"] = True  # the phone already has it: the laptop only shows it on the desktop
+    _k_post(json.dumps(data).encode())
+
+
+def kurama_should_stop():
+    """True after you asked KURAMA to stop this run (check it in your training loop and break)."""
+    return _K["stop"]
+
+
+def _k_control():
+    """Every 30 s: is there a command for this run? stop = after the current epoch/step, stop_now = at once."""
+    while True:
+        time.sleep(30)
+        try:
+            url = f"https://ntfy.sh/{KURAMA_TOPIC}-ctl/json?poll=1&since={_K['ctl'] or 'all'}"
+            for line in urllib.request.urlopen(url, timeout=20).read().decode().splitlines():
+                m = json.loads(line)
+                _K["ctl"] = m.get("id") or _K["ctl"]
+                c = json.loads(m.get("message") or "{}")
+                if c.get("run") not in (KURAMA_RUN, "*"):
+                    continue
+                if c.get("cmd") in ("stop", "stop_now"):
+                    _K["stop"] = True
+                    kurama("stopping", force=True)
+                    if c["cmd"] == "stop_now":
+                        _thread.interrupt_main()  # like pressing the stop button
+                elif c.get("cmd") == "got_file":
+                    _k_unshare(c.get("id", ""))
+        except Exception:
+            pass
+        if time.time() - _K["last"] > 590:
+            kurama("alive", force=True)
+
+
+threading.Thread(target=_k_control, daemon=True).start()
+
+
+def kurama_drive_login():
+    """Run once at the START if you want to send big checkpoints (> 15 MB) through Google Drive."""
+    from google.colab import auth
+    auth.authenticate_user()
+    _K["drive"] = True
+
+
+def _k_unshare(file_id):
+    try:
+        from googleapiclient.discovery import build
+        build("drive", "v3").permissions().delete(fileId=file_id, permissionId="anyoneWithLink").execute()
+    except Exception:
+        pass
+
+
+def kurama_send(path):
+    """Send a file (checkpoint, results) to your laptop: up to 15 MB directly, bigger through a private Drive link
+    (needs kurama_drive_login() at the start; the link is closed again once the laptop has the file)."""
+    size = os.path.getsize(path)
+    name = os.path.basename(path)
+    if size <= 15 * 1024 * 1024:
+        with open(path, "rb") as f:
+            _k_post(f.read(), {"Filename": name, "X-Message": json.dumps({"event": "file", "run": KURAMA_RUN,
+                                                                           "name": name, "size": size})})
+        return f"sent {name} to KURAMA"
+    if not _K.get("drive"):
+        return "too big for a direct send: run kurama_drive_login() at the start next time"
+    from googleapiclient.discovery import build
+    from googleapiclient.http import MediaFileUpload
+    svc = build("drive", "v3")
+    fid = svc.files().create(body={"name": f"KURAMA-{KURAMA_RUN}-{name}"}, fields="id",
+                             media_body=MediaFileUpload(path, resumable=True)).execute()["id"]
+    svc.permissions().create(fileId=fid, body={"type": "anyone", "role": "reader"}).execute()
+    kurama("file", force=True, name=name, size=size, drive_id=fid)
+    return f"sent {name} to KURAMA through Drive"
+
+
+def _k_crash(shell, etype, evalue, tb, tb_offset=None):
+    if etype is KeyboardInterrupt and _K["stop"]:
+        kurama("stopped", force=True)
+    else:
+        kurama("error", force=True, error=f"{etype.__name__}: {evalue}")
+    shell.showtraceback((etype, evalue, tb), tb_offset=tb_offset)
+
+
+get_ipython().set_custom_exc((BaseException,), _k_crash)
+try:
+    import keras
+
+    class KuramaKeras(keras.callbacks.Callback):
+        """Reports every epoch (epoch/epochs, loss, accuracy, val_...) and stops when you ask."""
+        def on_epoch_end(self, epoch, logs=None):
+            kurama(epoch=epoch + 1, epochs=self.params.get("epochs") or 0, **(logs or {}))
+
+        def on_train_batch_end(self, batch, logs=None):
+            if _K["stop"]:
+                self.model.stop_training = True
+
+        def on_train_end(self, logs=None):
+            kurama("stopped" if _K["stop"] else "done", force=True, **(logs or {}))
+except ImportError:
+    pass
+try:
+    from transformers import TrainerCallback
+
+    class KuramaCallback(TrainerCallback):
+        def on_log(self, args, state, control, logs=None, **kw):
+            nums = {k: v for k, v in (logs or {}).items() if isinstance(v, (int, float))}
+            kurama(epoch=state.epoch or 0, epochs=args.num_train_epochs, step=state.global_step,
+                   steps=state.max_steps, **nums)
+            if _K["stop"]:
+                control.should_training_stop = True
+
+        def on_train_end(self, args, state, control, **kw):
+            kurama("stopped" if _K["stop"] else "done", force=True, epoch=state.epoch or 0)
+except ImportError:
+    pass
+kurama("start", force=True)
+print("KURAMA is linked to this notebook: run " + KURAMA_RUN)

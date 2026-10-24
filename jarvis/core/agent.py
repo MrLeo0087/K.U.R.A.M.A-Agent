@@ -643,8 +643,8 @@ class Agent:
         """fastpath.try_answer for a single-intent request (None -> normal LLM path)."""
         if not config.FASTPATH or (record and self.use_planner and planner.is_multi(user_text)):
             return None
-        res = fastpath.try_answer(user_text, lang=lang,
-                                  confirm=self.confirm or safety.get_confirm(mode), mode=mode)
+        res = fastpath.try_answer(user_text, lang=lang, confirm=self.confirm or safety.get_confirm(mode), mode=mode,
+                                  ctx={"channel": getattr(self, "channel", "") or ""})
         if res is not None:
             entry = {"name": res.intent.tool, "ok": res.ok}
             if record:

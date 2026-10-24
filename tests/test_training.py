@@ -1,6 +1,7 @@
 """Training Guard: metric parsing, alerts, launched runs (real tiny subprocesses), retries, Colab, tools."""
 import sys
 import time
+from types import SimpleNamespace
 
 import pytest
 
@@ -115,7 +116,7 @@ def test_kill_asks_first(tmp_path):
     cmd = script(tmp_path, "import time\nprint('Epoch 1/9', flush=True)\ntime.sleep(30)\n")
     wid, _ = training.launch(cmd, str(tmp_path), "long")
     out = safety.execute("training", {"action": "kill", "target": "long"}, confirm=lambda p: False)
-    assert "keeps running" in out.output and store.watch_get(wid)["status"] == "active"
+    assert "keeps training" in out.output and store.watch_get(wid)["status"] == "active"
     out = safety.execute("training", {"action": "kill", "target": str(wid)}, confirm=lambda p: True)
     assert "stopped run" in out.output and store.watch_get(wid)["status"] == "stopped"
 
@@ -166,8 +167,9 @@ def test_colab_setup_events_and_silence(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "OUTPUTS_DIR", tmp_path / "out")
     out = registry.call("training", {"action": "colab", "label": "bert"}).output
     topic = store.kv_get("colab_topic")
-    assert topic.startswith("kurama-") and len(topic) > 25 and f'"{topic}"' in out and "KuramaCallback" in out
-    compile(out.split("\n\n", 1)[1], "cell", "exec")  # the cell is valid Python
+    cell = (tmp_path / "out" / "kurama_colab_cell.py").read_text()
+    assert topic.startswith("kurama-") and len(topic) > 25 and f'"{topic}"' in cell and "KuramaCallback" in out
+    compile((tmp_path / "out" / "kurama_colab_cell.py").read_text(), "cell", "exec")  # the saved cell is valid Python
     msgs = [{"id": "a", "event": "start", "run": "bert"},
             {"id": "b", "event": "progress", "run": "bert", "epoch": 1, "loss": 0.8, "eval_accuracy": 0.7},
             {"id": "c", "event": "progress", "run": "bert", "epoch": 2, "loss": 0.5}]
@@ -208,3 +210,68 @@ def test_tools_aliases_and_fastpath(tmp_path, monkeypatch):
     it = fastpath.match("how is my training going")
     assert (it.tool, it.args) == ("training", {"action": "status"})
     assert fastpath.match("connect my colab notebook").args == {"action": "colab"}
+
+
+# --- Colab: stop from the phone, direct phone messages, files, status anywhere ---
+def test_colab_stop_direct_file_and_status(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "OUTPUTS_DIR", tmp_path / "out")
+    monkeypatch.setattr(config, "COLAB_FILES_DIR", str(tmp_path / "Colab"))
+    registry.call("training", {"action": "colab", "label": "cnn"})
+    sent = []
+    monkeypatch.setattr(training, "colab_command", lambda run, cmd, **kw: sent.append((run, cmd, kw)) or True)
+    msgs = [{"id": "a", "event": "start", "run": "cnn", "direct": True},
+            {"id": "b", "event": "progress", "run": "cnn", "epoch": 12, "epochs": 30, "loss": 0.41, "accuracy": 0.87,
+             "val_accuracy": 0.84}]
+    monkeypatch.setattr(training, "colab_poll", lambda since: msgs)
+    w = pw.ProcessWatcher()
+    w.tick()
+    first = store.alerts_recent()[0]
+    assert first["title"] == "Colab training started: cnn" and "telegram" not in (first.get("channels") or "")
+    row = next(r for r in store.watches_list(("active",)) if r["kind"] == "colab")
+    st = row["state"]
+    st["started"] = time.time() - 3600  # 12 of 30 epochs in an hour -> 1h 30m left
+    store.watch_update(row["id"], state=st)
+    status = registry.call("status_now", {}).output
+    assert "epoch 12/30" in status and "acc 0.87" in status and "val acc 0.84" in status and "~1h 30m left" in status
+    assert "last update" in status
+    no = safety.execute("training", {"action": "stop"}, confirm=lambda p: False)
+    assert "keeps training" in no.output and not sent
+    yes = safety.execute("training", {"action": "stop"}, confirm=lambda p: True)
+    assert sent == [("cnn", "stop", {})] and "after the current epoch" in yes.output
+    safety.execute("training", {"action": "stop_now", "target": "cnn"}, confirm=lambda p: True)
+    assert sent[-1][1] == "stop_now"
+    # the run stops, then sends its checkpoint through Drive after it ended: still delivered, link closed again
+    monkeypatch.setattr(training, "colab_poll", lambda since: [{"id": "c", "event": "stopped", "run": "cnn", "epoch": 13}])
+    w.last_colab_poll = 0
+    w.tick()
+    assert store.watch_get(row["id"])["status"] == "stopped" and titles()[0] == "Colab training stopped: cnn"
+
+    class FakeStream:
+        def __init__(self, *a, **k):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def raise_for_status(self):
+            pass
+
+        def iter_bytes(self):
+            yield b"weights"
+    monkeypatch.setattr(pw.notify, "_http", lambda: SimpleNamespace(stream=FakeStream))
+    monkeypatch.setattr(training, "colab_poll", lambda since: [{"id": "d", "event": "file", "run": "cnn",
+                                                                "name": "best.pt", "drive_id": "XYZ"}])
+    w.last_colab_poll = 0
+    w.tick()
+    assert (tmp_path / "Colab" / "cnn" / "best.pt").read_bytes() == b"weights"
+    assert sent[-1] == ("cnn", "got_file", {"id": "XYZ"}) and titles()[0] == "Got a file from Colab: cnn"
+    assert not [r for r in store.watches_list(("active",)) if r["kind"] == "colab"]  # no phantom new run
+
+
+def test_colab_cell_is_valid_python():
+    cell = training.colab_cell("kurama-test", "run1")
+    compile(cell, "cell", "exec")
+    assert '"kurama-test"' in cell and "KuramaKeras" in cell and "kurama_should_stop" in cell

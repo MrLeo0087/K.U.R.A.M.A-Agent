@@ -128,7 +128,9 @@ def progress_text(st: dict) -> str:
     parts = []
     if "epoch" in m:
         e = m["epoch"]
-        parts.append(f"epoch {int(e) if e == int(e) else round(e, 2)}" + (f"/{m['epochs']}" if m.get("epochs") else ""))
+        total = m.get("epochs")
+        parts.append(f"epoch {int(e) if e == int(e) else round(e, 2)}"
+                     + (f"/{int(total) if float(total) == int(total) else total}" if total else ""))
     elif "step" in m:
         parts.append(f"step {m['step']}" + (f"/{m['steps']}" if m.get("steps") else ""))
     if k := loss_key(m):
@@ -138,7 +140,19 @@ def progress_text(st: dict) -> str:
             parts.append(f"{k.replace('_', ' ')} {m[k]:.4g}")
     if "pct" in m:
         parts.append(f"{m['pct']}%" + (f" (ETA {m['eta']})" if m.get("eta") and "?" not in m["eta"] else ""))
+    elif (eta := eta_text(st)):
+        parts.append(eta)
     return ", ".join(parts)
+
+
+def eta_text(st: dict) -> str:
+    """'~1h 20m left' from the epoch pace so far (needs epoch, epochs and a start time)."""
+    m = st.get("metrics") or {}
+    done, total, start = m.get("epoch"), m.get("epochs"), st.get("started")
+    if not done or not total or not start or done >= total:
+        return ""
+    left = (time.time() - float(start)) / float(done) * (float(total) - float(done))
+    return f"~{fmt_duration(left)} left"
 
 
 # ---------------------------------------------------------------- launching local runs
@@ -268,40 +282,12 @@ def colab_topic(create: bool = False) -> str:
     return topic
 
 
-COLAB_SNIPPET = '''# --- KURAMA training ping: run this cell once at the top of your Colab notebook ---
-import json, threading, time, urllib.request
-KURAMA_TOPIC, KURAMA_RUN, _k_last = "{topic}", "{run}", [0.0]
-def kurama(event="progress", force=False, **metrics):
-    """Tell KURAMA how training goes. Call kurama(epoch=e, loss=l, acc=a) in your loop; kurama("done") at the end."""
-    if event == "progress" and not force and time.time() - _k_last[0] < {every}: return
-    _k_last[0] = time.time()
-    data = {{"event": event, "run": KURAMA_RUN, **{{k: (float(v) if isinstance(v, (int, float)) else str(v)[:300])
-                                                 for k, v in metrics.items()}}}}
-    try: urllib.request.urlopen(urllib.request.Request("https://ntfy.sh/" + KURAMA_TOPIC,
-                                                       data=json.dumps(data).encode()), timeout=5)
-    except Exception: pass
-def _kurama_alive():
-    while True:
-        time.sleep(600)
-        if time.time() - _k_last[0] > 590: kurama("alive", force=True)
-threading.Thread(target=_kurama_alive, daemon=True).start()
-def _kurama_crash(shell, etype, evalue, tb, tb_offset=None):
-    kurama("error", force=True, error=f"{{etype.__name__}}: {{evalue}}")
-    shell.showtraceback((etype, evalue, tb), tb_offset=tb_offset)
-get_ipython().set_custom_exc((Exception,), _kurama_crash)
-try:  # Hugging Face Trainer: Trainer(..., callbacks=[KuramaCallback()])
-    from transformers import TrainerCallback
-    class KuramaCallback(TrainerCallback):
-        def on_log(self, args, state, control, logs=None, **kw):
-            nums = {{k: v for k, v in (logs or {{}}).items() if isinstance(v, (int, float))}}
-            kurama(epoch=state.epoch or 0, step=state.global_step, steps=state.max_steps, **nums)
-        def on_train_end(self, args, state, control, **kw):
-            kurama("done", force=True, epoch=state.epoch or 0, step=state.global_step)
-except ImportError: pass
-kurama("start", force=True)
-# Keras: model.fit(..., callbacks=[keras.callbacks.LambdaCallback(on_epoch_end=lambda e, logs: kurama(epoch=e + 1, **logs))])
-# PyTorch loop: kurama(epoch=epoch, loss=loss.item())  ...  and kurama("done") when finished
-'''
+CELL_FILE = Path(__file__).with_name("colab_cell.txt")  # the notebook cell (plain text template)
+
+
+def colab_cell(topic: str, run: str) -> str:
+    return (CELL_FILE.read_text().replace('"{topic}"', json.dumps(topic)).replace('"{run}"', json.dumps(run))
+            .replace("{every}", str(int(config.COLAB_PROGRESS_EVERY_S))))
 
 
 def colab_setup(label: str = "") -> str:
@@ -310,7 +296,22 @@ def colab_setup(label: str = "") -> str:
     if not any(w["kind"] == "colab" and w["target"] == run for w in store.watches_list(("active",))):
         store.watch_add("colab", run, run, "", {"started": time.time(), "last_msg": 0.0, "expect_until":
                                                 time.time() + 3600})
-    return COLAB_SNIPPET.format(topic=topic, run=run, every=int(config.COLAB_PROGRESS_EVERY_S))
+    return colab_cell(topic, run)
+
+
+def colab_command(run: str, cmd: str, **extra) -> bool:
+    """Send a command to a Colab run (its cell checks every 30 s): stop, stop_now, got_file."""
+    import urllib.request
+
+    topic = colab_topic()
+    if not topic:
+        return False
+    body = json.dumps({"cmd": cmd, "run": run, **extra}).encode()
+    try:
+        urllib.request.urlopen(urllib.request.Request(f"https://ntfy.sh/{topic}-ctl", data=body), timeout=10)
+        return True
+    except OSError:
+        return False
 
 
 def colab_poll(since: str) -> list[dict]:
@@ -335,7 +336,9 @@ def colab_poll(since: str) -> list[dict]:
             body = json.loads(msg.get("message") or "{}")
         except ValueError:
             continue
-        out.append({"id": msg.get("id"), "time": msg.get("time"), **body})
+        att = msg.get("attachment") or {}
+        out.append({"id": msg.get("id"), "time": msg.get("time"), **body,
+                    **({"_url": att.get("url"), "_size": att.get("size")} if att.get("url") else {})})
     return out
 
 

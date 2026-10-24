@@ -27,15 +27,17 @@ def _newest_log(folder: Path) -> Path | None:
 
 
 @tool(group="watch", safety="safe",
-      description="Training Guard: how training is going (status), watch a training run/process/log file, set up "
-                  "Google Colab pings (colab), stop watching, or stop a run KURAMA started (kill).")
-def training(action: Literal["status", "watch", "colab", "stop_watching", "kill"] = "status", target: str = "",
-             label: str = "", patterns: str = "") -> str:
+      description="Training Guard: how training is going (status: epochs, accuracy, ETA), watch a run/process/log, "
+                  "link a Google Colab notebook (colab), stop a training run (stop = after this epoch, stop_now = "
+                  "at once; local or Colab, asks first), or stop watching.")
+def training(action: Literal["status", "watch", "colab", "stop", "stop_now", "stop_watching", "kill"] = "status",
+             target: str = "", label: str = "", patterns: str = "") -> str:
     """Training Guard.
 
     Args:
         action: status = progress of every run; watch = start watching `target`; colab = get the notebook cell
-            that makes a Colab run report here; stop_watching = forget a watch; kill = stop a run KURAMA started.
+            that makes a Colab run report here; stop = stop a training run after the current epoch (Colab) / now
+            (local); stop_now = interrupt it at once; stop_watching = forget a watch.
         target: For watch: a log file, a folder (its newest log), a PID or a process name (e.g. "train.py").
             For stop_watching / kill: the run's number or name ("all" for every watch).
         label: Optional short name for the alerts.
@@ -50,20 +52,45 @@ def training(action: Literal["status", "watch", "colab", "stop_watching", "kill"
         path = Path(config.OUTPUTS_DIR) / "kurama_colab_cell.py"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(cell)
-        return ("Paste this cell at the top of your Colab notebook and run it once; then call kurama(epoch=..., "
-                "loss=...) in your loop (Hugging Face: callbacks=[KuramaCallback()]). I'll tell you about progress, "
-                f"crashes, the end, or if Colab goes quiet. Saved as {path}.\n\n{cell}")
-    if action in ("stop_watching", "kill"):
-        found = pw.find_watch(target or ("all" if action == "stop_watching" else ""))
+        ctx = safety.context()
+        where = f"saved as {path}"
+        if ctx.get("channel") == "telegram":  # on the phone: the cell comes as a file
+            from jarvis.tools.general.send_file_telegram import deliver
+            deliver(path, "KURAMA cell for Colab: paste it as the first cell")
+            where = "sent to you as a file"
+        else:
+            from jarvis.core import workspace
+            if (pub := workspace.publish("Colab cell for KURAMA", cell)) is not None and ctx.get("published") is not None:
+                ctx["published"].append(str(pub.relative_to(Path(config.OUTPUTS_DIR))))
+                where = "in your workspace and " + where
+        return (f"The Colab cell is {where}. Paste it as the FIRST cell and run it once, then start training. Keras: "
+                "model.fit(..., callbacks=[KuramaKeras()]); PyTorch: kurama(epoch=e, epochs=N, loss=l, acc=a) each "
+                "epoch and `if kurama_should_stop(): break`; HF: callbacks=[KuramaCallback()]. At the end "
+                "kurama_send('best.pt') sends the checkpoint here. Optional Colab secrets KURAMA_TG_TOKEN and "
+                "KURAMA_TG_CHAT make alerts reach your phone even when the laptop is off.")
+    if action in ("stop", "stop_now", "kill"):
+        runs = [w for w in pw.find_watch(target) if w["kind"] in ("run", "colab")]
+        if not runs:
+            return "No training run of mine is active" + (f" matching {target!r}" if target else "") + \
+                ". (For other programs ask me to stop the process or force-quit the app.)"
+        if len(runs) > 1 and not target:
+            return "Which one? " + "; ".join(f"#{w['id']} {w['label']}" for w in runs)
+        w = runs[0]
+        now = action != "stop"
+        how = "right now" if now else ("after the current epoch" if w["kind"] == "colab" else "now")
+        if not safety.ask(f"Stop training {w['label']} {how}?" + (" Progress since the last checkpoint is lost."
+                                                                 if now else "")):
+            return "The user said no, so it keeps training."
+        if w["kind"] == "colab":
+            if not tg.colab_command(w["target"], "stop_now" if now else "stop"):
+                return "error: couldn't reach Colab's command channel (internet?)"
+            return (f"Sent. Colab checks every 30 s, then {w['label']} stops {how}; I'll confirm when it has."
+                    " (A plain PyTorch loop needs `if kurama_should_stop(): break` for the gentle stop.)")
+        return tg.kill_run(w)
+    if action == "stop_watching":
+        found = pw.find_watch(target or "all")
         if not found:
             return f"nothing active matches {target!r}"
-        if action == "kill":
-            runs = [w for w in found if w["kind"] == "run"]
-            if not runs:
-                return "I can only stop runs I started; for other programs ask me to force-quit the app."
-            if not safety.ask(f"Stop {', '.join(w['label'] for w in runs)} now? Unsaved progress is lost."):
-                return "The user said no, so it keeps running."
-            return "; ".join(tg.kill_run(w) for w in runs)
         for w in found:
             store.watch_update(w["id"], status="stopped", finished=time.time(), result="stopped by user")
         return "stopped watching " + ", ".join(f"#{w['id']} {w['label']}" for w in found)

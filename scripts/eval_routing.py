@@ -15,6 +15,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 CASES: list[tuple[str, str]] = [
     # training / dev
     ("how is my training going", "training"), ("is the model still training", "training"),
+    ("what is the current status", "status_now"), ("any update", "status_now"), ("whats going on", "status_now"),
+    ("how many epochs are done", "training"), ("what is the current accuracy", "training"),
+    ("stop training", "training"), ("stop the colab training now", "training"),
     ("tell me when train.py finishes", "training"), ("connect my colab notebook", "training"),
     ("start training with python train.py --epochs 20 and watch it", "run_training"),
     ("alert me when long terminal commands finish", "command_alerts"), ("turn on command alerts", "command_alerts"),
@@ -75,7 +78,8 @@ CASES: list[tuple[str, str]] = [
 
 # Held out: messier, indirect phrasings (typos, STT slips, no keywords). Reported separately; never tuned on first.
 HARD: list[tuple[str, str]] = [
-    ("my model training crashed again can you check", "training"), ("is colab still running my notebook", "training"),
+    ("my model training crashed again can you check", "training"), ("what accuracy did it reach so far", "training"),
+    ("give me an update", "status_now"), ("is colab still running my notebook", "training"),
     ("why does python say cuda out of memory", "fix_error"), ("i keep getting this keyerror label", "fix_error"),
     ("pip says it cant find torchvision install it", "python_env"), ("are there nulls in my csv", "check_dataset"),
     ("undo my changes to model.py from this morning", "time_machine"), ("what was i doing on the tara project", "where_was_i"),

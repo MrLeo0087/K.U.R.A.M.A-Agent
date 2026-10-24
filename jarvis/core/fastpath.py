@@ -604,7 +604,23 @@ _QUIZ_MOVES = {"show the answer": "answer", "show answer": "answer", "what is th
 _DAYS = {"today": 1, "yesterday": 2, "this week": 7, "last week": 14, "this month": 31}
 
 
+_STATUS = re.compile(r"^(?:(?:what(?:'s|s| is) the )?(?:current )?status|what(?:'s|s| is) going on|what(?:'s|s| is) happening|"
+                     r"any (?:updates?|news)|give me (?:an |the )?(?:update|status)|how(?:'s| is) everything(?: going)?|"
+                     r"status (?:update|report)|update me)(?: now)?$", I)
+_TRAIN_Q = re.compile(r"^(?:what(?:'s| is) the |how many |which )?(?:current |latest )?(?:accuracy|acc|loss|epochs?|val(?:idation)? "
+                      r"(?:accuracy|loss))(?: (?:now|so far|is it(?: on)?|done|completed|finished|are done|of (?:my |the )?"
+                      r"(?:model|training)))*$", I)
+_TRAIN_STOP = re.compile(r"^(?:please )?(?:stop|end|cancel|kill|halt) (?:the |my )?(?:model )?(?:training|train(?:ing)? run|"
+                         r"colab(?: training| run)?)(?P<now> (?:right )?now| immediately| at once)?$", I)
+
+
 def _study_intent(t: str) -> Intent | None:
+    if _STATUS.match(t):
+        return Intent("status", "status_now", "usage", {})
+    if _TRAIN_Q.match(t):
+        return Intent("training", "training", "watch", {"action": "status"})
+    if m := _TRAIN_STOP.match(t):
+        return Intent("training", "training", "watch", {"action": "stop_now" if m.group("now") else "stop"})
     if m := _TT.match(t):
         w = (m.group("w") or "today").lower()
         return Intent("study", "timetable", "study", {"action": "week" if "week" in w else w})
@@ -975,12 +991,6 @@ def render(intent: Intent, ok: bool, output: str, lang: str) -> str:
         return f"Yes, I can help with {intent.label}. These of my tools fit: {', '.join(lines[:4])}. Shall I start?"
     if intent.name == "listdir":
         return _render_listdir(intent, out)
-    if intent.name == "training" and intent.args.get("action") == "colab" and safety.context().get("channel") != "telegram":
-        from jarvis.core import workspace  # the cell is long: the Workspace shows it, the reply stays short
-        if (path := workspace.publish("Colab cell for KURAMA", out)) is not None:
-            intent.args["_published"] = str(path.relative_to(Path(config.OUTPUTS_DIR)))
-        return ("Here's the Colab cell, it's in your workspace. Paste it at the top of your notebook and run it once; "
-                "then call kurama(epoch=..., loss=...) in your loop and I'll keep you posted.")
     return out  # weather / recall / digest / tokens / session: the tool output is already text
 
 
@@ -1043,7 +1053,7 @@ def _internal(intent: Intent) -> tuple[bool, str]:
 _VOICE_FIRST_LINE = {"digest", "tokens"}  # long reports: voice speaks the first (summary) line only
 
 
-def try_answer(text: str, lang: str | None = None, confirm=None, mode: str = "text") -> FastResult | None:
+def try_answer(text: str, lang: str | None = None, confirm=None, mode: str = "text", ctx: dict | None = None) -> FastResult | None:
     """Run the matched tool and return a templated answer, or None to use the LLM path."""
     if not config.FASTPATH:
         return None
@@ -1061,9 +1071,12 @@ def try_answer(text: str, lang: str | None = None, confirm=None, mode: str = "te
     if intent.tool.startswith("_"):
         ok, output = _internal(intent)
     else:
+        shelf: list[str] = []  # files the tool put in the Workspace
         res = safety.execute(intent.tool, {k: v for k, v in intent.args.items() if not k.startswith("_")},
-                              confirm=confirm)
+                              confirm=confirm, ctx={**(ctx or {}), "user_text": text, "published": shelf})
         ok, output = res.ok, res.output
+        if shelf:
+            intent.args.setdefault("_published", shelf[-1])
     if intent.name in ("time", "weather") and "couldn't find a place" in (output or ""):
         return None  # unknown place: let the LLM path try (it can fix spelling)
     answer = render(intent, ok, output, lang or "en")

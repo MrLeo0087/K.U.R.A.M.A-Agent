@@ -195,7 +195,10 @@ class ProcessWatcher(Worker):
             except Exception as e:  # one broken watch must not stop the others
                 self.log.warning("watch #%s failed: %s", w["id"], e)
         now = time.time()
-        if any(w["kind"] == "colab" for w in active) and now - self.last_colab_poll >= config.COLAB_POLL_S:
+        recent_colab = any(w["kind"] == "colab" and now - float(w.get("finished") or 0) < 7200
+                           for w in store.watches_list(("done", "stopped", "failed"), 10))
+        if (recent_colab or any(w["kind"] == "colab" for w in active)) and \
+                now - self.last_colab_poll >= config.COLAB_POLL_S:
             self.last_colab_poll = now
             try:
                 self.poll_colab()
@@ -240,13 +243,14 @@ class ProcessWatcher(Worker):
             self.alert(w, "No progress", f"No new output for {mins} minutes. It may be stuck (deadlock, waiting "
                                          f"for input, or swapping).\n{training.progress_text(st)}", "warning")
 
-    def finished(self, w: dict, st: dict, note: str = "") -> None:
+    def finished(self, w: dict, st: dict, note: str = "", phone: bool | None = None) -> None:
         dur = fmt_duration(time.time() - float(st.get("started") or w["created"]))
         prog = training.progress_text(st)
         result = f"finished in {dur}" + (f": {prog}" if prog else "")
         store.watch_update(w["id"], status="done", finished=time.time(), result=result, state=st)
-        self.alert(w, "Training finished" if w["kind"] in ("run", "colab") or prog else "Process finished",
-                   result + (f"\n{note}" if note else ""))
+        notify.notify(f"{'Training finished' if w['kind'] in ('run', 'colab') or prog else 'Process finished'}: "
+                      f"{w['label']}", result + (f"\n{note}" if note else ""), level="info", source=SOURCE,
+                      telegram=phone)
 
     # ---------- kinds ----------
     def read_log(self, w: dict, st: dict) -> None:
@@ -349,10 +353,16 @@ class ProcessWatcher(Worker):
         since = store.kv_get("colab_since") or "12h"
         msgs = training.colab_poll(since)
         runs = {w["target"]: w for w in store.watches_list(("active",)) if w["kind"] == "colab"}
+        ended = {w["target"]: w for w in store.watches_list(("done", "stopped", "failed"), 20) if w["kind"] == "colab"}
         for m in msgs:
             store.kv_set("colab_since", str(m.get("id") or since))
             name = str(m.get("run") or "colab")
             w = runs.get(name)
+            if w is None and name in ended and m.get("event") != "start":
+                if m.get("event") == "file":  # kurama_send() after kurama("done"): still deliver the file
+                    self.colab_file(ended[name], m, lambda t, x, level="info": notify.notify(
+                        f"{t}: {name}", x, level=level, source=SOURCE))
+                continue
             if w is None:  # the snippet from an earlier day, run again: a new run
                 wid = store.watch_add("colab", name, name, "", {"started": time.time(), "last_msg": 0.0})
                 w = runs[name] = store.watch_get(wid)
@@ -360,33 +370,76 @@ class ProcessWatcher(Worker):
 
     def colab_event(self, w: dict, m: dict) -> None:
         st = w["state"]
-        st["last_msg"] = time.time()
+        sent_at = float(m.get("time") or time.time())  # when Colab sent it (ntfy's clock), not when we read it
+        st["last_msg"] = max(float(st.get("last_msg") or 0), sent_at)
         st.pop("silent_sent", None)
         event = m.get("event")
-        nums = {k: v for k, v in m.items() if isinstance(v, (int, float)) and k not in ("time",)}
+        phone = None if not m.get("direct") else False  # the cell already told the phone itself
+
+        def say(title: str, text: str, level: str = "info") -> None:
+            notify.notify(f"{title}: {w['label']}", text, level=level, source=SOURCE, telegram=phone)
+        nums = {k: v for k, v in m.items() if isinstance(v, (int, float)) and k not in ("time", "size", "_size")}
         if nums:
             metrics = st.setdefault("metrics", {})
-            metrics.update({("acc" if k == "accuracy" else k): v for k, v in nums.items()})
+            metrics.update({("acc" if k == "accuracy" else "val_acc" if k == "val_accuracy" else k): v
+                            for k, v in nums.items()})
             if k := training.loss_key(nums):
                 st.setdefault("loss_hist", []).append(nums[k])
                 if training.is_bad(nums[k]) and not st.get("nan_sent"):
-                    st["nan_sent"] = True
-                    self.alert(w, "Loss is NaN", f"{k} is {nums[k]} on Colab. Lower the learning rate or check "
-                                                 f"the data.", "warning")
+                    event = "nan"
+        if event == "nan" and not st.get("nan_sent"):
+            st["nan_sent"] = True
+            say("Loss is NaN", "Training on Colab is diverging: lower the learning rate or check the data. "
+                               + training.progress_text(st), "warning")
         if event == "start":
-            st["started"] = time.time()
-            self.alert(w, "Colab training started", "I'll tell you when it finishes, crashes or goes quiet.")
+            st["started"] = sent_at
+            say("Colab training started", "I'll tell you when it finishes, crashes or goes quiet. Ask 'status' anytime.")
+        elif event == "stopping":
+            say("Stopping Colab training", "It got your stop request and stops after the current step.")
+        elif event == "stopped":
+            dur = fmt_duration(time.time() - float(st.get("started") or w["created"]))
+            store.watch_update(w["id"], status="stopped", finished=time.time(), state=st,
+                               result=f"stopped by you after {dur}: {training.progress_text(st)}")
+            say("Colab training stopped", f"Stopped after {dur}. {training.progress_text(st)}")
+            return
+        elif event == "file":
+            store.watch_update(w["id"], state=st)
+            self.colab_file(w, m, say)
+            return
         elif event == "error":
             st["error"] = str(m.get("error") or "")[:300]
             why = training.explain(st["error"], [])
             store.watch_update(w["id"], status="failed", finished=time.time(), state=st,
                                result=f"crashed: {st['error'][:150]}")
-            self.alert(w, "Colab training crashed", st["error"] + (f"\nLikely: {why}" if why else ""), "error")
+            say("Colab training crashed", st["error"] + (f"\nLikely: {why}" if why else ""), "error")
             return
         elif event == "done":
-            self.finished(w, st)
+            self.finished(w, st, phone=phone)
             return
         store.watch_update(w["id"], state=st)
+
+    def colab_file(self, w: dict, m: dict, say) -> None:
+        """A checkpoint/result sent from Colab: download it into ~/Downloads/Colab/<run>/ and close the Drive link."""
+        name = re.sub(r"[/\\\0]", "_", str(m.get("name") or "file"))
+        url = m.get("_url") or (f"https://drive.usercontent.google.com/download?id={m['drive_id']}&export=download"
+                                f"&confirm=t" if m.get("drive_id") else "")
+        if not url:
+            return
+        folder = Path(config.COLAB_FILES_DIR).expanduser() / re.sub(r"[^\w.-]+", "_", w["label"])
+        folder.mkdir(parents=True, exist_ok=True)
+        path = folder / name
+        try:
+            with notify._http().stream("GET", url, timeout=600, follow_redirects=True) as r:
+                r.raise_for_status()
+                with open(path, "wb") as f:
+                    for chunk in r.iter_bytes():
+                        f.write(chunk)
+        except Exception as e:
+            say("Couldn't get the file from Colab", f"{name}: {type(e).__name__}: {e}", "warning")
+            return
+        if m.get("drive_id"):
+            training.colab_command(w["target"], "got_file", id=m["drive_id"])  # the cell closes the share link
+        say("Got a file from Colab", f"{name} ({path.stat().st_size / 1e6:.1f} MB) saved to {path}")
 
     def check_colab(self, w: dict) -> None:
         st = w["state"]

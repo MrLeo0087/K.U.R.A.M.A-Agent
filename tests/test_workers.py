@@ -341,7 +341,7 @@ def test_telegram_status_and_help(tg, monkeypatch):
     store.job_insert("essay about Nepal", "write", status="running")
     bot = telegram_bot.TelegramBot()
     out = bot.answer("/status")
-    assert "RAM 50%" in out and "Watches: none" in out and "essay about Nepal" in out and "workers" in out
+    assert "Laptop: RAM" in out and "essay about Nepal" in out  # /status = the full overview now
     assert bot.answer("/help").startswith("I'm KURAMA") and bot.answer("/start@JarvisBot") == telegram_bot.HELP
 
 

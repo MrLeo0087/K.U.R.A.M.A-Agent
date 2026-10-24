@@ -22,7 +22,8 @@ HELP = ("I'm KURAMA. Send a question or command as text or a voice note.\n"
         "Send a file or photo: it's saved on your laptop (caption 'to <folder>' picks the folder).\n"
         "copy: <text> puts text on the laptop's clipboard; /clip sends you the laptop's clipboard.\n"
         "/screen: a screenshot of the laptop\n/guard on|off: laptop guard (photo + location if someone uses it)\n"
-        "/where: where the laptop is\n/status: resources, watches, jobs, workers\n/jobs: background jobs\n"
+        "/where: where the laptop is\n/status (or just 'status'): training epochs/accuracy/ETA, jobs, downloads...\n"
+        "'stop training' / 'stop training now': stops a run (asks first)\n/jobs: background jobs\n"
         "/help: this message\nRisky actions ask 'Reply yes/no' first.")
 TEXT_ONLY = "Sorry, I can't use that kind of message."
 # a reply to find_and_send's numbered list: "2", "send 2", "number 2", "all", "send all" (0 tokens)
@@ -132,7 +133,8 @@ class TelegramBot(Worker):
             cmd = text.split()[0].split("@")[0].lower()
             arg = text.split()[1].lower() if len(text.split()) > 1 else ""
             if cmd == "/status":
-                return status_text()
+                from jarvis.core import overview
+                return overview.status_all()
             if cmd == "/jobs":
                 return jobs_text()
             if cmd == "/clip":
