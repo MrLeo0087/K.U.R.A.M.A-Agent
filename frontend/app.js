@@ -16,6 +16,7 @@ if (params.get("wallpaper") === "1") document.body.classList.add("wallpaper");
 const MINI = params.get("mini") === "1"; // the small chat panel of mini KURAMA (no orb, stats or workspace)
 document.body.classList.toggle("mini", MINI);
 let minimized = false; // the dashboard is minimized to the floating button (window.kuramaMinimized)
+let miniGhost = false; // mini panel closed while in talk mode: it keeps listening, replies show beside the button
 
 // ---------- orb ----------
 const orb = new Orb($("orb-canvas"), { halo: document.querySelector("#orb .halo"), lowPower: lowPowerOn(), reducedMotion });
@@ -107,6 +108,7 @@ function updateState() {
   $("send").classList.toggle("stop", busy);
   $("send").setAttribute("aria-label", busy ? "Stop" : "Send");
   $("m-mic").classList.toggle("rec", recording);
+  if (MINI) miniReport(st);
   $("m-conv").classList.toggle("live", mode === "conv" && conv.on);
   if (!mic.open && !player.active && !recording) audioSleepSoon(); // free the audio thread when idle (asleep = API listens)
 }
@@ -296,6 +298,7 @@ function el(tag, cls, html) {
 function trim() { while (log.children.length > MAX_MSGS) log.firstElementChild.remove(); }
 
 function addUser(text, voice = false) {
+  if (voice) miniCaption("you", text);
   $("welcome")?.remove();
   const m = el("div", "msg user" + (voice ? " voice" : ""));
   const body = el("div", "body");
@@ -416,11 +419,13 @@ async function sendChat(text, { voice = false, lang = null, speak = false } = {}
       switch (ev.type) {
         case "delta":
           bot.append(ev.text);
+          if (miniGhost) miniCaptionSoon(() => bot.text);
           if (split) split.feed(ev.text).forEach((s) => player.enqueue(s, hint, gen));
           break;
         case "tool": bot.tool(ev); break;
         case "confirm":
           bot.confirm(ev);
+          miniCaption("bot", ev.prompt);
           openConfirm = ev.id;
           if (mode === "conv" && conv.on) pendingConfirm = ev.id; // any spoken yes/no answers it
           if (speak) player.enqueue(ev.prompt + (pendingConfirm ? " Please say yes or no." : ""), hint, gen);
@@ -431,11 +436,12 @@ async function sendChat(text, { voice = false, lang = null, speak = false } = {}
           if (pendingConfirm === ev.id) pendingConfirm = null;
           if (openConfirm === ev.id) openConfirm = null;
           break;
-        case "error": bot.error(ev.text); flashError(); break;
+        case "error": bot.error(ev.text); flashError(); miniCaption("bot", ev.text, true); break;
         case "done":
           openConfirm = null;
           if (split) { const rest = split.flush(); if (rest) player.enqueue(rest, hint || ev.lang, gen); }
           bot.done(ev);
+          miniCaption("bot", bot.text || ev.text || "Done.", true);
           wsFromReply(text, bot.text);
           if (ev.jobs?.length) watchJobs(ev.jobs); // background work: tell the user when it's done
           setTimeout(loadToday, 600); // a reminder / alarm / timer may have changed
@@ -1244,13 +1250,33 @@ window.kuramaMinimized = (on) => { // dashboard: hide the panels, keep the orb (
   if (minimized && !asleep) setMode("text"); // one mic user at a time; the wake word (asleep) keeps listening
   applyActivity();
 };
-window.kuramaMiniShown = (on) => { // mini panel opened / hidden
+window.kuramaMiniShown = (on, keepTalking = false) => { // mini panel opened / hidden
+  miniGhost = !on && keepTalking && mode === "conv" && conv.on; // talk mode goes on with the panel closed
   document.body.classList.toggle("paused", !on); // freeze CSS animations while hidden
   if (on) { input.focus(); return; }
+  if (miniGhost) { saveMiniLog(); return; }
   if (recording) cancelRecording();
   if (conv.on) setMode("text"); // never keep listening while the panel is hidden
   saveMiniLog();
 };
+// Talk mode with the panel closed: the host (kurama_wallpaper.py) colours the button's ring by voice state and
+// shows what was said + the reply in a caption beside it. Messages only; nothing is sent while the panel is open.
+let miniTalk = null, miniSt = null, capTimer = 0;
+function miniReport(st) {
+  const h = window.webkit?.messageHandlers?.kurama; // (updateState runs before `host` is defined)
+  if (!h) return;
+  const talk = mode === "conv" && conv.on;
+  if (talk !== miniTalk) { miniTalk = talk; h.postMessage("talk:" + (talk ? "on" : "off")); }
+  if (st !== miniSt) { miniSt = st; h.postMessage("state:" + st); }
+}
+function miniCaption(who, text, done = false) {
+  if (!MINI || !miniGhost || !text) return;
+  clearTimeout(capTimer); capTimer = 0;
+  hostSay("caption:" + JSON.stringify({ who, text, done }));
+}
+function miniCaptionSoon(get) { // streamed reply: at most ~4 updates a second
+  if (!capTimer) capTimer = setTimeout(() => { capTimer = 0; miniCaption("bot", get()); }, 250);
+}
 // The hidden panel is closed after a few minutes to free its memory; its chat comes back from here.
 const MINI_LOG = "kurama.mini.log";
 function saveMiniLog() {

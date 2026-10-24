@@ -13,6 +13,9 @@ the wallpaper costs ~0 CPU while you work. The page stays clickable: chat works 
 Minimize (the button in the chat header) hides the dashboard panels and shows mini KURAMA: a small round
 button that floats above every app (drag it anywhere, right-click for a menu). Clicking it opens a small
 chat-only panel (same page with ?mini=1: text, mic and conversation mode) over whatever you are using.
+Talk mode keeps working when that panel is closed: the panel turns invisible and click-through instead of
+hiding (a hidden WebView would stop the mic), the button's ring shows listening / thinking / speaking, and
+what you said and KURAMA's reply appear in a small caption next to the button (click it to open the chat).
 
 Instant start: a snapshot of the dashboard is saved in ~/.local/share/kurama (on the home drive, readable at
 login) and used as the GNOME desktop background, so the desktop already looks like KURAMA from the first
@@ -52,6 +55,9 @@ STATE_FILE = Path(__file__).resolve().parent.parent / "data" / "mini.json"  # mi
 BUBBLE = 56  # floating button size (px)
 PANEL_W, PANEL_H = 400, 600  # mini chat panel
 PANEL_KEEP_S = 180  # a hidden panel is closed after this long (frees its page); reopening restores the chat
+CAPTION_W = 340  # reply caption next to the button while talking with the panel closed
+RING = {"listening": (0.25, 0.85, 0.78), "capturing": (0.25, 0.95, 0.6), "thinking": (1, 0.75, 0.25),
+        "speaking": (1, 0.55, 0.15)}  # button ring colour per voice state (talk mode, panel closed)
 SNAP_DIR = Path.home() / ".local/share/kurama"  # same paths in jarvis/tools/general/set_wallpaper.py
 SNAP = SNAP_DIR / "desktop.png"
 REAL_WALLPAPER = SNAP_DIR / "real-wallpaper.json"
@@ -340,6 +346,8 @@ class Wallpaper:
             self.restore()
         elif msg == "hide" and self.mini:
             self.mini.hide_panel()
+        elif self.mini and msg.startswith(("talk:", "state:", "caption:")):  # only the mini panel sends these
+            self.mini.on_page(msg)
 
     def minimize(self):
         if self.mini is None:
@@ -378,6 +386,10 @@ class Mini:
         self.drag = None  # [root x, root y, window x, window y, moved]
         self.reaper = 0  # timer that closes the hidden panel
         self.hover = False
+        self.talking = False  # the panel's page is in talk mode
+        self.ghost = False  # panel "closed" but still alive (invisible, click-through) so talk mode keeps going
+        self.state = "idle"  # voice state shown by the ring while ghosted
+        self.caption = None  # Caption window, made on first use
         b = self.bubble = Gtk.Window(title="KURAMA mini")
         b.set_decorated(False)
         b.set_resizable(False)
@@ -410,7 +422,30 @@ class Mini:
 
     @property
     def open(self) -> bool:
-        return self.panel is not None and self.panel.get_visible()
+        return self.panel is not None and self.panel.get_visible() and not self.ghost
+
+    # ---------- messages from the panel's page ----------
+    def on_page(self, msg: str) -> None:
+        kind, _, rest = msg.partition(":")
+        if kind == "talk":
+            self.talking = rest == "on"
+            if not self.talking and self.ghost:  # talk mode ended while closed: really hide now
+                self.panel.hide()
+                self.unghost()
+                run_js(self.view, "window.kuramaMiniShown && window.kuramaMiniShown(false)")
+                if not self.reaper:
+                    self.reaper = GLib.timeout_add_seconds(PANEL_KEEP_S, self.drop_panel)
+                self.bubble.queue_draw()
+        elif kind == "state":
+            if rest != self.state:
+                self.state = rest
+                self.bubble.queue_draw()
+        elif kind == "caption" and self.ghost:
+            with contextlib.suppress(ValueError, TypeError):
+                d = json.loads(rest)
+                if self.caption is None:
+                    self.caption = Caption(self)
+                self.caption.show(d.get("who", "bot"), str(d.get("text", "")), bool(d.get("done")))
 
     # ---------- the button ----------
     def on_draw(self, _w, cr):
@@ -435,9 +470,13 @@ class Mini:
         cr.arc(c, c, c * 0.36, 0, 2 * math.pi)
         cr.set_source(core)
         cr.fill()
-        cr.set_line_width(1.6)
-        cr.set_dash([c * 0.62, c * 0.22])
-        cr.set_source_rgba(1, 0.48, 0.1, 1 if self.hover or self.open else 0.7)
+        ring = RING.get(self.state) if self.ghost else None
+        cr.set_line_width(2.4 if ring else 1.6)
+        cr.set_dash([] if ring else [c * 0.62, c * 0.22])
+        if ring:
+            cr.set_source_rgba(*ring, 1)
+        else:
+            cr.set_source_rgba(1, 0.48, 0.1, 1 if self.hover or self.open else 0.7)
         cr.arc(c, c, c - 4, -math.pi / 2, 1.5 * math.pi)
         cr.stroke()
         return True
@@ -468,6 +507,8 @@ class Mini:
         self.bubble.move(clamp(d[2] + dx, wa.x, wa.x + wa.width - BUBBLE), clamp(d[3] + dy, wa.y, wa.y + wa.height - BUBBLE))
         if self.open:
             self.place_panel()
+        if self.caption is not None and self.caption.win.get_visible():
+            self.caption.place()
         return True
 
     def on_release(self, _w, ev):
@@ -513,18 +554,25 @@ class Mini:
         v.load_uri(f"{u.scheme}://{u.netloc}/?mini=1")
         p.add(v)
 
-    def place_panel(self) -> None:
+    def beside(self, w: int, h: int, top: bool = False) -> tuple[int, int]:
+        """Where a w x h window goes next to the button: towards the middle of the screen."""
         bx, by = self.bubble.get_position()
         wa = workarea()
-        w, h = self.panel.get_size()
-        left = bx + BUBBLE / 2 > wa.x + wa.width / 2  # open towards the middle of the screen
+        left = bx + BUBBLE / 2 > wa.x + wa.width / 2
         x = bx - w - 10 if left else bx + BUBBLE + 10
-        self.panel.move(clamp(x, wa.x + 8, wa.x + wa.width - w - 8), clamp(by + BUBBLE - h, wa.y + 8, wa.y + wa.height - h - 8))
+        y = by if top else by + BUBBLE - h
+        return clamp(x, wa.x + 8, wa.x + wa.width - w - 8), clamp(y, wa.y + 8, wa.y + wa.height - h - 8)
+
+    def place_panel(self) -> None:
+        self.panel.move(*self.beside(*self.panel.get_size()))
 
     def show_panel(self, time: int = 0) -> None:
         if self.reaper:
             GLib.source_remove(self.reaper)
             self.reaper = 0
+        if self.caption is not None:
+            self.caption.hide()
+        self.unghost()
         self.ensure_panel()
         self.panel.show_all()
         self.place_panel()
@@ -533,12 +581,34 @@ class Mini:
         self.bubble.queue_draw()
 
     def hide_panel(self) -> None:
-        if self.open:
+        if self.open and self.talking:  # talk mode: keep the page alive, just invisible and click-through
+            run_js(self.view, "window.kuramaMiniShown && window.kuramaMiniShown(false, true)")
+            self.ghost = True
+            self.panel.set_opacity(0)
+            self.panel.set_keep_above(False)
+            gw = self.panel.get_window()
+            if gw is not None:
+                gw.input_shape_combine_region(cairo.Region(), 0, 0)
+        elif self.open:
             run_js(self.view, "window.kuramaMiniShown && window.kuramaMiniShown(false)")  # stops the mic, saves the chat
             self.panel.hide()
             if not self.reaper:
                 self.reaper = GLib.timeout_add_seconds(PANEL_KEEP_S, self.drop_panel)
         self.bubble.queue_draw()
+
+    def unghost(self) -> None:
+        if not self.ghost or self.panel is None:
+            self.ghost = False
+            return
+        self.ghost = False
+        self.state = "idle"
+        gw = self.panel.get_window()
+        if gw is not None:
+            gw.input_shape_combine_region(None, 0, 0)
+        self.panel.set_opacity(1)
+        self.panel.set_keep_above(True)
+        if self.caption is not None:
+            self.caption.hide()
 
     def drop_panel(self):
         """Hidden for a while: close the panel's page (~45 MB); the next click reopens it with the chat restored."""
@@ -553,8 +623,97 @@ class Mini:
             GLib.source_remove(self.reaper)
         if self.panel is not None:
             self.panel.destroy()
+        if self.caption is not None:
+            self.caption.win.destroy()
         self.bubble.destroy()
-        self.panel = self.view = None
+        self.panel = self.view = self.caption = None
+
+
+class Caption:
+    """A small reply bubble next to mini KURAMA's button (like Gemini's): what you said, then the reply as it
+    streams in; it fades out a few seconds after the reply is done. Click it to open the chat."""
+
+    CSS = b"""
+    .kcap { background-color: rgba(9, 10, 16, 0.94); border: 1px solid rgba(255, 122, 26, 0.55);
+            border-radius: 16px; padding: 10px 14px; }
+    .kcap .you { color: rgba(255, 255, 255, 0.55); font-size: 10pt; font-style: italic; }
+    .kcap .bot { color: #f4f1ec; font-size: 11pt; }
+    .kcap label { font-family: Ubuntu, "Noto Sans", sans-serif; }
+    """
+
+    def __init__(self, mini: Mini) -> None:
+        self.mini = mini
+        self.timer = 0
+        css = Gtk.CssProvider()
+        css.load_from_data(self.CSS)
+        w = self.win = Gtk.Window(title="KURAMA caption")
+        w.get_style_context().add_provider_for_screen(w.get_screen(), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        w.set_decorated(False)
+        w.set_resizable(False)
+        w.set_skip_taskbar_hint(True)
+        w.set_skip_pager_hint(True)
+        w.set_type_hint(Gdk.WindowTypeHint.DOCK)
+        w.set_keep_above(True)
+        w.set_accept_focus(False)
+        w.stick()
+        visual = w.get_screen().get_rgba_visual()
+        if visual is not None:
+            w.set_visual(visual)
+        w.set_app_paintable(True)
+        w.connect("draw", self.on_draw)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        box.get_style_context().add_class("kcap")
+        self.you, self.bot = Gtk.Label(xalign=0), Gtk.Label(xalign=0)
+        for lab, cls in ((self.you, "you"), (self.bot, "bot")):
+            lab.set_line_wrap(True)
+            lab.set_max_width_chars(34)
+            lab.set_lines(6)
+            lab.set_ellipsize(3)  # Pango.EllipsizeMode.END
+            lab.get_style_context().add_class(cls)
+            box.pack_start(lab, False, False, 0)
+        ev = Gtk.EventBox()
+        ev.set_visible_window(False)
+        ev.add(box)
+        ev.connect("button-release-event", lambda *_: self.mini.show_panel() or True)
+        w.add(ev)
+        w.set_size_request(CAPTION_W, -1)
+
+    @staticmethod
+    def on_draw(_w, cr):
+        cr.set_operator(cairo.OPERATOR_SOURCE)
+        cr.set_source_rgba(0, 0, 0, 0)
+        cr.paint()
+        cr.set_operator(cairo.OPERATOR_OVER)
+        return False  # then GTK draws the rounded box
+
+    def show(self, who: str, text: str, done: bool) -> None:
+        text = " ".join(text.split())
+        if not text:
+            return
+        if who == "you":
+            self.you.set_text(text[-160:])
+            self.bot.set_text("…")
+        else:
+            self.bot.set_text(text if len(text) <= 420 else text[:420].rsplit(" ", 1)[0] + "…")
+        self.you.set_visible(bool(self.you.get_text()))
+        self.win.show_all()
+        self.win.resize(CAPTION_W, 1)  # shrink to the text
+        self.place()
+        if self.timer:
+            GLib.source_remove(self.timer)
+            self.timer = 0
+        # done: long enough to read it (~15 characters a second, 5..14 s); else a safety net if no reply comes
+        self.timer = GLib.timeout_add_seconds(int(clamp(len(text) / 15, 5, 14)) if done else 25, self.hide)
+
+    def place(self) -> None:
+        w, h = self.win.get_size()
+        self.win.move(*self.mini.beside(w, h))
+
+    def hide(self):
+        self.timer = 0
+        self.win.hide()
+        self.you.set_text("")
+        return False
 
 
 def main() -> int:

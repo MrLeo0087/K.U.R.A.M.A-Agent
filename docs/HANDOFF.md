@@ -19,6 +19,8 @@ Repo: /media/leo/Project1/New_project/KURAMA, branch master. The venv is Python 
   - It pauses the page (`window.kuramaPause`) while a maximized window covers it.
   - Minimize gives a floating DOCK bubble plus a mini chat panel (`/?mini=1`). The panel shares the web process
     (related-view) and is dropped after 3 minutes hidden; its chat is restored from localStorage.
+    In talk mode, closing the panel keeps it alive (invisible, click-through) so talking goes on: the button's
+    ring shows the voice state and a caption beside it shows what was said and the reply (`Caption`).
   - It saves a dashboard snapshot to `~/.local/share/kurama/desktop.png` every 10 minutes and uses it as the GNOME
     background and as a startup cover, so login shows KURAMA instantly. The real wallpaper is stored in
     `real-wallpaper.json`; `set_wallpaper.current()` reads it from there.
