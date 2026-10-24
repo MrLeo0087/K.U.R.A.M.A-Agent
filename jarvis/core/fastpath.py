@@ -550,6 +550,8 @@ def match(text: str) -> Intent | None:
         return si
     if di := _daily_intent(t):
         return di
+    if ci := _control_intent(t):  # shutdown/restart/sleep, timers, alarms, stopwatch, Wi-Fi...
+        return ci
     if m := _full(TIME_LOCAL, t):
         want_date = bool(re.search(r"\b(?:date|day|today)\b|गते|तारीख|बार", t, I))
         return Intent("time", "get_time", "general", {"_date": True} if want_date else {})
@@ -792,6 +794,77 @@ REMIND_LIST = _rx(
     r"(?:my|all) reminders", r"do i have any reminders")
 REMIND_CANCEL = _rx(r"(?:cancel|delete|remove|stop) (?:the )?(?:reminder|schedule|scheduled command)"
                     r"(?: number| no\.?)? ?#?(?P<id>\d+)")
+
+
+# --- laptop control + clock (0 tokens) ---
+_DEV = r"(?:\s+(?:the|my|this))?\s*(?:laptop|computer|pc|system|machine|device)"
+_SHUTDOWN = re.compile(r"^(?:shut\s*down|power\s*off)(?:" + _DEV + r")?(?:\s+now)?$|^(?:turn|switch)\s+off" + _DEV + r"(?:\s+now)?$", I)
+_RESTART = re.compile(r"^(?:restart|reboot)(?:" + _DEV + r")?(?:\s+now)?$", I)
+_SUSPEND = re.compile(r"^(?:(?:sleep|suspend|hibernate)" + _DEV + r"|suspend|put" + _DEV + r"\s+to\s+sleep|"
+                      r"make" + _DEV + r"\s+sleep)(?:\s+now)?$", I)
+_LOGOUT = re.compile(r"^(?:log\s*out|logout|sign\s*out)(?:\s+(?:of\s+)?(?:the|my)?\s*(?:session|account|laptop|computer))?$", I)
+_NUM = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8,
+        "nine": 9, "ten": 10, "fifteen": 15, "twenty": 20, "thirty": 30, "forty": 40, "forty five": 45, "half an": 0.5}
+_AMOUNT = r"(?P<n>\d+(?:\.\d+)?|a|an|one|two|three|four|five|six|seven|eight|nine|ten|fifteen|twenty|thirty|forty(?: five)?|half an)"
+_UNIT = r"(?P<u>sec(?:ond)?s?|min(?:ute)?s?|hours?|hrs?)"
+_TIMER = [re.compile(r"^(?:set|start|put|make)\s+(?:a|an|the)?\s*(?:timer|countdown|count\s*down)\s+(?:for|of)\s+" + _AMOUNT + r"\s*" + _UNIT + r"$", I),
+          re.compile(r"^(?:set|start)?\s*(?:a|an)?\s*" + _AMOUNT + r"[\s-]*" + _UNIT + r"\s+(?:timer|countdown)$", I),
+          re.compile(r"^(?:timer|countdown)\s+(?:for\s+)?" + _AMOUNT + r"\s*" + _UNIT + r"$", I)]
+_ALARM = re.compile(r"^(?:set|put|create|add)\s+(?:an?\s+|the\s+)?alarm\s+(?:for|at)\s+(?P<w>.+)$|"
+                    r"^wake\s+me\s+(?:up\s+)?(?:at|by|in)\s+(?P<w2>.+)$|^alarm\s+(?:for|at)\s+(?P<w3>.+)$", I)
+_STOPWATCH = re.compile(r"^(?P<a>start|begin|stop|pause|reset|restart|resume|check|lap)?\s*(?:the\s+|a\s+)?stop\s?watch"
+                        r"(?:\s+(?P<b>start|stop|status|time|lap|reset))?$|^(?P<c>lap)$", I)
+_SWITCH = re.compile(r"^(?:turn|switch|put)\s+(?P<s>on|off)\s+(?:the\s+)?(?P<d>wi-?fi|wireless|bluetooth|airplane mode|"
+                     r"flight mode|aeroplane mode|battery saver|power saver|screen)$|"
+                     r"^(?:turn|switch|put)\s+(?:the\s+)?(?P<d2>wi-?fi|wireless|bluetooth|airplane mode|flight mode|"
+                     r"aeroplane mode|battery saver|power saver|screen)\s+(?P<s2>on|off)$|"
+                     r"^(?P<d3>wi-?fi|bluetooth|airplane mode|flight mode|battery saver|power saver)\s+(?P<s3>on|off)$", I)
+_POWERMODE = re.compile(r"^(?:switch\s+to\s+|set\s+|use\s+|enable\s+)?(?P<m>power saver|battery saver|saver|balanced|"
+                        r"performance|high performance)\s+mode$", I)
+
+
+def _amount(m: re.Match) -> dict | None:
+    n = m.group("n").lower()
+    v = float(n) if n[0].isdigit() else _NUM.get(n)
+    u = m.group("u").lower()
+    key = "seconds" if u.startswith("s") else "hours" if u.startswith("h") else "minutes"
+    return {key: v} if v else None
+
+
+def _control_intent(t: str) -> Intent | None:
+    if _SHUTDOWN.match(t):
+        return Intent("control", "power_off", "power", {"action": "shutdown"})
+    if _RESTART.match(t):
+        return Intent("control", "power_off", "power", {"action": "restart"})
+    if _SUSPEND.match(t):
+        return Intent("control", "suspend_computer", "power", {})
+    if _LOGOUT.match(t):
+        return Intent("control", "power_off", "power", {"action": "logout"})
+    for rx in _TIMER:
+        if (m := rx.match(t)) and (args := _amount(m)):
+            return Intent("control", "set_timer", "clock", args)
+    if m := _ALARM.match(t):
+        w = (m.group("w") or m.group("w2") or m.group("w3")).strip(" .")
+        return Intent("control", "set_alarm", "clock", {"when": w if not t.lower().startswith("wake me up in") else f"in {w}"})
+    if m := _STOPWATCH.match(t):
+        a = (m.group("a") or m.group("b") or m.group("c") or "status").lower()
+        a = {"begin": "start", "resume": "start", "restart": "reset", "pause": "stop", "check": "status",
+             "time": "status"}.get(a, a)
+        return Intent("control", "stopwatch", "clock", {"action": a})
+    if m := _SWITCH.match(t):
+        d = (m.group("d") or m.group("d2") or m.group("d3")).lower()
+        st = (m.group("s") or m.group("s2") or m.group("s3")).lower()
+        if d == "screen":
+            return Intent("control", "laptop_toggle", "system", {"setting": "screen", "state": "off"}) if st == "off" else None
+        if "saver" in d:
+            return Intent("control", "laptop_toggle", "system", {"setting": "power_mode", "state": "saver" if st == "on" else "balanced"})
+        setting = "wifi" if d.startswith(("wi", "wire")) else "bluetooth" if d == "bluetooth" else "airplane"
+        return Intent("control", "laptop_toggle", "system", {"setting": setting, "state": st})
+    if m := _POWERMODE.match(t):
+        mode = m.group("m").lower()
+        return Intent("control", "laptop_toggle", "system",
+                      {"setting": "power_mode", "state": "saver" if "saver" in mode else "performance" if "perf" in mode else "balanced"})
+    return None
 
 
 def _p9b_intent(t: str) -> Intent | None:

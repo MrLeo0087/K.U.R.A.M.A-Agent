@@ -19,7 +19,7 @@ from jarvis.core import config, notify, store, when
 
 log = logging.getLogger("jarvis.reminders")
 
-KINDS = ("reminder", "command")
+KINDS = ("reminder", "command", "alarm", "timer")
 
 
 def _dt(now: float | None) -> datetime:
@@ -44,12 +44,12 @@ def add(text: str, when_text: str, kind: str = "reminder", now: float | None = N
     if kind == "command":
         return (f"Scheduled #{sid} {desc}: \"{text}\". Steps that need your confirmation won't run "
                 "unattended.")
-    return f"Okay, reminder #{sid} set for {desc}: {text}."
+    return f"Okay, {kind} #{sid} set for {desc}: {text}."
 
 
 def _line(r: dict, now: float | None = None) -> str:
     desc = when.describe(r["next_run"], r.get("repeat") or "none", _dt(now))
-    label = "command" if r.get("kind") == "command" else "reminder"
+    label = r.get("kind") if r.get("kind") in KINDS else "reminder"
     return f"#{r['id']} {label} {desc}: {r['text']}"
 
 
@@ -120,9 +120,19 @@ def _hm(ts: float) -> str:
 
 
 def fire(row: dict) -> list[str]:
-    if row.get("kind") == "command":
+    from jarvis.core import sound
+
+    kind = row.get("kind")
+    if kind == "command":
         result = run_command(row["text"])
         return notify.notify(f"Scheduled: {row['text'][:60]}", result, level="info", source="scheduler")
+    if kind == "alarm":  # rings for a while, and reaches the phone too
+        sound.play("alarm", config.ALARM_RINGS)
+        return notify.notify(f"⏰ Alarm ({_hm(row['next_run'])})", row["text"], level="info", source="scheduler")
+    if kind == "timer":  # a laptop thing: sound + desktop, not the phone
+        sound.play("timer", 3)
+        return notify.notify("⏱️ Time's up", row["text"], level="info", source="timer")
+    sound.play("reminder", 2)
     return notify.notify(f"⏰ Reminder ({_hm(row['next_run'])})", f"{row['text']}\nIt's time, go do it now.",
                          level="info", source="scheduler")
 
@@ -136,7 +146,7 @@ def heads_up(now: float | None = None) -> list[int]:
         return sent
     for r in store.schedules_list(enabled_only=True, limit=50):
         due = r.get("next_run") or 0
-        if r.get("kind") == "command" or not (now < due <= now + lead):
+        if r.get("kind") != "reminder" or not (now < due <= now + lead):  # alarms/timers ring on their own
             continue
         mark = f"lead:{int(due)}"
         if r.get("note") == mark or due - (r.get("created") or 0) < lead + 60:

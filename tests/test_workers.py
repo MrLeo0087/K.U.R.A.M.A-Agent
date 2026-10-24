@@ -367,7 +367,11 @@ def test_telegram_confirm_yes_no_timeout_and_blocked(tg, monkeypatch, tmp_path):
     monkeypatch.setattr(config, "TELEGRAM_CONFIRM_TIMEOUT_S", 0.05)
     assert bot.confirm("Should I delete a file?") is False and tg["sent"][-1].startswith("No answer")
     n = len(tg["sent"])
-    res = safety.execute("power_off", {}, confirm=bot.confirm)
+    from jarvis.core import registry
+    reg = registry.Registry(packages=())
+    reg._discovered = True
+    reg.tool(lambda: "boom", name="self_destruct", safety="blocked")
+    res = safety.execute("self_destruct", {}, confirm=bot.confirm, reg=reg)
     assert "blocked" in res.output and len(tg["sent"]) == n  # blocked: never even asks
 
 

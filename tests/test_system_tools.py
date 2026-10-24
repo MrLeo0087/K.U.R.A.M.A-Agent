@@ -113,7 +113,7 @@ NEW = {"volume": ("audio", "safe"), "mute_audio": ("audio", "safe"), "mic_mute":
        "media_control": ("media", "safe"), "brightness": ("display", "safe"),
        "snap_window": ("windows", "safe"), "list_windows": ("windows", "safe"),
        "launch_workspace": ("apps", "safe"), "lock_screen": ("power", "safe"),
-       "suspend_computer": ("power", "confirm"), "power_off": ("power", "blocked"),
+       "suspend_computer": ("power", "confirm"), "power_off": ("power", "confirm"),
        "screenshot": ("screen", "safe"), "read_clipboard": ("clipboard", "safe"),
        "write_clipboard": ("clipboard", "safe"), "clipboard_history": ("clipboard", "safe"),
        "read_aloud": ("speech", "safe")}
@@ -252,14 +252,15 @@ def test_lock_screen_with_fallback(desk):
     assert lock_screen() == "screen locked" and desk.ran("gnome-screensaver-command", "-l")
 
 
-def test_suspend_needs_confirm_and_power_off_blocked(desk):
+def test_suspend_and_power_off_need_confirm(desk):
     res = safety.execute("suspend_computer", {}, confirm=lambda p: False)
     assert not res.ok and not desk.ran("systemctl")
     res = safety.execute("suspend_computer", {}, confirm=lambda p: True)
     assert res.ok and res.output == "suspending now" and desk.ran("systemctl", "suspend")
-    res = safety.execute("power_off", {"action": "shutdown"}, confirm=lambda p: True)
-    assert not res.ok and "blocked" in res.output
-    assert not desk.ran("shutdown") and len(desk.ran("systemctl")) == 1
+    res = safety.execute("power_off", {"action": "shutdown"}, confirm=lambda p: False)
+    assert not res.ok and len(desk.ran("systemctl")) == 1  # declined: nothing ran
+    res = safety.execute("power_off", {"action": "restart"}, confirm=lambda p: True)
+    assert res.ok and desk.ran("systemctl", "reboot")
 
 
 # --- screenshot ---

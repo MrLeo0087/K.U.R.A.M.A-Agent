@@ -10,6 +10,7 @@ def tmp_store(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "JOBS_NOTIFY", False)  # never pop desktop notifications in tests
     monkeypatch.setattr(config, "TELEGRAM_BOT_TOKEN", "")  # never message the real phone from a test
     monkeypatch.setattr(config, "NOTIFY_DESKTOP", False)
+    monkeypatch.setattr(config, "SOUNDS", False)  # no alarm sounds from tests
     monkeypatch.setattr(config, "FASTPATH", False)  # LLM-path tests stay on the LLM path; fastpath tests enable it
     monkeypatch.setattr(config, "STT_DUAL", False)  # single-pass STT unless a test opts in
     monkeypatch.setattr(config, "JOB_RESOURCE_GATE", False, raising=False)  # P9b: jobs never wait on real RAM

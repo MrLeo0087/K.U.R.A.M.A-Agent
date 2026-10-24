@@ -77,7 +77,11 @@ STT_FIXES: dict[str, str] = {
     r"\bvisual\s+studio(?:\s+code)?\b": "VS Code",
     r"\bbear\s+skull\b": "VS Code",
     r"\b(?:karama|kurma|corama|kurrama)\b": "Kurama",
+    r"\bslip\b(?=\s+(?:my|the|this|now|mode|kurama|laptop|computer)\b|\s*[.!?]*$)": "sleep",  # "slip my laptop"
+    r"^\s*hut\s+down\b": "shut down",
 }
+SOUNDS = os.getenv("KURAMA_SOUNDS", "1").lower() not in ("0", "false", "no", "off")  # alarm/timer/reminder sounds
+ALARM_RINGS = 6  # how many times an alarm rings
 
 # --- TTS (edge-tts) ---
 VOICES: dict[str, str] = {
@@ -279,6 +283,8 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
     "toolsmith": ("make a tool", "make tool", "create a tool", "build a tool", "new tool", "skills", "skill",
                   "saved tools", "my tools"),
     "system": ("battery", "cpu", "ram", "system doing", "my system", "system status", "system health",
+               "wifi", "wi-fi", "bluetooth", "airplane", "flight mode", "power saver", "battery saver",
+               "performance mode", "balanced mode", "screen off", "turn off the screen",
                "resources", "resource usage", "memory usage", "ram usage", "disk", "disk space", "swap",
                "storage", "workers", "computer doing", "laptop doing", "सिस्टम", "रैम", "डिस्क", "मेमोरी"),
     "audio": ("volume", "mute", "unmute", "louder", "quieter", "sound", "speaker", "speakers", "mic",
@@ -295,7 +301,8 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
                "capture screen", "स्क्रीनशॉट"),
     "power": ("battery", "charging", "charge left", "battery health", "बैटरी", "ब्याट्री", "बेट्री",
               "lock", "lock screen", "sleep", "suspend", "shutdown", "shut down", "reboot", "restart",
-              "power off", "लॉक"),
+              "power off", "log out", "logout", "sign out", "लॉक"),
+    "clock": ("timer", "alarm", "stopwatch", "stop watch", "wake me", "count down", "countdown", "lap"),
     "clipboard": ("clipboard", "clip board", "copy", "copied", "paste", "क्लिपबोर्ड"),
     "speech": ("read aloud", "read out", "read it out", "read this", "read that", "say aloud",
                "speak this", "read the clipboard", "read clipboard", "padh ke sunao", "पढ़कर सुनाओ",
@@ -383,14 +390,15 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
     "telegram": "send a file or a message to the user's Telegram (phone)",
     "toolsmith": "no tool fits a real task: offer to build a small new tool; saved skills list/delete",
     "skills": "small tools KURAMA built earlier (saved skills)",
-    "system": "system resources (RAM, swap, CPU, disk, KURAMA memory) and background workers status",
+    "system": "system resources (RAM, CPU, disk) and laptop switches: Wi-Fi, Bluetooth, airplane, power mode, screen off",
     "watch": "watch a process/PID until it exits or tail a training log and alert on errors/progress",
     "automation": "trigger n8n workflows; crash watchdog (auto-restart dev servers) targets and status",
     "audio": "speaker volume, mute, microphone mute",
     "display": "screen brightness, light/dark mode",
     "desktop": "do not disturb, night light, wallpaper, automatic dark/light at sunset, focus (pomodoro) timer",
     "screen": "take a screenshot (full screen, window or area)",
-    "power": "battery status, lock the screen, sleep/suspend (shutdown and restart are blocked)",
+    "power": "battery status, lock the screen, sleep/suspend, shut down, restart, log out",
+    "clock": "timers, alarms (with sound) and a stopwatch",
     "clipboard": "read or write the clipboard, clipboard history",
     "speech": "read text or the clipboard aloud",
     "windows": "snap, maximize, minimize, restore or list windows",
@@ -423,10 +431,11 @@ TOOL_GROUP_GLOSS: dict[str, str] = {
     "screen": "screenshot", "power": "battery", "clipboard": "", "speech": "", "windows": "",
     "apps": "", "media": "music", "desktop": "wallpaper", "git": "", "dev": "tests", "codequality": "review",
     "devutils": "docstrings",
-    "web": "search, wiki", "memory": "notes",
+    "web": "search", "memory": "notes",
     "knowledge": "my code", "usage": "tokens", "browser": "",
     "jobs": "writing",
     "schedule": "remind",
+    "clock": "",
     "image": "",
     "daily": "math, news",
     "self": "about me",
