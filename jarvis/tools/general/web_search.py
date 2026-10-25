@@ -63,7 +63,8 @@ def format_results(rows: list[dict], limit: int | None = None) -> str:
 
 
 @tool(group="web", safety="safe",
-      description="Search the web for current info, people, news or facts: top results with title, URL and snippet.")
+      description="Search the web for general info, people or facts: top results with title, URL and snippet. "
+                  "NOT for scores, prices, rates or today's news (use live_search).")
 def web_search(query: str, k: int = 5) -> str:
     """Search the web.
 

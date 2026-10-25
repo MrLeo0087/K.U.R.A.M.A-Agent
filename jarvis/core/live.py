@@ -3,8 +3,10 @@
   sports(): ESPN's public JSON API (free, no key): find the team, then its live game, last result (with scorers)
             and next fixture, in local time. Football/soccer (all big leagues), NBA, NFL, MLB, NHL ...  0 tokens
   news():   Google News RSS (free, minutes fresh), newest first, each with its age and source.        0 tokens
-  answer(): for a "what happened / who won / latest ..." question: fresh headlines + the top 2 articles' text,
-            then the fast LLM answers in 1-3 sentences with dates (~1.5k tokens). Used when 0-token parts can't.
+  facts():  prices/rates with a reliable free live API: gold/silver in Nepal (FENEGOSIDA, official), currency
+            rates in NPR (open.er-api), crypto (CoinGecko), stocks (Yahoo Finance).                       0 tokens
+  answer(): ANY other current question: Google News (< 1 day) + DuckDuckGo (< 1 week), top pages read, then the
+            fast LLM answers ONLY from them, with dates (~1.5-2k tokens).
 Results are cached briefly (sports 60 s, news 5 min) so repeats are free.
 """
 from __future__ import annotations
@@ -203,46 +205,191 @@ def news_text(query: str, k: int = 5) -> str:
                                         for n, i in enumerate(items, 1))
 
 
+# --- prices and rates from official / market-data APIs (0 tokens) ---
+_GOLD_Q = re.compile(r"\b(?:gold|silver|sun|chandi|सुन|चाँदी)\b", re.I)
+_FX_Q = re.compile(r"\b(?:exchange\s+rate|dollar|usd|euro|eur|pound|gbp|rupee|inr|indian\s+rupee|yen|jpy|yuan|cny|riyal|"
+                   r"sar|dirham|aed|ringgit|myr|won|krw|aud|cad|qatari|qar|kuwaiti|kwd)\b", re.I)
+_CRYPTO = {"bitcoin": "bitcoin", "btc": "bitcoin", "ethereum": "ethereum", "eth": "ethereum", "solana": "solana",
+           "sol": "solana", "dogecoin": "dogecoin", "doge": "dogecoin", "xrp": "ripple", "ripple": "ripple",
+           "bnb": "binancecoin", "cardano": "cardano", "ada": "cardano", "usdt": "tether", "tether": "tether"}
+_STOCK_Q = re.compile(r"\b(?:stock|share|shares)\s+(?:price|value|rate)\b|\bprice\s+of\s+.+\s+(?:stock|shares?)\b", re.I)
+_FX_CODES = {"dollar": "USD", "usd": "USD", "euro": "EUR", "eur": "EUR", "pound": "GBP", "gbp": "GBP", "rupee": "INR",
+             "inr": "INR", "indian rupee": "INR", "yen": "JPY", "jpy": "JPY", "yuan": "CNY", "cny": "CNY",
+             "riyal": "SAR", "sar": "SAR", "dirham": "AED", "aed": "AED", "ringgit": "MYR", "myr": "MYR",
+             "won": "KRW", "krw": "KRW", "aud": "AUD", "cad": "CAD", "qatari": "QAR", "qar": "QAR",
+             "kuwaiti": "KWD", "kwd": "KWD"}
+
+
+def _money(n: float) -> str:
+    return f"Rs {n:,.0f}" if n >= 100 else f"Rs {n:,.2f}"
+
+
+def gold_nepal() -> str | None:
+    """Official daily gold/silver rates from FENEGOSIDA (Nepal's gold & silver dealers' federation)."""
+    rows = _cached(("gold",), 600, lambda: _get("https://api.fenegosida.org/api/website/v1/Dashboard/today"))
+    if not isinstance(rows, list) or not rows:
+        return None
+    names = {"छापावाल सुन": "Fine gold (hallmark)", "तेजाबी सुन": "Tejabi gold", "असली चाँदी": "Silver"}
+    out, when = [], ""
+    for r in rows:
+        label = next((v for k, v in names.items() if k in r.get("rateType", "")), r.get("rateType", ""))
+        unit = "tola" if "तोला" in r.get("rateType", "") else "10 g"
+        now, before = float(r.get("todayBaseRatePerGram") or 0), float(r.get("yestardayBaseRatePerGram") or 0)
+        diff = now - before
+        trend = f", {'up' if diff > 0 else 'down'} {_money(abs(diff))} since {_local(r['yestardayDate']).strftime('%d %b')}" \
+            if before and diff else ""
+        out.append(f"{label}: {_money(now)} per {unit}{trend}")
+        when = _local(r["todayDate"]).strftime("%d %b %Y %I:%M %p")
+    return "Gold/silver in Nepal (FENEGOSIDA, " + when + "):\n" + "\n".join(out)
+
+
+def forex(text: str) -> str | None:
+    t = text.lower()
+    codes = list(dict.fromkeys(c for w, c in _FX_CODES.items() if re.search(r"\b" + w + r"\b", t)))
+    if not codes:
+        codes = ["USD", "EUR", "INR", "GBP"] if re.search(r"exchange\s+rate", t) else []
+    if not codes:
+        return None
+    data = _cached(("fx",), 1800, lambda: _get("https://open.er-api.com/v6/latest/USD"))
+    rates = (data or {}).get("rates") or {}
+    npr = rates.get("NPR")
+    if not npr:
+        return None
+    lines = [f"1 {c} = Rs {npr / rates[c]:,.2f}" for c in codes if c in rates and c != "NPR"]
+    upd = (data or {}).get("time_last_update_utc", "")[:16]
+    return ("Exchange rates in Nepali rupees (market rate, updated " + upd + " UTC; banks/NRB differ slightly):\n"
+            + "\n".join(lines)) if lines else None
+
+
+def crypto(text: str) -> str | None:
+    ids = list(dict.fromkeys(v for k, v in _CRYPTO.items() if re.search(r"\b" + k + r"\b", text.lower())))
+    if not ids:
+        return None
+    data = _cached(("cg", tuple(ids)), 120, lambda: _get(
+        "https://api.coingecko.com/api/v3/simple/price",
+        {"ids": ",".join(ids), "vs_currencies": "usd,npr", "include_24hr_change": "true"}))
+    if not data:
+        return None
+    lines = []
+    for i in ids:
+        d = data.get(i) or {}
+        if "usd" in d:
+            ch = d.get("usd_24h_change")
+            lines.append(f"{i.title()}: ${d['usd']:,.2f}" + (f" (Rs {d['npr']:,.0f})" if d.get("npr") else "")
+                         + (f", {ch:+.1f}% in 24 h" if ch is not None else ""))
+    return "Crypto (CoinGecko, live):\n" + "\n".join(lines) if lines else None
+
+
+def stock(text: str) -> str | None:
+    name = re.sub(r"\b(?:stock|share|shares|price|value|rate|of|the|what(?:'s| is)|today|now|current|live|latest)\b",
+                  " ", text, flags=re.I)
+    name = " ".join(name.split())
+    if not name:
+        return None
+    hdr = {"User-Agent": "Mozilla/5.0"}
+    from jarvis.tools.general import _web
+    st, found = _web.get_json("https://query1.finance.yahoo.com/v1/finance/search",
+                              params={"q": name, "quotesCount": 1, "newsCount": 0}, headers=hdr)
+    quotes = (found or {}).get("quotes") or []
+    if st != 200 or not quotes:
+        return None
+    sym = quotes[0]["symbol"]
+    st, chart = _web.get_json(f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}",
+                              params={"range": "1d", "interval": "1d"}, headers=hdr)
+    try:
+        m = chart["chart"]["result"][0]["meta"]
+    except (TypeError, KeyError, IndexError):
+        return None
+    prev = m.get("chartPreviousClose") or m.get("previousClose")
+    ch = f", {((m['regularMarketPrice'] - prev) / prev * 100):+.2f}% today" if prev else ""
+    when = datetime.fromtimestamp(m["regularMarketTime"]).astimezone().strftime("%d %b %I:%M %p")
+    return (f"{quotes[0].get('longname') or quotes[0].get('shortname') or sym} ({sym}): "
+            f"{m['regularMarketPrice']:,.2f} {m.get('currency', '')}{ch} (Yahoo Finance, as of {when})")
+
+
+def facts(text: str) -> str | None:
+    """0-token answers for prices/rates that have a reliable free live source."""
+    try:
+        if _GOLD_Q.search(text) and re.search(r"\b(?:price|rate|cost|today|now|current|bhau|भाउ|kati)\b", text, re.I):
+            return gold_nepal()
+        if re.search(r"\b(?:crypto|coin)\b", text, re.I) or any(re.search(r"\b" + k + r"\b", text.lower())
+                                                                  for k in _CRYPTO):
+            if r := crypto(text):
+                return r
+        if _STOCK_Q.search(text):
+            return stock(text)
+        if _FX_Q.search(text) and re.search(r"\b(?:rate|price|to|in|npr|nepali|value|today|how\s+much)\b", text, re.I):
+            return forex(text)
+    except Exception as e:  # noqa: BLE001 - a dead API falls back to the fresh-source answer
+        log.warning("facts lookup failed: %s", e)
+    return None
+
+
 # --- fresh answer (LLM over fresh sources) ---
 def _article_text(url: str, limit: int = 1800) -> str:
     try:
+        from jarvis.tools.general import _web
         from jarvis.tools.general.read_webpage import fetch
-        title, text = fetch(url)
-        return text[:limit]
+        ctype, body = fetch(url)
+        if "html" not in ctype:
+            return ""
+        return _web.html_to_text(body)[1][:limit]
     except Exception as e:  # noqa: BLE001 - one bad page shouldn't sink the answer
         log.info("article fetch failed: %s", e)
         return ""
 
 
+def _web_recent(query: str, k: int = 5) -> list[dict]:
+    """DuckDuckGo results from the past week (direct links, unlike Google News redirects)."""
+    try:
+        from ddgs import DDGS
+        rows = DDGS(timeout=10).text(query, max_results=k, timelimit="w") or []
+        return [{"title": r.get("title", ""), "url": r.get("href", ""), "snippet": r.get("body", "")} for r in rows]
+    except Exception as e:  # noqa: BLE001
+        log.info("ddg recent failed: %s", e)
+        return []
+
+
 def answer(question: str) -> str:
-    """Answer a current-events question from minutes-fresh sources, with dates. ~1.5k tokens."""
-    q = team_query(question) or question
-    items = news(question, 6) or news(q, 6)
-    if not items:
+    """Answer a current question from fresh sources (news < 1 day + web < 1 week, top pages read), with dates."""
+    items = news(question, 6)
+    web = _cached(("ddgw", question.lower()), 300, lambda: _web_recent(question))
+    if not items and not web:
         return f"I couldn't find anything recent about that. ({question})"
     now = datetime.now().astimezone()
     heads = "\n".join(f"- [{i['when'].astimezone().strftime('%d %b %H:%M')}] {i['title']} ({i['source']})"
                       for i in items)
-    bodies = "\n\n".join(f"[{i['source']}, {i['when'].astimezone().strftime('%d %b %H:%M')}]\n{t}"
-                         for i in items[:2] if (t := _article_text(i["url"])))
+    snips = "\n".join(f"- {w['title']}: {w['snippet'][:220]} ({w['url'][:80]})" for w in web)
+    bodies = "\n\n".join(f"[{w['url'][:80]}]\n{t}" for w in web[:2] if (t := _article_text(w["url"])))
     from jarvis.core import llm
     msgs = [{"role": "system", "content": "Answer the question ONLY from the sources below, in 1-3 short sentences. "
-                                          "Prefer the newest source. Say the date/time of the fact. If the sources "
-                                          "don't contain the answer, say so plainly. No guessing."},
+                                          "Prefer the newest source and give the date of the fact (and the number "
+                                          "with its unit for prices). If the sources don't contain the answer, say so "
+                                          "plainly. No guessing, no old knowledge."},
             {"role": "user", "content": f"Now: {now.strftime('%A %d %B %Y %H:%M %Z')}\nQuestion: {question}\n\n"
-                                        f"Headlines (newest first):\n{heads}\n\nArticles:\n{bodies[:4000]}"}]
+                                        f"News headlines (newest first):\n{heads or '-'}\n\nWeb results (past week):\n"
+                                        f"{snips or '-'}\n\nPages:\n{bodies[:3500] or '-'}"}]
     try:
         reply = llm.chat(msgs, tier="fast", purpose="live_answer", max_tokens=300)
-        text = (reply.text or "").strip()
+        text = re.sub(r"【[^】]*】", "", (reply.text or "")).strip()  # gpt-oss inline citation marks
     except Exception as e:  # noqa: BLE001 - fall back to the 0-token headlines
         log.warning("live answer LLM failed: %s", e)
         text = ""
-    src = ", ".join(dict.fromkeys(i["source"] for i in items[:3] if i["source"]))
-    return (text + f"\n(Sources: {src}; newest {_ago(items[0]['when'])})") if text else news_text(question)
+    src = ", ".join(dict.fromkeys([i["source"] for i in items[:2] if i["source"]] +
+                                  [re.sub(r"^https?://(?:www\.)?([^/]+).*", r"\1", w["url"]) for w in web[:2]]))
+    if text:
+        return text + f"\n(Sources: {src})"
+    return news_text(question) if items else format_web(web)
+
+
+def format_web(rows: list[dict]) -> str:
+    return "Recent results:\n" + "\n".join(f"{n}. {r['title']} - {r['snippet'][:140]}" for n, r in enumerate(rows, 1))
 
 
 def search(query: str, kind: str = "auto") -> str:
-    """Router: sports -> ESPN, news -> headlines, question -> fresh answer."""
+    """Router: prices/rates -> official APIs, sports -> ESPN, news -> headlines, anything else -> fresh answer."""
+    if kind in ("auto", "answer") and (f := facts(query)):
+        return f
     if kind in ("auto", "sports") and (kind == "sports" or SPORTS_Q.search(query)):
         try:
             if r := sports(query):

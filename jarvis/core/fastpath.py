@@ -1045,19 +1045,50 @@ _LIVE_SPORT = [re.compile(r"^(?:please\s+)?(?:what(?:'s|\s+is|\s+was)\s+|tell\s+
                re.compile(r"^who\s+won\s+(?:the\s+|today'?s?\s+|last\s+|yesterday'?s?\s+)*(?P<t>.+?)(?:\s+(?:match|game))?(?:\s+today|\s+yesterday)?\??$", I),
                re.compile(r"^when\s+(?:is|does|do|will)\s+(?:the\s+)?(?:next\s+)?(?P<t>.+?)(?:'s)?\s+(?:next\s+)?"
                           r"(?:match|game|play(?:ing)?(?:\s+next)?|fixture)(?:\s+next)?\??$", I),
-               re.compile(r"^(?:is|are)\s+(?P<t>.+?)\s+playing\s+(?:today|tonight|now)\??$", I)]
+               re.compile(r"^(?:is|are)\s+(?P<t>.+?)\s+playing\s+(?:today|tonight|now)\??$", I),
+               # "tell me today man united match", "man united match today", "what happened in the X game"
+               re.compile(r"^(?:please\s+)?(?:(?:tell|show|give)\s+(?:me\s+)?(?:about\s+)?|what\s+happened\s+(?:in|to)\s+|"
+                          r"how\s+(?:was|is|did)\s+|update\s+(?:on|me\s+on)\s+|any\s+update\s+on\s+)?" + _DAYW +
+                          r"(?P<t>[^?]{3,40}?)(?:'s)?\s+(?:match|game|fixture)(?:\s+(?:today|tonight|yesterday|now|go|end))?\??$", I),
+               re.compile(r"^how\s+did\s+(?P<t>.+?)\s+(?:do|play|perform)(?:\s+(?:today|tonight|yesterday))?\??$", I),
+               re.compile(r"^(?P<t>[a-z .'-]{3,30}?)\s+(?:vs\.?|versus|v)\s+[a-z .'-]{3,30}(?:\s+(?:today|score|result|match))?\??$", I)]
 _LIVE_NEWS = re.compile(r"^(?:please\s+)?(?:(?:what(?:'s|\s+is)\s+the\s+|give\s+me\s+(?:the\s+)?|show\s+(?:me\s+)?(?:the\s+)?|"
                         r"tell\s+me\s+(?:the\s+)?)?(?:latest|today'?s|recent|top|breaking|current)\s+)?(?:news|headlines)"
                         r"(?:\s+(?:about|on|for|from|in|of)\s+(?P<t>.+?))?(?:\s+today|\s+now)?\??$", I)
+_LIVE_PRICE = re.compile(r"^(?:please\s+)?(?:what(?:'s|\s+is|\s+are)\s+|tell\s+me\s+|give\s+me\s+|check\s+|how\s+much\s+is\s+)?(?:the\s+)?"
+                         r"(?:today'?s\s+|current\s+|latest\s+|live\s+)?(?:(?:price|rate|cost|value)\s+of\s+.{2,40}|"
+                         r".{2,40}?\s+(?:price|rate|prices|rates|bhau|भाउ)|exchange\s+rates?)"
+                         r"(?:\s+(?:in|of)\s+nepal)?(?:\s+(?:today|now|right\s+now|currently))?\??$", I)
+_FRESH = re.compile(r"\b(?:today|tonight|now|right\s+now|current|currently|latest|recent|recently|this\s+(?:week|month|year)|"
+                    r"live|so\s+far|yet|breaking|just\s+(?:now|announced|happened))\b", I)
+_ASK = re.compile(r"^(?:what|who|whom|which|when|where|how|is|are|was|were|did|does|has|have|will|tell\s+me|give\s+me|any)\b", I)
+_NOT_FRESH = re.compile(r"\b(?:you|your|yourself|my|me|i|we|our|kurama|jarvis|time|date|day|weather|battery|volume|"
+                        r"brightness|training|epoch|accuracy|loss|it|job|jobs|reminder|alarm|timer|download|file|folder|code|project)\b", I)
+
+
+def fresh_intent(t: str) -> Intent | None:
+    """LAST resort before the LLM: a question about something current ('who is leading the election now',
+    'latest iphone price', 'is the airport open today') -> live_search answer from minutes-fresh sources."""
+    if len(t.split()) < 3 or not _ASK.match(t) or not _FRESH.search(t) or _NOT_FRESH.search(t):
+        return None
+    return Intent("live", "live_search", "web", {"query": t, "kind": "auto"})
+
+
 _NOT_TEAM = re.compile(r"^(?:my|the|this|that|it|your|our|test|tests|training|model|exam|search|regex|file|files|"
+                       r"find|open|close|install|launch|start|run|compare|best|perfect|exact|a|an|pattern|string|"
                        r"build|code|job|jobs|download|backup|query)\b", I)
 
 
 def live_intent(t: str) -> Intent | None:
     """'what is the result of today inter miami match', 'barcelona score', 'did real madrid win', 'news about Nepal'."""
+    if _LIVE_PRICE.match(t) and not re.search(r"\b(?:my|your|this|that|ticket|plan|interest)\b|\d+(?:\.\d+)?\s*"
+                                              r"(?:usd|dollars?|euros?|rs|rupees?|npr|inr|pounds?|%|kg|km|gb)\b", t, I):
+        return Intent("live", "live_search", "web", {"query": t, "kind": "auto"})
     if m := _LIVE_NEWS.match(t):
         topic = (m.group("t") or "top stories").strip()
         return Intent("live", "live_search", "web", {"query": f"news {topic}", "kind": "news"})
+    if re.search(r"\bvs\s*code\b|\bvisual\s+studio\b", t, I):
+        return None
     for rx in _LIVE_SPORT:
         if (m := rx.match(t)) and (team := m.group("t").strip(" ,?")) and not _NOT_TEAM.match(team) \
                 and len(team.split()) <= 6:
@@ -1179,7 +1210,7 @@ def match(text: str) -> Intent | None:
         return _open_intent(m.group("target").strip(" ,"), m.group("verb").lower())
     if m := _full(CLOSE, t):
         return _close_intent(m.group("target").strip(" ,"))
-    return None
+    return fresh_intent(t)
 
 
 def _close_intent(target: str) -> Intent | None:

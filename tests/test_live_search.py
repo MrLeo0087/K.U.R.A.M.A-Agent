@@ -58,3 +58,31 @@ def test_intents():
     for t in ("did the tests pass", "what is the result of my exam", "did my training finish"):
         i = fastpath.match(t)
         assert i is None or i.tool != "live_search", t
+
+
+def test_more_sport_phrases_and_false_friends():
+    for t in ("Tell.me today man united match", "man united match today", "how did man united do",
+              "man united vs bournemouth", "what happened in the man united match"):
+        assert fastpath.match(t).tool == "live_search", t
+    assert fastpath.match("open vs code").tool == "open_app"
+    i = fastpath.match("find the best match")
+    assert i is None or i.tool != "live_search"
+
+
+def test_price_and_fresh_routing():
+    for t in ("what is the gold price in Nepal today", "dollar rate today", "bitcoin price", "tesla stock price",
+              "price of iphone 17 in nepal", "who is leading the election now"):
+        assert fastpath.match(t).tool == "live_search", t
+    for t in ("what is the weather today", "what time is it now", "how is my training going now"):
+        assert fastpath.match(t).tool != "live_search", t
+
+
+def test_gold_and_fx_formatting(monkeypatch):
+    live._cache.clear()
+    gold = [{"todayDate": "2026-10-25T04:50:30+00:00", "yestardayDate": "2026-10-19T04:52:59+00:00",
+             "rateType": "छापावाल सुन (१ तोला)", "todayBaseRatePerGram": 278500.0, "yestardayBaseRatePerGram": 290200.0}]
+    fx = {"rates": {"NPR": 152.0, "USD": 1.0, "INR": 95.0}, "time_last_update_utc": "Sun, 25 Oct 2026 00:02"}
+    monkeypatch.setattr(live, "_get", lambda url, params=None: gold if "fenegosida" in url else fx)
+    assert "Fine gold (hallmark): Rs 278,500 per tola, down Rs 11,700" in live.facts("gold price in nepal today")
+    assert "1 USD = Rs 152.00" in live.facts("dollar rate today")
+    assert "1 INR = Rs 1.60" in live.facts("indian rupee rate")
