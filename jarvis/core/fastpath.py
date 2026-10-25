@@ -1204,6 +1204,12 @@ def everyday_intent(t: str) -> Intent | None:
     if re.fullmatch(r"(?:please\s+)?(?:share|show|give\s+me)\s+(?:the\s+|my\s+)?(?:wi[\s-]*fi|wifi)(?:\s+(?:password|qr(?:\s+code)?|"
                     r"code))?(?:\s+(?:qr(?:\s+code)?))?(?:\s+(?:to|with)\s+.{1,30})?[\s.!]*|(?:wi[\s-]*fi|wifi)\s+qr(?:\s+code)?[\s.!]*", t, I):
         return Intent("wifiqr", "share_wifi", "desktop", {})
+    if m := re.fullmatch(r"(?:please\s+)?(?P<a>lock|unlock|encrypt|decrypt|password\s+protect)\s+(?:the\s+|my\s+)?(?P<p>.+?)"
+                         r"(?:\s+(?:folder|file|directory))?(?:\s+with\s+(?:a\s+)?password)?[\s.!]*", t, I):
+        p = m.group("p").strip()
+        if not re.fullmatch(r"(?:the\s+)?(?:screen|laptop|computer|pc|kurama|phone|door|it\s+now)", p, I):
+            act = "unlock" if m.group("a").lower() in ("unlock", "decrypt") else "lock"
+            return Intent("lock", "folder_lock", "filesearch", {"action": act, "path": p}, p)
     if _WHERE_PATH.match(t):
         return Intent("where", "_where", "filesearch", {})
     if (m := _KILL.match(t)) and not re.search(r"\b(?:it|this|that|time|me|process\s+\d+)\b", m.group("a"), I):
