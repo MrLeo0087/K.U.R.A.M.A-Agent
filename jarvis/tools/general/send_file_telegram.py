@@ -127,26 +127,32 @@ def send_file_telegram(path: str = "", caption: str = "", pick: int = 0) -> str:
     from jarvis.tools.general.find_and_send import find_and_send
     if pick or not path.strip():
         return find_and_send(path, pick)
-    resolved = _files.resolve(path)
-    if resolved.is_dir():  # a full/relative folder path: zip it; split into parts if over the Telegram limit
-        return deliver_folder(resolved, caption)
-    if not resolved.is_file():  # not a literal path — maybe "project in download", "downloads/project", "the X folder"
+    raw = path.strip().strip("\"'")
+    cleaned = re.sub(r"\s*\bfolder\b\s*", " ", raw, flags=re.I).strip()
+    literal = Path(raw).expanduser()
+    if literal.is_absolute() or raw.startswith("~"):  # an explicit path the user/model gave
+        if literal.is_dir():
+            return deliver_folder(literal, caption)
+        if literal.is_file():
+            if err := _tg.ready():
+                return err
+            try:
+                return deliver(check_path(raw), caption)
+            except ValueError as e:
+                return f"error: {e}"
+        return f"error: {literal} doesn't exist"
+    nested = "/" in raw or bool(re.search(r"\b(?:in|inside|under|from)\b", raw, re.I))  # "X in Y", "downloads/project"
+    if nested:
         try:
             from jarvis.tools.interactive._proc import resolve_dir
-            d = resolve_dir(re.sub(r"\s*\bfolder\b\s*", " ", path, flags=re.I).strip())
+            d = resolve_dir(cleaned)
             if d.is_dir():
                 return deliver_folder(d, caption)
         except Exception:
             pass
-    try:
-        p = check_path(path)
-    except ValueError as e:
-        if "/" in path or path.startswith("~"):
-            return f"error: {e}"
-        return find_and_send(path)  # a name, not a path: find it first
-    if err := _tg.ready():
-        return err
-    return deliver(p, caption)
+    # a bare NAME ("phone", "clz_project", "report.pdf"): find it with EXACT-match preference — never fuzzy to "Python"
+    want = "folder" if re.search(r"\b(?:folder|directory|dir)\b", raw, re.I) else "file"
+    return find_and_send(cleaned, want=want)
 
 
 def deliver(p: Path, caption: str = "") -> str:
@@ -161,7 +167,9 @@ def deliver(p: Path, caption: str = "") -> str:
         return f"error: Telegram didn't accept {p.name}: {e}"
     if not ok:
         return f"error: Telegram didn't accept {p.name} (check the bot token/chat id or your internet)"
-    return f"Sent {p.name} to Telegram."
+    # don't put the raw filename in the text: Telegram turns "x.zip" into a (dead) web link because .zip is a TLD.
+    # The file itself is attached above with its name, so just confirm.
+    return "Sent it to your Telegram. ✅"
 
 
 alias("find_and_send", "send_file_telegram", lambda a: {"path": a.get("name", ""), "pick": a.get("pick", 0)})

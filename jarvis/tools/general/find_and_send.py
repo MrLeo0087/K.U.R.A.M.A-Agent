@@ -87,13 +87,26 @@ def _picked(paths: list[Path], pick: int) -> str:
     return send_paths([paths[pick - 1]])
 
 
-def find_and_send(name: str = "", pick: int = 0) -> str:
+def _folders(name: str) -> str:
+    """Search folders by name and send/list them (used when the user explicitly said 'folder')."""
+    folders = search(re.sub(r"\s*\bfolders?\b\s*", " ", name, flags=re.I).strip() or name, ftype="d")
+    if len(folders) == 1:
+        return send_paths(folders)
+    if folders:
+        store.kv_set(LAST_KEY, json.dumps({"t": time.time(), "paths": [str(p) for p in folders]}))
+        return (f"I found {len(folders)} folders matching {name!r} (I'll zip and send the one you pick):\n"
+                + "\n".join(_line(i, p) for i, p in enumerate(folders, 1)) + "\nReply with a number to send it.")
+    return ""
+
+
+def find_and_send(name: str = "", pick: int = 0, want: str = "file") -> str:
     """Search home and every disk for a file name and send it. Several matches: lists them numbered; call
     again with pick=N (or pick=-1 for all) to send from that list.
 
     Args:
         name: File name or part of it ("naruto.jpg", "naruto", "*.pdf"). Empty when pick refers to the last list.
         pick: 0 = search; N = send item N of the last list; -1 = send all of them (max 5).
+        want: "folder" to look for a folder (and zip it), else a file.
     """
     if err := _tg.ready():
         return err
@@ -109,6 +122,10 @@ def find_and_send(name: str = "", pick: int = 0) -> str:
     if not name:
         return "error: tell me the file name to look for"
     name = Path(name).name if "/" in name else name  # "/wrong/dir/x.py" -> look for x.py everywhere
+    if want == "folder":  # the user said "folder": search folders, not files (so "phone folder" != phone*.svg)
+        if out := _folders(name):
+            return out
+        return f"I couldn't find a folder named like {name!r} in your home folder or on your disks."
     paths, note = search(name), ""
     if paths and pick:  # "send all the X files" / "send the 2nd one" in one go
         store.kv_set(LAST_KEY, json.dumps({"t": time.time(), "paths": [str(p) for p in paths]}))
