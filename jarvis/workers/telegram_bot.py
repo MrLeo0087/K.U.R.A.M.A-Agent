@@ -39,6 +39,12 @@ HELP = (
     "/status (or 'status') — training epochs/accuracy/ETA, jobs, downloads...\n"
     "'stop training' / 'stop training now' — stop a run (asks first)\n"
     "/jobs — background jobs\n"
+    "\n🖥 Remote control\n"
+    "/control (or 'start remote desktop') — turn on RustDesk and get the ID + password to control the screen\n"
+    "\n🔒 Security\n"
+    "/lock — block all risky actions (use if your phone is lost)\n"
+    "/unlock <pin> — unlock after /lock\n"
+    "Risky actions (camera, send files, shutdown, location, remote desktop) ask for your PIN once per 30 min.\n"
     "\n⚙️ Chat control\n"
     "/stop — stop a stuck task and reset the chat\n"
     "/clear — clear this chat + reminders/alarms (keeps what I know about you)\n"
@@ -63,6 +69,7 @@ class TelegramBot(Worker):
         super().__init__(interval_s)
         self.offset = 0
         self._agent = None
+        self._pending_risky: str | None = None  # a risky message waiting for the PIN
         self._backlog: collections.deque[dict] = collections.deque()
         self._confirm_lock = threading.Lock()
         self.handled = 0
@@ -200,6 +207,32 @@ class TelegramBot(Worker):
                 return
         self.handled += 1
         self.log.info("message (%d chars)", len(text))
+        # --- security: lock switch + PIN for risky actions ---
+        from jarvis.core import telesec
+        low = text.strip().lower()
+        if low.startswith("/lock") or low in ("lock kurama", "lock"):
+            self._pending_risky = None
+            self.send(telesec.lock())
+            return
+        if low.startswith("/unlock"):
+            parts = text.split(maxsplit=1)
+            self.send(telesec.unlock(parts[1] if len(parts) > 1 else ""))
+            return
+        if self._pending_risky and telesec.looks_like_pin(text):  # a PIN answering a held-back risky action
+            if telesec.verify_pin(text.strip().lstrip("/")):
+                pending, self._pending_risky = self._pending_risky, None
+                self.send("PIN accepted.")
+                self.send(self.reply_with_typing(pending))
+            else:
+                self.send("Wrong PIN. The action was not run.")
+            return
+        if telesec.looks_like_pin(text) and telesec.verify_pin(text.strip().lstrip("/")):
+            self.send(f"PIN accepted — risky actions unlocked for {int(config.TELEGRAM_PIN_WINDOW_S // 60)} min.")
+            return
+        if (gated := telesec.gate(text)) is not None:
+            self._pending_risky = text  # the next PIN runs it
+            self.send(gated)
+            return
         self.send(self.reply_with_typing(text))
 
     def answer(self, text: str) -> str:
