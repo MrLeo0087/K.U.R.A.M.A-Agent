@@ -22,14 +22,13 @@ def _under_shares(p: Path) -> bool:
 
 
 def check_path(path: str) -> Path:
-    """Resolved file path; raises ValueError unless it exists, is a file, <= 50 MB and is under SHARE_ROOTS."""
+    """Resolved file path; raises ValueError unless it exists, is a file and is under SHARE_ROOTS.
+    (No size limit here: deliver() sends a big file as a download link instead of rejecting it.)"""
     p = _files.resolve(path)
     if not _under_shares(p):
         raise ValueError(f"I can only send files from your home folder or your data disks, not {p}")
     if not p.is_file():
         raise ValueError(f"{p} doesn't exist or isn't a file")
-    if p.stat().st_size > config.TELEGRAM_FILE_MAX_MB * 1024 * 1024:
-        raise ValueError(f"{p.name} is bigger than {config.TELEGRAM_FILE_MAX_MB} MB")
     return p
 
 
@@ -96,20 +95,22 @@ def deliver_folder(path: str | Path, caption: str = "") -> str:
     name = Path(path).name if not isinstance(path, Path) else path.name
     if z.stat().st_size <= cap:
         return deliver(z, caption or f"{name} (folder, zipped)")
-    base = z.name  # the real zip filename (has a timestamp); the parts are <base>.001, .002, …
-    parts = split_file(z, int(cap) - 512 * 1024)  # a little headroom under the limit
-    if len(parts) > 25:  # absurdly large: don't flood the chat with 40 parts
-        for pp in parts:
-            pp.unlink(missing_ok=True)
-        return (f"“{name}” would need {len(parts)} Telegram files even split — that's too many to send sensibly. "
-                f"Tell me a specific sub-folder or file instead.")
-    results = []
-    for i, pp in enumerate(parts, 1):
-        results.append(deliver(pp, f"{name} — part {i}/{len(parts)}"))
-    bad = [r for r in results if r.startswith("error")]
-    howto = (f"Sent “{name}” as {len(parts)} parts ({base}.001 … .{len(parts):03d}). To rebuild it on a computer: "
-             f"put all parts in one folder, then run  cat {base}.*  >  {base}  and unzip {base}.")
-    return howto if not bad else howto + "\nSome parts failed: " + "; ".join(bad)
+    # Too big for Telegram: upload the ONE zip to a free host and send a single download link (far better than
+    # splitting into parts you can't rebuild on a phone).
+    mb = z.stat().st_size / (1024 * 1024)
+    return upload_and_link(z, name, mb)
+
+
+def upload_and_link(file_path: Path, name: str, mb: float, is_zip: bool = True) -> str:
+    from jarvis.core import cloudshare
+    try:
+        link = cloudshare.share(str(file_path))
+    except Exception as e:
+        return (f"“{name}” is {mb:.0f} MB — too big for Telegram's {config.TELEGRAM_FILE_MAX_MB} MB limit, and the "
+                f"file-share upload didn't work ({str(e)[:100]}). It's saved on your laptop at {file_path}.")
+    tail = " (tap it, download, then unzip)" if is_zip else " (tap it to download)"
+    return (f"📦 “{name}” is {mb:.0f} MB — too big to send through Telegram directly, so I uploaded it. Download link"
+            f"{tail}:\n{link}\n(Anyone with this link can download it, and it may expire after a while.)")
 
 
 # safe: it can only ever send to the owner's own chat (TELEGRAM_CHAT_ID), like find_and_send
@@ -156,7 +157,10 @@ def send_file_telegram(path: str = "", caption: str = "", pick: int = 0) -> str:
 
 
 def deliver(p: Path, caption: str = "") -> str:
-    """Upload one checked file to the user's chat (photos as pictures, the rest as documents)."""
+    """Upload one checked file to the user's chat (photos as pictures, the rest as documents).
+    A file over Telegram's limit is uploaded to a file host and sent as a download link instead."""
+    if p.stat().st_size > config.TELEGRAM_FILE_MAX_MB * 1024 * 1024:
+        return upload_and_link(p, p.name, p.stat().st_size / (1024 * 1024), is_zip=False)
     photo = p.suffix.lower() in PHOTO_EXT and p.stat().st_size <= PHOTO_MAX
     method, field = ("sendPhoto", "photo") if photo else ("sendDocument", "document")
     payload = {"chat_id": config.TELEGRAM_CHAT_ID, **({"caption": caption[:1000]} if caption else {})}

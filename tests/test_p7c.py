@@ -129,8 +129,10 @@ def test_send_file_path_checks_and_multipart(roots, tmp_path, tg, monkeypatch):
     assert res.ok and tg[-1][:3] == ("sendDocument", {"chat_id": "42", "caption": "here"}, {"document": "report.pdf"})
     ex("send_file_telegram", {"path": str(img)})
     assert tg[-1][0] == "sendPhoto" and tg[-1][2] == {"photo": "pic.png"}
-    monkeypatch.setattr(config, "TELEGRAM_FILE_MAX_MB", 0)
-    assert "bigger than" in ex("send_file_telegram", {"path": str(doc)})[0].output
+    monkeypatch.setattr(config, "TELEGRAM_FILE_MAX_MB", 0)  # too big for Telegram -> upload + link (not an error)
+    monkeypatch.setattr("jarvis.core.cloudshare.share", lambda p: "https://gofile.io/d/XYZ")
+    out = ex("send_file_telegram", {"path": str(doc)})[0].output
+    assert "gofile.io/d/XYZ" in out and "Download link" in out
 
 
 def test_telegram_call_sends_multipart(monkeypatch):

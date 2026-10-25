@@ -40,22 +40,39 @@ def test_folder_zipped_and_sent(monkeypatch, tmp_path):
     assert "Sent" in out and sent and sent[0][0].endswith(".zip") and "folder" in sent[0][1]
 
 
-def test_big_folder_split_into_parts(monkeypatch, tmp_path):
+def test_big_folder_uploads_and_links(monkeypatch, tmp_path):
+    # a folder too big for Telegram is uploaded to a file host and sent as ONE download link (not split parts)
     import os
     monkeypatch.setattr(config, "OUTPUTS_DIR", tmp_path)
     monkeypatch.setattr(config, "SHARE_ROOTS", (tmp_path,))
-    monkeypatch.setattr(config, "TELEGRAM_FILE_MAX_MB", 1)  # tiny limit to force a split
+    monkeypatch.setattr(config, "TELEGRAM_FILE_MAX_MB", 1)  # tiny limit so the zip counts as "too big"
     monkeypatch.setattr("jarvis.core.paths.all_disks", lambda: [tmp_path])
     monkeypatch.setattr("jarvis.tools.general._tg.ready", lambda: "")
+    uploaded = []
+    monkeypatch.setattr("jarvis.core.cloudshare.share", lambda p: uploaded.append(p) or "https://gofile.io/d/ABC123")
     d = tmp_path / "bigproj"
     d.mkdir()
     for i in range(6):
         (d / f"f{i}.bin").write_bytes(os.urandom(500 * 1024))  # incompressible: the zip stays big
     import jarvis.tools.general.send_file_telegram as S
-    sent = []
-    monkeypatch.setattr(S, "deliver", lambda p, caption="": sent.append(p.name) or f"Sent {p.name}.")
     out = S.deliver_folder(d)
-    assert "parts" in out and "cat" in out and len(sent) >= 3
-    assert all(".zip.00" in n for n in sent)  # the real timestamped base, numbered
-    base = sent[0].rsplit(".", 1)[0]  # <name>-<ts>.zip
-    assert f"cat {base}.*" in out  # the reassembly glob matches the actual filenames
+    assert "https://gofile.io/d/ABC123" in out and "Download link" in out
+    assert uploaded and uploaded[0].endswith(".zip")  # the whole zip was uploaded once
+
+
+def test_upload_failure_tells_the_truth(monkeypatch, tmp_path):
+    import os
+    from jarvis.core import cloudshare
+    monkeypatch.setattr(config, "OUTPUTS_DIR", tmp_path)
+    monkeypatch.setattr(config, "SHARE_ROOTS", (tmp_path,))
+    monkeypatch.setattr(config, "TELEGRAM_FILE_MAX_MB", 1)
+    monkeypatch.setattr("jarvis.core.paths.all_disks", lambda: [tmp_path])
+    monkeypatch.setattr("jarvis.tools.general._tg.ready", lambda: "")
+    monkeypatch.setattr(cloudshare, "share", lambda p: (_ for _ in ()).throw(cloudshare.ShareError("host down")))
+    d = tmp_path / "bigproj"
+    d.mkdir()
+    for i in range(6):
+        (d / f"f{i}.bin").write_bytes(os.urandom(500 * 1024))
+    import jarvis.tools.general.send_file_telegram as S
+    out = S.deliver_folder(d)
+    assert "didn't work" in out and "saved on your laptop" in out  # honest, not a fake success
