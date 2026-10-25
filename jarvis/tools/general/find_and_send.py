@@ -91,6 +91,8 @@ def _folders(name: str) -> str:
     """Search folders by name and send/list them (used when the user explicitly said 'folder')."""
     folders = search(re.sub(r"\s*\bfolders?\b\s*", " ", name, flags=re.I).strip() or name, ftype="d")
     if len(folders) == 1:
+        from jarvis.core import focus
+        focus.set_path(str(folders[0]))
         return send_paths(folders)
     if folders:
         store.kv_set(LAST_KEY, json.dumps({"t": time.time(), "paths": [str(p) for p in folders]}))

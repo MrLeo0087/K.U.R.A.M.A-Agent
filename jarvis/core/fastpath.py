@@ -188,23 +188,45 @@ def listdir_intent(t: str) -> Intent | None:
 
 
 # "send [me] [the] X folder/file [in Y] [to telegram]" — send a file/folder to Telegram (0 tokens)
-_TGDEST = r"(?:\s+(?:to|in|on|via|through)\s+(?:my\s+)?(?:telegram|phone|mobile))"
-_SENDLEAD = r"(?:send|share|forward|upload)(?:\s+(?:me|us|the|my))*\s+"
+_DEST = r"(?:telegram|telegra|phone|mobile)"
+_TGDEST = r"(?:\s+(?:to|in|on|via|through)\s+(?:my\s+)?" + _DEST + r")"
+_SENDLEAD = r"(?:(?:ok|okay|nice|yes|yeah|now|please|hey|fine|good)\s+)*(?:send|share|forward|upload)(?:\s+(?:me|us|the|my))*\s+"
+# a location that is NOT the telegram destination, so "in telegram" is never read as the folder's location
+_LOCP = r"(?!(?:my\s+)?" + _DEST + r"\b)(?P<loc>[\w /.\-]+?)"
 SENDFILE = _rx(
     _SENDLEAD + r"(?P<target>.+?)\s+(?:folder|directory|file|document|zip|pdf|image|photo|video)s?"
-    + r"(?:\s+(?:in|from|inside)\s+(?P<loc>[\w /.\-]+?))?" + _TGDEST + r"?",
-    _SENDLEAD + r"(?P<target>[\w.\-]+(?:\s+[\w.\-]+){0,3}?)\s+(?:in|from|inside)\s+(?P<loc>[\w /.\-]+?)" + _TGDEST,
+    + r"(?:\s+(?:in|from|inside)\s+" + _LOCP + r")?" + _TGDEST + r"?",
+    _SENDLEAD + r"(?P<target>[\w.\-]+(?:\s+[\w.\-]+){0,3}?)\s+(?:in|from|inside)\s+" + _LOCP + _TGDEST,
 )
+# "send this / send it / send that folder [to telegram]" -> whatever we were just talking about
+_ANAPHORA_SEND = re.compile(
+    r"^\s*(?:(?:ok|okay|nice|yes|yeah|now|please|hey|fine|good)\s+)*(?:send|share|forward|upload)"
+    r"(?:\s+(?:me|us|it|this|that|the|them))*(?:\s+(?:folder|file|one|document|zip))?"
+    r"(?:\s+(?:again|also|too))?" + _TGDEST + r"?\s*[.!?]*$", I)
+
+
+def _focus_intent() -> Intent | None:
+    from jarvis.core import focus
+    fp = focus.get_path()
+    if not fp:
+        return None
+    return Intent("sendfile", "send_file_telegram", "telegram", {"path": fp}, fp.rstrip("/").rsplit("/", 1)[-1])
 
 
 def sendfile_intent(t: str) -> Intent | None:
+    if _ANAPHORA_SEND.match(t):  # "send this folder" / "send it to telegram"
+        return _focus_intent()
     m = _full(SENDFILE, t)
     if not m:
         return None
     tgt = (m.group("target") or "").strip(" ,")
     loc = (m.groupdict().get("loc") or "").strip(" ,")
-    if not tgt or len(tgt.split()) > 6 or re.fullmatch(r"(?:it|that|this|them|a message|message|hi|hello)", tgt, I):
+    if re.fullmatch(r"(?:my\s+)?" + _DEST, loc, I):  # "in telegram" wrongly captured as location
+        loc = ""
+    if not tgt or len(tgt.split()) > 6 or re.fullmatch(r"(?:a message|message|hi|hello)", tgt, I):
         return None
+    if re.fullmatch(r"(?:it|that|this|them|the)", tgt, I):  # anaphora target -> the folder we're talking about
+        return _focus_intent()
     path = f"{tgt} in {loc}" if loc else tgt
     return Intent("sendfile", "send_file_telegram", "telegram", {"path": path}, tgt)
 
@@ -650,7 +672,12 @@ _DAYS = {"today": 1, "yesterday": 2, "this week": 7, "last week": 14, "this mont
 _STATUS = re.compile(r"^(?:(?:what(?:'s|s| is) the )?(?:current )?status|what(?:'s|s| is) going on|what(?:'s|s| is) happening|"
                      r"any (?:updates?|news)|give me (?:an |the )?(?:update|status)|how(?:'s| is) everything(?: going)?|"
                      r"status (?:update|report)|update me)(?: now)?$", I)
-_TRAIN_Q = re.compile(r"^(?:what(?:'s| is) the |how many |which )?(?:current |latest )?(?:accuracy|acc|loss|epochs?|val(?:idation)? "
+_COLAB_SETUP = re.compile(
+    r"^(?:(?:please |now )?(?:set\s*up|setup|connect|link|configure|enable|start|get|give me)\s+)"
+    r"(?:(?:the|my|a)\s+)?(?:google\s+)?colab(?:\s+(?:cell|notebook|training|tracking|watch|monitor|link|"
+    r"for\s+(?:track(?:ing)?|watch(?:ing)?|monitor(?:ing)?)(?:\s+training)?))?\s*[.!?]*$"
+    r"|^(?:google\s+)?colab\s+(?:set\s*up|setup|cell|link|tracking|connect)\s*[.!?]*$", re.I)
+_TRAIN_Q = re.compile(r"^(?:what(?:'s| is) the |how many |which )?(?:current |latest )?(?:accuracy|acc|loss|epochs?|val(?:idation)?"
                       r"(?:accuracy|loss))(?: (?:now|so far|is it(?: on)?|done|completed|finished|are done|of (?:my |the )?"
                       r"(?:model|training)))*$", I)
 _TRAIN_STOP = re.compile(r"^(?:please )?(?:stop|end|cancel|kill|halt) (?:the |my )?(?:model )?(?:training|train(?:ing)? run|"
@@ -660,6 +687,8 @@ _TRAIN_STOP = re.compile(r"^(?:please )?(?:stop|end|cancel|kill|halt) (?:the |my
 def _study_intent(t: str) -> Intent | None:
     if _STATUS.match(t):
         return Intent("status", "status_now", "usage", {})
+    if _COLAB_SETUP.match(t):
+        return Intent("training", "training", "watch", {"action": "colab"})
     if _TRAIN_Q.match(t):
         return Intent("training", "training", "watch", {"action": "status"})
     if m := _TRAIN_STOP.match(t):

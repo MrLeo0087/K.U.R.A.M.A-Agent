@@ -79,6 +79,8 @@ def list_folder(path: str, pattern: str = "", hidden: bool = False) -> str:
     dirs, notes = _targets(path)
     if not dirs:
         return notes[0] if notes else f"error: not a folder: {path}"
+    from jarvis.core import focus
+    focus.set_path(str(dirs[0]))  # "send this folder" after listing refers to this folder
     lines, picks = [n for n in notes if not n.startswith("error")], []
     for d in dirs[:4]:
         got, shown = _list_one(d, (pattern or "").lower().strip(), hidden, len(picks) + 1)

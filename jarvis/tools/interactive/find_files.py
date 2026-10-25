@@ -84,6 +84,9 @@ def find_files(query: str, path: str = "", kind: Literal["name", "folder", "cont
         partial = f" (timed out after {TIMEOUT}s; partial, narrow the path)" if late else ""
         if not found:
             return f"no {what} matching {query!r} under {base}{partial}"
+        if kind == "folder":  # "is there an X folder?" -> remember it, so "send this folder" works next
+            from jarvis.core import focus
+            focus.set_path(found[0])
         head = f"{len(found)}{'+' if len(found) == limit else ''} {what} named like {query!r}{partial}:"
         return "\n".join([head, *(_clean(f) for f in found)])
     argv = content_argv(query, limit)

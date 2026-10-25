@@ -224,6 +224,13 @@ class TelegramBot(Worker):
             return phone.clipboard_text()
         if phone.SCREEN.match(text):
             return phone.screenshot_to_phone()
+        # "send this folder" / "send X folder in Y" / "send it" (after we discussed a folder) -> send that, reliably
+        # (0 tokens, before the resend/LLM path) so it never asks for a chat id or sends a random file
+        from jarvis.core import fastpath
+        if config.FASTPATH:
+            if si := fastpath.sendfile_intent(fastpath.normalize(text)):
+                from jarvis.tools.general.send_file_telegram import send_file_telegram
+                return send_file_telegram(**si.args)
         if phone.RESEND.match(text):  # "send that / send it again" -> resend the last photo/video/screenshot
             return phone.resend_last()
         if phone.CAMERA.match(text):

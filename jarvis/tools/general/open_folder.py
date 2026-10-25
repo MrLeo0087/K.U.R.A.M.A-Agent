@@ -20,6 +20,8 @@ def open_folder(name: str) -> str:
     if not dirs:
         return notes[0] if notes else f"error: no folder like {name!r} found on your laptop"
     d = dirs[0]
+    from jarvis.core import focus
+    focus.set_path(str(d))  # "send this folder" after opening refers to it
     _open(str(d))  # xdg-open on a directory opens the default file manager there
     note = next((n for n in notes if not n.startswith("error")), "")
     return f"Opened “{d.name}” in your file manager ({d})." + (f" {note}" if note else "")
