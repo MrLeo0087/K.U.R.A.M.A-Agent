@@ -893,6 +893,23 @@ def error_intent(text: str) -> Intent | None:
     return None
 
 
+def _ui_intent(t: str) -> Intent | None:
+    """In-app control at 0 tokens: tab/page shortcuts, 'press ctrl t', 'type hello', 'click Wi-Fi'."""
+    from jarvis.core import uiagent as ui
+    if re.fullmatch(r"(?:please\s+)?(?:enable|turn\s+on|set\s*up|activate)\s+(?:the\s+)?screen\s+(?:control|agent)", t, I):
+        return Intent("ui", "app_control", "windows", {"action": "enable"})
+    if sc := ui.parse_shortcut(t):
+        name = f"tab:{sc['n']}" if sc["action"] == "tab" else sc["action"]
+        return Intent("ui", "app_control", "windows", {"action": "shortcut", "text": name, "app": sc["app"]})
+    if p := ui.parse_press(t):
+        return Intent("ui", "app_control", "windows", {"action": "press", "text": p["keys"], "app": p["app"]})
+    if p := ui.parse_type(t):
+        return Intent("ui", "app_control", "windows", {"action": "type", "text": p["text"], "app": p["app"]})
+    if p := ui.parse_click(t):
+        return Intent("ui", "app_control", "windows", {"action": "click", "text": p["name"], "app": p["app"]})
+    return None
+
+
 def match(text: str) -> Intent | None:
     """The single high-confidence intent for text, or None."""
     from jarvis.core import selfknow
@@ -907,6 +924,8 @@ def match(text: str) -> Intent | None:
         return None
     if si := _self_intent(t):
         return si
+    if ui := _ui_intent(t):
+        return ui
     if di := _daily_intent(t):
         return di
     if ci := _control_intent(t):  # shutdown/restart/sleep, timers, alarms, stopwatch, Wi-Fi...

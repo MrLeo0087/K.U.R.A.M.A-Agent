@@ -2,7 +2,7 @@
 
 Two independent walls (PINs live in .env — config.TELEGRAM_RISKY_PIN / TELEGRAM_LOCK_PIN):
   - Risky PIN  : running a risky action (shutdown, delete, shell, send a file/folder, camera/video, screenshot,
-                 location, guard) needs the PIN once per config.TELEGRAM_PIN_WINDOW_S (30 min). Harmless things
+                 location, guard, clicking/typing on the screen) needs the PIN once per config.TELEGRAM_PIN_WINDOW_S (30 min). Harmless things
                  (status, weather, reminders) never ask.
   - /lock      : a panic switch — while locked, EVERY risky action is blocked no matter what, until /unlock <pin>
                  (the lock PIN). Use it if your phone goes missing.
@@ -35,7 +35,9 @@ _RISKY = re.compile(
     r"where(?:'s| is)?\s+(?:my\s+)?laptop|/where|/locate|/here|/track|/history|location\s+of\s+(?:my\s+)?laptop|"
     r"guard|/guard|"
     r"kill\b|stop\s+(?:the\s+)?process|install\b|"
-    r"remote\s+desktop|rust\s*desk|/control|control\s+(?:my\s+)?laptop)\b", re.I)
+    r"remote\s+desktop|rust\s*desk|/control|control\s+(?:my\s+)?laptop|"
+    # driving the laptop's screen (screen agent): clicking, typing, pressing keys, tasks "on screen"/"in <app>"
+    r"^(?:please\s+)?(?:click|tap|double\s*click|type|press|hit)\s|on\s+(?:the\s+)?screen)\b", re.I)
 
 # commands that are always allowed even while locked / without a PIN (safety + control of the lock itself)
 _ALWAYS = {"/lock", "/unlock", "/help", "/start", "/status", "/stop"}

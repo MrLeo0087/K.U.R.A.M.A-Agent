@@ -256,7 +256,8 @@ ROUTER_EXAMPLES: dict[str, tuple[str, ...]] = {
     "schedule": ("remind me later to call mom", "what reminders do I have", "cancel that reminder"),
     "clock": ("set an alarm for the morning", "start a countdown", "start the stopwatch"),
     "clipboard": ("what is on my clipboard", "copy that text", "what did I copy before"),
-    "windows": ("move this window to the left half", "maximize the window", "switch to the browser window"),
+    "windows": ("move this window to the left half", "maximize the window", "switch to the browser window",
+                "click the wifi button in settings", "turn on dark mode in the settings app"),
     "apps": ("open the calculator app", "close spotify", "the app froze, kill it"),
     "media": ("pause the music", "next track please", "play my playlist"),
     "screen": ("capture my screen", "screenshot of this window"),
@@ -391,7 +392,9 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
               "power off", "log out", "logout", "sign out", "लॉक"),
     "clock": ("timer", "alarm", "stopwatch", "stop watch", "wake me", "count down", "countdown", "lap"),
     "clipboard": ("clipboard", "clip board", "copy", "copied", "paste", "क्लिपबोर्ड"),
-    "windows": ("window", "windows", "snap", "minimize", "minimise", "maximize", "maximise",
+    "windows": ("click", "tap on", "double click", "press the", "new tab", "close tab", "tab", "tabs", "button",
+                "on screen", "on the screen", "in the app", "dark mode in", "toggle", "in settings",
+                "window", "windows", "snap", "minimize", "minimise", "maximize", "maximise",
                 "left half", "right half", "tile", "restore window", "full screen", "fullscreen",
                 "split", "side by side", "half screen", "big screen", "पूरा स्क्रीन", "what's open",
                 "what is open", "things open", "currently open", "open right now", "running apps",
@@ -487,7 +490,7 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
              "photo + location) and where the laptop is",
     "clock": "timers, alarms (with sound) and a stopwatch",
     "clipboard": "read or write the clipboard, clipboard history",
-    "windows": "snap, maximize, minimize, restore or list windows",
+    "windows": "snap, maximize, minimize, restore or list windows; control the app on screen (tabs, keys, typing, clicking buttons, free-form tasks inside apps)",
     "apps": "open, close, focus or force-kill apps; launch a named workspace of apps and sites",
     "media": "music and video playback (play, pause, next, previous, what's playing), YouTube, playlists, hand-gesture media control (camera)",
     "git": "git status, log, diff, commit and branches; code time machine (automatic snapshots: what changed since "
@@ -643,6 +646,9 @@ TELEGRAM_MAX_REPLY_CHARS = 3500
 TELEGRAM_RISKY_PIN = os.getenv("TELEGRAM_RISKY_PIN", "1500")  # needed to run risky actions from Telegram
 TELEGRAM_LOCK_PIN = os.getenv("TELEGRAM_LOCK_PIN", "0087")    # /unlock <this> clears a /lock
 REMOTE_PW_TTL_MIN = float(os.getenv("REMOTE_PW_TTL_MIN", "15"))  # RustDesk password stops working after this
+UI_TIER = "fast"  # screen agent (free-form app control) LLM tier
+UI_MAX_STEPS = 8  # a free-form screen task stops after this many steps
+UI_MAX_ITEMS = 70  # on-screen items sent to the LLM per step (token cap)
 REMOTE_HELPER = "/usr/local/sbin/kurama-rustdesk"  # root-owned helper (scripts/kurama-rustdesk.sh), run via sudo -n
 TELEGRAM_PIN_WINDOW_S = float(os.getenv("TELEGRAM_PIN_WINDOW_S", "1800"))  # risky PIN is remembered this long (30 min)
 

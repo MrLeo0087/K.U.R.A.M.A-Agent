@@ -56,8 +56,9 @@ def test_close_app_phrases():
     assert fastpath.render(it, True, "closed 1 window(s) of Cheese", "en") == "Done, I closed camera."
     assert fastpath.render(it, True, "no open window matches 'camera'", "en") == "Camera isn't open."
     assert fastpath.match("Disable the handset system.").args == {"action": "off"}
-    for text in ("close the tab", "close the door", "close all windows"):
+    for text in ("close the door", "close all windows"):
         assert fastpath.match(text) is None, text
+    assert fastpath.match("close the tab").tool == "app_control"  # a browser-tab shortcut, not close_app("tab")
 
 
 def test_fastpath_common_misses():
