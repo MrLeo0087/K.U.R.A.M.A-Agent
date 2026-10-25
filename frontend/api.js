@@ -87,8 +87,9 @@ export class Api {
   statusStream() { return new EventSource(this.url("/api/v1/status/stream", true)); }
 
   // POST /chat and yield the parsed SSE events.
-  async *chat(text, { mode = "text", lang = null, signal } = {}) {
+  async *chat(text, { mode = "text", lang = null, signal, ambient = false } = {}) {
     const body = { text, mode };
+    if (ambient) body.ambient = true;
     if (lang && lang !== "auto") body.lang = lang;
     const r = await this.request("/api/v1/chat", { method: "POST", body, signal, raw: true });
     const reader = r.body.getReader();

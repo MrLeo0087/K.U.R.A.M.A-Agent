@@ -15,6 +15,7 @@ import asyncio
 import contextlib
 import logging
 import threading
+import re
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -70,6 +71,21 @@ def _tool_ms(name: str, ts0: float, used: set[int]) -> int | None:
             used.add(i)
             return r["latency_ms"]
     return None
+
+
+_NAME = re.compile(r"\b(?:kurama|kuramaa|jarvis|karma|curama)\b|कुरामा|कुरमा", re.I)
+
+
+def addressed(text: str) -> bool:
+    """Is this utterance meant for KURAMA? It names KURAMA, or the fast path knows it as a command (0 tokens)."""
+    if _NAME.search(text or ""):
+        return True
+    try:
+        from jarvis.core import fastpath
+        it = fastpath.match(text)
+    except Exception:  # noqa: BLE001
+        return True
+    return it is not None and it.tool != "_say"
 
 
 def reply_lang(text: str, hint: str | None = None) -> str:
@@ -158,8 +174,15 @@ class Engine:
                        "ms": t.get("ms", _tool_ms(str(t.get("name")), ts0, used))})
         return max(seen, len(tools))
 
-    def run_turn(self, turn: Turn, text: str, mode: str, lang: str | None) -> None:
+    def run_turn(self, turn: Turn, text: str, mode: str, lang: str | None, ambient: bool = False) -> None:
         t0, ts0 = time.monotonic(), time.time()
+        if ambient and not addressed(text):
+            # talk mode heard room talk / TV / a phone call: not a command and KURAMA wasn't named -> no LLM call
+            log.info("ignored ambient speech: %r", text[:60])
+            turn.push({"type": "done", "text": "", "ignored": True, "route": None, "tier": "", "tokens": 0, "ms": 0,
+                       "lang": lang or "en"})
+            turn.push(None)
+            return
         with self.turn_lock:
             self.current = turn
             try:

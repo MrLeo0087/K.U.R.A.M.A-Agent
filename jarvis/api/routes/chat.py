@@ -25,6 +25,8 @@ class ChatIn(BaseModel):
     text: str = Field("", description="User message")
     mode: str | None = Field("text", description="'text' or 'voice' (voice = short spoken-style replies)")
     lang: str | None = Field(None, description="Language hint: en | ne | hi (omit for auto)")
+    ambient: bool = Field(False, description="voice heard while nobody was talking to KURAMA (room talk/TV): "
+                                             "answered only when it is clearly a command or names KURAMA")
 
 
 class ConfirmIn(BaseModel):
@@ -50,7 +52,7 @@ async def chat(body: ChatIn, request: Request):
     mode: Literal["text", "voice"] = "voice" if body.mode == "voice" else "text"
     engine = st.engine
     turn = Turn(asyncio.get_running_loop(), asyncio.Queue())
-    threading.Thread(target=engine.run_turn, args=(turn, text, mode, norm_lang(body.lang)),
+    threading.Thread(target=engine.run_turn, args=(turn, text, mode, norm_lang(body.lang), body.ambient is True),
                      name="jarvis-turn", daemon=True).start()
 
     async def events():

@@ -169,8 +169,20 @@ class TelegramBot(Worker):
         return msg
 
     # --- loop ---
+    _TRANSIENT = ("ReadTimeout", "ConnectTimeout", "ConnectError", "RemoteProtocolError", "Bad Gateway",
+                  "Too Many Requests", "Gateway Timeout", "Service Unavailable", "name resolution")
+
     def tick(self) -> None:
-        updates = list(self._backlog) or self.poll()
+        try:
+            updates = list(self._backlog) or self.poll()
+        except RuntimeError as e:
+            if not any(w in str(e) for w in self._TRANSIENT):
+                raise
+            # a network blip (Wi-Fi waking up, Telegram 502/429): one quiet line and a short retry, instead of a
+            # traceback and an exponential backoff that kept the bot deaf for up to 80 s
+            self.log.warning("telegram poll: %s (retrying)", str(e)[:120])
+            self._stop.wait(3 if "Too Many" not in str(e) else 6)
+            return
         self._backlog.clear()
         for u in updates:
             if self.stopping:

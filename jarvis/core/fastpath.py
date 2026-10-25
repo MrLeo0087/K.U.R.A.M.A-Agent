@@ -62,8 +62,14 @@ _DEVICE_TAIL = re.compile(r"\s+(?:of|in|from|for)\s+(?:my|the|this)\s+(?:laptop|
                           r"screen|monitor|device)(?=[\s,?.!।]*$)", I)
 
 
+_TYPO_RX = re.compile(r"(?<![\w.])(?:" + "|".join(re.escape(k) for k in sorted(config.TYPO_FIXES, key=len, reverse=True))
+                      + r")(?![\w])", re.I)
+
+
 def normalize(text: str) -> str:
     t = " ".join((text or "").split())
+    t = _TYPO_RX.sub(lambda m: config.TYPO_FIXES[m.group(0).lower()], t) if config.TYPO_FIXES else t
+    t = re.sub(r"\s*\.{2,}\s*", " ", t)  # "show me X .. send it" -> one sentence
     for pat, rep in config.STT_FIXES.items():  # the same mishearing fixes as voice ("tone of" -> "turn off")
         t = re.sub(pat, rep, t, flags=I)
     t = _LEAD.sub("", t, count=1)
@@ -1105,7 +1111,7 @@ _FRESH = re.compile(r"\b(?:today|tonight|now|right\s+now|current|currently|lates
                     r"live|so\s+far|yet|breaking|just\s+(?:now|announced|happened))\b", I)
 _ASK = re.compile(r"^(?:what|who|whom|which|when|where|how|is|are|was|were|did|does|has|have|will|tell\s+me|give\s+me|any)\b", I)
 _NOT_FRESH = re.compile(r"\b(?:you|your|yourself|my|me|i|we|our|kurama|jarvis|time|date|day|weather|battery|volume|"
-                        r"brightness|training|epoch|accuracy|loss|it|job|jobs|reminder|alarm|timer|download|file|folder|code|project)\b", I)
+                        r"brightness|training|traning|epoch|accuracy|loss|it|status|progress|usage|tokens?|ram|cpu|memory|disk|storage|wifi|internet|location|laptop|computer|pc|system|process|processes|app|apps|job|jobs|reminder|alarm|timer|download|file|folder|code|project)\b", I)
 
 
 def fresh_intent(t: str) -> Intent | None:
@@ -1137,6 +1143,71 @@ def time_weather_intent(t: str) -> Intent | None:
     if place is None or (place and place.lower() in ("nepal", "here", "my place", "my location")):
         place = ""  # local (KURAMA is in Nepal): the default weather/time
     return Intent("weather", "weather", "weather", {"place": place, "days": 1, "_time": True}, place)
+
+
+_HELLO = re.compile(r"^(?:hi+|hello+|hey+|hii+|yo|namaste|namaskar|नमस्ते|good\s+(?:morning|afternoon|evening))"
+                    r"(?:\s+(?:kurama|jarvis|there|buddy|bro|sir))?(?:[\s,.!]+(?:how\s+are\s+you(?:\s+doing)?|how\s+r\s+u|"
+                    r"what\s+are\s+you\s+doing|what'?s\s+up|sup)[\s?.!]*)*[\s?.!]*$", I)
+_HOWRU = re.compile(r"^(?:how\s+are\s+you(?:\s+doing)?(?:\s+today)?|how\s+r\s+u|what'?s\s+up|k\s+cha|kasto\s+cha|"
+                    r"kaise\s+ho|sanchai\s+(?:hunuhunchha|cha)|what\s+are\s+you\s+doing)[\s?.!]*$", I)
+_THANKS = re.compile(r"^(?:ok(?:ay)?\s+)?(?:thanks?(?:\s+(?:a\s+lot|so\s+much|you|bro|kurama))*|thank\s+you(?:\s+(?:so\s+much|kurama))?|"
+                     r"dhanyabad|dhanyavaad|shukriya|thx|ty|great|nice|good\s+job|well\s+done|perfect|awesome|cool)[\s!.]*$", I)
+_OKAY = re.compile(r"^(?:ok(?:ay)?|k|fine|alright|got\s+it|hmm+|mm+h?|oh+|ah+)[\s!.]*$", I)
+_BYE = re.compile(r"^(?:bye|good\s*bye|good\s+night|see\s+you(?:\s+later)?|ta\s*ta)(?:\s+kurama)?[\s!.]*$", I)
+_KILL = re.compile(r"^(?:please\s+)?(?:kill|force\s+(?:quit|close|stop)|terminate)\s+(?:the\s+)?(?P<a>[\w .+-]{2,30}?)"
+                   r"(?:\s+(?:app|application|process|window))?[\s.!]*$", I)
+_TOP_PROC = re.compile(r"\b(?:top|biggest|heaviest|most|which|what)\b.{0,30}\b(?:memory|ram|cpu)\b.{0,30}\b(?:process|processes|apps?|"
+                       r"programs?)\b|\b(?:process|apps?)\b.{0,20}\busing\s+(?:the\s+)?most\s+(?:memory|ram|cpu)\b", I)
+_SLOW = re.compile(r"\b(?:laptop|computer|pc|system)\b.{0,25}\b(?:slow|lag+y?|lagging|hang(?:ing)?|stuck|heating)\b|"
+                   r"^(?:please\s+)?(?:clean|clear|speed\s+up|optimi[sz]e|boost)\s+(?:up\s+)?(?:my\s+|the\s+)?"
+                   r"(?:laptop|computer|pc|system|ram|memory)\b", I)
+_TRAIN_ST = re.compile(r"^(?:give\s+me\s+|what(?:'s|\s+is)\s+|show\s+(?:me\s+)?)?(?:the\s+)?(?:current\s+)?"
+                       r"(?:status\s+of\s+(?:the\s+|my\s+)?training|training\s+status)[\s?.!]*$", I)
+_CUR_STATUS = re.compile(r"^(?:what(?:'s|\s+is)\s+(?:the\s+)?current\s+status|current\s+status|status)[\s?.!]*$", I)
+_DIGEST2 = re.compile(r"^(?:please\s+)?summari[sz]e\s+(?:my\s+)?(?:today|the\s+day|today'?s?\s+day|my\s+day)"
+                      r"(?:\s+(?:till|until|so\s+far|up\s+to)\s*(?:now)?)?[\s.!]*$", I)
+_WHERE_PATH = re.compile(r"^(?:give\s+me\s+|tell\s+me\s+|what(?:'s|\s+is)\s+)?(?:the\s+)?(?:exact\s+|full\s+)?path"
+                         r"(?:\s+of\s+(?:that|this|the|it)(?:\s+(?:folder|file|one))?)?[\s?.!]*$|"
+                         r"^where\s+is\s+(?:that|this|it)(?:\s+(?:folder|file))?[\s?.!]*$", I)
+
+
+def everyday_intent(t: str) -> Intent | None:
+    """0-token replies for things that were costing an LLM call each (greetings, thanks, 'kill brave',
+    'top memory processes', 'laptop is slow', 'status of training', 'summarise today', 'exact path of that folder')."""
+    if _HELLO.match(t):
+        return Intent("say", "_say", "self", {"en": "Hi! What can I do for you?", "hi": "नमस्ते! बताइए, क्या करूँ?",
+                                               "ne": "नमस्ते! भन्नुहोस्, के गरूँ?"})
+    if _HOWRU.match(t):
+        return Intent("say", "_say", "self", {"en": "I'm good and ready. What should I do?",
+                                               "hi": "मैं ठीक हूँ, बताइए क्या करना है?", "ne": "म ठिक छु, के गर्नु पर्छ भन्नुहोस्।"})
+    if _THANKS.match(t):
+        return Intent("say", "_say", "self", {"en": "You're welcome.", "hi": "कोई बात नहीं।", "ne": "स्वागत छ।"})
+    if _OKAY.match(t):
+        return Intent("say", "_say", "self", {"en": "Okay.", "hi": "ठीक है।", "ne": "हुन्छ।"})
+    if _BYE.match(t):
+        return Intent("say", "_say", "self", {"en": "Bye! Call me when you need me.", "hi": "ठीक है, ज़रूरत हो तो बुलाइए।",
+                                               "ne": "हुन्छ, चाहिँदा बोलाउनुहोस्।"})
+    if _WHERE_PATH.match(t):
+        return Intent("where", "_where", "filesearch", {})
+    if (m := _KILL.match(t)) and not re.search(r"\b(?:it|this|that|time|me|process\s+\d+)\b", m.group("a"), I):
+        return Intent("kill", "kill_app", "apps", {"name": m.group("a").strip()}, m.group("a").strip())
+    if _TOP_PROC.search(t):
+        return Intent("doctor", "laptop_doctor", "system", {"action": "check"})
+    if _SLOW.search(t) and len(t.split()) <= 16:
+        free = re.search(r"\b(?:ram|memory)\b", t, I) and re.search(r"\b(?:clean|clear|free)\b", t, I)
+        return Intent("doctor", "laptop_doctor", "system", {"action": "free_ram" if free else "check"})
+    if re.search(r"\btokens?\b.{0,15}\b(?:usage|used|spent|left|budget)\b|\bhow\s+many\s+tokens\b", t, I) and len(t.split()) <= 10 \
+            and not re.search(r"\b(?:week|month|year|yesterday|all|total|ever)\b", t, I):
+        return Intent("tokens", "token_usage", "usage", {"period": "today"})
+    if re.fullmatch(r"(?:please\s+)?(?:enable|run|start|open|use)\s+(?:the\s+)?laptop\s+doctor[\s.!]*", t, I):
+        return Intent("doctor", "laptop_doctor", "system", {"action": "check"})
+    if _TRAIN_ST.match(t):
+        return Intent("training", "training", "watch", {"action": "status"})
+    if _CUR_STATUS.match(t):
+        return Intent("status", "status_now", "usage", {})
+    if _DIGEST2.match(t):
+        return Intent("digest", "daily_digest", "usage", {"date": "today"})
+    return None
 
 
 def live_intent(t: str) -> Intent | None:
@@ -1204,7 +1275,9 @@ def match(text: str) -> Intent | None:
     if len(study_mod.parse(text)) >= 2:  # a pasted timetable
         return Intent("study", "timetable", "study", {"action": "set", "text": text})
     t = normalize(text)
-    if not t or len(t) > 200:
+    if not t:  # "Hi" / "ok" are stripped as lead-in filler: answer them without the LLM
+        return everyday_intent(" ".join((text or "").split()).strip(" ,"))
+    if len(t) > 200:
         return None
     if si := _self_intent(t):
         return si
@@ -1216,6 +1289,8 @@ def match(text: str) -> Intent | None:
         return ws
     if ct := contacts_intent(t):
         return ct
+    if ev := everyday_intent(t):
+        return ev
     if lv := live_intent(t):
         return lv
     if di := _daily_intent(t):
@@ -1396,6 +1471,10 @@ def _say(key: str, lang: str, x: str) -> str:
 
 
 def render(intent: Intent, ok: bool, output: str, lang: str) -> str:
+    if intent.name == "say":
+        return intent.args.get(lang) or intent.args["en"]
+    if intent.name == "where" and ok:
+        return {"hi": f"पूरा पाथ: {output}", "ne": f"पूरा पाथ: {output}"}.get(lang, f"The full path is {output}")
     if intent.name == "weather" and intent.args.get("_time") and ok and not output.strip().lower().startswith("error"):
         from jarvis.tools.general.echo_time import get_time
         rest = render(Intent(intent.name, intent.tool, intent.group,
@@ -1499,6 +1578,12 @@ def _internal(intent: Intent) -> tuple[bool, str]:
     if intent.tool == "_unlock":
         from jarvis.core import selfknow
         return True, selfknow.try_unlock(intent.args["text"])
+    if intent.tool == "_say":
+        return True, "ok"
+    if intent.tool == "_where":
+        from jarvis.core import focus
+        p = focus.get_path(config.FOCUS_TTL_H * 3600)
+        return (True, p) if p else (False, "error: I don't know which folder you mean yet. Name it first.")
     if intent.tool == "_profile":
         from jarvis.core import profile
         profile.save(intent.args["key"], intent.args["value"], "fastpath")

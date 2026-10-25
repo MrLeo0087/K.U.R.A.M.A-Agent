@@ -73,6 +73,16 @@ STT_PROMPT = os.getenv("JARVIS_STT_PROMPT",
                        "Kurama, KURAMA, VS Code, Bluetooth, Brave, YouTube, Spotify, Instagram, Telegram, Wi-Fi, gesture control, "
                        "GitHub, Colab, Nepalgunj, Kathmandu, Pokhara.")
 # Common mishearings fixed after transcription (regex, case-insensitive, word-bounded).
+# Typing slips seen in the real chat log, fixed before matching (word-level, case-insensitive)
+TYPO_FIXES: dict[str, str] = {
+    "alram": "alarm", "alaram": "alarm", "allarm": "alarm", "remainder": "reminder", "remiander": "reminder",
+    "traning": "training", "trainig": "training", "usuage": "usage", "useage": "usage", "staus": "status",
+    "statsu": "status", "thsi": "this", "niw": "now", "insdie": "inside", "insde": "inside", "plz": "please",
+    "pls": "please", "wht": "what", "whta": "what", "teh": "the", "laptop.doctor": "laptop doctor",
+    "scrrenshot": "screenshot", "screnshot": "screenshot", "brigthness": "brightness", "volumn": "volume",
+    "telgram": "telegram", "telegarm": "telegram", "downlaod": "download", "donwload": "download",
+    "foler": "folder", "fodler": "folder", "folde": "folder", "summarise": "summarize",
+}
 STT_FIXES: dict[str, str] = {
     r"\b(?:b\.?\s?s\.?|be\s?as|versus|vs\.?|v\.\s?s\.)\s+(?:code|cold|cord|court|coat)\b": "VS Code",
     r"\bvisual\s+studio(?:\s+code)?\b": "VS Code",

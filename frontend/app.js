@@ -260,7 +260,7 @@ async function handleUtterance(blob) {
     answerConfirm(pendingConfirm, yes);
     return;
   }
-  sendChat(r.text, { voice: true, lang: r.lang, speak: !S.mute });
+  sendChat(r.text, { voice: true, lang: r.lang, speak: !S.mute, ambient: Date.now() - lastBotAt > FOLLOWUP_MS });
 }
 
 // ---------- chat ----------
@@ -315,6 +315,7 @@ function addUser(text, voice = false) {
   log.append(m);
   trim();
   scrollDown(true);
+  return m;
 }
 
 class BotBubble {
@@ -400,7 +401,10 @@ async function answerConfirm(id, yes) {
   try { await api.confirm(id, yes); } catch (e) { toast("Confirmation failed: " + e.message); }
 }
 
-async function sendChat(text, { voice = false, lang = null, speak = false } = {}) {
+let lastBotAt = 0; // talk mode: speech long after KURAMA last spoke is probably room talk (sent as "ambient")
+const FOLLOWUP_MS = 45000;
+
+async function sendChat(text, { voice = false, lang = null, speak = false, ambient = false } = {}) {
   text = (text || "").trim();
   if (!text) return;
   if (wantsSleep(text) && mode === "conv" && S.wakeListen) { addUser(text, voice); goSleep(); return; } // talk mode sleeps
@@ -410,7 +414,7 @@ async function sendChat(text, { voice = false, lang = null, speak = false } = {}
     if (busy) return;
   }
   busy = true;
-  addUser(text, voice);
+  const userBubble = addUser(text, voice);
   const bot = new BotBubble();
   const ctrl = new AbortController();
   chatCtrl = ctrl;
@@ -420,7 +424,7 @@ async function sendChat(text, { voice = false, lang = null, speak = false } = {}
   const hint = lang && lang !== "auto" ? lang : S.lang !== "auto" ? S.lang : null;
   updateState();
   try {
-    for await (const ev of api.chat(text, { mode: voice ? "voice" : "text", lang: hint, signal: ctrl.signal })) {
+    for await (const ev of api.chat(text, { mode: voice ? "voice" : "text", lang: hint, signal: ctrl.signal, ambient })) {
       switch (ev.type) {
         case "delta":
           bot.append(ev.text);
@@ -444,6 +448,8 @@ async function sendChat(text, { voice = false, lang = null, speak = false } = {}
         case "error": bot.error(ev.text); flashError(); miniCaption("bot", ev.text, true); break;
         case "done":
           openConfirm = null;
+          if (ev.ignored) { bot.root.remove(); userBubble?.remove(); maybeResume(); break; } // room talk, not for KURAMA
+          lastBotAt = Date.now();
           if (split) { const rest = split.flush(); if (rest) player.enqueue(rest, hint || ev.lang, gen); }
           bot.done(ev);
           miniCaption("bot", bot.text || ev.text || "Done.", true);
@@ -1644,6 +1650,7 @@ function goSleep(quiet = false) {
 }
 async function wakeUp(rest) {
   asleep = false;
+  lastBotAt = Date.now(); // just woken: the next thing said is for KURAMA
   api.wakeAwake().catch(() => {});
   try { // talk mode with echo cancellation
     audioCtx();
