@@ -72,6 +72,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                        allow_methods=["GET", "POST", "OPTIONS"], allow_headers=["Authorization", "Content-Type"],
                        expose_headers=["X-Voice"], max_age=600)
 
+    @app.get("/map/{name}", include_in_schema=False)  # not under /api, so the browser needs no token
+    async def saved_map(name: str):
+        import re as _re
+
+        from fastapi.responses import FileResponse
+        from jarvis.core import config as _cfg
+        if not _re.fullmatch(r"[\w.\-]+\.html", name):  # no path traversal
+            return JSONResponse({"error": "bad name"}, status_code=400)
+        path = _cfg.OUTPUTS_DIR / "maps" / name
+        if not path.is_file():
+            return JSONResponse({"error": "not found"}, status_code=404)
+        return FileResponse(str(path), media_type="text/html")
+
     if s.serve_frontend and (s.frontend_dir / "index.html").is_file():
         app.mount("/", _Frontend(directory=str(s.frontend_dir), html=True), name="frontend")
     else:

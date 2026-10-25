@@ -164,8 +164,8 @@ _MAP_TEMPLATE = """<!doctype html><html><head><meta charset="utf-8"><title>__TIT
 <style>html,body,#map{height:100%;margin:0}#t{position:absolute;z-index:1000;top:8px;left:50px;background:#111;
 color:#fff;padding:6px 12px;border-radius:8px;font:14px system-ui;opacity:.85}</style></head>
 <body><div id="t">__TITLE__</div><div id="map"></div><script>
-var map=L.map('map');L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+var map=L.map('map');L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+{subdomains:'abcd',maxZoom:20,attribution:'© OpenStreetMap, © CARTO'}).addTo(map);
 var line=__LINE__, marks=__MARKERS__, bounds=__BOUNDS__;
 L.polyline(line,{color:'#ff7a1a',weight:4,opacity:.8}).addTo(map);
 marks.forEach(function(m,i){var c=i===marks.length-1?'#ff3b30':(i===0?'#2ec27e':'#6fb7ff');

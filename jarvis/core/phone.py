@@ -14,9 +14,15 @@ from jarvis.core import config, notify
 FILE_URL = "https://api.telegram.org/file/bot{token}/{path}"
 # "copy: some text" / "copy this: ..." from the phone puts the text on the laptop's clipboard
 COPY = re.compile(r"^\s*(?:copy|clip|paste on laptop|laptop clipboard)(?: this| it)?\s*[:\-]\s*(?P<t>.+)$", re.I | re.S)
-SCREEN = re.compile(r"^\s*(?:/screen|(?:send|take|show)(?: me)?(?: a)? screen ?shot(?: of)?(?: my| the)?"
-                    r"(?: laptop| screen| computer| desktop)?(?: now)?|screenshot(?: of)?(?: my| the)? "
-                    r"(?:laptop|screen|computer|desktop)(?: now)?|what(?:'s| is) on my (?:laptop|screen))\s*[.!?]*$", re.I)
+_GET = r"(?:send|take|get|grab|give|show|capture|snap|can you (?:send|take|get|grab|give|show|capture)|i want)"
+_LOC = r"(?:(?: of)?(?: my| the| this)?(?: laptop| screen| computer| desktop))?(?: now)?"
+SCREEN = re.compile(r"^\s*(?:/screen|" + _GET + r"(?: me)?(?: a| the)? screen ?shot" + _LOC
+                    + r"|screen ?shot" + _LOC + r"|what(?:'s| is) on my (?:laptop|screen))\s*[.!?]*$", re.I)
+# "send that", "send it again", "send that in telegram" — resend the last photo/video/screenshot (no file named)
+RESEND = re.compile(r"^\s*(?:send|resend|re-send|share|forward|give)(?:\s+(?:me|it|that|this|those|the|one))*"
+                    r"(?:\s+(?:file|photo|picture|image|screenshot|screen ?shot|video|clip))?"
+                    r"(?:\s+(?:again|once more|back|now|also|as well|too))*"
+                    r"(?:\s+(?:to|in|on)\s+(?:my\s+)?(?:telegram|phone|mobile))?\s*[.!?]*$", re.I)
 CLIP = re.compile(r"^\s*(?:/clip|(?:send|what(?:'s| is))(?: me)?(?: my| the)? (?:laptop(?:'s)? )?clipboard"
                   r"(?: from (?:my |the )?laptop)?)\s*[.!?]*$", re.I)
 # a photo from the laptop's camera ("find my laptop")
@@ -122,6 +128,40 @@ def set_clipboard(text: str) -> str:
     return "Copied to your laptop's clipboard." if not out.startswith("error") else out
 
 
+_last_sent: dict = {"path": None}
+
+
+def remember_sent(path) -> None:
+    """Record the last file sent to the phone, so 'send that again' can resend it."""
+    _last_sent["path"] = str(path)
+
+
+def _newest(*globs: tuple[str, str]) -> Path | None:
+    """The most recent file matching (dir, pattern) pairs (for 'send that' after an agent-saved screenshot)."""
+    best = None
+    for d, pat in globs:
+        for p in Path(d).expanduser().glob(pat):
+            if best is None or p.stat().st_mtime > best.stat().st_mtime:
+                best = p
+    return best
+
+
+def resend_last() -> str:
+    """Send the last photo/video/screenshot again (or the newest one on disk if none is remembered)."""
+    from jarvis.tools.general.send_file_telegram import deliver
+    p = _last_sent["path"]
+    path = Path(p) if p and Path(p).exists() else _newest(
+        (config.SCREENSHOT_DIR, "*.png"), (str(Path(config.DATA_DIR) / "guard"), "*.jpg"),
+        (str(Path(config.DATA_DIR) / "guard"), "*.mp4"))
+    if path is None or not path.exists():
+        return ("I don't have a recent photo, video or screenshot to send. Ask for /screen, /camera or /video "
+                "and I'll send it right away.")
+    out = deliver(path, "Here it is.")
+    if not out.startswith("error"):
+        remember_sent(path)
+    return out
+
+
 def screenshot_to_phone() -> str:
     from jarvis.tools.general.screenshot import screenshot
     from jarvis.tools.general.send_file_telegram import deliver
@@ -129,4 +169,7 @@ def screenshot_to_phone() -> str:
     m = re.search(r"(/\S+\.png)", out)
     if not m:
         return out
-    return deliver(Path(m.group(1)), f"Your laptop screen at {time.strftime('%H:%M')}")
+    r = deliver(Path(m.group(1)), f"Your laptop screen at {time.strftime('%H:%M')}")
+    if not r.startswith("error"):
+        remember_sent(m.group(1))
+    return r

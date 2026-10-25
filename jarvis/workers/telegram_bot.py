@@ -214,13 +214,18 @@ class TelegramBot(Worker):
             if cmd == "/track":  # lost mode for the laptop (the phone uses Find My Device / live-location sharing)
                 from jarvis.core import locationlog
                 return locationlog.set_lost("laptop", arg != "off")
-            return HELP
+            if cmd in ("/help", "/start", "/commands", "/command", "/?", "/menu"):
+                return HELP
+            # any other "/…" (a file path like /home/leo/x.pdf, a name, a typo) is NOT a command: let the agent handle
+            # it instead of dumping the command list
         if m := phone.COPY.match(text):  # 0 tokens: phone -> laptop clipboard
             return phone.set_clipboard(m.group("t").strip())
         if phone.CLIP.match(text):
             return phone.clipboard_text()
         if phone.SCREEN.match(text):
             return phone.screenshot_to_phone()
+        if phone.RESEND.match(text):  # "send that / send it again" -> resend the last photo/video/screenshot
+            return phone.resend_last()
         if phone.CAMERA.match(text):
             return guard.send_photo()
         if m := phone.VIDEO.match(text):

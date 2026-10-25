@@ -124,17 +124,47 @@ def _places() -> dict:
         return {}
 
 
-def label_here(label: str) -> str:
-    """Remember the current Wi-Fi as a named place (so /where names it exactly)."""
+def _place_of(bssid: str) -> dict | None:
+    """The saved place for a BSSID as {label, lat?, lon?} (older saves were a bare label string)."""
+    v = _places().get(bssid)
+    if v is None:
+        return None
+    return {"label": v} if isinstance(v, str) else v
+
+
+def geocode(query: str) -> tuple[float, float] | None:
+    """Forward-geocode an address to (lat, lon) via OpenStreetMap (free)."""
+    import urllib.parse
+    url = f"https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q={urllib.parse.quote(query)}"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": _UA})
+        with urllib.request.urlopen(req, timeout=12) as r:
+            d = json.load(r)
+        return (float(d[0]["lat"]), float(d[0]["lon"])) if d else None
+    except Exception as e:
+        log.info("forward geocode failed: %s", e)
+        return None
+
+
+def label_here(label: str, lat: float | None = None, lon: float | None = None) -> str:
+    """Remember the current Wi-Fi as a named place. If lat/lon are given (or the label geocodes to a place),
+    /where reports that exact spot and map pin whenever the laptop is on this Wi-Fi."""
     cur = scan()
     if not cur["bssid"]:
         return "I'm not on Wi-Fi right now, so I can't label this spot. Connect to the Wi-Fi here and try again."
+    label = label.strip()[:60] or "home"
+    # only geocode a label that looks like a place (2+ words), never a generic "home"/"office" (which geocodes wrong)
+    if lat is None and len(label.split()) >= 2 and (g := geocode(f"{label}, Nepal" if "nepal" not in label.lower() else label)):
+        lat, lon = g
+    entry: dict = {"label": label}
+    if lat is not None and lon is not None:
+        entry["lat"], entry["lon"] = round(float(lat), 6), round(float(lon), 6)
     places = _places()
-    label = label.strip()[:40] or "home"
-    places[cur["bssid"]] = label
+    places[cur["bssid"]] = entry
     store.kv_set(_PLACES_KEY, json.dumps(places))
     _cache.clear()  # so /where reflects the new label right away
-    return f"Saved: when the laptop is on “{cur['ssid']}” I'll say it's at “{label}”."
+    pin = f" (pinned to {entry['lat']}, {entry['lon']})" if "lat" in entry else ""
+    return f"Saved: when the laptop is on “{cur['ssid']}” I'll say it's at “{label}”{pin}."
 
 
 def forget_here() -> str:
@@ -154,11 +184,18 @@ def locate(use_cache: bool = True) -> dict:
     cur = scan()
     if use_cache and _cache and now - _cache.get("at", 0) < _CACHE_S and _cache.get("bssid") == cur["bssid"]:
         return _cache["loc"]
+    known = _place_of(cur["bssid"])
+    if known and "lat" in known:  # labelled spot with a pin: report it exactly, no coarse IP guess
+        g, osm = maps(known["lat"], known["lon"])
+        out = {"lat": known["lat"], "lon": known["lon"], "accuracy": 30, "source": "known",
+               "ssid": cur["ssid"], "known": known["label"], "place": known["label"], "map": g, "osm": osm}
+        _cache.update(at=now, bssid=cur["bssid"], loc=out)
+        return out
     geo = _geolocate(cur["aps"])
     if not geo:
         return {}
     g, osm = maps(geo["lat"], geo["lon"])
-    out = {**geo, "ssid": cur["ssid"], "known": _places().get(cur["bssid"], ""),
+    out = {**geo, "ssid": cur["ssid"], "known": (known or {}).get("label", ""),
            "place": place_name(geo["lat"], geo["lon"], geo["accuracy"]), "map": g, "osm": osm}
     _cache.update(at=now, bssid=cur["bssid"], loc=out)
     return out
@@ -173,12 +210,13 @@ def where_text() -> str:
                 + (f"\nWi-Fi: {ssid}" if ssid else ""))
     lines = ["📍 Laptop location"]
     if loc["known"]:
-        lines.append(f"At: {loc['known']}")
-    around = loc["place"] or "unknown area"
-    acc = f" (±{loc['accuracy'] // 1000} km)" if loc["accuracy"] >= 1500 else (
-        f" (±{loc['accuracy']} m)" if loc["accuracy"] else "")
-    via = "Wi-Fi" if loc["source"] == "wi-fi" else "IP"
-    lines.append(f"Around {around}{acc}, via {via}")
+        lines.append(f"At: {loc['known']}" + (" (your saved spot)" if loc["source"] == "known" else ""))
+    if loc["source"] != "known":  # pinned spot needs no coarse guess; otherwise show the Wi-Fi/IP area
+        around = loc["place"] or "unknown area"
+        acc = f" (±{loc['accuracy'] // 1000} km)" if loc["accuracy"] >= 1500 else (
+            f" (±{loc['accuracy']} m)" if loc["accuracy"] else "")
+        via = "Wi-Fi" if loc["source"] == "wi-fi" else "IP"
+        lines.append(f"Around {around}{acc}, via {via}")
     if loc["ssid"]:
         lines.append(f"Wi-Fi: {loc['ssid']}")
     lines.append(f"Map: {loc['map']}")

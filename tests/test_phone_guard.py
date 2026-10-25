@@ -60,32 +60,31 @@ def test_clipboard_screen_guard_commands(bot, monkeypatch):
     monkeypatch.setattr(guard, "camera", lambda: None)
     assert "guard is on" in b.answer("/guard on") and guard.armed()
     assert b.answer("/guard").startswith("Laptop guard is on")
-    assert b.answer("/guard off") == "Laptop guard is off." and not guard.armed()
+    assert b.answer("/guard off").startswith("Laptop guard is off") and not guard.armed()
 
 
-def test_guard_photographs_unlock_wrong_password_and_wakeup(monkeypatch):
+def test_guard_photographs_only_a_real_unlock(monkeypatch):
+    # New behaviour: ONLY an unlock (locked -> unlocked) alerts. No password-journal reading (it gave false
+    # "wrong password" alarms) and no wake guessing. Disarmed = nothing at all.
     alerts = []
     monkeypatch.setattr(guard, "alert", alerts.append)
     st: dict = {}
-    monkeypatch.setattr(guard, "auth_failures", lambda since: 0)
     states = iter([True, True, False])
     monkeypatch.setattr(guard, "locked", lambda: next(states))
     assert guard.check(st) == []  # disarmed: nothing
     guard.arm(True)
-    guard.check(st)
-    guard.check(st)
+    guard.check(st)  # locked
+    guard.check(st)  # still locked
     assert alerts == []
     guard.check(st)  # locked -> unlocked
-    assert alerts == ["Someone unlocked the laptop"]
+    assert alerts == ["Someone just used your laptop"]
+    # staying unlocked does not re-alert; a frozen worker (laptop slept) does NOT falsely alert
     monkeypatch.setattr(guard, "locked", lambda: False)
-    monkeypatch.setattr(guard, "auth_failures", lambda since: 2)
+    st["tick"] = time.time() - 600
     guard.check(st)
-    assert alerts[-1] == "Wrong password typed 2 time(s)"
-    monkeypatch.setattr(guard, "auth_failures", lambda since: 0)
-    st["tick"] = time.time() - 600  # the worker was frozen: the laptop slept
-    guard.check(st)
-    assert alerts[-1].startswith("The laptop woke up")
+    assert alerts == ["Someone just used your laptop"]
     guard.arm(False)
+    assert guard.check(st) == []  # off: no tracking
 
 
 def test_guard_tool_and_where(monkeypatch):

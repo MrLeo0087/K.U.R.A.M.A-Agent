@@ -22,10 +22,10 @@ def arm(on: bool) -> str:
     store.kv_set("guard_armed", "1" if on else "0")
     store.kv_set("guard_since", str(time.time()))
     if on:
-        cam = "the webcam will take a photo" if camera() else "no webcam found, so I'll just alert you"
-        return (f"Laptop guard is on: if someone unlocks it, types a wrong password or wakes it up, {cam} and send "
-                f"it to your Telegram with the laptop's location. Turn it off with 'guard off' (or /guard off).")
-    return "Laptop guard is off."
+        cam = "the webcam takes a photo" if camera() else "no webcam found, so I'll just alert you"
+        return (f"Laptop guard is on: whenever someone unlocks it, {cam} and sends it to your Telegram with the "
+                f"laptop's location. Turn it off with 'guard off' (or /guard off).")
+    return "Laptop guard is off. I won't watch or send anything until you turn it on again."
 
 
 def camera() -> str | None:
@@ -110,7 +110,11 @@ def send_photo() -> str:
         return f"Photo saved on the laptop: {pic} (set up Telegram to get it on your phone)."
     from jarvis.tools.general.send_file_telegram import deliver
     r = deliver(pic, f"Laptop camera · {time.strftime('%H:%M:%S')}")
-    return "📷 Sent a photo from the laptop camera." if not r.startswith("error") else r
+    if not r.startswith("error"):
+        from jarvis.core import phone
+        phone.remember_sent(pic)
+        return "📷 Sent a photo from the laptop camera."
+    return r
 
 
 def send_clip(seconds: float = 5.0) -> str:
@@ -122,7 +126,11 @@ def send_clip(seconds: float = 5.0) -> str:
         return f"Video saved on the laptop: {vid}."
     from jarvis.tools.general.send_file_telegram import deliver
     r = deliver(vid, f"Laptop camera · {int(max(1, min(30, seconds)))}s clip")
-    return "🎥 Sent a video from the laptop camera." if not r.startswith("error") else r
+    if not r.startswith("error"):
+        from jarvis.core import phone
+        phone.remember_sent(vid)
+        return "🎥 Sent a video from the laptop camera."
+    return r
 
 
 def where() -> str:
@@ -176,23 +184,16 @@ def check(state: dict) -> list[str]:
         state.clear()
         return []
     now = time.time()
-    events = []
-    last_tick = state.get("tick", now)
-    if now - last_tick > max(60.0, config.GUARD_INTERVAL_S * 6):
-        events.append("The laptop woke up (lid opened or resumed)")
-    lk = locked()
-    if lk is False and state.get("locked") is True:
-        events.append("Someone unlocked the laptop")
-    if lk is not None:
-        state["locked"] = lk
-    since = state.get("journal_since", float(store.kv_get("guard_since") or now))
-    if (n := auth_failures(since)) > 0:
-        events.append(f"Wrong password typed {n} time(s)")
-    state["journal_since"] = now
     state["tick"] = now
-    for e in events[:1] if events else []:  # one photo per tick is plenty
-        alert(e if len(events) == 1 else "; ".join(events))
-    return events
+    # Only a real unlock counts (locked -> unlocked = someone used the laptop). We do NOT read the password
+    # journal (it gave false "wrong password" alarms) and we don't guess at wake-ups: just "someone used it".
+    lk = locked()
+    was = state.get("locked")
+    state["locked"] = lk if lk is not None else was
+    if lk is False and was is True:
+        alert("Someone just used your laptop")
+        return ["Someone just used your laptop"]
+    return []
 
 
 def status() -> str:

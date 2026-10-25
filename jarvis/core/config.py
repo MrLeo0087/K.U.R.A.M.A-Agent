@@ -294,7 +294,7 @@ SELF_PASSWORD_HASH = os.getenv("KURAMA_PASSWORD_HASH", "8e1e9a607be9d9e165f37829
 SELF_UNLOCK_S = 600  # protected answers stay unlocked this long after the right password
 SELF_PENDING_S = 180  # how long a "say the password" question waits for the answer
 ASSISTANT_NAMES = ("kurama",)  # always answered to, besides the current name; stripped from commands
-HOME_PLACE = os.getenv("JARVIS_HOME_PLACE", "Kathmandu")  # default for weather
+HOME_PLACE = os.getenv("JARVIS_HOME_PLACE", "Nepalgunj, Nepal")  # default for weather
 HTTP_TIMEOUT_S = 5.0
 # Hand-gesture media/YouTube control: the user's module, run in its own venv (OpenCV + MediaPipe stay out of KURAMA).
 GESTURE_DIR = Path(os.getenv("KURAMA_GESTURE_DIR", "/media/leo/Project1/Project/Gen_AI/Big_project/02_K.U.R.A.M.A/"

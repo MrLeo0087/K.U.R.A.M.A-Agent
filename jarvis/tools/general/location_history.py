@@ -20,14 +20,20 @@ def location_history(device: Literal["laptop", "phone"] = "laptop", hours: int =
         hours: how far back to look (default 24).
         open_map: also open a map of the trail in the browser.
     """
+    import os
+
     hours = max(1, min(24 * 30, int(hours or 24)))
     text = locationlog.summary(device, hours)
     if open_map:
         path = locationlog.map_html(device, hours)
         if path is not None:
+            # serve it through the local API (http://127.0.0.1:PORT/map/<file>): a file:// URL is blocked by some
+            # browsers ("access denied"), an http page is not
+            port = os.getenv("JARVIS_API_PORT", "8000")
+            url = f"http://127.0.0.1:{port}/map/{path.name}"
             try:
-                _open(path.as_uri())
+                _open(url)
                 return f"{text}\n(Map opened in your browser.)"
             except Exception:
-                return f"{text}\n(Map saved: {path})"
+                return f"{text}\n(Map at {url})"
     return text
