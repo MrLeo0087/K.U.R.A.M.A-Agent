@@ -39,3 +39,9 @@ SpeechRecognition==3.17.0
 # video_download: yt-dlp (pure Python, kept current; YouTube breaks old builds) + its YouTube JS-challenge scripts (no deps)
 yt-dlp==2026.10.21
 yt-dlp-ejs==0.8.0
+# convert_file: Markdown->HTML, HTML->PDF (fpdf2: pure Python; deps fonttools, defusedxml, Pillow), Devanagari shaping
+# (uharfbuzz: no deps), csv/xlsx tables (openpyxl). Checked: no torch/GPU.
+Markdown==3.11.2
+fpdf2==2.8.4
+uharfbuzz==0.53.3
+openpyxl==3.1.5

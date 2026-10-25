@@ -903,6 +903,41 @@ def error_intent(text: str) -> Intent | None:
     return None
 
 
+_CONV = re.compile(r"^(?:please\s+)?(?:convert|change|turn|transform|save|export)\s+(?P<src>.+?)\s+"
+                   r"(?:in\s*to|to|as|into)\s+(?:an?\s+)?\.?(?P<to>[a-z0-9]{2,10})(?:\s+(?:file|format|files))?$", I)
+_CONV2 = re.compile(r"^(?:please\s+)?(?:make|create|give\s+me)\s+(?:an?\s+)?(?P<to>pdf|md|markdown|png|jpg|mp3|mp4|gif|"
+                    r"docx|xlsx|csv|txt)(?:\s+file)?\s+(?:of|from|out\s+of)\s+(?P<src>.+)$", I)
+_ALL_IN = re.compile(r"^(?:all\s+)?(?:the\s+)?(?P<ext>[a-z0-9]{2,5})\s+(?:files|images|photos|pictures|videos|songs)?"
+                     r"\s*(?:in|inside|from)\s+(?:the\s+|my\s+)?(?P<dir>.+?)(?:\s+folder)?$", I)
+
+
+def convert_intent(t: str) -> Intent | None:
+    """'convert this pdf into md file', 'convert notes.md to pdf', 'convert all jpg in downloads to png'."""
+    from jarvis.core import convert as cv
+    m = _CONV.match(t) or _CONV2.match(t)
+    if not m:
+        return None
+    to = cv.ext_of(m.group("to"))
+    known = cv.IMAGES | cv.MEDIA | cv.OFFICE | cv.TABLES | cv.TEXTS | {"pdf", "gif"}
+    if to not in known:
+        return None
+    src = re.sub(r"\s+(?:file|document|doc)$", "", m.group("src").strip(), flags=I)
+    if a := _ALL_IN.match(src):
+        if cv.ext_of(a.group("ext")) in known:
+            return Intent("convert", "convert_file", "files", {"path": a.group("dir"), "to": to,
+                                                               "src_ext": cv.ext_of(a.group("ext"))})
+    words = src.split()
+    ext = ""
+    if words and cv.ext_of(words[-1]) in known and not re.search(r"\.\w+$", src):
+        ext = cv.ext_of(words[-1])  # "this pdf", "report pdf", "my resume docx"
+        src = " ".join(words[:-1])
+    src = re.sub(r"^(?:the|my|this|that|these)\s+", lambda x: "this " if x.group(0).strip().lower() in
+                 ("this", "that", "these") else "", src, flags=I).strip()
+    if src.lower() in ("", "this", "it", "that"):
+        src = "this"
+    return Intent("convert", "convert_file", "files", {"path": src, "to": to, "src_ext": ext})
+
+
 def video_dl_intent(t: str) -> Intent | None:
     """'download this youtube video in 1080p', 'download <link> as mp3', 'download interstellar trailer in 4k'."""
     m = _VDL.match(t)
@@ -957,6 +992,8 @@ def match(text: str) -> Intent | None:
         return si
     if ui := _ui_intent(t):
         return ui
+    if cv := convert_intent(t):
+        return cv
     if di := _daily_intent(t):
         return di
     if ci := _control_intent(t):  # shutdown/restart/sleep, timers, alarms, stopwatch, Wi-Fi...
