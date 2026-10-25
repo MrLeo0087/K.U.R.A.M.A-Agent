@@ -73,3 +73,15 @@ def test_fastpath_common_misses():
     it = fastpath.match("set remiander for 11:58 PM of today for reading book")
     assert it.tool == "add_reminder" and it.args["text"] == "reading book"
     assert fastpath.match("Also set the reminder for tomorrow 6 am for walking.").args["text"] == "walking"
+
+
+def test_time_and_weather_together(monkeypatch):
+    for t in ("What is the time in the weather right now?", "what is the time and weather right now",
+              "What is the time and order right now in Nepal"):
+        i = fastpath.match(t)
+        assert (i.tool, i.args) == ("weather", {"place": "", "days": 1, "_time": True}), t
+    assert fastpath.match("what is the time in tokyo").args == {"place": "tokyo"}
+    from jarvis.tools.general import echo_time
+    monkeypatch.setattr(echo_time, "get_time", lambda place="": "It is 8:55 PM, Sunday, 25 October 2026")
+    out = fastpath.render(fastpath.match("time and weather"), True, "Kathmandu: 18°C, clear", "en")
+    assert "Kathmandu: 18°C" in out and "PM" in out

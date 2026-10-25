@@ -1079,6 +1079,24 @@ _NOT_TEAM = re.compile(r"^(?:my|the|this|that|it|your|our|test|tests|training|mo
                        r"build|code|job|jobs|download|backup|query)\b", I)
 
 
+_TIME_WX = re.compile(r"^(?:please\s+)?(?:(?:what(?:'s|\s+is)|tell\s+me|give\s+me)\s+)?(?:the\s+)?(?:current\s+)?"
+                      r"(?:time\s+(?:and|in|&|plus)\s+(?:the\s+)?(?:weather|whether|order|wether)|"
+                      r"(?:weather|whether)\s+(?:and|&|plus)\s+(?:the\s+)?time)"
+                      r"(?:\s+(?:right\s+now|now|today))?(?:\s+(?:in|of|at|for)\s+(?P<place>[^,?]+?))?"
+                      r"(?:\s+(?:right\s+now|now|today))?(?:\s+and\s+.*)?\??$", I)
+
+
+def time_weather_intent(t: str) -> Intent | None:
+    """'what is the time and weather right now (in Nepal)'; STT often hears 'time in the weather' / 'time and order'."""
+    m = _TIME_WX.match(t)
+    if not m:
+        return None
+    place = _place(m.group("place")) if m.group("place") else ""
+    if place is None or (place and place.lower() in ("nepal", "here", "my place", "my location")):
+        place = ""  # local (KURAMA is in Nepal): the default weather/time
+    return Intent("weather", "weather", "weather", {"place": place, "days": 1, "_time": True}, place)
+
+
 def live_intent(t: str) -> Intent | None:
     """'what is the result of today inter miami match', 'barcelona score', 'did real madrid win', 'news about Nepal'."""
     if _LIVE_PRICE.match(t) and not re.search(r"\b(?:my|your|this|that|ticket|plan|interest)\b|\d+(?:\.\d+)?\s*"
@@ -1162,6 +1180,8 @@ def match(text: str) -> Intent | None:
         return di
     if ci := _control_intent(t):  # shutdown/restart/sleep, timers, alarms, stopwatch, Wi-Fi...
         return ci
+    if ti := time_weather_intent(t):  # "time and weather (in X)" -- also the misheard "time in the weather"
+        return ti
     if m := _full(TIME_LOCAL, t):
         want_date = bool(re.search(r"\b(?:date|day|today)\b|गते|तारीख|बार", t, I))
         return Intent("time", "get_time", "general", {"_date": True} if want_date else {})
@@ -1334,6 +1354,13 @@ def _say(key: str, lang: str, x: str) -> str:
 
 
 def render(intent: Intent, ok: bool, output: str, lang: str) -> str:
+    if intent.name == "weather" and intent.args.get("_time") and ok and not output.strip().lower().startswith("error"):
+        from jarvis.tools.general.echo_time import get_time
+        rest = render(Intent(intent.name, intent.tool, intent.group,
+                             {k: v for k, v in intent.args.items() if k != "_time"}, intent.label), ok, output, lang)
+        t_out = get_time(intent.args.get("place") or "")
+        t_txt = render(Intent("time", "get_time", "general", {}, intent.label), True, t_out, lang)
+        return f"{t_txt} {rest}"
     out = output.strip()
     err = (not ok) or out.lower().startswith("error")
     if intent.name in ("time", "weather") and err and "couldn't find a place" in out:
