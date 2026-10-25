@@ -1201,6 +1201,9 @@ def everyday_intent(t: str) -> Intent | None:
     if _BYE.match(t):
         return Intent("say", "_say", "self", {"en": "Bye! Call me when you need me.", "hi": "ठीक है, ज़रूरत हो तो बुलाइए।",
                                                "ne": "हुन्छ, चाहिँदा बोलाउनुहोस्।"})
+    if re.fullmatch(r"(?:please\s+)?(?:share|show|give\s+me)\s+(?:the\s+|my\s+)?(?:wi[\s-]*fi|wifi)(?:\s+(?:password|qr(?:\s+code)?|"
+                    r"code))?(?:\s+(?:qr(?:\s+code)?))?(?:\s+(?:to|with)\s+.{1,30})?[\s.!]*|(?:wi[\s-]*fi|wifi)\s+qr(?:\s+code)?[\s.!]*", t, I):
+        return Intent("wifiqr", "share_wifi", "desktop", {})
     if _WHERE_PATH.match(t):
         return Intent("where", "_where", "filesearch", {})
     if (m := _KILL.match(t)) and not re.search(r"\b(?:it|this|that|time|me|process\s+\d+)\b", m.group("a"), I):

@@ -86,7 +86,7 @@ def test_groups_small_and_registered():
         names = [t.name for t in registry.schemas_for([g])]
         assert 1 <= len(names) <= 5, (g, names)
     assert {t.name for t in registry.schemas_for(["desktop"])} == {
-        "do_not_disturb", "night_light", "set_wallpaper", "focus_mode"}
+        "do_not_disturb", "night_light", "set_wallpaper", "focus_mode", "share_wifi"}
     assert registry.get("kill_app").metadata["safety"] == "confirm"
 
 
