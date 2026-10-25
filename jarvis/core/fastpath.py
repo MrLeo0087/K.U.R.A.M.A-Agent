@@ -205,6 +205,33 @@ _ANAPHORA_SEND = re.compile(
     r"(?:\s+(?:again|also|too))?" + _TGDEST + r"?\s*[.!?]*$", I)
 
 
+# "find/search/locate X [folder/file] [anywhere/in my laptop/on all disks]" -> search the whole laptop (0 tokens)
+_FINDFILE = re.compile(
+    r"^(?:please\s+)?(?:(?:can|could)\s+you\s+)?(?:find|search(?:\s+for)?|locate|look\s+for|where(?:'s| is| are)|"
+    r"source|sarch|serch|serach)\s+(?:me\s+)?(?:the\s+|a\s+|my\s+|all\s+)?"
+    r"(?P<q>.+?)"
+    r"(?:\s+(?P<kind>folder|directory|dir|file|document)s?)?"
+    # the ONLY trailing location allowed is the whole laptop; a scoped "X in <some folder>" is left to the LLM
+    r"(?:\s+(?:(?:in|on|across|inside|throughout|from)\s+)?(?:my\s+|the\s+|this\s+|all\s+|entire\s+|whole\s+)*"
+    r"(?:laptop|computer|pc|system|machine|disks?|drives?|storage|everywhere|anywhere))?\s*[.!?]*$", re.I)
+# things that are NOT a file search even though they start with find/search/where
+_NOT_FINDFILE = re.compile(r"^(?:my\s+)?(?:phone|mobile|iphone|android|laptop|computer|pc|it|this|that)$"
+                           r"|\b(?:news|weather|time|price|who|what\s+is|meaning|define|online|internet|web|song|video\s+of)\b", re.I)
+
+
+def findfile_intent(t: str) -> Intent | None:
+    m = _FINDFILE.match(t)
+    if not m:
+        return None
+    q = (m.group("q") or "").strip(" ,")
+    # reject: not-a-file-search, too long, or a SCOPED search ("X in <folder>", "a/b") -> let the LLM pass a path
+    if not q or len(q.split()) > 6 or _NOT_FINDFILE.search(q) or re.search(r"\b(?:in|inside|under|within|from)\b|/", q):
+        return None
+    kw = (m.group("kind") or "").lower()
+    kind = "folder" if kw in ("folder", "directory", "dir") else "name" if kw in ("file", "document") else "any"
+    return Intent("findfile", "find_files", "filesearch", {"query": q, "kind": kind}, q)
+
+
 def _focus_intent() -> Intent | None:
     from jarvis.core import focus
     fp = focus.get_path()
@@ -918,6 +945,8 @@ def match(text: str) -> Intent | None:
         return li
     if si := search_intent(t):
         return si
+    if ff := findfile_intent(t):
+        return ff
     if m := _full(FOLDER_OPEN, t):
         if fi := _folder_intent(m.group("target")):
             return fi

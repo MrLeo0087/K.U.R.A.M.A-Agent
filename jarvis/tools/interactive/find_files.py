@@ -59,14 +59,14 @@ def _clean(line: str) -> str:
 
 
 @tool(group="filesearch", safety="safe", description="Find files or folders by name, or text inside files, anywhere on this laptop (home + all disks).")
-def find_files(query: str, path: str = "", kind: Literal["name", "folder", "content"] = "name",
+def find_files(query: str, path: str = "", kind: Literal["any", "name", "folder", "content"] = "any",
                limit: int = 20) -> str:
     """Search files or folders. Without a path it searches the whole laptop: home and every mounted disk.
 
     Args:
         query: File/folder name, part of it or a glob (*.py) for name/folder; text to look for when kind=content.
         path: Folder to search; loose names work ("project1 then tara"). Empty = whole laptop.
-        kind: name (files), folder, or content (text inside files).
+        kind: any (files AND folders, the default), name (files), folder, or content (text inside files).
         limit: Max results (max 50).
     """
     query = (query or "").strip()
@@ -78,13 +78,19 @@ def find_files(query: str, path: str = "", kind: Literal["name", "folder", "cont
     limit = max(1, min(int(limit or 20), 50))
     if not (path or "").strip():
         limit = 200  # whole-laptop search: the full list goes to the Workspace card, the LLM sees the top
-    what = {"name": "files", "folder": "folders", "content": "hits"}[kind]
+    what = {"any": "files/folders", "name": "files", "folder": "folders", "content": "hits"}[kind]
     if kind != "content":
-        found, late = search_names(query, bases, limit, "d" if kind == "folder" else "f")
+        if kind == "any":  # search folders first (what people usually mean by "find X"), then files
+            folders, late1 = search_names(query, bases, limit, "d")
+            files, late2 = search_names(query, bases, limit, "f")
+            found = list(dict.fromkeys(folders + [f for f in files if f not in folders]))[:limit]
+            late = late1 or late2
+        else:
+            found, late = search_names(query, bases, limit, "d" if kind == "folder" else "f")
         partial = f" (timed out after {TIMEOUT}s; partial, narrow the path)" if late else ""
         if not found:
             return f"no {what} matching {query!r} under {base}{partial}"
-        if kind == "folder":  # "is there an X folder?" -> remember it, so "send this folder" works next
+        if kind in ("folder", "any"):  # remember the top folder, so "send this folder" works next
             from jarvis.core import focus
             focus.set_path(found[0])
         head = f"{len(found)}{'+' if len(found) == limit else ''} {what} named like {query!r}{partial}:"
