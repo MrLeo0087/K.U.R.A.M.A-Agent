@@ -376,10 +376,20 @@ def describe(w: dict) -> str:
     else:
         head += f", {w['status']})"
     prog = progress_text(st)
-    if w["kind"] == "colab" and not st.get("last_msg") and w["status"] == "active":
-        prog = "waiting for the first message (run the KURAMA cell in Colab)"
+    if w["kind"] == "colab" and w["status"] == "active":
+        if not st.get("last_msg"):
+            prog = "waiting for the first message — run the KURAMA cell in Colab, then start training"
+        elif not (st.get("metrics") or {}):
+            prog = prog or "connected, waiting for the first epoch (add KuramaKeras() to your callbacks)"
     tail = (st.get("tail") or [""])[-1][:120] if not prog else ""
     extra = f": {prog}" if prog else (f": {w['result']}" if w.get("result") and w["status"] != "active" else "")
+    # how fresh the info is (so you know if it stalled)
+    if w["status"] == "active" and (last := st.get("last_msg") or st.get("last_output")):
+        ago = time.time() - float(last)
+        if ago > 30:
+            extra += f" | last update {fmt_duration(ago)} ago"
+            if ago > 15 * 60:
+                extra += " ⚠ (may be stalled or disconnected)"
     if st.get("error") and w["status"] != "done":
         extra += f" | last error: {st['error'][:120]}"
     return head + extra + (f" | {tail}" if tail else "")

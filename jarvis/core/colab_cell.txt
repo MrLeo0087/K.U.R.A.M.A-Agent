@@ -132,13 +132,26 @@ try:
     import keras
 
     class KuramaKeras(keras.callbacks.Callback):
-        """Reports every epoch (epoch/epochs, loss, accuracy, val_...) and stops when you ask."""
+        """Reports the start, every epoch (epoch/epochs, loss, accuracy, val_...), step/ETA within long epochs,
+        and the end; stops when you ask."""
+        def on_train_begin(self, logs=None):
+            self._ep = 0
+            kurama("start", epochs=self.params.get("epochs") or 0, force=True)
+
+        def on_epoch_begin(self, epoch, logs=None):
+            self._ep = epoch + 1
+
         def on_epoch_end(self, epoch, logs=None):
-            kurama(epoch=epoch + 1, epochs=self.params.get("epochs") or 0, **(logs or {}))
+            kurama(epoch=epoch + 1, epochs=self.params.get("epochs") or 0, force=True, **(logs or {}))
 
         def on_train_batch_end(self, batch, logs=None):
             if _K["stop"]:
                 self.model.stop_training = True
+                return
+            steps = self.params.get("steps")
+            if steps:  # progress within an epoch (throttled); so a long epoch still shows step X/Y + ETA
+                kurama(epoch=getattr(self, "_ep", 0), epochs=self.params.get("epochs") or 0, step=batch + 1,
+                       steps=steps, **{k: float(v) for k, v in (logs or {}).items() if k in ("loss", "accuracy")})
 
         def on_train_end(self, logs=None):
             kurama("stopped" if _K["stop"] else "done", force=True, **(logs or {}))
@@ -148,6 +161,9 @@ try:
     from transformers import TrainerCallback
 
     class KuramaCallback(TrainerCallback):
+        def on_train_begin(self, args, state, control, **kw):
+            kurama("start", epochs=args.num_train_epochs, steps=state.max_steps, force=True)
+
         def on_log(self, args, state, control, logs=None, **kw):
             nums = {k: v for k, v in (logs or {}).items() if isinstance(v, (int, float))}
             kurama(epoch=state.epoch or 0, epochs=args.num_train_epochs, step=state.global_step,

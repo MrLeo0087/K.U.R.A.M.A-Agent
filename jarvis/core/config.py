@@ -613,7 +613,7 @@ BACKUP_EVERY_DAYS = 7  # automatic backup interval (also runs when the backup dr
 COLAB_POLL_S = 60.0  # how often KURAMA checks for Colab pings (only while a Colab run is active)
 COLAB_FILES_DIR = "~/Downloads/Colab"  # checkpoints sent from Colab land in <this>/<run>/
 COLAB_SILENT_MIN = 25  # no ping for this long = the Colab runtime probably disconnected
-COLAB_PROGRESS_EVERY_S = 300  # the notebook sends progress at most this often (ntfy.sh free limits)
+COLAB_PROGRESS_EVERY_S = 60  # the notebook sends within-epoch progress at most this often (epoch ends are forced)
 # Crash watchdog: targets come ONLY from here plus data/watchdog_targets.json (add_watchdog_target,
 # confirm-level, allowlist-checked). Example: {"name": "n8n", "command": "n8n start", "cwd": "~",
 # "match": "n8n"}  ("match" = adopt an already-running process whose command line contains it).
