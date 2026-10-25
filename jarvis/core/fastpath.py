@@ -270,7 +270,10 @@ SWITCHES = [  # (intent name, tool, group, args, patterns); first full match win
         r"find my (?:phone|mobile) \(?iphone\)?")),
     ("find_phone", "find_my_phone", "system", {"phone": "android"}, _rx(
         r"(?:find|locate|track|ring) (?:my |the )?(?:lost |missing )?(?:phone|mobile|android|cell\s*phone)(?: now)?",
-        r"where(?:'s| is) (?:my |the )?(?:phone|mobile|android|cell\s*phone)(?: now)?",
+        r"where(?:'s| is| are)? (?:my |the )?(?:phone|mobile|android|cell\s*phone)(?: location| at| now)?",
+        r"(?:(?:what(?:'s| is)|give|send|show|get|tell)(?: me)?\s*)?(?:the )?location of (?:my |the )?(?:phone|mobile|android|cell\s*phone)(?: now)?",
+        r"(?:give|send|show|get|tell)(?: me)?(?: the| my)? (?:phone|mobile)(?:'s)? location(?: now)?",
+        r"(?:my |the )?(?:phone|mobile|android)(?:'s)? location(?: now)?",
         r"(?:open |launch )?(?:google )?find my (?:device|phone|mobile|android)",
         r"(?:phone|mobile|मोबाइल|फोन) (?:kaha|kahan|khoj|कहाँ|कहां|खोज)(?:\s\w+)?")),
     ("mic", "mic_mute", "audio", {"action": "mute"}, _rx(

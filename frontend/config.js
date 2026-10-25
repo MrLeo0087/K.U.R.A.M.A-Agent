@@ -12,7 +12,7 @@ export const API_BASE = injected.apiBase || "";
 export const DEFAULTS = Object.freeze({
   apiBase: API_BASE,
   token: "",
-  mute: false, // the speaker button: true = KURAMA never speaks in this UI (replies stay as text)
+  mute: true, // the speaker button: true = KURAMA never speaks in this UI (replies stay as text)
   micMuted: false, // talk mode: the user muted the mic (kept until unmuted)
   wakeListen: true, // talk mode on at start, asleep until "wake up KURAMA"; "sleep now" puts it back to sleep
   lowPower: null, // null = follow prefers-reduced-motion
