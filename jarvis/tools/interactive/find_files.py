@@ -18,19 +18,56 @@ def _fd_binary() -> str:
     return "fdfind" if exe.endswith("fdfind") else exe
 
 
-def name_argv(query: str, limit: int, ftype: str = "f", paths: tuple[str, ...] = (".",)) -> list[str]:
+def name_argv(query: str, limit: int, ftype: str = "f", paths: tuple[str, ...] = (".",), regex: bool = False) -> list[str]:
     # --no-ignore-vcs: also files in git-ignored folders (data/, outputs); junk folders are excluded below
     argv = [_fd_binary(), "--color=never", "--type", ftype, "--max-results", str(limit), "--absolute-path",
-            "--no-ignore-vcs"]
+            "--no-ignore-vcs", "--ignore-case"]
     for ex in _proc.EXCLUDES:
         argv += ["--exclude", ex]
-    argv += ["--glob"] if any(c in query for c in "*?[") else ["--fixed-strings"]
+    if regex:
+        pass  # fd's default is regex
+    elif any(c in query for c in "*?["):
+        argv += ["--glob"]
+    else:
+        argv += ["--fixed-strings"]
     return argv + ["--", query, *paths]
 
 
-def search_names(query: str, bases: list, limit: int = 20, ftype: str = "f") -> tuple[list[str], bool]:
+def fuzzy_search(query: str, bases: list, limit: int, ftype: str) -> list[str]:
+    """Find names that are CLOSE to the query (tolerates spacing/underscores and small spelling slips):
+    'final rag' / 'final-rag' / 'final drag' all find 'Final_RAG'. Returns paths, best match first."""
+    import difflib
+    import os
+    import re
+    toks = re.findall(r"[a-z0-9]+", (query or "").lower())
+    if not toks:
+        return []
+    # 1) tokens with any separators between them ("final rag" -> final[ _.-]*rag), case-insensitive
+    pat = r"[\s._/-]*".join(map(re.escape, toks))
+    found, _ = search_names(pat, bases, limit, ftype, regex=True)
+    if found:
+        return found
+    # 2) small typos / run-together ("finalrag"): search a prefix of the most distinctive token broadly,
+    #    then rank candidates by similarity to the whole query
+    key = max(toks, key=len)
+    if len(key) < 3:
+        return []
+    cand, _ = search_names(key, bases, 200, ftype)
+    if not cand and len(key) >= 5:  # "finalrag" matches no "finalrag"; search the prefix "fina" and rank
+        cand, _ = search_names(key[:4], bases, 400, ftype)
+    want = re.sub(r"[^a-z0-9]", "", (query or "").lower())
+
+    def score(p: str) -> float:
+        name = re.sub(r"[^a-z0-9]", "", os.path.basename(p.rstrip("/")).lower())
+        return difflib.SequenceMatcher(None, want, name).ratio()
+
+    ranked = sorted(((score(p), p) for p in cand), reverse=True)
+    return [p for s, p in ranked if s >= 0.6][:limit]
+
+
+def search_names(query: str, bases: list, limit: int = 20, ftype: str = "f", regex: bool = False) -> tuple[list[str], bool]:
     """Matching paths under all bases in ONE fd run (fd searches them in parallel); (paths, timed_out)."""
-    argv = name_argv(query, limit, ftype, tuple(str(b) for b in bases))
+    argv = name_argv(query, limit, ftype, tuple(str(b) for b in bases), regex=regex)
     try:
         cp = _proc.run(argv, cwd=str(bases[0]), timeout=TIMEOUT)
         if cp.returncode not in (0, 1):
@@ -80,6 +117,7 @@ def find_files(query: str, path: str = "", kind: Literal["any", "name", "folder"
         limit = 200  # whole-laptop search: the full list goes to the Workspace card, the LLM sees the top
     what = {"any": "files/folders", "name": "files", "folder": "folders", "content": "hits"}[kind]
     if kind != "content":
+        fuzzy = ""
         if kind == "any":  # search folders first (what people usually mean by "find X"), then files
             folders, late1 = search_names(query, bases, limit, "d")
             files, late2 = search_names(query, bases, limit, "f")
@@ -87,13 +125,19 @@ def find_files(query: str, path: str = "", kind: Literal["any", "name", "folder"
             late = late1 or late2
         else:
             found, late = search_names(query, bases, limit, "d" if kind == "folder" else "f")
+        if not found:  # nothing exact: try a close/fuzzy match (spacing, underscores, small typos)
+            for ft in (("d", "f") if kind in ("any", "folder") else ("f",)):
+                if hit := fuzzy_search(query, bases, limit, ft):
+                    found, fuzzy = hit, f" (closest matches to {query!r})"
+                    break
         partial = f" (timed out after {TIMEOUT}s; partial, narrow the path)" if late else ""
         if not found:
-            return f"no {what} matching {query!r} under {base}{partial}"
+            where = "anywhere on your laptop" if len(bases) > 1 else f"under {base}"
+            return f"No {what} named like {query!r} {where}. Try a different spelling or part of the name."
         if kind in ("folder", "any"):  # remember the top folder, so "send this folder" works next
             from jarvis.core import focus
             focus.set_path(found[0])
-        head = f"{len(found)}{'+' if len(found) == limit else ''} {what} named like {query!r}{partial}:"
+        head = f"{len(found)}{'+' if len(found) == limit else ''} {what} named like {query!r}{fuzzy}{partial}:"
         return "\n".join([head, *(_clean(f) for f in found)])
     argv = content_argv(query, limit)
     out, partial = "", ""
