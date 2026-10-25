@@ -36,3 +36,6 @@ pydantic==2.14.1
 PyYAML==6.0.3
 # P12 wake word: free Google Web Speech recognizer (pure Python + bundled flac; checked: no torch/PyAudio)
 SpeechRecognition==3.17.0
+# video_download: yt-dlp (pure Python, kept current; YouTube breaks old builds) + its YouTube JS-challenge scripts (no deps)
+yt-dlp==2026.10.21
+yt-dlp-ejs==0.8.0

@@ -612,6 +612,7 @@ LECTURE_LANG = os.getenv("KURAMA_LECTURE_LANG", "")  # "" = auto; "en", "ne" or 
 TIMETABLE_LEAD_MIN = 10  # heads-up this long before each class
 DOWNLOAD_DIR = "~/Downloads"  # download manager default folder
 DOWNLOAD_NIGHT_HOUR = 1  # "tonight" downloads start at this hour
+VIDEO_DIR = os.getenv("KURAMA_VIDEO_DIR", "~/Videos/KURAMA")  # video/audio downloads (yt-dlp)
 BACKUP_EVERY_DAYS = 7  # automatic backup interval (also runs when the backup drive appears)
 COLAB_POLL_S = 60.0  # how often KURAMA checks for Colab pings (only while a Colab run is active)
 COLAB_FILES_DIR = "~/Downloads/Colab"  # checkpoints sent from Colab land in <this>/<run>/

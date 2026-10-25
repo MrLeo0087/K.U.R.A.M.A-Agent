@@ -748,6 +748,14 @@ def _study_intent(t: str) -> Intent | None:
     return None
 
 
+_VID_SITES = r"(?:youtube\.com|youtu\.be|vimeo\.com|facebook\.com|fb\.watch|instagram\.com|tiktok\.com|x\.com|twitter\.com|dailymotion\.com)"
+_VDL = re.compile(r"^(?:please\s+)?(?:download|save|get)\s+(?:me\s+)?(?:the\s+|this\s+|that\s+|a\s+)?(?P<pl>(?:whole\s+)?playlist\s+)?"
+                  r"(?:(?:youtube|yt)\s+)?(?P<kind>video|movie|film|song|music|audio|mp3|clip|playlist)?"
+                  r"(?:\s+(?:of|called|named|for))?\s*(?P<src>.*?)"
+                  r"(?:\s+(?:from|on)\s+youtube)?"
+                  r"(?:\s+(?:in|at|with)\s+(?P<q>4k|2k|\d{3,4}\s*p?|full\s+hd|hd|fhd)(?:\s+quality)?)?"
+                  r"(?P<aud>\s+(?:as|in|to)\s+(?:an?\s+)?(?:mp3|audio|music|sound\s+only))?"
+                  r"(?:\s+(?:with|and)\s+(?:the\s+)?(?:sound|audio))?$", I)
 _DL = re.compile(r"^download (?P<u>https?://\S+)(?: (?:to|into|in) (?P<f>.+?))?(?P<n> tonight| at night| overnight)?$", I)
 _CLEAN = re.compile(r"^(?:clean|clear|empty|delete|remove|free)(?: up)? (?:the |my |all )?(?P<c>pip cache|hugging ?face "
                     r"cache|hf cache|torch cache|trash|old checkpoints|checkpoints|duplicates|duplicate files|old "
@@ -766,6 +774,8 @@ _JOT = re.compile(r"^(?:jot|note|write|put) (?:this |it )?down (?:for|in|under) 
 def _daily_intent(t: str) -> Intent | None:
     if m := _JOT.match(t):  # "jot down for physics newton's third law": a study note (one-word subject)
         return Intent("note", "study_notes", "study", {"action": "add", "text": m.group("t"), "subject": m.group("s")})
+    if vd := video_dl_intent(t):
+        return vd
     if m := _DL.match(t):
         return Intent("auto", "download_file", "automation", {"action": "add", "url": m.group("u"),
                                                               "folder": m.group("f") or "",
@@ -891,6 +901,27 @@ def error_intent(text: str) -> Intent | None:
     if m := _ERR_FIXED.match(t):
         return Intent("error", "fix_error", "dev", {"action": "fixed", "text": m.group("fix")})
     return None
+
+
+def video_dl_intent(t: str) -> Intent | None:
+    """'download this youtube video in 1080p', 'download <link> as mp3', 'download interstellar trailer in 4k'."""
+    m = _VDL.match(t)
+    if not m:
+        return None
+    src, kind, q = (m.group("src") or "").strip(), (m.group("kind") or "").lower(), m.group("q") or ""
+    if qm := re.fullmatch(r"(?:in|at|with)\s+(4k|2k|\d{3,4}\s*p?|full\s+hd|hd|fhd)(?:\s+quality)?", src, I):
+        src, q = "", qm.group(1)  # "download this video in 1080p": no words left, the quality was all of it
+    is_url = bool(re.match(r"https?://", src))
+    if is_url and not re.search(_VID_SITES, src, I) and not (kind or q or m.group("aud")):
+        return None  # a plain file link -> download_file
+    if not is_url and not (kind or q or m.group("aud") or re.search(r"\byoutube\b", t, I)):
+        return None  # "download the dataset" etc. are not videos
+    if src.lower() in ("", "it", "this", "that", "one"):
+        src = ""
+    audio = bool(m.group("aud")) or kind in ("mp3", "audio", "song", "music")
+    return Intent("vdl", "video_download", "media", {"source": src, "quality": q.replace(" ", ""),
+                                                      "audio": audio,
+                                                      "playlist": bool(m.group("pl")) or kind == "playlist"})
 
 
 def _ui_intent(t: str) -> Intent | None:
