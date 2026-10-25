@@ -1,6 +1,7 @@
 """send_file_telegram (P7c): send a local file to the user's Telegram (sendPhoto / sendDocument)."""
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from jarvis.core import config, notify
@@ -127,8 +128,16 @@ def send_file_telegram(path: str = "", caption: str = "", pick: int = 0) -> str:
     if pick or not path.strip():
         return find_and_send(path, pick)
     resolved = _files.resolve(path)
-    if resolved.is_dir():  # a folder: zip it (minus junk); split into parts if it's over the Telegram limit
+    if resolved.is_dir():  # a full/relative folder path: zip it; split into parts if over the Telegram limit
         return deliver_folder(resolved, caption)
+    if not resolved.is_file():  # not a literal path — maybe "project in download", "downloads/project", "the X folder"
+        try:
+            from jarvis.tools.interactive._proc import resolve_dir
+            d = resolve_dir(re.sub(r"\s*\bfolder\b\s*", " ", path, flags=re.I).strip())
+            if d.is_dir():
+                return deliver_folder(d, caption)
+        except Exception:
+            pass
     try:
         p = check_path(path)
     except ValueError as e:

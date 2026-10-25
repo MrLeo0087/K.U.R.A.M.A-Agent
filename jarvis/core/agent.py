@@ -294,36 +294,30 @@ class Agent:
         tools = state.get("tools") or None
         rounds = state.get("rounds", 0)
         last_round = rounds >= config.AGENT_MAX_TOOL_ROUNDS
+        if last_round:
+            tools = None  # final round: send NO tools so the model must answer in text. (tool_choice="none" is
+            #              not obeyed by gpt-oss and makes Groq return a 400 "Tool choice is none but model called a tool".)
         kw: dict[str, Any] = {"tier": state.get("tier", "fast"), "tools": tools,
                               "purpose": f"agent_{state.get('mode', 'text')}",
                               "max_tokens": config.AGENT_MAX_TOKENS}
         if kw["tier"] != "voice":  # (the voice tier has its own, shorter timeout)
             kw["timeout"] = config.AGENT_TIMEOUT_S
-        if tools and last_round:
-            kw["tool_choice"] = "none"
         msgs = state["messages"]
         hold = self._retry_ok(state)  # stream: hold the first sentence back until it is not "I can't"
         try:
             reply = self._chat(msgs, kw, state.get("stream", False), hold)
         except llm.LLMError as e:
-            if not tools or "tool" not in str(e).lower():
+            low = str(e).lower()
+            if not tools or ("tool" not in low and "400" not in low):
                 raise
-            log.warning("tool call generation failed, retrying without tools: %s", e)
-            # tool_choice="none" is not always obeyed ("Tool choice is none, but model called a tool"):
-            # the last resort sends no tools at all, so the model can only answer in text
-            nxt = {**kw, "tool_choice": "none"} if kw.get("tool_choice") != "none" else \
-                {k: v for k, v in kw.items() if k not in ("tools", "tool_choice")}
+            # a tool-call / tool_choice 400 from Groq: retry once with NO tools so it answers in text
+            log.warning("tool-call generation failed (%s); retrying without tools", str(e)[:120])
+            notools = {k: v for k, v in kw.items() if k != "tools"}
             try:
-                reply = self._chat(msgs, nxt, state.get("stream", False), hold)
-            except llm.LLMError as e2:
-                if "tool" not in str(e2).lower():
-                    raise
-                if "tools" in nxt:
-                    reply = self._chat(msgs, {k: v for k, v in kw.items() if k not in ("tools", "tool_choice")},
-                                       state.get("stream", False), hold)
-                else:  # it insists on calling tools: answer with what the tools already said
-                    done = [str(m.content) for m in msgs if isinstance(m, ToolMessage)][-2:]
-                    reply = llm.Reply(" ".join(done)[:400] or NO_ANSWER, "", [])
+                reply = self._chat(msgs, notools, state.get("stream", False), hold)
+            except llm.LLMError:  # still failing: answer from whatever the tools already returned
+                done = [str(m.content) for m in msgs if isinstance(m, ToolMessage) and not str(m.content).startswith("error")][-2:]
+                reply = llm.Reply(" ".join(done)[:600] or NO_ANSWER, "", [])
         ai = reply.message or AIMessage(content=reply.text)
         calls = [] if last_round else list(ai.tool_calls)
         bad = [] if last_round else list(getattr(ai, "invalid_tool_calls", None) or [])
@@ -684,8 +678,14 @@ class Agent:
         if fast is not None:
             self._remember(user_text, fast.answer)
             return fast.answer
-        final = self.graph.invoke(self._state(user_text, mode, lang, False), self._config())
-        answer = final.get("answer") or NO_ANSWER
+        try:
+            final = self.graph.invoke(self._state(user_text, mode, lang, False), self._config())
+            answer = final.get("answer") or NO_ANSWER
+        except llm.LLMError as e:
+            log.warning("agent run failed: %s", e)
+            answer = ("Sorry, my AI service is busy or rate-limited right now — please try again in a few seconds."
+                      if any(w in str(e).lower() for w in ("rate", "429", "busy", "quota", "budget"))
+                      else "Sorry, something went wrong on my side. Please try again.")
         self._remember(user_text, answer)
         return answer
 

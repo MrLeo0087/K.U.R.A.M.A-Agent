@@ -187,6 +187,28 @@ def listdir_intent(t: str) -> Intent | None:
     return Intent("listdir", "list_folder", "filesearch", {"path": path}, path)
 
 
+# "send [me] [the] X folder/file [in Y] [to telegram]" — send a file/folder to Telegram (0 tokens)
+_TGDEST = r"(?:\s+(?:to|in|on|via|through)\s+(?:my\s+)?(?:telegram|phone|mobile))"
+_SENDLEAD = r"(?:send|share|forward|upload)(?:\s+(?:me|us|the|my))*\s+"
+SENDFILE = _rx(
+    _SENDLEAD + r"(?P<target>.+?)\s+(?:folder|directory|file|document|zip|pdf|image|photo|video)s?"
+    + r"(?:\s+(?:in|from|inside)\s+(?P<loc>[\w /.\-]+?))?" + _TGDEST + r"?",
+    _SENDLEAD + r"(?P<target>[\w.\-]+(?:\s+[\w.\-]+){0,3}?)\s+(?:in|from|inside)\s+(?P<loc>[\w /.\-]+?)" + _TGDEST,
+)
+
+
+def sendfile_intent(t: str) -> Intent | None:
+    m = _full(SENDFILE, t)
+    if not m:
+        return None
+    tgt = (m.group("target") or "").strip(" ,")
+    loc = (m.groupdict().get("loc") or "").strip(" ,")
+    if not tgt or len(tgt.split()) > 6 or re.fullmatch(r"(?:it|that|this|them|a message|message|hi|hello)", tgt, I):
+        return None
+    path = f"{tgt} in {loc}" if loc else tgt
+    return Intent("sendfile", "send_file_telegram", "telegram", {"path": path}, tgt)
+
+
 def search_intent(t: str) -> Intent | None:
     if _SEARCH_ANSWER.search(t):
         return None  # they want the answer: LLM path with web_search / wikipedia
@@ -852,6 +874,8 @@ def match(text: str) -> Intent | None:
         return sysi
     if ii := image_intent(t):
         return ii
+    if sf := sendfile_intent(t):
+        return sf
     if li := listdir_intent(t):
         return li
     if si := search_intent(t):
@@ -878,10 +902,11 @@ def _close_intent(target: str) -> Intent | None:
 
 
 _FM = r"(?:the |my )?(?:file manager|files|file explorer|explorer|nautilus|files app)"
+_FOLDLEAD = r"(?:me |us |the |my )*"  # "show me the X folder" -> X
 FOLDER_OPEN = _rx(
-    r"(?:open|show|go to|goto|browse|reveal|take me to)(?: up)? (?:the |my )?(?P<target>.+?) (?:folder|directory|dir)(?: in " + _FM + r")?",
-    r"(?:open|show|go to|goto|browse|reveal)(?: up)? (?:the |my )?folder (?:called |named )?(?P<target>.+?)",
-    r"(?:open|show|go to|goto|browse|reveal|take me to)(?: up)? (?:the |my )?(?P<target>.+?) in " + _FM,
+    r"(?:open|show|go to|goto|browse|reveal|take me to)(?: up)? " + _FOLDLEAD + r"(?P<target>.+?) (?:folder|directory|dir)(?: in " + _FM + r")?",
+    r"(?:open|show|go to|goto|browse|reveal)(?: up)? " + _FOLDLEAD + r"folder (?:called |named )?(?P<target>.+?)",
+    r"(?:open|show|go to|goto|browse|reveal|take me to)(?: up)? " + _FOLDLEAD + r"(?P<target>.+?) in " + _FM,
 )
 
 

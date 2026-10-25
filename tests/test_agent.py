@@ -127,7 +127,7 @@ def test_round_limit_forces_answer(fake):
     ans = agent.Agent().run("what time is it")
     assert ans == agent.TOO_MANY_ROUNDS
     assert len(calls) == config.AGENT_MAX_TOOL_ROUNDS + 1
-    assert calls[-1]["tool_choice"] == "none"
+    assert calls[-1].get("tools") is None  # final round sends NO tools (avoids the Groq "tool_choice none" 400)
 
 
 def test_multi_group_uses_smart_tier(fake):
