@@ -38,7 +38,7 @@ owner uses, not a demo.
 - Pin dependency versions; check each new dep for torch/GPU baggage.
 - When ambiguous, pick a sensible default, note it, ask only if blocked.
 - **Attribution on commits** (current reminder): end commit messages with
-  `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>` (use whatever the live system-reminder says; owner rules win).
+  `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>` (use whatever the live system-reminder says; owner rules win).
 - Tone: professional, organized, **no emojis** in KURAMA's own tool messages (the LLM prompt already forbids them).
 
 ## 4. Architecture / layout
@@ -105,10 +105,23 @@ tests/  docs/  PROGRESS.md  CLAUDE.md
   desktop", "real-time preview", "control my laptop from my phone") → launches **RustDesk** with unattended access
   and returns ID + password (to Telegram if asked there, else the dashboard).
 
+- **Added 2026-10-25/26:** screen agent `app_control` (0-token app shortcuts, click by name via AT-SPI helper
+  scripts/atspi_dump.py, learned replays, LLM/vision steps); `video_download` (yt-dlp + yt-dlp-ejs/deno, any
+  quality, MP3, playlists); `convert_file` (pdf<->md, md->pdf via fpdf2, images, media, tables, OCR, office via
+  LibreOffice if installed); `install_app` (apt/snap/flatpak, pkexec popup, confirm); `wifi_share` (LAN link + QR,
+  token path, auto-stop); `contacts` (Excel sheet ~/Documents/KURAMA/contacts.xlsx); `live_search` (ESPN scores,
+  Google News RSS, gold/forex/crypto/stock APIs, fresh-source answers). Remote desktop password is set via the
+  root helper /usr/local/sbin/kurama-rustdesk (sudoers), expires after 15 min, only given on Telegram after the PIN.
+  The messages/notification tool was built and then REMOVED at the owner's request.
+- **Path memory (focus.py = current folder):** history of 10, 12 h; "this/it/here", "previous folder",
+  "parent folder", bare sub-folder names, cwd-relative lookups; send refuses home/disk roots.
+- **Token savers:** 0-token small talk/everyday commands, TYPO_FIXES, talk-mode ambient gate (speech > 45 s after
+  KURAMA last spoke must name KURAMA or be a fast-path command), history messages capped at 420 chars.
+
 ## 6. Current in-progress / pending
-- **RustDesk install (owner action):** the .deb (1.5.0) is at `~/Downloads/rustdesk-1.5.0-x86_64.deb`. Install needs
-  one sudo command: `sudo apt install -y ~/Downloads/rustdesk-1.5.0-x86_64.deb`. After that, "/control laptop" works;
-  verify `remotedesk.start()` returns an ID+password. The owner may ask to add a dashboard "remote desktop" button.
+- RustDesk is installed and working (helper + sudoers in place). Owner may ask for a dashboard button.
+- Optional owner actions: "enable screen control" + restart Brave/VS Code (accessibility for app_control);
+  `sudo apt install libreoffice-writer` for Word/PowerPoint conversions; accept Groq Orpheus terms if TTS is wanted.
 - **Owner setup still open:** turn on command alerts ("turn on command alerts"); paste the Colab cell/notebook; set a
   backup drive; paste the timetable; turn on Telegram's own Passcode Lock; label home Wi-Fi with `/here`.
 - The owner's Groq **daily fast-model budget often runs out** → more fallbacks/slow replies late in the day. Not a bug.
@@ -121,7 +134,7 @@ tests/  docs/  PROGRESS.md  CLAUDE.md
   wallpaper `scripts/kurama-wallpaper.sh` (stop with `... stop`). Health: `curl -s localhost:8000/api/v1/health`.
 - **Kill by exact PID**, never `pkill -f` (it matches your own shell → the agent has been killed that way before).
   A helper exists in the scratchpad: `restart.sh jarvis.server jarvis.workers`.
-- Tests: `venv/bin/python -m pytest -q` (~640 pass). Routing: `venv/bin/python scripts/eval_routing.py` (110/110,
+- Tests: `venv/bin/python -m pytest -q` (~707 pass). Routing: `venv/bin/python scripts/eval_routing.py` (110/110,
   32/32). Offscreen UI render with JS-error check: a `shot2.py` in the scratchpad injects the API token and reports
   `window.__errs`. Reload the wallpaper after frontend changes.
 - Logs: `data/logs/{server.log,workers.out,worker_telegram_bot.log,wallpaper.log,stt.log}`.
@@ -138,5 +151,4 @@ tests/  docs/  PROGRESS.md  CLAUDE.md
   (`sleep-inactive-battery-type 'nothing'`).
 
 ## 9. Where to look for the latest truth
-`PROGRESS.md` tail + `git log --oneline` (each commit message says exactly what changed and why). The project is at
-commit ~`926b30c` (Telegram security + remote desktop) as of this handoff, on branch `master`.
+`PROGRESS.md` tail + `git log --oneline` (each commit message says exactly what changed and why). On branch `master`; see `git log --oneline` for the latest commit.
