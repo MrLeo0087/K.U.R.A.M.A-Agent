@@ -37,6 +37,11 @@ class Scheduler(Worker):
         except Exception as e:
             self.log.warning("timetable check failed: %s", e)
         try:
+            from jarvis.core import kaggle_gpu
+            kaggle_gpu.tick(self._now())
+        except Exception as e:
+            self.log.warning("kaggle check failed: %s", e)
+        try:
             from jarvis.core import remotedesk
             remotedesk.expire_if_due(self._now())
         except Exception as e:

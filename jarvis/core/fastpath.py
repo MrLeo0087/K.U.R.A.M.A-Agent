@@ -1232,6 +1232,16 @@ def everyday_intent(t: str) -> Intent | None:
             return Intent("organize", "organize_files", "daily", {"action": "undo"})
         return Intent("organize", "organize_files", "daily", {"action": "preview" if m.group("prev") else "organize",
                                                               "folder": m.group("f").strip()})
+    if m := re.fullmatch(r"(?:please\s+)?(?:(?:run|train|start)\s+(?:the\s+|my\s+)?(?P<p>.+?)\s+(?:on|in|using|with)\s+"
+                         r"(?:a\s+|the\s+)?(?:free\s+)?(?:kaggle(?:'s)?(?:\s+(?:free\s+)?gpu)?|gpu|cloud\s+gpu)|(?:train|run)\s+(?:it|this)\s+on\s+gpu)"
+                         r"[\s.!]*", t, I):
+        p = re.sub(r"\s+(?:project|folder|script|notebook|code)$", "", (m.group("p") or "this").strip(), flags=I)
+        return Intent("kaggle", "kaggle_train", "watch", {"action": "run", "path": p})
+    if re.fullmatch(r"(?:please\s+)?(?:(?:show|check|what(?:'s|\s+is))\s+(?:the\s+|my\s+)?)?kaggle\s+(?:run\s+)?(?:status|runs?)"
+                    r"[\s?.!]*|(?:is\s+)?(?:my\s+)?kaggle\s+(?:training|run)\s+(?:done|finished)\??", t, I):
+        return Intent("kaggle", "kaggle_train", "watch", {"action": "status"})
+    if re.fullmatch(r"(?:please\s+)?(?:set\s*up|install|configure)\s+kaggle(?:\s+(?:gpu|tool|cli))?[\s.!]*", t, I):
+        return Intent("kaggle", "kaggle_train", "watch", {"action": "setup"})
     if m := _REWRITE.match(t):
         ins = re.sub(r"\s+(?:this|it|that|the\s+selected\s+text|the\s+selection|selected\s+text|selection)\b", "",
                      m.group(0), count=1, flags=I).strip(" .!")
