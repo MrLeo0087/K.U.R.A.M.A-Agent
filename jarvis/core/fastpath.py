@@ -1185,6 +1185,14 @@ _WHERE_PATH = re.compile(r"^(?:give\s+me\s+|tell\s+me\s+|what(?:'s|\s+is)\s+)?(?
                          r"^where\s+is\s+(?:that|this|it)(?:\s+(?:folder|file))?[\s?.!]*$", I)
 
 
+_SEL = r"(?:this|it|that|the\s+selected\s+text|the\s+selection|selected\s+text|selection|this\s+(?:text|paragraph|line|sentence|email|message))"
+_REWRITE = re.compile(r"^(?:please\s+)?(?:make\s+" + _SEL + r"\s+(?:more\s+)?(?:formal|informal|polite|professional|simple|simpler|"
+                      r"shorter|longer|clear(?:er)?|friendly|casual|concise|better|nicer|funny|serious)|"
+                      r"(?:fix|correct|check)\s+(?:the\s+)?(?:grammar|spelling|typos?)(?:\s+(?:of|in)\s+" + _SEL + r")?(?:\s+" + _SEL + r")?|"
+                      r"(?:shorten|summari[sz]e|simplify|paraphrase|rephrase|rewrite|improve|polish|expand)\s+" + _SEL +
+                      r"(?:\s+.{1,40})?|translate\s+" + _SEL + r"\s+(?:in)?to\s+\w+(?:\s+\w+)?)[\s.!]*$", I)
+
+
 def everyday_intent(t: str) -> Intent | None:
     """0-token replies for things that were costing an LLM call each (greetings, thanks, 'kill brave',
     'top memory processes', 'laptop is slow', 'status of training', 'summarise today', 'exact path of that folder')."""
@@ -1210,6 +1218,10 @@ def everyday_intent(t: str) -> Intent | None:
         if not re.fullmatch(r"(?:the\s+)?(?:screen|laptop|computer|pc|kurama|phone|door|it\s+now)", p, I):
             act = "unlock" if m.group("a").lower() in ("unlock", "decrypt") else "lock"
             return Intent("lock", "folder_lock", "filesearch", {"action": act, "path": p}, p)
+    if m := _REWRITE.match(t):
+        ins = re.sub(r"\s+(?:this|it|that|the\s+selected\s+text|the\s+selection|selected\s+text|selection)\b", "",
+                     m.group(0), count=1, flags=I).strip(" .!")
+        return Intent("rewrite", "rewrite_text", "clipboard", {"instruction": ins})
     if _WHERE_PATH.match(t):
         return Intent("where", "_where", "filesearch", {})
     if (m := _KILL.match(t)) and not re.search(r"\b(?:it|this|that|time|me|process\s+\d+)\b", m.group("a"), I):
