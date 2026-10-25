@@ -448,7 +448,7 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
                   "where is the code", "which function", "which module", "this project", "this repo", "this codebase",
                   "this code", "my code", "project about", "repo about", "what does this repo",
                   "what does this project", "explain my code", "explain this code", "explain the code"),
-    "usage": ("token", "tokens", "token usage", "api usage", "api cost", "groq usage", "how much did i spend",
+    "usage": ("whatsapp", "messages", "unread", "inbox", "instagram", "messenger", "facebook", "email", "emails", "mail", "token", "tokens", "token usage", "api usage", "api cost", "groq usage", "how much did i spend",
               "cost", "budget", "digest", "daily digest", "daily summary", "summary of my day", "my day",
               "टोकन"),
     "browser": ("url", "link", "website", "web site", "site", "youtube", "gmail", "github",
@@ -505,7 +505,7 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
            "page and say when it changes",
     "memory": "notes the user dictates, facts about the user (profile), past conversations/sessions",
     "knowledge": "search or ask questions about the user's own code, docs and notes (RAG); index a folder",
-    "usage": "LLM token usage, budget and API cost; daily digest of the day's activity",
+    "usage": "new/latest WhatsApp, Facebook, Instagram and email messages on the laptop; LLM token usage, budget and API cost; daily digest",
     "browser": "open a website or URL in the browser",
     "jobs": "long writing jobs (essays, articles, reports) and background job status/cancel/resume",
     "schedule": "reminders and scheduled commands at a time or repeating; list or cancel them",
@@ -557,7 +557,7 @@ SHELL_ALLOWLIST = ("ls", "cat", "head", "tail", "wc", "grep", "rg", "fdfind", "f
 WORKERS_ENABLED: tuple[str, ...] = tuple(
     w.strip() for w in os.getenv("JARVIS_WORKERS", "process_watch,resource_guard,crash_watchdog,"
                                  "telegram_bot,daily_digest,auto_theme,scheduler,timemachine,guard,"
-                                 "location_tracker").split(",") if w.strip())
+                                 "location_tracker,msg_watch").split(",") if w.strip())
 WORKER_MIN_INTERVAL_S = 5.0  # no daemon polls faster than this
 WORKER_MAX_BACKOFF_S = 300.0  # error backoff cap (interval * 2^errors)
 WORKER_LOG_BYTES = 1_000_000  # rotating log per worker: ~1 MB x 3
@@ -613,6 +613,10 @@ TIMETABLE_LEAD_MIN = 10  # heads-up this long before each class
 DOWNLOAD_DIR = "~/Downloads"  # download manager default folder
 DOWNLOAD_NIGHT_HOUR = 1  # "tonight" downloads start at this hour
 WIFI_SHARE_IDLE_MIN = 30  # a Wi-Fi share link stops after this many idle minutes
+INBOX_KEEP_HOURS = 48.0  # WhatsApp/Facebook/Instagram/email notifications kept this long (data/inbox.db)
+GMAIL_USER = os.getenv("GMAIL_USER", "")  # optional: real unread email over IMAP (with a Google app password)
+GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD", "")
+IMAP_HOST = os.getenv("IMAP_HOST", "imap.gmail.com")
 CONTACTS_FILE = os.getenv("KURAMA_CONTACTS", "~/Documents/KURAMA/contacts.xlsx")  # name/phone sheet (Excel)
 VIDEO_DIR = os.getenv("KURAMA_VIDEO_DIR", "~/Videos/KURAMA")  # video/audio downloads (yt-dlp)
 BACKUP_EVERY_DAYS = 7  # automatic backup interval (also runs when the backup drive appears)
