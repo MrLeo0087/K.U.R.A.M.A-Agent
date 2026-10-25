@@ -1225,6 +1225,13 @@ def everyday_intent(t: str) -> Intent | None:
             return Intent("dictate", "dictate", "windows", {"action": "stop"})
         lang = {"english": "en", "nepali": "ne", "hindi": "hi"}.get((m.group("lang") or "").lower(), "auto")
         return Intent("dictate", "dictate", "windows", {"action": "start", "lang": lang})
+    if m := re.fullmatch(r"(?:please\s+)?(?:(?P<undo>undo)\s+(?:the\s+)?(?:organi[sz]e|organi[sz]ing|sorting)|"
+                         r"(?P<prev>preview|plan)?\s*(?:smart\s+)?(?:organi[sz]e|clean\s+up|sort\s+out|rename\s+and\s+sort)\s+"
+                         r"(?:the\s+|my\s+)?(?P<f>[\w .-]{2,40}?)(?:\s+(?:folder|files))?)[\s.!]*", t, I):
+        if m.group("undo"):
+            return Intent("organize", "organize_files", "daily", {"action": "undo"})
+        return Intent("organize", "organize_files", "daily", {"action": "preview" if m.group("prev") else "organize",
+                                                              "folder": m.group("f").strip()})
     if m := _REWRITE.match(t):
         ins = re.sub(r"\s+(?:this|it|that|the\s+selected\s+text|the\s+selection|selected\s+text|selection)\b", "",
                      m.group(0), count=1, flags=I).strip(" .!")
