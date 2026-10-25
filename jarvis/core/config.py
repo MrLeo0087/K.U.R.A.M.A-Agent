@@ -138,6 +138,7 @@ LLM_MAX_WAIT_S = 20.0  # never sleep longer than this for one retry
 
 # --- chat ---
 HISTORY_TURNS = 6
+HISTORY_MSG_MAX_CHARS = 420  # each remembered message is cut to this for the LLM history (full text stays in the DB)
 
 # --- audio capture / VAD (P2) ---
 AUDIO_SAMPLE_RATE = 16_000  # Hz, mono int16 (what webrtcvad and Whisper want)

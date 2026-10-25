@@ -201,6 +201,20 @@ def here_intent(t: str) -> Intent | None:
         ref = re.search(r"previous|parent", t, I)
         return Intent("listdir", "list_folder", "filesearch", {"path": f"{ref.group(0)} folder" if ref else "this"},
                       "this")
+    if m := re.match(r"^(?:what(?:'s|\s+is)(?:\s+there)?\s+(?:in|inside)|(?:list|show)(?:\s+me)?|open)\s+(?:the\s+)?"
+                     r"(?P<p>[\w .-]{2,40}?)(?:\s+(?:folder|directory))?\s*[?.!]*$", t, I):
+        from jarvis.core import focus  # a sub-folder of the current folder named on its own: "what is in data"
+        cur, want = focus.cwd(), m.group("p").strip()
+        if cur is not None:
+            from jarvis.core.paths import norm
+            try:
+                hit = next((e.name for e in cur.iterdir() if e.is_dir() and norm(e.name) == norm(want)), None)
+            except OSError:
+                hit = None
+            if hit:
+                tool = "open_folder" if t.lower().startswith("open") else "list_folder"
+                return Intent("openfolder" if tool == "open_folder" else "listdir", tool, "filesearch",
+                              {"name" if tool == "open_folder" else "path": str(cur / hit)}, hit)
     if m := _OPEN_REF.match(t):
         r = m.group("r").lower()
         r = "previous folder" if re.search(r"previous|last", r) else "parent folder" if "parent" in r else "this"

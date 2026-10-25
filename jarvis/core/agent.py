@@ -637,7 +637,10 @@ class Agent:
         self._persist_turn(user_text, answer)
         batch: list[BaseMessage] = []
         with self._lock:
-            self.history += [HumanMessage(content=user_text), AIMessage(content=answer)]
+            short = answer if len(answer) <= config.HISTORY_MSG_MAX_CHARS else \
+                answer[: config.HISTORY_MSG_MAX_CHARS].rstrip() + " …(shortened)"
+            # long replies (file lists, reports) are kept short in the LLM history: every later turn re-sends them
+            self.history += [HumanMessage(content=user_text[: config.HISTORY_MSG_MAX_CHARS]), AIMessage(content=short)]
             while len(self.history) > 2 * config.HISTORY_TURNS:
                 self._overflow += self.history[:2]
                 self.history = self.history[2:]
