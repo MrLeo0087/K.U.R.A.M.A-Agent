@@ -33,7 +33,13 @@ VIDEO = re.compile(r"^\s*(?:/video|/vid|/rec(?:ord)?|(?:record|take|send|capture
                    r"video(?: clip)?(?: from| of| on)?(?: my| the)?(?: laptop| webcam| camera)+)(?:\s+(?P<sec>\d{1,2})\s*(?:s|sec|seconds?)?)?\s*[.!?]*$", re.I)
 # label the current Wi-Fi as a known place ("/here Home", "this is home")
 HERE = re.compile(r"^\s*(?:/here|(?:remember |save )?(?:this (?:is|spot is|place is)|the laptop is(?: at| in)?))\s+(?P<label>.{1,40}?)\s*[.!?]*$", re.I)
-WHERE = re.compile(r"^\s*(?:/where|/locate|/find|where(?:'s| is)(?: my| the)? laptop|(?:find|locate)(?: my| the)? laptop)(?: now)?\s*[.!?]*$", re.I)
+WHERE = re.compile(
+    r"^\s*(?:/where|/locate|/find"
+    r"|where(?:'s| is| are)?(?: my| the)? laptop(?:'s)?(?: location| at)?"
+    r"|(?:find|locate|track|trace)(?: my| the)? laptop"
+    r"|(?:give|send|show|get|tell)(?: me)?(?: the| my)? (?:laptop(?:'s)? )?location(?: of(?: my| the)? laptop)?"
+    r"|(?:what(?:'s| is))?(?:the )?(?:laptop(?:'s)? )?location(?: of(?: the| my)? laptop)?"
+    r"|laptop(?:'s)? location)(?: now| right now)?\s*[.!?]*$", re.I)
 # "give me all laptop control commands", "what can you do", "help", "list commands"
 HELP_RE = re.compile(r"^\s*(?:/help|/commands?|/start|help|commands?|(?:give me |show me |list |what are |tell me )?"
                      r"(?:all |the |my )?(?:laptop |phone )?(?:control )?commands?(?: list| can i use| do you have)?|"
