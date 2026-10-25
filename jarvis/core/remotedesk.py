@@ -25,6 +25,17 @@ SETUP_HINT = ("Remote desktop needs a one-time setup so I can set a short-lived 
               "sudo install -o root -g root -m 755 scripts/kurama-rustdesk.sh /usr/local/sbin/kurama-rustdesk && "
               "echo \"$USER ALL=(root) NOPASSWD: /usr/local/sbin/kurama-rustdesk\" | sudo tee /etc/sudoers.d/kurama-rustdesk "
               "&& sudo chmod 440 /etc/sudoers.d/kurama-rustdesk\n(from the KURAMA folder), then ask me again.")
+START_RE = re.compile(
+    r"^(?:please\s+)?(?:/control(?:\s+laptop)?|"
+    r"(?:activate|enable|start|turn\s+on|open|give\s+me|i\s+want)\s+(?:the\s+|my\s+|a\s+)?"
+    r"(?:remote(?:\s+(?:control|desktop|access))?|rust\s*desk|real[\s-]*time\s+(?:preview|view|screen))"
+    r"(?:\s+(?:of\s+)?(?:my\s+|the\s+)?laptop)?|"
+    r"(?:control|access|see)\s+(?:my\s+|the\s+)?(?:whole\s+)?laptop(?:\s+(?:remotely|from\s+(?:my\s+)?(?:phone|mobile|anywhere)))?|"
+    r"(?:give\s+me\s+(?:a\s+)?)?real[\s-]*time\s+preview(?:\s+of\s+(?:my\s+|the\s+)?laptop)?)\s*[.!?]*$", re.I)
+CHANGE_RE = re.compile(r"^(?:please\s+)?(?:/change_?pass(?:word)?|/change_?pin|/newpass|(?:change|reset|new|rotate)\s+(?:the\s+|my\s+)?"
+                       r"(?:remote(?:\s+(?:desktop|control|access))?|rust\s*desk)\s+password)\s*[.!?]*$", re.I)
+TELEGRAM_ONLY = ("For safety, the remote desktop password is only given on Telegram. Send /control (or /changepass) "
+                 "to the KURAMA bot; it asks your PIN first, then sends a new password.")
 STOP_RE = re.compile(r"^(?:please\s+)?(?:/control\s+off|(?:stop|end|close|turn\s+off|disable|kill)\s+(?:the\s+|my\s+)?"
                      r"(?:remote(?:\s+(?:control|desktop|access))?|rust\s*desk))\s*[.!?]*$", re.I)
 
@@ -133,6 +144,11 @@ def start() -> dict:
         return {"error": "RustDesk is on but I couldn't read its ID yet. Open the RustDesk window on the laptop "
                          "once, then ask again."}
     return {"id": rid, "password": pw, "minutes": int(config.REMOTE_PW_TTL_MIN)}
+
+
+def wants_password(text: str) -> bool:
+    t = (text or "").strip()
+    return bool(START_RE.match(t) or CHANGE_RE.match(t))
 
 
 def status_text(fix: dict) -> str:

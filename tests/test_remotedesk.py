@@ -40,3 +40,18 @@ def test_stop_phrases_and_not_pin_gated():
         assert remotedesk.STOP_RE.match(t)
         assert not telesec.is_risky(t)
     assert telesec.is_risky("/control laptop")
+
+
+def test_password_only_on_telegram_with_pin_every_time(monkeypatch):
+    from jarvis.tools.general.remote_desktop import remote_desktop
+    kv = {}
+    monkeypatch.setattr(telesec.store, "kv_get", lambda k, d=None: kv.get(k, d))
+    monkeypatch.setattr(telesec.store, "kv_set", lambda k, v: kv.__setitem__(k, v))
+    fn = getattr(remote_desktop, "func", remote_desktop)
+    assert "only given on Telegram" in fn()  # dashboard/voice never get the password
+    for t in ("/control", "/changepass", "/changepin", "change remote desktop password"):
+        assert remotedesk.wants_password(t)
+    assert not remotedesk.wants_password("change my password")
+    assert telesec.verify_pin(str(telesec.config.TELEGRAM_RISKY_PIN))  # PIN window open...
+    assert "PIN" in telesec.gate("/changepass")                       # ...still asks for the password
+    assert telesec.gate("/control off") is None

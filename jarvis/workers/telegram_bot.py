@@ -41,6 +41,7 @@ HELP = (
     "/jobs — background jobs\n"
     "\n🖥 Remote control\n"
     "/control (or 'start remote desktop') — turn on RustDesk; the password works for 15 min\n"
+    "/changepass — new remote desktop password (asks your PIN every time)\n"
     "/control off (or 'stop remote desktop') — kill the password now\n"
     "\n🔒 Security\n"
     "/lock — block all risky actions (use if your phone is lost)\n"
@@ -237,7 +238,9 @@ class TelegramBot(Worker):
         self.send(self.reply_with_typing(text))
 
     def answer(self, text: str) -> str:
-        from jarvis.core import guard, phone
+        from jarvis.core import guard, phone, remotedesk
+        if remotedesk.wants_password(text):  # only reached after the PIN (telesec.gate): a fresh password each time
+            return remotedesk.status_text(remotedesk.start())
         if text.startswith("/"):
             cmd = text.split()[0].split("@")[0].lower()
             arg = text.split()[1].lower() if len(text.split()) > 1 else ""

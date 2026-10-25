@@ -93,10 +93,14 @@ def is_risky(text: str) -> bool:
 
 def gate(text: str) -> str | None:
     """Return None if the message may proceed, else the reply to send instead (locked / needs PIN)."""
-    if not is_risky(text):
+    from jarvis.core.remotedesk import wants_password
+    always = wants_password(text)  # handing out the remote desktop password asks the PIN EVERY time
+    if not always and not is_risky(text):
         return None
     if is_locked():
         return "KURAMA is locked. Send /unlock <pin> first."
+    if always:
+        return "Send your PIN to get a new remote desktop password."
     if pin_ok():
         return None
     return ("This is a protected action. Send your PIN to run it (it stays unlocked for "

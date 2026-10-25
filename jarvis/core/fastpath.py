@@ -699,13 +699,6 @@ _DAYS = {"today": 1, "yesterday": 2, "this week": 7, "last week": 14, "this mont
 _STATUS = re.compile(r"^(?:(?:what(?:'s|s| is) the )?(?:current )?status|what(?:'s|s| is) going on|what(?:'s|s| is) happening|"
                      r"any (?:updates?|news)|give me (?:an |the )?(?:update|status)|how(?:'s| is) everything(?: going)?|"
                      r"status (?:update|report)|update me)(?: now)?$", I)
-_REMOTE = re.compile(
-    r"^(?:please\s+)?(?:/control(?:\s+laptop)?|"
-    r"(?:activate|enable|start|turn\s+on|open|give\s+me|i\s+want)\s+(?:the\s+|my\s+|a\s+)?"
-    r"(?:remote(?:\s+(?:control|desktop|access))?|rust\s*desk|real[\s-]*time\s+(?:preview|view|screen))"
-    r"(?:\s+(?:of\s+)?(?:my\s+|the\s+)?laptop)?|"
-    r"(?:control|access|see)\s+(?:my\s+|the\s+)?(?:whole\s+)?laptop(?:\s+(?:remotely|from\s+(?:my\s+)?(?:phone|mobile|anywhere)))?|"
-    r"(?:give\s+me\s+(?:a\s+)?)?real[\s-]*time\s+preview(?:\s+of\s+(?:my\s+|the\s+)?laptop)?)\s*[.!?]*$", re.I)
 _RESET = re.compile(
     r"^(?:please\s+)?(?:(?P<all>reset|wipe|factory\s*reset)(?:\s+(?:kurama|everything|all|yourself))?"
     r"|(?:clear|forget|wipe|delete|erase|start)\s+(?:a\s+)?(?:new\s+)?"
@@ -727,10 +720,10 @@ _TRAIN_STOP = re.compile(r"^(?:please )?(?:stop|end|cancel|kill|halt) (?:the |my
 def _study_intent(t: str) -> Intent | None:
     if _STATUS.match(t):
         return Intent("status", "status_now", "usage", {})
-    from jarvis.core.remotedesk import STOP_RE
+    from jarvis.core.remotedesk import START_RE, STOP_RE, CHANGE_RE
     if STOP_RE.match(t):
         return Intent("remote", "remote_desktop", "system", {"stop": True})
-    if _REMOTE.match(t):
+    if START_RE.match(t) or CHANGE_RE.match(t):
         return Intent("remote", "remote_desktop", "system", {})
     if m := _RESET.match(t):
         lvl = "all" if m.group("all") else ("recent" if m.group("recent") else "chat")
