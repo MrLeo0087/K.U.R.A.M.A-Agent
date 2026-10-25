@@ -727,6 +727,9 @@ _TRAIN_STOP = re.compile(r"^(?:please )?(?:stop|end|cancel|kill|halt) (?:the |my
 def _study_intent(t: str) -> Intent | None:
     if _STATUS.match(t):
         return Intent("status", "status_now", "usage", {})
+    from jarvis.core.remotedesk import STOP_RE
+    if STOP_RE.match(t):
+        return Intent("remote", "remote_desktop", "system", {"stop": True})
     if _REMOTE.match(t):
         return Intent("remote", "remote_desktop", "system", {})
     if m := _RESET.match(t):

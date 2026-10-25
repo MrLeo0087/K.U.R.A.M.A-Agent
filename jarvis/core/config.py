@@ -642,6 +642,8 @@ TELEGRAM_MAX_REPLY_CHARS = 3500
 # --- Telegram security: a PIN for risky actions, and a /lock switch (PINs live in .env, change anytime) ---
 TELEGRAM_RISKY_PIN = os.getenv("TELEGRAM_RISKY_PIN", "1500")  # needed to run risky actions from Telegram
 TELEGRAM_LOCK_PIN = os.getenv("TELEGRAM_LOCK_PIN", "0087")    # /unlock <this> clears a /lock
+REMOTE_PW_TTL_MIN = float(os.getenv("REMOTE_PW_TTL_MIN", "15"))  # RustDesk password stops working after this
+REMOTE_HELPER = "/usr/local/sbin/kurama-rustdesk"  # root-owned helper (scripts/kurama-rustdesk.sh), run via sudo -n
 TELEGRAM_PIN_WINDOW_S = float(os.getenv("TELEGRAM_PIN_WINDOW_S", "1800"))  # risky PIN is remembered this long (30 min)
 
 # --- Multitasking (P3b-2): planner, background jobs, rate limiter ---

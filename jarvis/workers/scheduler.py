@@ -36,6 +36,11 @@ class Scheduler(Worker):
                 self.log.info("class heads-up: %s", subject)
         except Exception as e:
             self.log.warning("timetable check failed: %s", e)
+        try:
+            from jarvis.core import remotedesk
+            remotedesk.expire_if_due(self._now())
+        except Exception as e:
+            self.log.warning("remote desktop expiry check failed: %s", e)
         for sid in reminders.heads_up(self._now()):
             self.log.info("schedule #%d heads-up", sid)
         for item in reminders.run_due(self._now()):

@@ -85,6 +85,9 @@ def is_risky(text: str) -> bool:
     cmd = t.split()[0].split("@")[0].lower()
     if cmd in _ALWAYS:
         return False
+    from jarvis.core.remotedesk import STOP_RE
+    if STOP_RE.match(t):  # turning remote desktop OFF is a safety action, never gated
+        return False
     return bool(_RISKY.search(t))
 
 
