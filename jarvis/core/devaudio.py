@@ -74,8 +74,10 @@ def _save(d: dict) -> None:
 
 
 def hear() -> bool:
+    # Default ON (no echo canceller): the virtual sink made everyday speaker sound quiet/thin. Turning the
+    # canceller on (hear=False) is opt-in from Settings for people who want KURAMA to not hear device sound.
     from jarvis.core import store
-    return store.kv_get(KEY, "0") == "1"
+    return store.kv_get(KEY, "1") == "1"
 
 
 def cancelling() -> bool:

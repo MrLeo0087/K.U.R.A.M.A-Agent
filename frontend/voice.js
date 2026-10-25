@@ -155,7 +155,9 @@ export class Mic {
     }
     const stream = await navigator.mediaDevices.getUserMedia({
       // hearDevice: the user wants KURAMA to hear the laptop's sound too, so the page doesn't cancel it either
-      audio: { echoCancellation: !plain && !this.hearDevice, noiseSuppression: !plain, autoGainControl: !plain, channelCount: 1 },
+      // browser echo cancellation only cleans KURAMA's own mic capture (it never touches speaker volume), so keep
+      // it on regardless of the system "hear device sound" setting
+      audio: { echoCancellation: !plain, noiseSuppression: !plain, autoGainControl: !plain, channelCount: 1 },
     });
     stream.getAudioTracks().forEach((t) => { t.enabled = !this.muted; });
     const ctx = audioCtx(); // full rate: a 16 kHz context made speech recognition noticeably worse
