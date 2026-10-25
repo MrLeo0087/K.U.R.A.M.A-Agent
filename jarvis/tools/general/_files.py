@@ -22,8 +22,18 @@ def resolve(path: str) -> Path:
             if m:
                 raw = m.group(1) + raw.rstrip("/")[len(pre):]
                 break
+    from jarvis.core import focus
+    head, _, rest = raw.partition("/")
+    if head and not raw.startswith(("/", "~")) and (ref := focus.refer(head)) is not None:
+        base = ref if ref.is_dir() else ref.parent  # "here/notes.txt", "this folder/x", "it" -> the current folder
+        return (base / rest).resolve() if rest else ref.resolve()
     p = Path(raw).expanduser()
     if not p.is_absolute():
+        said = str(safety.context().get("user_text", "")).lower()
+        cur = focus.cwd()
+        if cur and "/" not in raw and re.search(r"\b(?:here|in\s+it|inside\s+it|in\s+there|in\s+this\s+(?:folder|directory)|"
+                                                 r"in\s+the\s+same\s+folder|in\s+that\s+folder)\b", said):
+            return (cur / raw).resolve()  # "create notes.txt here" -> in the current folder
         p = Path.home() / p
     p = p.resolve()
     if not p.exists() and (not p.parent.exists() or p.parent == Path.home()):

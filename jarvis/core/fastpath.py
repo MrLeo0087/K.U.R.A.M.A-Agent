@@ -177,7 +177,42 @@ _LISTDIR = _rx(
     r"list (?:the |my )?(?P<path>.+?) (?:folders?|directory|drive)(?:'s)?(?: contents| files)?")
 
 
+_HERE_LIST = re.compile(r"^(?:please\s+)?(?:(?:list|show(?:\s+me)?|give\s+me(?:\s+the)?(?:\s+list\s+of)?)\s+(?:all\s+)?(?:the\s+)?"
+                        r"(?:files?|folders?|contents?|everything|items?)(?:\s+and\s+(?:files?|folders?))?\s+"
+                        r"(?:here|in\s+(?:it|here|there|this(?:\s+folder)?|that(?:\s+folder)?|the\s+(?:previous|parent)\s+folder))|"
+                        r"what(?:'s|\s+is)\s+(?:in\s+)?(?:here|inside(?:\s+it)?|in\s+it))\s*[.?!]*$", I)
+_OPEN_REF = re.compile(r"^(?:please\s+)?(?:open|go\s+(?:back\s+)?to|show)\s+(?:me\s+)?(?P<r>it|this|that|this\s+folder|that\s+folder|"
+                       r"the\s+folder|(?:the\s+)?previous\s+folder|(?:the\s+)?last\s+folder|(?:the\s+)?parent\s+folder)"
+                       r"(?:\s+in\s+(?:the\s+)?(?:file\s+manager|files|laptop))?\s*[.?!]*$", I)
+_IS_THERE = re.compile(r"^(?:(?:hello|hi|hey|ok|okay)\s+)?(?:please\s+)?(?:is\s+there|do\s+i\s+have|does)\s+(?:a\s+|an\s+|the\s+|any\s+)?(?P<q>.+?)\s+"
+                       r"(?P<kind>folder|file|directory)(?:\s+(?:in|inside|under)\s+(?:the\s+|my\s+)?(?P<p>.+?))?(?:\s+exists?)?\s*[.?!]*$", I)
+
+
+def here_intent(t: str) -> Intent | None:
+    """Follow-ups on the CURRENT folder: 'list files here', 'what is in it', 'open it', 'go to the previous folder',
+    'is there X folder (in Y)'."""
+    if _HERE_LIST.match(t):
+        ref = re.search(r"previous|parent", t, I)
+        return Intent("listdir", "list_folder", "filesearch", {"path": f"{ref.group(0)} folder" if ref else "this"},
+                      "this")
+    if m := _OPEN_REF.match(t):
+        r = m.group("r").lower()
+        r = "previous folder" if re.search(r"previous|last", r) else "parent folder" if "parent" in r else "this"
+        return Intent("openfolder", "open_folder", "filesearch", {"name": r}, r)
+    if m := _IS_THERE.match(t):
+        q = re.sub(r"^(?:my|the)\s+", "", m.group("q").strip(), flags=I)
+        kind = "folder" if m.group("kind").lower() in ("folder", "directory") else "name"
+        if "/" in q and not m.group("p"):
+            path, q = q.rsplit("/", 1)
+            return Intent("findfile", "find_files", "filesearch", {"query": q, "path": path, "kind": kind}, q)
+        return Intent("findfile", "find_files", "filesearch",
+                      {"query": q, "path": (m.group("p") or "").strip(), "kind": kind}, q)
+    return None
+
+
 def listdir_intent(t: str) -> Intent | None:
+    if hi := here_intent(t):
+        return hi
     m = _full(_LISTDIR, t)
     if not m:
         return None
@@ -225,10 +260,17 @@ def findfile_intent(t: str) -> Intent | None:
         return None
     q = (m.group("q") or "").strip(" ,")
     # reject: not-a-file-search, too long, or a SCOPED search ("X in <folder>", "a/b") -> let the LLM pass a path
-    if not q or len(q.split()) > 6 or _NOT_FINDFILE.search(q) or re.search(r"\b(?:in|inside|under|within|from)\b|/", q):
-        return None
     kw = (m.group("kind") or "").lower()
     kind = "folder" if kw in ("folder", "directory", "dir") else "name" if kw in ("file", "document") else "any"
+    if q and "/" in q and len(q.split()) <= 8 and not _NOT_FINDFILE.search(q):  # "look for Project1/clz_project"
+        path, name = q.rstrip("/").rsplit("/", 1)
+        return Intent("findfile", "find_files", "filesearch", {"query": name, "path": path or "/", "kind": kind}, name)
+    sc = re.match(r"^(?P<n>.+?)\s+(?:folder\s+|file\s+)?(?:in|inside|under|within)\s+(?:the\s+|my\s+)?(?P<p>.+)$", q or "", I)
+    if sc and len(q.split()) <= 8 and not _NOT_FINDFILE.search(q):  # "find report in project1"
+        return Intent("findfile", "find_files", "filesearch", {"query": sc.group("n").strip(), "path": sc.group("p").strip(),
+                                                               "kind": kind}, sc.group("n").strip())
+    if not q or len(q.split()) > 6 or _NOT_FINDFILE.search(q) or re.search(r"\b(?:in|inside|under|within|from)\b|/", q):
+        return None
     return Intent("findfile", "find_files", "filesearch", {"query": q, "kind": kind}, q)
 
 

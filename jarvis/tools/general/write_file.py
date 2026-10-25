@@ -31,4 +31,6 @@ def write_file(path: str, content: str = "", overwrite: bool = False) -> str:
         return "The user declined: the file was not written."
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(content[:MAX_CHARS], encoding="utf-8")
+    from jarvis.core import focus
+    focus.set_path(str(p))  # follow-ups ('open it', 'send it') refer to it
     return f"Wrote {len(content[:MAX_CHARS])} characters to {p}"

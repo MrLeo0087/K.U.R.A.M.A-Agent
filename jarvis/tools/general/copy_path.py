@@ -28,4 +28,6 @@ def copy_path(source: str, destination: str) -> str:
         shutil.copytree(src, dst, symlinks=True)
     else:
         shutil.copy2(src, dst)
+    from jarvis.core import focus
+    focus.set_path(str(dst))  # follow-ups ('open it', 'send it') refer to it
     return f"Copied {src} to {dst}"

@@ -25,6 +25,7 @@ def test_spoken_paths_resolve(tmp_path, monkeypatch):
 def test_file_requests_stay_local_and_unsplit():
     assert planner.split_clauses("search for main.py in project1 then tara folder") == [
         "search for main.py in project1 then tara folder"]
-    assert fastpath.match("search for main.py in project1") is None  # laptop search, not Google
+    i = fastpath.match("search for main.py in project1")  # laptop search (scoped), not Google
+    assert i is None or (i.tool, i.args["path"]) == ("find_files", "project1")
     assert not planner.is_long_job("create a new python project called demo_cli in project1")
     assert planner.is_long_job("write a 500 word essay about Nepal")

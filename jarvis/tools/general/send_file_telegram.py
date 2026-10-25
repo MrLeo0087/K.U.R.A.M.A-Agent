@@ -82,10 +82,27 @@ def split_file(path: Path, part_bytes: int) -> list[Path]:
     return parts
 
 
+def too_broad(p: Path) -> str | None:
+    """Refuse to zip a whole home folder, a disk or / (a vague 'send the folder' once sent all of /home/leo)."""
+    from jarvis.core.paths import all_disks
+    try:
+        rp = p.expanduser().resolve()
+    except OSError:
+        return None
+    broad = {Path("/"), Path.home().resolve(), Path("/media").resolve(), Path("/mnt").resolve(),
+             (Path("/media") / Path.home().name).resolve(), *(d.resolve() for d in all_disks())}
+    if rp in broad:
+        return (f"error: {rp} is a whole home folder or disk, too big to send. Tell me the exact folder "
+                f"(e.g. 'send Project1/clz_project').")
+    return None
+
+
 def deliver_folder(path: str | Path, caption: str = "") -> str:
     """Zip a folder and send it to Telegram. If the zip is over the limit, split it into numbered parts and send
     each, with instructions to reassemble. (Sending happens inside; returns a status line.)"""
     if err := _tg.ready():
+        return err
+    if err := too_broad(Path(path)):
         return err
     try:
         z = zip_dir(path)
@@ -129,6 +146,11 @@ def send_file_telegram(path: str = "", caption: str = "", pick: int = 0) -> str:
     if pick or not path.strip():
         return find_and_send(path, pick)
     raw = path.strip().strip("\"'")
+    # "clz_project in telegram" / "X to my phone": the destination is not part of the name
+    raw = re.sub(r"\s+(?:in|to|on|via|through|over)\s+(?:my\s+)?(?:telegram|phone|mobile|tg)\s*$", "", raw, flags=re.I)
+    from jarvis.core import focus
+    if (ref := focus.refer(raw)) is not None:  # "this folder", "it", "the previous folder"
+        raw = str(ref)
     cleaned = re.sub(r"\s*\bfolder\b\s*", " ", raw, flags=re.I).strip()
     literal = Path(raw).expanduser()
     if literal.is_absolute() or raw.startswith("~"):  # an explicit path the user/model gave

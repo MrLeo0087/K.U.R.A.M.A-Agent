@@ -21,4 +21,6 @@ def make_folder(path: str) -> str:
     if not _files.ask_outside(p, "create the folder"):
         return "The user declined: the folder was not created."
     p.mkdir(parents=True, exist_ok=True)
+    from jarvis.core import focus
+    focus.set_path(str(p))  # follow-ups ('open it', 'send it') refer to it
     return f"Created folder {p}"

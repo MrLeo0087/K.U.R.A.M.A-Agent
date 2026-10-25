@@ -765,6 +765,7 @@ PATH_ALIASES = {
     "documents": "~/Documents", "pictures": "~/Pictures", "music": "~/Music", "videos": "~/Videos",
     "kurama": "/media/leo/Project1/New_project/KURAMA", "jarvis": "/media/leo/Project1/New_project/KURAMA",
 }
+FOCUS_TTL_H = 12.0  # the current folder (focus) is remembered this long
 PATH_MATCH_MIN = 0.72
 SHARE_ROOTS = (Path.home(), Path("/media/leo/Project1"))  # send_file_telegram only sends files under these
 TELEGRAM_FILE_MAX_MB = 50

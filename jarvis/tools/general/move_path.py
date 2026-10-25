@@ -26,4 +26,6 @@ def move_path(source: str, destination: str) -> str:
         return f"error: {dst} already exists"
     dst.parent.mkdir(parents=True, exist_ok=True)
     shutil.move(str(src), str(dst))
+    from jarvis.core import focus
+    focus.set_path(str(dst))  # follow-ups ('open it', 'send it') refer to it
     return f"Moved {src} to {dst}"

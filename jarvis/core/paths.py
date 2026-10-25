@@ -20,12 +20,33 @@ _SKIP = {"node_modules", "venv", ".venv", "__pycache__", ".git", "site-packages"
 MAX_SCAN = 6000  # directory entries looked at per search (keeps it fast)
 
 
+_NUMS = {"zero": "0", "one": "1", "two": "2", "three": "3", "four": "4", "five": "5", "six": "6", "seven": "7",
+         "eight": "8", "nine": "9", "ten": "10"}
+_NUM_RX = re.compile(r"\b(" + "|".join(_NUMS) + r")\b")
+
+
 def norm(s: str) -> str:
-    return re.sub(r"[\s_\-.]+", "", s.lower())
+    """Compare names loosely: case, spaces, _-. ignored; spoken numbers as digits ("project one" = "Project1")."""
+    s = _NUM_RX.sub(lambda m: _NUMS[m.group(1)], s.lower())
+    return re.sub(r"[\s_\-.]+", "", s)
 
 
 def roots() -> list[Path]:
-    return [Path(p).expanduser() for p in config.SEARCH_ROOTS if Path(p).expanduser().is_dir()]
+    """Where loose names are looked up: the configured roots first, then every mounted data disk."""
+    out = [Path(p).expanduser() for p in config.SEARCH_ROOTS if Path(p).expanduser().is_dir()]
+    try:
+        out += [d for d in all_disks() if d not in out and not any(_inside(d, r) for r in out)]
+    except Exception:  # noqa: BLE001
+        pass
+    return out
+
+
+def _inside(p: Path, root: Path) -> bool:
+    try:
+        p.relative_to(root)
+        return True
+    except ValueError:
+        return False
 
 
 _DATA_FS = {"ext4", "ext3", "ext2", "btrfs", "xfs", "f2fs", "fuseblk", "ntfs", "ntfs3", "exfat", "vfat"}
@@ -126,18 +147,20 @@ def similar_dirs(want: str, k: int = 4) -> list[Path]:
     return list(dict.fromkeys(found))[:k]
 
 
-def _walk(cur: Path, segs: list[str], want: str) -> Path | None:
+def _walk(cur: Path, segs: list[str], want: str, min_score: float | None = None, depth: int = 2) -> Path | None:
     """Resolve the remaining segments under cur, trying alternatives when a name is ambiguous."""
     if not segs:
         ok = (want != "dir" or cur.is_dir()) and (want != "file" or cur.is_file())
         return cur if ok else None
     last = len(segs) == 1
     dirs_only = not last or want == "dir"
-    cands = find_children(cur, segs[0], depth=2, dirs_only=dirs_only)
+    cands = find_children(cur, segs[0], depth=depth, dirs_only=dirs_only, min_score=min_score)
     if last and want != "dir" and not cands:
-        cands = find_children(cur, segs[0], depth=3, dirs_only=False)
+        cands = find_children(cur, segs[0], depth=depth + 1, dirs_only=False, min_score=min_score)
+    # an exact name at this level is never swapped for a look-alike (".../pytest-68/x" must not become pytest-65)
+    cands = [c for c in cands if norm(c.name) == norm(segs[0])] or cands
     for c in cands:
-        if (hit := _walk(c, segs[1:], want)) is not None:
+        if (hit := _walk(c, segs[1:], want, min_score, depth)) is not None:
             return hit
     return None
 
@@ -168,6 +191,9 @@ def smart_path(text: str, want: str = "any") -> Path | None:
     p = Path(raw).expanduser()
     if p.is_absolute() and p.exists():
         return p
+    from jarvis.core import focus
+    if (ref := focus.refer(raw)) is not None:  # "this", "it", "here", "the previous folder", "parent folder"
+        return ref if (want != "dir" or ref.is_dir()) else (ref.parent if ref.is_file() else None)
     home = str(Path.home())
     if raw.startswith("~/") or raw.startswith(home + "/"):  # "~/project1/kurama/x": the model guessed home
         raw = raw.split("/", 1)[1] if raw.startswith("~/") else raw[len(home) + 1:]
@@ -176,16 +202,17 @@ def smart_path(text: str, want: str = "any") -> Path | None:
         return None
     cur: Path | None = None
     alias = config.PATH_ALIASES.get(norm(segs[0]))
-    if raw.startswith("/"):  # absolute but wrong case/typo: walk from / component by component
-        cur = Path("/")
-        for i, s in enumerate(segs):
-            nxt = find_child(cur, s, depth=1, dirs_only=i < len(segs) - 1 or want == "dir")
-            if nxt is None:
-                return None
-            cur = nxt
-        return cur
+    if raw.startswith("/"):  # absolute but wrong case/typo/spacing: walk from / level by level, with backtracking
+        return _walk(Path("/"), segs, want, depth=1)
     if alias:
         return _walk(Path(alias).expanduser(), segs[1:], want)
+    from jarvis.core import focus
+    if (cur := focus.cwd()) is not None and cur.is_dir():
+        # relative to the CURRENT folder first ("data" right after listing Final_RAG), then its parent; only a
+        # close match counts here so a far-away exact name still wins below
+        for base in (cur, cur.parent):
+            if (hit := _walk(base, segs, want, min_score=0.88)) is not None:
+                return hit
     for r in roots():  # first segment anywhere under the search roots (depth 3), then walk the rest
         for c in find_children(r, segs[0], depth=3, dirs_only=len(segs) > 1 or want == "dir"):
             if (hit := _walk(c, segs[1:], want)) is not None:
