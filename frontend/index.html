@@ -242,6 +242,15 @@
       <label class="check"><input id="set-wake" type="checkbox"><span>Wake word <small>talk mode on at start, asleep until “wake up KURAMA”; “sleep now” to sleep</small></span></label>
       <label class="check"><input id="set-hear" type="checkbox"><span>Hear device sound <small>on (default): normal speaker sound · off: the laptop's own sound is removed from the mic, but this can make your speakers quieter</small></span></label>
       <label class="check"><input id="set-low" type="checkbox"><span>Low power <small>static orb, CSS glow only</small></span></label>
+      <div class="set-group">
+        <span class="label">Clear &amp; reset</span>
+        <div class="reset-btns">
+          <button type="button" class="btn" data-reset="chat">Clear chat</button>
+          <button type="button" class="btn" data-reset="recent">Clear chat + reminders</button>
+          <button type="button" class="btn danger" data-reset="all">Reset KURAMA</button>
+        </div>
+        <small class="note">Clear chat forgets this conversation. Reset wipes reminders, caches and learned facts and starts fresh (your password and settings are kept).</small>
+      </div>
       <p id="set-msg" class="note" role="status"></p>
       <div class="row">
         <button type="button" id="set-test" class="btn">Test connection</button>

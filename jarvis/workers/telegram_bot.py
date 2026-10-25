@@ -39,6 +39,11 @@ HELP = (
     "/status (or 'status') — training epochs/accuracy/ETA, jobs, downloads...\n"
     "'stop training' / 'stop training now' — stop a run (asks first)\n"
     "/jobs — background jobs\n"
+    "\n⚙️ Chat control\n"
+    "/stop — stop a stuck task and reset the chat\n"
+    "/clear — clear this chat + reminders/alarms (keeps what I know about you)\n"
+    "/clearchat — clear just this conversation\n"
+    "/reset — wipe everything and start fresh (keeps your password + settings)\n"
     "\n/help — this list\nRisky actions ask 'Reply yes/no' first.")
 TEXT_ONLY = "Sorry, I can't use that kind of message."
 # a reply to find_and_send's numbered list: "2", "send 2", "number 2", "all", "send all" (0 tokens)
@@ -103,14 +108,31 @@ class TelegramBot(Worker):
                 break
 
     def reply_with_typing(self, text: str) -> str:
-        """Answer `text` while "typing…" shows, so the user always sees something is happening."""
+        """Answer `text` while "typing…" shows, but never hang forever: a reply that takes longer than
+        config.TELEGRAM_ANSWER_TIMEOUT_S is given up on (so "typing…" can't run for an hour)."""
         stop = threading.Event()
         pinger = threading.Thread(target=self._keep_typing, args=(stop,), name="tg-typing", daemon=True)
         pinger.start()
-        try:
-            return self.answer(text)
-        finally:
-            stop.set()
+        box: dict = {}
+
+        def run() -> None:
+            try:
+                box["out"] = self.answer(text)
+            except Exception as e:
+                box["out"] = f"Sorry, that failed: {type(e).__name__}: {str(e)[:200]}"
+
+        worker = threading.Thread(target=run, name="tg-answer", daemon=True)
+        worker.start()
+        worker.join(config.TELEGRAM_ANSWER_TIMEOUT_S)
+        stop.set()
+        if worker.is_alive():  # still running after the timeout: don't wait, tell the user
+            try:
+                self.agent().abort()
+            except Exception:
+                pass
+            return ("That took too long and I stopped waiting on it. Try a simpler request, or send /stop to reset. "
+                    "(A big job like writing or a scan keeps running in the background and I'll tell you when it's done.)")
+        return box.get("out") or "(no answer)"
 
     def send(self, text: str) -> None:
         text = (text or "(no answer)").strip()
@@ -214,6 +236,19 @@ class TelegramBot(Worker):
             if cmd == "/track":  # lost mode for the laptop (the phone uses Find My Device / live-location sharing)
                 from jarvis.core import locationlog
                 return locationlog.set_lost("laptop", arg != "off")
+            if cmd == "/stop":  # abort the current task and reset the conversation so you can start again
+                try:
+                    self.agent().abort()
+                except Exception:
+                    pass
+                from jarvis.core import reset
+                return reset.clear_chat(self._agent) + "\nStopped. Send a new message anytime."
+            if cmd in ("/clear", "/clearchat", "/clear_chat", "/new"):
+                from jarvis.core import reset
+                return reset.clear_chat(self._agent) if "chat" in cmd or cmd == "/new" else reset.clear_recent(self._agent)
+            if cmd in ("/reset", "/wipe"):
+                from jarvis.core import reset
+                return reset.reset_all(self._agent)
             if cmd in ("/help", "/start", "/commands", "/command", "/?", "/menu"):
                 return HELP
             # any other "/…" (a file path like /home/leo/x.pdf, a name, a typo) is NOT a command: let the agent handle

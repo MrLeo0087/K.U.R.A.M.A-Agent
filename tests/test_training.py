@@ -167,9 +167,9 @@ def test_colab_setup_events_and_silence(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "OUTPUTS_DIR", tmp_path / "out")
     out = registry.call("training", {"action": "colab", "label": "bert"}).output
     topic = store.kv_get("colab_topic")
-    cell = (tmp_path / "out" / "kurama_colab_cell.py").read_text()
+    cell = (tmp_path / "out" / "colab" / "kurama_colab_cell.py").read_text()
     assert topic.startswith("kurama-") and len(topic) > 25 and f'"{topic}"' in cell and "KuramaCallback" in out
-    compile((tmp_path / "out" / "kurama_colab_cell.py").read_text(), "cell", "exec")  # the saved cell is valid Python
+    compile((tmp_path / "out" / "colab" / "kurama_colab_cell.py").read_text(), "cell", "exec")  # the saved cell is valid Python
     msgs = [{"id": "a", "event": "start", "run": "bert"},
             {"id": "b", "event": "progress", "run": "bert", "epoch": 1, "loss": 0.8, "eval_accuracy": 0.7},
             {"id": "c", "event": "progress", "run": "bert", "epoch": 2, "loss": 0.5}]

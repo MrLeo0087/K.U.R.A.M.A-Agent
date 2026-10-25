@@ -109,7 +109,7 @@ def upload_and_link(file_path: Path, name: str, mb: float, is_zip: bool = True) 
         return (f"“{name}” is {mb:.0f} MB — too big for Telegram's {config.TELEGRAM_FILE_MAX_MB} MB limit, and the "
                 f"file-share upload didn't work ({str(e)[:100]}). It's saved on your laptop at {file_path}.")
     tail = " (tap it, download, then unzip)" if is_zip else " (tap it to download)"
-    return (f"📦 “{name}” is {mb:.0f} MB — too big to send through Telegram directly, so I uploaded it. Download link"
+    return (f"“{name}” is {mb:.0f} MB — too big to send through Telegram directly, so I uploaded it. Download link"
             f"{tail}:\n{link}\n(Anyone with this link can download it, and it may expire after a while.)")
 
 
@@ -173,7 +173,7 @@ def deliver(p: Path, caption: str = "") -> str:
         return f"error: Telegram didn't accept {p.name} (check the bot token/chat id or your internet)"
     # don't put the raw filename in the text: Telegram turns "x.zip" into a (dead) web link because .zip is a TLD.
     # The file itself is attached above with its name, so just confirm.
-    return "Sent it to your Telegram. ✅"
+    return "Sent to your Telegram."
 
 
 alias("find_and_send", "send_file_telegram", lambda a: {"path": a.get("name", ""), "pick": a.get("pick", 0)})

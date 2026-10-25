@@ -302,6 +302,22 @@ def colab_setup(label: str = "") -> str:
     return colab_cell(topic, run)
 
 
+def colab_notebook(cell: str) -> str:
+    """Wrap the KURAMA cell as a .ipynb notebook (JSON) you can import into Colab (File > Upload notebook)."""
+    def code_cell(src: str) -> dict:
+        lines = src.splitlines(keepends=True)
+        return {"cell_type": "code", "metadata": {}, "execution_count": None, "outputs": [], "source": lines}
+
+    example = ("# Your training goes here. Add KURAMA to your callbacks so 'status' shows live metrics:\n"
+               "#   Keras:  model.fit(x, y, epochs=10, callbacks=[KuramaKeras()])\n"
+               "#   HF:     Trainer(..., callbacks=[KuramaCallback()])\n"
+               "#   PyTorch loop:  kurama(epoch=e, epochs=N, loss=l, acc=a);  if kurama_should_stop(): break\n")
+    nb = {"nbformat": 4, "nbformat_minor": 0,
+          "metadata": {"colab": {"name": "KURAMA_colab.ipynb"}, "kernelspec": {"name": "python3", "display_name": "Python 3"}},
+          "cells": [code_cell(cell), code_cell(example)]}
+    return json.dumps(nb, indent=1)
+
+
 def colab_command(run: str, cmd: str, **extra) -> bool:
     """Send a command to a Colab run (its cell checks every 30 s): stop, stop_now, got_file."""
     import urllib.request
@@ -456,7 +472,7 @@ def _detail_block(w: dict) -> str:
     m = st.get("metrics") or {}
     where = {"run": "local", "proc": "process", "log": "log", "colab": "Colab"}.get(w["kind"], w["kind"])
     since = st.get("started") or w["created"]
-    rows = [f"🎓 {w['label']} — {where}, {w['status']}"
+    rows = [f"{w['label']} — {where}, {w['status']}"
             + (f" (running {fmt_duration(time.time() - since)})" if w["status"] == "active" else "")]
 
     def row(label: str, val: str) -> None:

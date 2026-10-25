@@ -48,26 +48,28 @@ def training(action: Literal["status", "watch", "colab", "stop", "stop_now", "st
     if action == "status":
         return tg.status_text(detailed=True)  # fetches the latest Colab metrics right now, formatted
     if action == "colab":
-        cell = tg.colab_setup(label)
-        path = Path(config.OUTPUTS_DIR) / "kurama_colab_cell.py"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(cell)
+        cell = tg.colab_setup(label)  # 0 tokens: a fixed template, no LLM code generation
+        d = Path(config.OUTPUTS_DIR) / "colab"
+        d.mkdir(parents=True, exist_ok=True)
+        py = d / "kurama_colab_cell.py"
+        py.write_text(cell)
+        nb = d / "KURAMA_colab.ipynb"
+        nb.write_text(tg.colab_notebook(cell))  # an .ipynb you can import into Colab (File > Upload notebook)
         ctx = safety.context()
-        where = f"saved as {path}"
-        if ctx.get("channel") == "telegram":  # on the phone: the cell comes as a file
+        if ctx.get("channel") == "telegram":  # on the phone: the notebook comes as a file
             from jarvis.tools.general.send_file_telegram import deliver
-            deliver(path, "KURAMA cell for Colab: paste it as the first cell")
-            where = "sent to you as a file"
+            deliver(nb, "KURAMA Colab notebook — open it in Colab (Upload notebook), or copy its first cell")
+            where = "sent to you as a notebook (.ipynb) file"
         else:
-            from jarvis.core import workspace
-            if (pub := workspace.publish("Colab cell for KURAMA", cell)) is not None and ctx.get("published") is not None:
-                ctx["published"].append(str(pub.relative_to(Path(config.OUTPUTS_DIR))))
-                where = "in your workspace and " + where
-        return (f"The Colab cell is {where}. Paste it as the FIRST cell and run it once, then start training. Keras: "
-                "model.fit(..., callbacks=[KuramaKeras()]); PyTorch: kurama(epoch=e, epochs=N, loss=l, acc=a) each "
-                "epoch and `if kurama_should_stop(): break`; HF: callbacks=[KuramaCallback()]. At the end "
-                "kurama_send('best.pt') sends the checkpoint here. Optional Colab secrets KURAMA_TG_TOKEN and "
-                "KURAMA_TG_CHAT make alerts reach your phone even when the laptop is off.")
+            rel = str(nb.relative_to(Path(config.OUTPUTS_DIR)))
+            if ctx.get("published") is not None:
+                ctx["published"].append(rel)
+            where = "in your workspace as KURAMA_colab.ipynb (also at " + str(nb) + ")"
+        return (f"The Colab notebook is {where}. In Colab, open it (File > Upload notebook) or copy its first cell, "
+                "run that cell once, then start training. Keras: model.fit(..., callbacks=[KuramaKeras()]); "
+                "PyTorch: call kurama(epoch=e, epochs=N, loss=l, acc=a) each epoch and 'if kurama_should_stop(): break'; "
+                "HF: callbacks=[KuramaCallback()]. At the end kurama_send('best.pt') sends the checkpoint here. "
+                "Optional Colab secrets KURAMA_TG_TOKEN and KURAMA_TG_CHAT make alerts reach your phone when the laptop is off.")
     if action in ("stop", "stop_now", "kill"):
         runs = [w for w in pw.find_watch(target) if w["kind"] in ("run", "colab")]
         if not runs:

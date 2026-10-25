@@ -69,6 +69,7 @@ export class Api {
   weatherFull() { return this.request("/api/v1/weather/full"); }
   action(body) { return this.request("/api/v1/action", { method: "POST", body }); }
   sendLocation(body) { return this.request("/api/v1/location", { method: "POST", body }); }
+  reset(level) { return this.request("/api/v1/reset", { method: "POST", body: { level } }); }
 
   async stt(blob, lang) {
     const type = (blob.type || "audio/webm").split(";")[0];

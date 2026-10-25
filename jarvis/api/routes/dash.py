@@ -12,7 +12,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -245,6 +245,23 @@ class LocationFix(BaseModel):
     lat: float
     lon: float
     accuracy: float = 0.0
+
+
+class ResetIn(BaseModel):
+    level: str = "chat"  # chat | recent | all
+
+
+@router.post("/reset", summary="Clear the chat, or chat+reminders, or everything (keeps password + settings)")
+async def reset_endpoint(body: ResetIn, request: Request):
+    from jarvis.core import reset
+    agent = None
+    try:
+        agent = request.app.state.engine.agent()
+    except Exception:
+        agent = None
+    fn = {"all": reset.reset_all, "recent": reset.clear_recent}.get(body.level, reset.clear_chat)
+    msg = await run_in_threadpool(fn, agent)
+    return {"ok": True, "message": msg}
 
 
 @router.post("/location", summary="The browser's accurate position (Geolocation API) for the laptop")

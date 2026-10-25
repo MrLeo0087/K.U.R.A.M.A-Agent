@@ -236,7 +236,7 @@ def where_text() -> str:
         ssid = scan()["ssid"]
         return ("I couldn't fix the location (offline, or no Wi-Fi to scan)."
                 + (f"\nWi-Fi: {ssid}" if ssid else ""))
-    lines = ["📍 Laptop location"]
+    lines = ["Laptop location:"]
     if loc["known"]:
         lines.append(f"At: {loc['known']}" + (" (your saved spot)" if loc["source"] == "known" else ""))
     if loc["source"] != "known":  # pinned spot needs no coarse guess; otherwise show the Wi-Fi/IP area

@@ -119,6 +119,23 @@ class Agent:
         self._graph: Any = None
         self.last: dict = {}
 
+    def abort(self) -> None:
+        """Signal the current turn to stop streaming (best-effort)."""
+        try:
+            self._abort.set()
+        except Exception:
+            pass
+
+    def clear_conversation(self) -> None:
+        """Forget the current chat (history + rolling summary + session), keep learned personal facts."""
+        with self._lock:
+            self.history = []
+            self._overflow = []
+            self.summary = ""
+            self.session_id = None
+            self._self_talk = []
+            self.last = {}
+
     # --- graph ---
     def _build(self, planned: bool | None = None) -> Any:
         from langgraph.graph import END, START, StateGraph  # lazy: keeps `import jarvis` light
@@ -517,6 +534,15 @@ class Agent:
         """New session after a long silence (fresh context); regex fact capture (0 tokens)."""
         if not self.persist:
             return
+        try:  # another process (UI / Telegram) cleared the chat: drop our in-memory history too
+            from jarvis.core import reset
+            ep = reset.epoch()
+            if ep != getattr(self, "_epoch_seen", None):
+                if getattr(self, "_epoch_seen", None) is not None:
+                    self.clear_conversation()
+                self._epoch_seen = ep
+        except Exception:
+            pass
         now = time.time()
         if self.session_id is None and not self.history and self.channel:
             self._resume(now)

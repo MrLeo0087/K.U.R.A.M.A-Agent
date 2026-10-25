@@ -20,6 +20,7 @@ SITES = {
     "maps": "https://maps.google.com", "google maps": "https://maps.google.com",
     "drive": "https://drive.google.com", "google drive": "https://drive.google.com",
     "groq": "https://console.groq.com", "amazon": "https://www.amazon.com",
+    "colab": "https://colab.research.google.com", "google colab": "https://colab.research.google.com", "collab": "https://colab.research.google.com",
     "sofascore": "https://www.sofascore.com", "daraz": "https://www.daraz.com.np", "tiktok": "https://www.tiktok.com",
     "cricbuzz": "https://www.cricbuzz.com", "espn": "https://www.espn.com", "chess": "https://www.chess.com",
     "यूट्यूब": "https://www.youtube.com", "युट्युब": "https://www.youtube.com",

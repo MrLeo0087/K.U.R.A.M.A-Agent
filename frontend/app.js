@@ -1710,6 +1710,21 @@ function openSettings(msg) {
   if (!dlg.open) dlg.showModal();
 }
 $("btn-settings").onclick = () => openSettings();
+for (const b of document.querySelectorAll("[data-reset]")) {
+  b.onclick = async () => {
+    const level = b.dataset.reset;
+    if (level === "all" && !confirm("Reset KURAMA? This wipes reminders, caches and learned facts and starts fresh. Your password and settings are kept.")) return;
+    b.disabled = true;
+    try {
+      const r = await api.reset(level);
+      log.innerHTML = ""; // clear the on-screen conversation
+      player.stop(); if (busy) abortChat();
+      toast(r.message || "Done.");
+      $("settings").close();
+    } catch { toast("Couldn't do that right now."); }
+    finally { b.disabled = false; }
+  };
+}
 $("set-test").onclick = async () => {
   const probe = new Api(() => ({ apiBase: $("set-api").value, token: $("set-token").value }));
   $("set-msg").textContent = "Testing…";

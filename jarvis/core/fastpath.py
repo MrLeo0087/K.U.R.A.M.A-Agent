@@ -672,6 +672,12 @@ _DAYS = {"today": 1, "yesterday": 2, "this week": 7, "last week": 14, "this mont
 _STATUS = re.compile(r"^(?:(?:what(?:'s|s| is) the )?(?:current )?status|what(?:'s|s| is) going on|what(?:'s|s| is) happening|"
                      r"any (?:updates?|news)|give me (?:an |the )?(?:update|status)|how(?:'s| is) everything(?: going)?|"
                      r"status (?:update|report)|update me)(?: now)?$", I)
+_RESET = re.compile(
+    r"^(?:please\s+)?(?:(?P<all>reset|wipe|factory\s*reset)(?:\s+(?:kurama|everything|all|yourself))?"
+    r"|(?:clear|forget|wipe|delete|erase|start)\s+(?:a\s+)?(?:new\s+)?"
+    r"(?:(?P<recent>(?:the\s+)?(?:recent|reminders?(?:\s+and\s+(?:chat|cache))?|cache))|"
+    r"(?:the\s+|this\s+|our\s+|my\s+)?(?:chat|conversation|chat\s+history|memory\s+of\s+(?:this\s+)?chat))"
+    r"|(?:new\s+chat|start\s+over|start\s+fresh|start\s+a\s+new\s+chat))\s*[.!?]*$", re.I)
 _COLAB_SETUP = re.compile(
     r"^(?:(?:please |now )?(?:set\s*up|setup|connect|link|configure|enable|start|get|give me)\s+)"
     r"(?:(?:the|my|a)\s+)?(?:google\s+)?colab(?:\s+(?:cell|notebook|training|tracking|watch|monitor|link|"
@@ -687,6 +693,9 @@ _TRAIN_STOP = re.compile(r"^(?:please )?(?:stop|end|cancel|kill|halt) (?:the |my
 def _study_intent(t: str) -> Intent | None:
     if _STATUS.match(t):
         return Intent("status", "status_now", "usage", {})
+    if m := _RESET.match(t):
+        lvl = "all" if m.group("all") else ("recent" if m.group("recent") else "chat")
+        return Intent("reset", "reset_kurama", "self", {"level": lvl})
     if _COLAB_SETUP.match(t):
         return Intent("training", "training", "watch", {"action": "colab"})
     if _TRAIN_Q.match(t):

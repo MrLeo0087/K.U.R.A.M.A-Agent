@@ -113,7 +113,7 @@ def send_photo() -> str:
     if not r.startswith("error"):
         from jarvis.core import phone
         phone.remember_sent(pic)
-        return "📷 Sent a photo from the laptop camera."
+        return "Sent a photo from the laptop camera."
     return r
 
 
@@ -129,7 +129,7 @@ def send_clip(seconds: float = 5.0) -> str:
     if not r.startswith("error"):
         from jarvis.core import phone
         phone.remember_sent(vid)
-        return "🎥 Sent a video from the laptop camera."
+        return "Sent a video from the laptop camera."
     return r
 
 

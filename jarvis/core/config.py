@@ -637,6 +637,7 @@ RESOURCE_REALERT_S = 1800.0  # still high: alert again after 30 min
 # Telegram remote control (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID from .env; skipped when empty)
 TELEGRAM_POLL_TIMEOUT_S = 6  # long-poll seconds (short so Ctrl+C stops the workers quickly)
 TELEGRAM_CONFIRM_TIMEOUT_S = 60.0  # "Reply yes/no": no answer in time means no
+TELEGRAM_ANSWER_TIMEOUT_S = 90.0  # a reply that takes longer than this is given up on (no "typing" forever)
 TELEGRAM_MAX_REPLY_CHARS = 3500
 
 # --- Multitasking (P3b-2): planner, background jobs, rate limiter ---
