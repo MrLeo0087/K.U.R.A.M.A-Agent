@@ -36,7 +36,7 @@ def test_gesture_start_stop(monkeypatch, tmp_path):
 def test_fastpath_phrases(monkeypatch):
     for text, tool in [("enable the media control through hand", "gesture_control"),
                        ("summarize the today day", "daily_digest"), ("what did we do today", "daily_digest"),
-                       ("what is 18% of 2500", "calculate"), ("latest news about cricket", "web_search")]:
+                       ("what is 18% of 2500", "calculate"), ("latest news about cricket", "live_search")]:
         it = fastpath.match(text)
         assert it is not None and it.tool == tool, text
 

@@ -57,7 +57,7 @@ CASES: list[tuple[str, str]] = [
     ("back up my projects", "backup"),
     # web / info
     ("weather in pokhara tomorrow", "weather"), ("what time is it in london", "get_time"),
-    ("latest news about AI", "web_search"), ("who is the prime minister of nepal", "web_search"),
+    ("latest news about AI", "live_search"), ("who is the prime minister of nepal", "web_search"),
     ("watch tu.edu.np/results for BSc", "web_watch"), ("tell me when this website changes https://x.org", "web_watch"),
     ("tell me about Mount Everest from wikipedia", "wikipedia"), ("what is 18% of 2500", "calculate"),
     ("100 dollars to rupees", "calculate"), ("draw a dragon flying over kathmandu", "generate_image"),

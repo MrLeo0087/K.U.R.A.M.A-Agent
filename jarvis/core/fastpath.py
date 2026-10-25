@@ -1034,6 +1034,37 @@ def contacts_intent(t: str) -> Intent | None:
     return None
 
 
+_DAYW = r"(?:the\s+|today'?s?\s+|tonight'?s?\s+|last\s+|latest\s+|yesterday'?s?\s+|recent\s+|live\s+)*"
+_LIVE_SPORT = [re.compile(r"^(?:please\s+)?(?:what(?:'s|\s+is|\s+was)\s+|tell\s+me\s+|give\s+me\s+|show\s+(?:me\s+)?|check\s+)?(?:the\s+)?"
+                          r"(?:live\s+|final\s+|latest\s+)?(?:score|result)s?\s+(?:of|in|for|from)\s+" + _DAYW +
+                          r"(?P<t>.+?)(?:\s+(?:match|game|fixture))?(?:\s+today|\s+tonight|\s+now)?\??$", I),
+               re.compile(r"^(?:please\s+)?(?:what(?:'s|\s+is)\s+)?(?:the\s+)?" + _DAYW +
+                          r"(?P<t>[^?]{3,40}?)\s+(?:match|game)?\s*(?:score|result|scores|results|live\s+score)"
+                          r"(?:\s+today|\s+now|\s+tonight)?\??$", I),
+               re.compile(r"^(?:did|has|have)\s+(?P<t>.+?)\s+(?:win|won|lose|lost|draw|drawn|beat|play|played)\b.*$", I),
+               re.compile(r"^who\s+won\s+(?:the\s+|today'?s?\s+|last\s+|yesterday'?s?\s+)*(?P<t>.+?)(?:\s+(?:match|game))?(?:\s+today|\s+yesterday)?\??$", I),
+               re.compile(r"^when\s+(?:is|does|do|will)\s+(?:the\s+)?(?:next\s+)?(?P<t>.+?)(?:'s)?\s+(?:next\s+)?"
+                          r"(?:match|game|play(?:ing)?(?:\s+next)?|fixture)(?:\s+next)?\??$", I),
+               re.compile(r"^(?:is|are)\s+(?P<t>.+?)\s+playing\s+(?:today|tonight|now)\??$", I)]
+_LIVE_NEWS = re.compile(r"^(?:please\s+)?(?:(?:what(?:'s|\s+is)\s+the\s+|give\s+me\s+(?:the\s+)?|show\s+(?:me\s+)?(?:the\s+)?|"
+                        r"tell\s+me\s+(?:the\s+)?)?(?:latest|today'?s|recent|top|breaking|current)\s+)?(?:news|headlines)"
+                        r"(?:\s+(?:about|on|for|from|in|of)\s+(?P<t>.+?))?(?:\s+today|\s+now)?\??$", I)
+_NOT_TEAM = re.compile(r"^(?:my|the|this|that|it|your|our|test|tests|training|model|exam|search|regex|file|files|"
+                       r"build|code|job|jobs|download|backup|query)\b", I)
+
+
+def live_intent(t: str) -> Intent | None:
+    """'what is the result of today inter miami match', 'barcelona score', 'did real madrid win', 'news about Nepal'."""
+    if m := _LIVE_NEWS.match(t):
+        topic = (m.group("t") or "top stories").strip()
+        return Intent("live", "live_search", "web", {"query": f"news {topic}", "kind": "news"})
+    for rx in _LIVE_SPORT:
+        if (m := rx.match(t)) and (team := m.group("t").strip(" ,?")) and not _NOT_TEAM.match(team) \
+                and len(team.split()) <= 6:
+            return Intent("live", "live_search", "web", {"query": t, "kind": "sports"})
+    return None
+
+
 def video_dl_intent(t: str) -> Intent | None:
     """'download this youtube video in 1080p', 'download <link> as mp3', 'download interstellar trailer in 4k'."""
     m = _VDL.match(t)
@@ -1094,6 +1125,8 @@ def match(text: str) -> Intent | None:
         return ws
     if ct := contacts_intent(t):
         return ct
+    if lv := live_intent(t):
+        return lv
     if di := _daily_intent(t):
         return di
     if ci := _control_intent(t):  # shutdown/restart/sleep, timers, alarms, stopwatch, Wi-Fi...
