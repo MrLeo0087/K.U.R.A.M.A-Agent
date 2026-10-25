@@ -65,13 +65,13 @@ def last_list() -> list[Path]:
 
 
 def send_paths(paths: list[Path]) -> str:
-    from jarvis.tools.general.send_file_telegram import check_path, deliver, zip_dir
+    from jarvis.tools.general.send_file_telegram import check_path, deliver, deliver_folder
 
     out = []
     for p in paths:
         try:
-            if p.is_dir():  # a folder -> zip (minus junk) and send the zip
-                out.append(deliver(zip_dir(p), f"{p.name} (folder, zipped)"))
+            if p.is_dir():  # a folder -> zip (minus junk), split into parts if over the limit, send
+                out.append(deliver_folder(p))
             else:
                 out.append(deliver(check_path(str(p))))
         except ValueError as e:

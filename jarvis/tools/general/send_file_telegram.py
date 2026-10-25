@@ -44,6 +44,7 @@ def zip_dir(path: str | Path) -> Path:
     if not p.is_dir():
         raise ValueError(f"{p} isn't a folder")
     cap = config.TELEGRAM_FILE_MAX_MB * 1024 * 1024
+    hard = cap * 40  # ~2 GB raw: above this, zipping it just to find out it won't fit is a waste
     files, total = [], 0
     for f in p.rglob("*"):
         if not f.is_file() or any(part in ZIP_SKIP for part in f.relative_to(p).parts):
@@ -53,20 +54,61 @@ def zip_dir(path: str | Path) -> Path:
         except OSError:
             continue
         files.append(f)
-        if total > cap:
-            raise ValueError(
-                f"“{p.name}” is too big for Telegram — it's over {config.TELEGRAM_FILE_MAX_MB} MB even after skipping "
-                f"venv/.git/node_modules (Telegram bots can't send more than {config.TELEGRAM_FILE_MAX_MB} MB). "
-                f"I can send a smaller sub-folder or a specific file from it instead — tell me which part you need.")
     if not files:
         raise ValueError(f"the folder “{p.name}” is empty (or only junk), nothing to send")
+    if total > hard:
+        raise ValueError(
+            f"“{p.name}” is about {total // (1024 * 1024)} MB — far over Telegram's {config.TELEGRAM_FILE_MAX_MB} MB "
+            f"limit even compressed. Tell me a specific sub-folder or file to send instead.")
     out_dir = Path(config.OUTPUTS_DIR) / "zips"
     out_dir.mkdir(parents=True, exist_ok=True)
     out = out_dir / f"{p.name}-{time.strftime('%Y%m%d-%H%M%S')}.zip"
-    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:  # actually compress
         for f in files:
             z.write(f, Path(p.name) / f.relative_to(p))
     return out
+
+
+def split_file(path: Path, part_bytes: int) -> list[Path]:
+    """Split a big file into <=part_bytes pieces named <file>.001, .002, … (reassemble with `cat … > file`)."""
+    parts, i = [], 1
+    with open(path, "rb") as fh:
+        while chunk := fh.read(part_bytes):
+            part = path.with_name(f"{path.name}.{i:03d}")
+            part.write_bytes(chunk)
+            parts.append(part)
+            i += 1
+    path.unlink(missing_ok=True)  # keep only the parts
+    return parts
+
+
+def deliver_folder(path: str | Path, caption: str = "") -> str:
+    """Zip a folder and send it to Telegram. If the zip is over the limit, split it into numbered parts and send
+    each, with instructions to reassemble. (Sending happens inside; returns a status line.)"""
+    if err := _tg.ready():
+        return err
+    try:
+        z = zip_dir(path)
+    except ValueError as e:
+        return f"error: {e}"
+    cap = config.TELEGRAM_FILE_MAX_MB * 1024 * 1024
+    name = Path(path).name if not isinstance(path, Path) else path.name
+    if z.stat().st_size <= cap:
+        return deliver(z, caption or f"{name} (folder, zipped)")
+    base = z.name  # the real zip filename (has a timestamp); the parts are <base>.001, .002, …
+    parts = split_file(z, int(cap) - 512 * 1024)  # a little headroom under the limit
+    if len(parts) > 25:  # absurdly large: don't flood the chat with 40 parts
+        for pp in parts:
+            pp.unlink(missing_ok=True)
+        return (f"“{name}” would need {len(parts)} Telegram files even split — that's too many to send sensibly. "
+                f"Tell me a specific sub-folder or file instead.")
+    results = []
+    for i, pp in enumerate(parts, 1):
+        results.append(deliver(pp, f"{name} — part {i}/{len(parts)}"))
+    bad = [r for r in results if r.startswith("error")]
+    howto = (f"Sent “{name}” as {len(parts)} parts ({base}.001 … .{len(parts):03d}). To rebuild it on a computer: "
+             f"put all parts in one folder, then run  cat {base}.*  >  {base}  and unzip {base}.")
+    return howto if not bad else howto + "\nSome parts failed: " + "; ".join(bad)
 
 
 # safe: it can only ever send to the owner's own chat (TELEGRAM_CHAT_ID), like find_and_send
@@ -85,14 +127,8 @@ def send_file_telegram(path: str = "", caption: str = "", pick: int = 0) -> str:
     if pick or not path.strip():
         return find_and_send(path, pick)
     resolved = _files.resolve(path)
-    if resolved.is_dir():  # a folder: zip it (minus junk) and send the zip
-        if err := _tg.ready():
-            return err
-        try:
-            z = zip_dir(resolved)
-        except ValueError as e:
-            return f"error: {e}"
-        return deliver(z, caption or f"{resolved.name} (folder, zipped)")
+    if resolved.is_dir():  # a folder: zip it (minus junk); split into parts if it's over the Telegram limit
+        return deliver_folder(resolved, caption)
     try:
         p = check_path(path)
     except ValueError as e:
