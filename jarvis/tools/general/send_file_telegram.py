@@ -11,18 +11,60 @@ PHOTO_EXT = {".jpg", ".jpeg", ".png", ".webp"}
 PHOTO_MAX = 10 * 1024 * 1024  # Bot API sendPhoto limit
 
 
+ZIP_SKIP = {".git", "node_modules", "venv", ".venv", "__pycache__", "dist", "build", ".mypy_cache",
+            ".pytest_cache", ".next", ".cache", "site-packages"}
+
+
+def _under_shares(p: Path) -> bool:
+    from jarvis.core.paths import all_disks
+    return any(_files.inside(p, Path(r)) for r in (*config.SHARE_ROOTS, *all_disks()))
+
+
 def check_path(path: str) -> Path:
     """Resolved file path; raises ValueError unless it exists, is a file, <= 50 MB and is under SHARE_ROOTS."""
-    from jarvis.core.paths import all_disks
-
     p = _files.resolve(path)
-    if not any(_files.inside(p, Path(r)) for r in (*config.SHARE_ROOTS, *all_disks())):
+    if not _under_shares(p):
         raise ValueError(f"I can only send files from your home folder or your data disks, not {p}")
     if not p.is_file():
         raise ValueError(f"{p} doesn't exist or isn't a file")
     if p.stat().st_size > config.TELEGRAM_FILE_MAX_MB * 1024 * 1024:
         raise ValueError(f"{p.name} is bigger than {config.TELEGRAM_FILE_MAX_MB} MB")
     return p
+
+
+def zip_dir(path: str | Path) -> Path:
+    """Zip a folder (skipping junk like venv/.git/node_modules) into data/outputs/zips, for sending to Telegram.
+    Raises ValueError if the folder is missing, outside the allowed roots, or the content exceeds the size limit."""
+    import time
+    import zipfile
+
+    p = _files.resolve(str(path))
+    if not _under_shares(p):
+        raise ValueError(f"I can only send folders from your home folder or your data disks, not {p}")
+    if not p.is_dir():
+        raise ValueError(f"{p} isn't a folder")
+    cap = config.TELEGRAM_FILE_MAX_MB * 1024 * 1024
+    files, total = [], 0
+    for f in p.rglob("*"):
+        if not f.is_file() or any(part in ZIP_SKIP for part in f.relative_to(p).parts):
+            continue
+        try:
+            total += f.stat().st_size
+        except OSError:
+            continue
+        files.append(f)
+        if total > cap:
+            raise ValueError(f"the folder “{p.name}” is over {config.TELEGRAM_FILE_MAX_MB} MB (Telegram's limit); "
+                             f"I skip venv/.git/node_modules but it's still too big to send")
+    if not files:
+        raise ValueError(f"the folder “{p.name}” is empty (or only junk), nothing to send")
+    out_dir = Path(config.OUTPUTS_DIR) / "zips"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out = out_dir / f"{p.name}-{time.strftime('%Y%m%d-%H%M%S')}.zip"
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+        for f in files:
+            z.write(f, Path(p.name) / f.relative_to(p))
+    return out
 
 
 # safe: it can only ever send to the owner's own chat (TELEGRAM_CHAT_ID), like find_and_send
@@ -40,6 +82,15 @@ def send_file_telegram(path: str = "", caption: str = "", pick: int = 0) -> str:
     from jarvis.tools.general.find_and_send import find_and_send
     if pick or not path.strip():
         return find_and_send(path, pick)
+    resolved = _files.resolve(path)
+    if resolved.is_dir():  # a folder: zip it (minus junk) and send the zip
+        if err := _tg.ready():
+            return err
+        try:
+            z = zip_dir(resolved)
+        except ValueError as e:
+            return f"error: {e}"
+        return deliver(z, caption or f"{resolved.name} (folder, zipped)")
     try:
         p = check_path(path)
     except ValueError as e:

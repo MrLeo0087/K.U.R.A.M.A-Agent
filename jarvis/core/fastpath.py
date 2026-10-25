@@ -269,9 +269,9 @@ SWITCHES = [  # (intent name, tool, group, args, patterns); first full match win
         r"(?:find|locate|where(?:'s| is)|track|ring) (?:my |the )?(?:lost |missing )?iphone(?: now)?",
         r"find my (?:phone|mobile) \(?iphone\)?")),
     ("find_phone", "find_my_phone", "system", {"phone": "android"}, _rx(
-        r"(?:find|locate|track|ring) (?:my |the )?(?:lost |missing )?(?:phone|mobile|android|cell\s*phone)(?: now)?",
-        r"where(?:'s| is| are)? (?:my |the )?(?:phone|mobile|android|cell\s*phone)(?: location| at| now)?",
-        r"(?:(?:what(?:'s| is)|give|send|show|get|tell)(?: me)?\s*)?(?:the )?location of (?:my |the )?(?:phone|mobile|android|cell\s*phone)(?: now)?",
+        r"(?:find|locate|track|ring) (?:my |the )?(?:lost |missing )?(?:phone|mobile(?: phone)?|android|cell\s*phone)(?: now)?",
+        r"where(?:'s| is| are)? (?:my |the )?(?:phone|mobile(?: phone)?|android|cell\s*phone)(?: location| at| now)?",
+        r"(?:(?:what(?:'s| is)|give|send|show|get|tell)(?: me)?\s*)?(?:the )?location of (?:my |the )?(?:phone|mobile(?: phone)?|android|cell\s*phone)(?: now)?",
         r"(?:give|send|show|get|tell)(?: me)?(?: the| my)? (?:phone|mobile)(?:'s)? location(?: now)?",
         r"(?:my |the )?(?:phone|mobile|android)(?:'s)? location(?: now)?",
         r"(?:open |launch )?(?:google )?find my (?:device|phone|mobile|android)",
@@ -856,6 +856,9 @@ def match(text: str) -> Intent | None:
         return li
     if si := search_intent(t):
         return si
+    if m := _full(FOLDER_OPEN, t):
+        if fi := _folder_intent(m.group("target")):
+            return fi
     if m := _full(OPEN, t):
         return _open_intent(m.group("target").strip(" ,"), m.group("verb").lower())
     if m := _full(CLOSE, t):
@@ -872,6 +875,21 @@ def _close_intent(target: str) -> Intent | None:
     if entry is None or score < _apps.FASTPATH_MIN_SCORE:
         return None
     return Intent("close", "close_app", "apps", {"name": target}, target)  # say it the way the user did
+
+
+_FM = r"(?:the |my )?(?:file manager|files|file explorer|explorer|nautilus|files app)"
+FOLDER_OPEN = _rx(
+    r"(?:open|show|go to|goto|browse|reveal|take me to)(?: up)? (?:the |my )?(?P<target>.+?) (?:folder|directory|dir)(?: in " + _FM + r")?",
+    r"(?:open|show|go to|goto|browse|reveal)(?: up)? (?:the |my )?folder (?:called |named )?(?P<target>.+?)",
+    r"(?:open|show|go to|goto|browse|reveal|take me to)(?: up)? (?:the |my )?(?P<target>.+?) in " + _FM,
+)
+
+
+def _folder_intent(target: str) -> Intent | None:
+    target = (target or "").strip(" ,'\"")
+    if not target or len(target.split()) > 6 or re.fullmatch(r"(?:it|this|that|here|there)", target, I):
+        return None
+    return Intent("openfolder", "open_folder", "apps", {"name": target}, target)
 
 
 def _open_intent(target: str, verb: str) -> Intent | None:

@@ -35,11 +35,11 @@ def _line(i: int, p: Path) -> str:
     return f"{i}. {p.name} ({meta})\n   {shown}"
 
 
-def search(query: str) -> list[Path]:
+def search(query: str, ftype: str = "f") -> list[Path]:
     from jarvis.core.paths import all_disks
     from jarvis.tools.interactive.find_files import search_names
 
-    found, _ = search_names(query, all_disks(), MAX_LIST)
+    found, _ = search_names(query, all_disks(), MAX_LIST, ftype)
     return [Path(f) for f in found]
 
 
@@ -52,12 +52,15 @@ def last_list() -> list[Path]:
 
 
 def send_paths(paths: list[Path]) -> str:
-    from jarvis.tools.general.send_file_telegram import check_path, deliver
+    from jarvis.tools.general.send_file_telegram import check_path, deliver, zip_dir
 
     out = []
     for p in paths:
         try:
-            out.append(deliver(check_path(str(p))))
+            if p.is_dir():  # a folder -> zip (minus junk) and send the zip
+                out.append(deliver(zip_dir(p), f"{p.name} (folder, zipped)"))
+            else:
+                out.append(deliver(check_path(str(p))))
         except ValueError as e:
             out.append(f"error: {e}")
     return "\n".join(out)
@@ -101,8 +104,17 @@ def find_and_send(name: str = "", pick: int = 0) -> str:
         stem = re.sub(r"\.[a-z0-9]{1,5}$", "", Path(name).name, flags=re.I)
         if stem and stem != name:
             paths, note = search(stem), f"No file named exactly {name}, but I found similar ones:\n"
+    if not paths:  # no file: maybe they meant a FOLDER (we zip it to send)
+        folders = search(re.sub(r"\s*folder$", "", name, flags=re.I).strip() or name, ftype="d")
+        if len(folders) == 1:
+            return send_paths(folders)
+        if folders:
+            store.kv_set(LAST_KEY, json.dumps({"t": time.time(), "paths": [str(p) for p in folders]}))
+            return (f"I found {len(folders)} folders matching {name!r} (I'll zip and send the one you pick):\n"
+                    + "\n".join(_line(i, p) for i, p in enumerate(folders, 1))
+                    + "\nReply with a number to send it.")
     if not paths:
-        return f"I couldn't find any file named like {name!r} in your home folder or on your disks."
+        return f"I couldn't find any file or folder named like {name!r} in your home folder or on your disks."
     if len(paths) == 1 and not note:
         return send_paths(paths)
     store.kv_set(LAST_KEY, json.dumps({"t": time.time(), "paths": [str(p) for p in paths]}))
