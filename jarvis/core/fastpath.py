@@ -1097,49 +1097,6 @@ def time_weather_intent(t: str) -> Intent | None:
     return Intent("weather", "weather", "weather", {"place": place, "days": 1, "_time": True}, place)
 
 
-_MSRC = {"whatsapp": "whatsapp", "whats app": "whatsapp", "wa": "whatsapp", "facebook": "facebook", "fb": "facebook",
-         "messenger": "facebook", "instagram": "instagram", "insta": "instagram", "ig": "instagram",
-         "email": "email", "emails": "email", "mail": "email", "mails": "email", "gmail": "email", "inbox": "email"}
-_MSRC_RX = r"(?P<src>whats\s*app|wa|facebook|fb|messenger|instagram|insta|ig|e-?mails?|mails?|gmail|inbox)"
-_MSG_Q = re.compile(r"^(?:please\s+)?(?:(?:do|did)\s+i\s+(?:have|get|got)\s+(?:any\s+)?|any\s+|check\s+(?:my\s+)?(?:for\s+)?(?:any\s+)?|"
-                    r"show\s+(?:me\s+)?(?:my\s+)?|read\s+(?:me\s+)?(?:my\s+)?|give\s+me\s+(?:my\s+)?|what\s+are\s+(?:my\s+)?|"
-                    r"(?:what(?:'s|\s+is)\s+)?(?:my\s+)?)"
-                    r"(?P<kind>new\s+|unread\s+|latest\s+|recent\s+|last\s+)?(?:" + _MSRC_RX + r"\s+)?"
-                    r"(?:messages?|msgs?|texts?|notifications?|chats?|e-?mails?|mails?|dms?)"
-                    r"(?:\s+(?:on|in|from)\s+" + _MSRC_RX.replace("src", "src2") + r")?"
-                    r"(?:\s+from\s+(?P<who>[^?]+?))?(?:\s+(?:today|now|yet))?\??$", I)
-_MSG_WHO = re.compile(r"^(?:what\s+did|did)\s+(?P<who>.+?)\s+(?:send|say|text|message|write)(?:\s+(?:me|to\s+me))?"
-                      r"(?:\s+(?:on|in)\s+" + _MSRC_RX + r")?(?:\s+today)?\??$", I)
-_MSG_READ = re.compile(r"^(?:please\s+)?mark\s+(?:all\s+)?(?:(?:my|the)\s+)?(?:" + _MSRC_RX +
-                       r"\s+)?(?:messages?|e-?mails?|notifications?)\s+(?:as\s+)?read$", I)
-
-
-def messages_intent(t: str) -> Intent | None:
-    """'do I have new messages', 'any new whatsapp messages', 'latest instagram messages', 'messages from Ram',
-    'what did Ram send on whatsapp', 'check my email', 'mark all messages read'."""
-    def src(*vals: str | None) -> str:
-        for v in vals:
-            if v:
-                return _MSRC.get(re.sub(r"\s+", " ", v.lower()).replace("e-mail", "email"), "all")
-        return "all"
-    if m := _MSG_READ.match(t):
-        return Intent("msgs", "messages", "usage", {"action": "mark_read", "source": src(m.group("src"))})
-    if m := _MSG_WHO.match(t):
-        return Intent("msgs", "messages", "usage", {"action": "latest", "source": src(m.group("src")),
-                                                    "sender": m.group("who").strip()})
-    m = _MSG_Q.match(t)
-    if not m:
-        return None
-    noun = re.search(r"(e-?mails?|mails?)\s*(?:\s+from|\??$)", t, I)
-    source = src(m.group("src"), m.group("src2"), noun.group(1) if noun else None)
-    kind = (m.group("kind") or "").strip().lower()
-    if not kind and source == "all" and not m.group("who") and not re.search(r"\b(?:check|any|do|did|my)\b", t, I):
-        return None  # a bare "messages" / "notifications" is too vague
-    action = "latest" if kind in ("latest", "recent", "last") or m.group("who") else "unread"
-    return Intent("msgs", "messages", "usage", {"action": action, "source": source,
-                                                "sender": (m.group("who") or "").strip()})
-
-
 def live_intent(t: str) -> Intent | None:
     """'what is the result of today inter miami match', 'barcelona score', 'did real madrid win', 'news about Nepal'."""
     if _LIVE_PRICE.match(t) and not re.search(r"\b(?:my|your|this|that|ticket|plan|interest)\b|\d+(?:\.\d+)?\s*"
@@ -1217,8 +1174,6 @@ def match(text: str) -> Intent | None:
         return ws
     if ct := contacts_intent(t):
         return ct
-    if mi := messages_intent(t):
-        return mi
     if lv := live_intent(t):
         return lv
     if di := _daily_intent(t):
