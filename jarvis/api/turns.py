@@ -176,6 +176,14 @@ class Engine:
 
     def run_turn(self, turn: Turn, text: str, mode: str, lang: str | None, ambient: bool = False) -> None:
         t0, ts0 = time.monotonic(), time.time()
+        from jarvis.core import dictation
+        if mode == "voice" and dictation.active():
+            # the same speech is being typed by dictation: don't also treat it as a command
+            said = dictation.stop() if dictation.STOP.match(text) else ""
+            turn.push({"type": "done", "text": said, "ignored": not said, "route": None, "tier": "", "tokens": 0,
+                       "ms": 0, "lang": lang or "en"})
+            turn.push(None)
+            return
         if ambient and not addressed(text):
             # talk mode heard room talk / TV / a phone call: not a command and KURAMA wasn't named -> no LLM call
             log.info("ignored ambient speech: %r", text[:60])

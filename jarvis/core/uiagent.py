@@ -123,7 +123,7 @@ _TAB_N = re.compile(_PL + r"(?:go\s+to\s+|switch\s+to\s+|open\s+|show\s+(?:me\s+
                     r"third|fourth|fifth|sixth|seventh|eighth|ninth|1st|2nd|3rd|\d)(?:th)?\s+tab|tab\s+(?:number\s+)?"
                     r"(?P<num>\d))" + _IN_APP + _END, re.I)
 _PRESS = re.compile(_PL + r"(?:press|hit)\s+(?P<k>[\w\s+-]{1,40}?)(?:\s+key)?" + _IN_APP + _END, re.I)
-_TYPE = re.compile(_PL + r"type\s+(?P<t>.+?)" + _IN_APP + _END, re.I)
+_TYPE = re.compile(_PL + r"type\s+(?!what\s+i\s+(?:say|speak)\b)(?P<t>.+?)" + _IN_APP + _END, re.I)
 _CLICK = re.compile(_PL + r"(?:click|tap|double[\s-]*click)\s+(?:on\s+)?(?:the\s+)?"
                     r"(?!(?:a|my|me|some)?\s*(?:photo|picture|pic|selfie|screenshot|snap)s?\b)(?P<n>.{1,60}?)"
                     r"(?:\s+(?:button|tab|link|option|menu|icon|item|toggle|switch))?" + _IN_APP + _END, re.I)

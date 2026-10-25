@@ -1218,6 +1218,13 @@ def everyday_intent(t: str) -> Intent | None:
         if not re.fullmatch(r"(?:the\s+)?(?:screen|laptop|computer|pc|kurama|phone|door|it\s+now)", p, I):
             act = "unlock" if m.group("a").lower() in ("unlock", "decrypt") else "lock"
             return Intent("lock", "folder_lock", "filesearch", {"action": act, "path": p}, p)
+    if m := re.fullmatch(r"(?:please\s+)?(?:(?P<stop>stop|end|finish|cancel)\s+(?:the\s+)?(?:dictation|dictating|voice\s+typing|typing)|"
+                         r"(?:start\s+|begin\s+)?(?:dictat(?:e|ion|ing)|voice\s+typing)|(?:start\s+)?typ(?:e|ing)\s+what\s+i\s+(?:say|speak))"
+                         r"(?:\s+(?:in|for)\s+(?P<lang>english|nepali|hindi))?(?:\s+mode)?[\s.!]*", t, I):
+        if m.group("stop"):
+            return Intent("dictate", "dictate", "windows", {"action": "stop"})
+        lang = {"english": "en", "nepali": "ne", "hindi": "hi"}.get((m.group("lang") or "").lower(), "auto")
+        return Intent("dictate", "dictate", "windows", {"action": "start", "lang": lang})
     if m := _REWRITE.match(t):
         ins = re.sub(r"\s+(?:this|it|that|the\s+selected\s+text|the\s+selection|selected\s+text|selection)\b", "",
                      m.group(0), count=1, flags=I).strip(" .!")
