@@ -971,6 +971,26 @@ def app_install_intent(t: str) -> Intent | None:
     return Intent("app", "install_app", "apps", {"action": "install", "name": name})
 
 
+_WIFI = r"(?:wi[\s-]*fi|wifi|lan|local\s+network|hotspot)"
+_WSHARE = re.compile(r"^(?:please\s+)?(?:(?:share|send|transfer|give)\s+(?P<a>.+?)\s+(?:to\s+(?:my\s+)?(?:phone|mobile)\s+)?"
+                     r"(?:over|via|by|through|on|using)\s+(?:the\s+)?" + _WIFI + r"|" + _WIFI +
+                     r"\s+(?:share|send|transfer)\s+(?P<b>.+?))$", I)
+_WSTOP = re.compile(r"^(?:please\s+)?(?:stop|end|close|turn\s+off)\s+(?:the\s+)?(?:" + _WIFI +
+                    r"\s+(?:share|sharing|transfer)|sharing(?:\s+(?:over|via|on)\s+" + _WIFI + r")?)$", I)
+
+
+def wifi_share_intent(t: str) -> Intent | None:
+    """'send this folder to my phone over wifi', 'share report.pdf via wifi', 'stop wifi share'."""
+    if _WSTOP.match(t):
+        return Intent("wifi", "wifi_share", "telegram", {"action": "stop", "path": ""})
+    if m := _WSHARE.match(t):
+        src = re.sub(r"^(?:the|my)\s+", "", (m.group("a") or m.group("b")).strip(), flags=I)
+        src = re.sub(r"\s+(?:folder|file|directory)$", "", src, flags=I) if not src.lower().startswith(
+            ("this", "that", "it")) else "this"
+        return Intent("wifi", "wifi_share", "telegram", {"action": "share", "path": src})
+    return None
+
+
 def video_dl_intent(t: str) -> Intent | None:
     """'download this youtube video in 1080p', 'download <link> as mp3', 'download interstellar trailer in 4k'."""
     m = _VDL.match(t)
@@ -1027,6 +1047,8 @@ def match(text: str) -> Intent | None:
         return ui
     if cv := convert_intent(t):
         return cv
+    if ws := wifi_share_intent(t):
+        return ws
     if di := _daily_intent(t):
         return di
     if ci := _control_intent(t):  # shutdown/restart/sleep, timers, alarms, stopwatch, Wi-Fi...
