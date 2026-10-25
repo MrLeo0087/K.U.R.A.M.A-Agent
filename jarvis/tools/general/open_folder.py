@@ -4,7 +4,7 @@ from __future__ import annotations
 from jarvis.core.registry import tool
 
 
-@tool(group="apps", safety="safe",
+@tool(group="filesearch", safety="safe",
       description="Open a folder in the file manager by name (fuzzy match anywhere on the laptop): "
                   "'open project1 in files', 'open my college project folder'.")
 def open_folder(name: str) -> str:

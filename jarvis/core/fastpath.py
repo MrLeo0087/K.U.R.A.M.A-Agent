@@ -926,7 +926,7 @@ def convert_intent(t: str) -> Intent | None:
     src = re.sub(r"\s+(?:file|document|doc)$", "", m.group("src").strip(), flags=I)
     if a := _ALL_IN.match(src):
         if cv.ext_of(a.group("ext")) in known:
-            return Intent("convert", "convert_file", "files", {"path": a.group("dir"), "to": to,
+            return Intent("convert", "convert_file", "daily", {"path": a.group("dir"), "to": to,
                                                                "src_ext": cv.ext_of(a.group("ext"))})
     words = src.split()
     ext = ""
@@ -937,7 +937,7 @@ def convert_intent(t: str) -> Intent | None:
                  ("this", "that", "these") else "", src, flags=I).strip()
     if src.lower() in ("", "this", "it", "that"):
         src = "this"
-    return Intent("convert", "convert_file", "files", {"path": src, "to": to, "src_ext": ext})
+    return Intent("convert", "convert_file", "daily", {"path": src, "to": to, "src_ext": ext})
 
 
 _PY_HINT = re.compile(r"\b(?:pip|module|library|package|python|requirements|venv)\b", I)
@@ -988,6 +988,49 @@ def wifi_share_intent(t: str) -> Intent | None:
         src = re.sub(r"\s+(?:folder|file|directory)$", "", src, flags=I) if not src.lower().startswith(
             ("this", "that", "it")) else "this"
         return Intent("wifi", "wifi_share", "telegram", {"action": "share", "path": src})
+    return None
+
+
+_PH = r"(?P<p>\+?\d[\d\s-]{4,18}\d)"
+_CNAME = r"(?P<n>[^\d]{1,40}?)"
+_C_ADD = [re.compile(r"^(?:please\s+)?(?:save|add|store|remember)\s+(?:a\s+|new\s+)*(?:contact\s+)?" + _CNAME +
+                     r"(?:'s|s'|\s+ko)?\s+(?:(?:phone|mobile|cell)\s+)?(?:number|no\.?|contact)?\s*(?:is|as|:|=)?\s*" + _PH +
+                     r"(?:\s+(?:as|note)\s+(?P<note>.+))?$", I),
+          re.compile(r"^(?:please\s+)?(?:save|add|store)\s+" + _PH + r"\s+(?:as|for)\s+" + _CNAME + r"(?:'s)?(?:\s+number)?$", I),
+          re.compile(r"^" + _CNAME + r"(?:'s|s')\s+(?:(?:phone|mobile)\s+)?number\s+is\s+" + _PH + r"$", I)]
+_C_FIND = [re.compile(r"^(?:please\s+)?(?:what(?:'s|\s+is)\s+|give\s+me\s+|tell\s+me\s+|send\s+me\s+|find\s+|get\s+|show\s+(?:me\s+)?)?"
+                      r"(?:the\s+)?" + _CNAME + r"(?:'s|s'|\s+ko)\s+(?:(?:phone|mobile|cell|contact)\s+)?(?:number|no\.?|contact)\s*\??$", I),
+           re.compile(r"^(?:please\s+)?(?:what(?:'s|\s+is)\s+|give\s+me\s+|tell\s+me\s+|find\s+|get\s+)?(?:the\s+)?"
+                      r"(?:(?:phone|mobile|contact)\s+(?:number|no\.?|details?)|contact)\s+(?:of|for)\s+" + _CNAME + r"\s*\??$", I),
+           re.compile(r"^(?:please\s+)?(?:find|search|look\s+up)\s+(?:the\s+)?contact\s+" + _CNAME + r"$", I),
+           re.compile(r"^(?:please\s+)?(?:what(?:'s|\s+is)|give\s+me|tell\s+me|send\s+me|get\s+me)\s+" + _CNAME +
+                      r"\s+(?:(?:phone|mobile)\s+)?(?:number|no\.?|contact)\s*\??$", I)]
+_C_LIST = re.compile(r"^(?:please\s+)?(?:show|list|open|give\s+me)\s+(?:all\s+)?(?:of\s+)?(?:my\s+|the\s+)?(?:contacts|contact\s+list|phone\s+book|phonebook)$", I)
+_C_DEL = re.compile(r"^(?:please\s+)?(?:delete|remove)\s+(?:the\s+)?contact\s+" + _CNAME + r"$", I)
+_C_UPD = re.compile(r"^(?:please\s+)?(?:change|update|edit)\s+" + _CNAME + r"(?:'s|s')?\s+(?:(?:phone|mobile)\s+)?number\s+to\s+" + _PH + r"$", I)
+_C_STOP = {"my", "your", "his", "her", "their", "our", "the", "this", "that", "a", "an", "it", "phone", "mobile",
+           "kurama", "jarvis", "you", "me", "tracking", "order", "account", "roll", "registration", "serial"}
+
+
+def contacts_intent(t: str) -> Intent | None:
+    """'save Ram's number 9800000000', 'what is Ram's number', 'phone number of Sita', 'show my contacts'."""
+    def ok(n: str) -> bool:
+        n = n.strip(" ,.?")
+        return bool(n) and n.lower().split()[0] not in _C_STOP and len(n.split()) <= 4
+    if _C_LIST.match(t):
+        return Intent("contact", "contacts", "memory", {"action": "list"})
+    if (m := _C_UPD.match(t)) and ok(m.group("n")):
+        return Intent("contact", "contacts", "memory", {"action": "update", "name": m.group("n").strip(), "phone": m.group("p")})
+    if (m := _C_DEL.match(t)) and ok(m.group("n")):
+        return Intent("contact", "contacts", "memory", {"action": "delete", "name": m.group("n").strip()})
+    for rx in _C_ADD:
+        if (m := rx.match(t)) and ok(m.group("n")):
+            note = (m.groupdict().get("note") or "").strip()
+            return Intent("contact", "contacts", "memory", {"action": "add", "name": m.group("n").strip(" ,"),
+                                                            "phone": m.group("p"), "note": note})
+    for rx in _C_FIND:
+        if (m := rx.match(t)) and ok(m.group("n")):
+            return Intent("contact", "contacts", "memory", {"action": "find", "name": m.group("n").strip(" ,.?")})
     return None
 
 
@@ -1049,6 +1092,8 @@ def match(text: str) -> Intent | None:
         return cv
     if ws := wifi_share_intent(t):
         return ws
+    if ct := contacts_intent(t):
+        return ct
     if di := _daily_intent(t):
         return di
     if ci := _control_intent(t):  # shutdown/restart/sleep, timers, alarms, stopwatch, Wi-Fi...
@@ -1128,7 +1173,7 @@ def _folder_intent(target: str) -> Intent | None:
     target = (target or "").strip(" ,'\"")
     if not target or len(target.split()) > 6 or re.fullmatch(r"(?:it|this|that|here|there)", target, I):
         return None
-    return Intent("openfolder", "open_folder", "apps", {"name": target}, target)
+    return Intent("openfolder", "open_folder", "filesearch", {"name": target}, target)
 
 
 def _open_intent(target: str, verb: str) -> Intent | None:

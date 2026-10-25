@@ -4,7 +4,7 @@ from __future__ import annotations
 from jarvis.core.registry import tool
 
 
-@tool(group="files", safety="safe",
+@tool(group="daily", safety="safe",
       description="Convert files locally: pdf<->md/txt/images/docx, md/txt/html->pdf, jpg<->png/webp/ico, "
                   "images->pdf, docx/pptx/xlsx->pdf, mp4->mp3/gif, mov/mkv->mp4, csv<->xlsx<->json, image->text (OCR). "
                   "A folder converts all its files of src_ext.")

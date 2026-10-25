@@ -258,7 +258,7 @@ ROUTER_EXAMPLES: dict[str, tuple[str, ...]] = {
     "clipboard": ("what is on my clipboard", "copy that text", "what did I copy before"),
     "windows": ("move this window to the left half", "maximize the window", "switch to the browser window",
                 "click the wifi button in settings", "turn on dark mode in the settings app"),
-    "apps": ("open the calculator app", "close spotify", "the app froze, kill it"),
+    "apps": ("install app", "install the app", "uninstall", "update all apps", "update everything", "open the calculator app", "close spotify", "the app froze, kill it"),
     "media": ("pause the music", "next track please", "play my playlist"),
     "screen": ("capture my screen", "screenshot of this window"),
     "power": ("how much charge is left", "lock the screen", "shut down the computer", "put it to sleep",
@@ -346,7 +346,7 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
     "study": ("note for", "study note", "my notes", "notes from", "record the lecture", "record this lecture",
               "record the class", "record this class", "lecture", "transcript", "stop the recording", "stop recording",
               "timetable", "time table", "class schedule", "next class", "my classes", "quiz", "flashcard", "revise"),
-    "daily": ("calculate", "calculator", "% of", "percent of", "convert currency", "convert money", " to miles", " to km", "square root",
+    "daily": ("convert file", "convert this", "convert it", "to pdf", "to markdown", "to png", "to jpg", "to mp3", "calculate", "calculator", "% of", "percent of", "convert currency", "convert money", " to miles", " to km", "square root",
               "currency", "exchange rate", "dollar", "rupee", "usd", "npr", "inr", "euro",
               "disk space", "free space", "cleanup", "clean up",
               "storage full", "what is using"),
@@ -365,7 +365,7 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
                    "list folder", "contents of", "inside the folder", "in the folder", "list of", "file in",
                    "list the folder", "show me the files", "folders in",
                    "which file", "containing", "search files", "search for files"),
-    "telegram": ("telegram", "to my phone", "on my phone", "send it to my phone", "send me", "send it to me",
+    "telegram": ("over wifi", "via wifi", "wifi share", "telegram", "to my phone", "on my phone", "send it to my phone", "send me", "send it to me",
                  "and send", "from my laptop", "whole list", "full list", "complete list", "full result",
                  "टेलिग्राम", "फोनमा पठाउ",
                  "फोनमा", "फोन पर भेज", "फ़ोन पर भेज", "phone ma pathau", "phone pe bhej"),
@@ -402,7 +402,7 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
     "apps": ("force quit", "force close", "not responding", "frozen", "hung", "end process", "terminate",
              "open", "close", "launch", "focus", "app", "application", "workspace", "kill", "browser",
              "terminal"),
-    "media": ("gesture", "hand control", "hand gesture", "vision control", "control with my hand", "on youtube", "youtube video", "youtube ma", "youtube pe", "youtube par", "यूट्यूब", "युट्युब",
+    "media": ("download video", "download the video", "1080p", "720p", "mp3", "gesture", "hand control", "hand gesture", "vision control", "control with my hand", "on youtube", "youtube video", "youtube ma", "youtube pe", "youtube par", "यूट्यूब", "युट्युब",
               "next video", "playlists", "play", "pause", "resume", "unpause", "music", "song", "next track", "previous track",
               "next song", "previous song", "skip", "playing", "playlist", "गाना", "गीत"),
     "git": ("git", "commit", "branch", "repo", "repository", "git status", "git log", "diff",
@@ -437,7 +437,7 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
     "web": ("search", "search for", "news", "google", "look up", "lookup", "browse", "website", "wikipedia",
             "wiki", "who is", "who was", "who are", "latest", "headlines", "search the web", "search online",
             "on the internet", "read this page", "read the page", "web page", "webpage", "खोज", "ढूंढ"),
-    "memory": ("remember", "recall", "note", "notes", "last time", "yesterday", "remind",
+    "memory": ("contact", "contacts", "phone number", "'s number", "remember", "recall", "note", "notes", "last time", "yesterday", "remind",
                "what did i tell you", "forget", "yaad", "याद", "सम्झ", "talk about", "talked about",
                "we discussed", "did we discuss", "our conversation", "about me", "know about me",
                "my profile", "my name", "who am i"),
@@ -471,7 +471,7 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
     "general": "time and date (any city or country), simple utilities",
     "weather": "current weather and up to 3-day forecast for any place",
     "files": "create folders, write files, move/copy, move to trash",
-    "filesearch": "find files by name or by text content",
+    "filesearch": "find files by name or by text content; open a folder by name",
     "telegram": "send a file (by path or name) or a message to the user's Telegram (phone)",
     "toolsmith": "no tool fits a real task: offer to build a small new tool; saved tools list/run/delete",
     "skills": "small tools KURAMA built earlier (saved skills)",
@@ -491,7 +491,7 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
     "clock": "timers, alarms (with sound) and a stopwatch",
     "clipboard": "read or write the clipboard, clipboard history",
     "windows": "snap, maximize, minimize, restore or list windows; control the app on screen (tabs, keys, typing, clicking buttons, free-form tasks inside apps)",
-    "apps": "open, close, focus or force-kill apps; launch a named workspace of apps and sites",
+    "apps": "open, close, focus, force-kill, install/uninstall/update apps; launch a named workspace of apps and sites",
     "media": "music and video playback (play, pause, next, previous, what's playing), YouTube, playlists, hand-gesture media control (camera)",
     "git": "git status, log, diff, commit and branches; code time machine (automatic snapshots: what changed since "
            "a time, restore a file); where was I (resume a project)",
@@ -512,7 +512,7 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
     "image": "generate a picture or drawing from a description",
     "study": "study notes by subject, lecture recorder (record a class, transcript, summary), class timetable "
              "(today, tomorrow, next class, reminders), quiz from my notes with spaced repetition",
-    "daily": "calculator, unit and currency conversion, disk space cleaner (ML caches, old checkpoints, old venvs, "
+    "daily": "file format conversion (pdf, md, images, audio/video, tables), calculator, unit and currency conversion, disk space cleaner (ML caches, old checkpoints, old venvs, "
              "duplicates, trash)",
     "self": "about the assistant itself (abilities, outputs/data locations, limits, how it works), which tool "
             "fits a task, guidance when the user is stuck, change the assistant's name",
@@ -613,6 +613,7 @@ TIMETABLE_LEAD_MIN = 10  # heads-up this long before each class
 DOWNLOAD_DIR = "~/Downloads"  # download manager default folder
 DOWNLOAD_NIGHT_HOUR = 1  # "tonight" downloads start at this hour
 WIFI_SHARE_IDLE_MIN = 30  # a Wi-Fi share link stops after this many idle minutes
+CONTACTS_FILE = os.getenv("KURAMA_CONTACTS", "~/Documents/KURAMA/contacts.xlsx")  # name/phone sheet (Excel)
 VIDEO_DIR = os.getenv("KURAMA_VIDEO_DIR", "~/Videos/KURAMA")  # video/audio downloads (yt-dlp)
 BACKUP_EVERY_DAYS = 7  # automatic backup interval (also runs when the backup drive appears)
 COLAB_POLL_S = 60.0  # how often KURAMA checks for Colab pings (only while a Colab run is active)
