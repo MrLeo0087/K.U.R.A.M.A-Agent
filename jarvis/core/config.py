@@ -176,7 +176,7 @@ WAKE_DEBUG = os.getenv("JARVIS_WAKE_DEBUG", "0").lower() not in ("0", "false", "
 
 # --- playback / TTS ---
 AUDIO_PLAYERS = ("ffplay", "mpv", "paplay")  # first one found by `which` is used
-TTS_RATE = "+0%"  # edge-tts speaking rate
+TTS_RATE = os.getenv("JARVIS_TTS_RATE", "+15%")  # edge-tts speaking rate (a bit faster than default)
 TTS_PARALLEL = 2  # edge-tts requests in flight (prefetch the next sentence while one plays)
 TTS_WARM_SOCKETS = os.getenv("JARVIS_TTS_WARM", "1").lower() not in ("0", "false", "no", "off")
 TTS_WS_MAX_IDLE_S = 90.0  # drop pooled edge sockets idle longer than this
