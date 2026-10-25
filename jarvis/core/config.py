@@ -35,8 +35,8 @@ TIERS: dict[str, str] = {"smart": LLM_DEFAULT, "fast": LLM_FAST, "vision": LLM_V
 # Fallback chain per tier (first entry is preferred).
 TIER_CHAIN: dict[str, list[str]] = {
     "smart": [LLM_DEFAULT, LLM_FAST],
-    "fast": [LLM_FAST],
-    "vision": [LLM_VISION],
+    "fast": [LLM_FAST, LLM_DEFAULT],  # if the fast model errors/is rate-limited, fall back to the smart one
+    "vision": [LLM_VISION, LLM_DEFAULT],  # second vision model; the text fallback still answers non-image asks
     "voice": list(dict.fromkeys([LLM_VOICE, LLM_FAST])),
     # Background writer jobs: smart model only (never falls back onto the fast/voice models' TPM).
     "writer": [LLM_DEFAULT],

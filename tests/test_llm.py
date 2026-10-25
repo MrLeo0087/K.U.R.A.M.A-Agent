@@ -75,12 +75,12 @@ def test_model_settings_from_config():
 
 
 def test_non_stream_retry_honors_retry_after(sleeps):
-    fc = FakeClient([err(429, {"retry-after": "2"}), err(503), completion("hello")])
+    fc = FakeClient([err(429, {"retry-after": "2"}), completion("hello")])
     llm.set_client(fc)
     r = llm.chat(MSGS, tier="fast", purpose="t")
     assert r.text == "hello" and r.model == config.LLM_FAST and r.message.content == "hello"
-    assert sleeps[0] == 2.0 and len(sleeps) == 2
-    assert [tuple(x) for x in rows()] == [(config.LLM_FAST, 0, 0, 0)] * 2 + [(config.LLM_FAST, 1, 10, 0)]
+    assert sleeps[0] == 2.0 and len(sleeps) == 1
+    assert [tuple(x) for x in rows()] == [(config.LLM_FAST, 0, 0, 0), (config.LLM_FAST, 1, 10, 0)]
     req = fc.requests[-1]
     assert req["reasoning_format"] == "hidden" and req["max_tokens"] == config.LLM_MAX_TOKENS
     assert store._exec("SELECT purpose FROM llm_calls ORDER BY id DESC LIMIT 1")[0][0] == "t"
@@ -109,12 +109,21 @@ def test_budget_exhausted_skips_smart(monkeypatch):
     assert fc.models == [config.LLM_FAST]
 
 
-def test_non_retryable_raises_immediately(sleeps):
-    fc = FakeClient([err(400)])
+def test_non_retryable_falls_back_to_next_model(sleeps):
+    # a non-retryable error (e.g. a 400) on one model now falls back to the next model instead of giving up
+    fc = FakeClient([err(400), completion("recovered")])
+    llm.set_client(fc)
+    r = llm.chat(MSGS, tier="smart")
+    assert r.text == "recovered" and r.model == config.LLM_FAST
+    assert fc.models == [config.LLM_DEFAULT, config.LLM_FAST] and sleeps == []
+
+
+def test_raises_only_when_all_models_fail(sleeps):
+    fc = FakeClient([err(400), err(400)])  # both models in the smart chain fail
     llm.set_client(fc)
     with pytest.raises(llm.LLMError):
         llm.chat(MSGS, tier="smart")
-    assert fc.models == [config.LLM_DEFAULT] and sleeps == []
+    assert fc.models == [config.LLM_DEFAULT, config.LLM_FAST]
 
 
 def test_bind_tools_and_tool_call_parsing():

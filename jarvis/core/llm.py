@@ -303,12 +303,14 @@ def _plan(models: list[str]) -> Iterator[tuple[int, str, int]]:
 
 
 def _on_error(e: Exception, model: str, attempt: int, retries: int) -> bool:
-    """Sleep and return True to retry this model; False to fall back; raise if fatal."""
+    """Sleep and return True to retry this model; False to fall back to the NEXT model in the chain.
+    We never raise here: a non-retryable error on one model (e.g. a 400, or that model being down) should
+    still let the next model try. _complete/_stream raise LLMError only after every model has failed."""
     wait = _plan_retry(e, attempt, retries)
     if wait is None:
         if not _retryable(e):
-            raise LLMError(f"{model}: {e}") from e
-        return False
+            log.warning("%s failed (%s): %s — trying the next model", model, type(e).__name__, str(e)[:120])
+        return False  # move on to the next model in the chain
     log.info("retry %s in %.1fs (%s)", model, wait, type(e).__name__)
     _sleep(wait)
     return True
