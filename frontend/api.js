@@ -68,6 +68,7 @@ export class Api {
   detail(panel) { return this.request(`/api/v1/dashboard/detail/${encodeURIComponent(panel)}`); }
   weatherFull() { return this.request("/api/v1/weather/full"); }
   action(body) { return this.request("/api/v1/action", { method: "POST", body }); }
+  sendLocation(body) { return this.request("/api/v1/location", { method: "POST", body }); }
 
   async stt(blob, lang) {
     const type = (blob.type || "audio/webm").split(";")[0];

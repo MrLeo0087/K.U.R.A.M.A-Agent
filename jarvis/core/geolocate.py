@@ -178,27 +178,55 @@ def forget_here() -> str:
     return "This Wi-Fi isn't labelled."
 
 
+BROWSER_KEY = "browser_gps_fix"
+BROWSER_FRESH_S = 900  # a browser GPS fix counts as "current" for 15 min
+
+
+def set_browser_fix(lat: float, lon: float, accuracy: float = 0.0) -> None:
+    """Store an accurate position the dashboard got from the browser's Geolocation API (Google-backed: real GPS/
+    Wi-Fi, updates as the laptop moves). Shared across processes (the API writes it, Telegram reads it)."""
+    store.kv_set(BROWSER_KEY, json.dumps({"lat": round(float(lat), 6), "lon": round(float(lon), 6),
+                                          "accuracy": int(accuracy or 0), "at": time.time()}))
+    _cache.clear()
+
+
+def browser_fix() -> dict | None:
+    try:
+        d = json.loads(store.kv_get(BROWSER_KEY, "") or "{}")
+    except ValueError:
+        return None
+    if not d or time.time() - d.get("at", 0) > BROWSER_FRESH_S:
+        return None
+    return d
+
+
 def locate(use_cache: bool = True) -> dict:
-    """Best location now: {lat, lon, accuracy, source, ssid, known, place, map, osm}. {} if nothing worked."""
+    """Best location now: {lat, lon, accuracy, source, ssid, known, place, map, osm}. {} if nothing worked.
+    Priority: a fresh browser GPS fix (accurate, moves with the laptop) -> Wi-Fi geolocation -> a pinned spot -> IP."""
     now = time.time()
     cur = scan()
     if use_cache and _cache and now - _cache.get("at", 0) < _CACHE_S and _cache.get("bssid") == cur["bssid"]:
         return _cache["loc"]
-    known = _place_of(cur["bssid"])
-    if known and "lat" in known:  # labelled spot with a pin: report it exactly, no coarse IP guess
-        g, osm = maps(known["lat"], known["lon"])
-        out = {"lat": known["lat"], "lon": known["lon"], "accuracy": 30, "source": "known",
-               "ssid": cur["ssid"], "known": known["label"], "place": known["label"], "map": g, "osm": osm}
+
+    def finish(lat, lon, accuracy, source, place=None, known=""):
+        g, osm = maps(lat, lon)
+        out = {"lat": lat, "lon": lon, "accuracy": int(accuracy), "source": source, "ssid": cur["ssid"],
+               "known": known, "place": place if place is not None else place_name(lat, lon, accuracy),
+               "map": g, "osm": osm}
         _cache.update(at=now, bssid=cur["bssid"], loc=out)
         return out
-    geo = _geolocate(cur["aps"])
-    if not geo:
-        return {}
-    g, osm = maps(geo["lat"], geo["lon"])
-    out = {**geo, "ssid": cur["ssid"], "known": (known or {}).get("label", ""),
-           "place": place_name(geo["lat"], geo["lon"], geo["accuracy"]), "map": g, "osm": osm}
-    _cache.update(at=now, bssid=cur["bssid"], loc=out)
-    return out
+
+    bf = browser_fix()  # the real, dynamic one (updates as the laptop moves)
+    if bf:
+        return finish(bf["lat"], bf["lon"], bf["accuracy"] or 30, "gps")
+    known = _place_of(cur["bssid"])  # a Wi-Fi you pinned (e.g. home): trusted over beacondb's shaky Nepal data
+    if known and "lat" in known:
+        return finish(known["lat"], known["lon"], 30, "known", place=known["label"], known=known["label"])
+    geo = _geolocate(cur["aps"])  # Wi-Fi/IP positioning (the only dynamic option on an unpinned network, coarse in Nepal)
+    if geo:
+        return finish(geo["lat"], geo["lon"], geo["accuracy"], geo["source"],
+                      known=(known or {}).get("label", ""))
+    return {}
 
 
 def where_text() -> str:
@@ -215,8 +243,9 @@ def where_text() -> str:
         around = loc["place"] or "unknown area"
         acc = f" (±{loc['accuracy'] // 1000} km)" if loc["accuracy"] >= 1500 else (
             f" (±{loc['accuracy']} m)" if loc["accuracy"] else "")
-        via = "Wi-Fi" if loc["source"] == "wi-fi" else "IP"
-        lines.append(f"Around {around}{acc}, via {via}")
+        via = {"gps": "GPS", "wi-fi": "Wi-Fi"}.get(loc["source"], "IP")
+        lead = "Near" if loc["source"] == "gps" else "Around"
+        lines.append(f"{lead} {around}{acc}, via {via}")
     if loc["ssid"]:
         lines.append(f"Wi-Fi: {loc['ssid']}")
     lines.append(f"Map: {loc['map']}")

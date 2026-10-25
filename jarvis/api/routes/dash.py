@@ -241,6 +241,22 @@ async def dashboard_detail(panel: str):
     return await run_in_threadpool(lambda: _cached(f"detail:{panel}", 5, lambda: detail(panel)))
 
 
+class LocationFix(BaseModel):
+    lat: float
+    lon: float
+    accuracy: float = 0.0
+
+
+@router.post("/location", summary="The browser's accurate position (Geolocation API) for the laptop")
+async def location_fix(body: LocationFix):
+    from jarvis.core import geolocate, locationlog
+    await run_in_threadpool(geolocate.set_browser_fix, body.lat, body.lon, body.accuracy)
+    # also feed the movement history, so the trail is accurate
+    await run_in_threadpool(lambda: locationlog.record("laptop", body.lat, body.lon, int(body.accuracy or 0), "gps",
+                                                       geolocate.place_name(body.lat, body.lon, int(body.accuracy or 0))))
+    return {"ok": True}
+
+
 # ---------------------------------------------------------------- fuller forecast for the weather card
 def forecast(place: str) -> dict:
     from jarvis.tools.general import _geo

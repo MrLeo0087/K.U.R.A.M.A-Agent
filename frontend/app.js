@@ -248,7 +248,9 @@ async function handleUtterance(blob) {
   conv.waiting();
   const r = await transcribe(blob);
   if (!r || !r.text) { maybeResume(); return; }
-  if (isEcho(r.text)) { maybeResume(); return; } // the mic heard KURAMA's own voice
+  r.text = stripEcho(r.text); // the mic often catches the tail of KURAMA's own "Yes? I'm listening." before you speak
+  if (!r.text) { maybeResume(); return; }
+  if (isEcho(r.text)) { maybeResume(); return; } // the whole thing was KURAMA's own voice
   if (wantsSleep(r.text)) { addUser(r.text, true); goSleep(); return; }
   if (pendingConfirm) {
     const t = r.text.replace(/^[\s,.!?"']+/, "");
@@ -1568,6 +1570,35 @@ function wakeEvents() {
     if (ev.type === "error" && asleep) { serverWake = false; sleepListen(); } // fall back to the page's mic
   };
 }
+// Remove KURAMA's own recently-spoken words from the start/end of a transcription (the mic catches the tail of
+// "Yes? I'm listening." or a reply just before/after the user speaks), so only the user's real words are routed.
+function stripEcho(text) {
+  const said = player.said || [];
+  if (!said.length || !text) return text;
+  const norm = (s) => (s || "").toLowerCase().match(/[\p{L}\p{N}]+/gu) || [];
+  const original = norm(text);
+  let words = original.slice();
+  const spoken = said.map(norm).filter((w) => w.length);
+  // peel KURAMA's phrases off the FRONT, repeatedly (it may have said two short lines)
+  let step;
+  do {
+    step = 0;
+    for (const sw of spoken) {
+      let k = 0;
+      while (k < sw.length && k < words.length && words[k] === sw[k]) k++;
+      if (k >= Math.min(sw.length, 2) && k >= 2) { words = words.slice(k); step = k; break; }
+    }
+  } while (step && words.length);
+  // and one echo off the END
+  for (const sw of spoken) {
+    let k = 0;
+    while (k < sw.length && k < words.length && words[words.length - 1 - k] === sw[sw.length - 1 - k]) k++;
+    if (k >= Math.min(sw.length, 3)) { words = words.slice(0, words.length - k); break; }
+  }
+  if (words.length === original.length) return text; // nothing was KURAMA's
+  return words.join(" "); // the user's remaining words (lower-cased; routing is case-insensitive)
+}
+
 function isEcho(text) { // the mic heard KURAMA's own voice (anything it said in the last 90 s), not the user
   // An echo is a long stretch of KURAMA's own words in the same order; a follow-up question that only shares
   // some words ("what is using the most RAM?") is not one.
@@ -1622,7 +1653,9 @@ async function wakeUp(rest) {
   } catch (e) { toast(micError(e)); setMode("text"); }
   updateState();
   if (rest && rest.split(/\s+/).length >= 2) { sendChat(rest, { voice: true, speak: !S.mute }); return; }
-  if (!S.mute) player.enqueue("Yes? I'm listening."); else conv.listen();
+  // just listen (silently): speaking "Yes? I'm listening." made the mic hear its own voice and corrupt the next
+  // command; the orb + "Listening…" already show it's awake
+  conv.listen();
 }
 function startListening() { // boot: asleep, waiting for the wake word
   if (MINI || !S.wakeListen || asleep || conv.on) return;
@@ -1797,7 +1830,17 @@ if (MINI) { $("chat-title").textContent = botName; restoreMiniLog(); input.focus
 tick();
 if (params.get("paused") === "1") window.kuramaPause(true); // start paused (testing)
 conv.muted = !!S.micMuted;
-checkHealth().then(() => { startStatus(); loadDevice(); loadToday(); loadDash(); syncDeviceSound(); bootVoice(); });
+checkHealth().then(() => { startStatus(); loadDevice(); loadToday(); loadDash(); syncDeviceSound(); sendLocation(); bootVoice(); });
+// the browser's Geolocation API (Google-backed: real GPS/Wi-Fi, accurate, moves with the laptop) -> the backend,
+// so /where and the dashboard show the true current location, not a coarse IP guess
+function sendLocation() {
+  if (MINI || !navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(
+    (p) => api.sendLocation({ lat: p.coords.latitude, lon: p.coords.longitude, accuracy: p.coords.accuracy || 0 }).catch(() => {}),
+    () => {}, // denied or unavailable: the backend falls back to Wi-Fi/IP
+    { enableHighAccuracy: true, maximumAge: 120000, timeout: 15000 });
+}
+setInterval(() => { if (!document.hidden && !paused && !minimized) sendLocation(); }, 10 * 60 * 1000); // refresh every 10 min while active
 async function syncDeviceSound() { // the server owns this setting (it changes the system's echo canceller)
   try { const d = await api.deviceSound(); mic.hearDevice = !!d.hear; } catch { /* old API: keep the default */ }
 }
