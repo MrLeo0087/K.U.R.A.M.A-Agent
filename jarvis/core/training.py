@@ -14,6 +14,7 @@ The process_watch worker drives everything (jarvis/workers/process_watch.py); th
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import secrets
@@ -26,6 +27,8 @@ import time
 from pathlib import Path
 
 from jarvis.core import config, store
+
+log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------- metric parsing (pure, tested)
 _NUM = r"(nan|-?inf|-?\d+(?:\.\d+)?(?:e[-+]?\d+)?)"
@@ -342,6 +345,58 @@ def colab_poll(since: str) -> list[dict]:
     return out
 
 
+def apply_colab_metrics(st: dict, m: dict, metrics_only: bool = False) -> None:
+    """Fold one Colab message's numbers (and, unless metrics_only, lifecycle: started/error) into a run's state.
+    The worker uses the full form; the on-demand refresh uses metrics_only (it must not touch the timer or
+    re-fire lifecycle — that stays the worker's job)."""
+    sent_at = float(m.get("time") or time.time())
+    st["last_msg"] = max(float(st.get("last_msg") or 0), sent_at)
+    nums = {k: v for k, v in m.items() if isinstance(v, (int, float)) and k not in ("time", "size", "_size")}
+    if nums:
+        metrics = st.setdefault("metrics", {})
+        metrics.update({("acc" if k == "accuracy" else "val_acc" if k == "val_accuracy" else k): v
+                        for k, v in nums.items()})
+        if k := loss_key(nums):
+            hist = st.setdefault("loss_hist", [])
+            hist.append(nums[k])
+            del hist[:-40]
+    if metrics_only:
+        return
+    if m.get("event") == "start":
+        st["started"] = sent_at
+    if m.get("event") == "error" and m.get("error"):
+        st["error"] = str(m["error"])[:300]
+
+
+def refresh_colab() -> bool:
+    """Poll Colab's ntfy topic NOW and update active runs' state, so an on-demand 'status' is near real-time
+    (2-3 s late at most). Does NOT notify or advance the worker's cursor — the worker still sends the alerts and
+    handles crash/finish/file. Returns True if it refreshed anything."""
+    active = [w for w in store.watches_list(("active",)) if w["kind"] == "colab"]
+    if not active:
+        return False
+    since = store.kv_get("colab_since") or "6h"
+    try:
+        msgs = colab_poll(since)
+    except Exception as e:  # offline / ntfy hiccup: fall back to the last known state
+        log.info("on-demand colab refresh failed: %s", e)
+        return False
+    by_name: dict = {}
+    for w in active:
+        by_name.setdefault(w["target"], w)
+    touched = set()
+    for m in msgs:
+        w = by_name.get(str(m.get("run") or "colab"))
+        if w is None:
+            continue
+        apply_colab_metrics(w["state"], m, metrics_only=True)
+        touched.add(w["id"])
+    for w in active:
+        if w["id"] in touched:
+            store.watch_update(w["id"], state=w["state"])
+    return bool(touched)
+
+
 # ---------------------------------------------------------------- crash explanation (the only LLM use)
 def explain(error: str, tail: list[str]) -> str:
     """'cause -> fix' for a crash from the error memory (0 tokens when seen before, with the user's own fix),
@@ -395,12 +450,58 @@ def describe(w: dict) -> str:
     return head + extra + (f" | {tail}" if tail else "")
 
 
-def status_text(include_recent: bool = True) -> str:
+def _detail_block(w: dict) -> str:
+    """A clean, labelled status for one run: epoch, step, accuracy, loss, ETA, last update, errors."""
+    st = w.get("state") or {}
+    m = st.get("metrics") or {}
+    where = {"run": "local", "proc": "process", "log": "log", "colab": "Colab"}.get(w["kind"], w["kind"])
+    since = st.get("started") or w["created"]
+    rows = [f"🎓 {w['label']} — {where}, {w['status']}"
+            + (f" (running {fmt_duration(time.time() - since)})" if w["status"] == "active" else "")]
+
+    def row(label: str, val: str) -> None:
+        if val:
+            rows.append(f"  • {label}: {val}")
+
+    if "epoch" in m:
+        e = m["epoch"]
+        row("Epoch", f"{int(e) if e == int(e) else round(e, 2)}" + (f" / {int(m['epochs'])}" if m.get("epochs") else ""))
+    if "step" in m:
+        row("Step", f"{int(m['step'])}" + (f" / {int(m['steps'])}" if m.get("steps") else ""))
+    if lk := loss_key(m):
+        row("Loss", f"{m[lk]:.4g} {sparkline(st.get('loss_hist') or [])}".strip())
+    for k, lab in (("acc", "Accuracy"), ("val_acc", "Val accuracy"), ("val_loss", "Val loss"), ("f1", "F1")):
+        if k in m and k != lk:
+            row(lab, f"{m[k]:.4g}")
+    if "pct" in m and m.get("eta") and "?" not in str(m["eta"]):
+        row("Remaining", f"ETA {m['eta']}")
+    elif eta := eta_text(st):
+        row("Remaining", eta.replace("~", "~"))
+    if w["status"] == "active" and (last := st.get("last_msg") or st.get("last_output")):
+        ago = time.time() - float(last)
+        row("Last update", f"{fmt_duration(ago)} ago" + (" ⚠ may be stalled/disconnected" if ago > 15 * 60 else ""))
+    elif w["kind"] == "colab" and w["status"] == "active" and not m:
+        rows.append("  • Waiting for the first message — run the KURAMA cell and add KuramaKeras() to your callbacks.")
+    row("Error", st.get("error", "")[:160] if st.get("error") and w["status"] != "done" else "")
+    if not st.get("error") and w["status"] == "active" and m:
+        row("Error", "none so far")
+    if w["status"] != "active" and w.get("result"):
+        row("Result", w["result"][:160])
+    return "\n".join(rows)
+
+
+def status_text(include_recent: bool = True, detailed: bool = False) -> str:
+    try:  # make an on-demand 'status' near real-time: pull the latest Colab messages right now
+        refresh_colab()
+    except Exception as e:
+        log.info("status refresh skipped: %s", e)
     active = [w for w in store.watches_list(("active",)) if w["kind"] in KINDS]
-    lines = [describe(w) for w in active]
+    fmt = _detail_block if detailed else describe
+    lines = [fmt(w) for w in active]
     if include_recent:
         recent = [w for w in store.watches_list(("done", "failed", "stopped")) if w["kind"] in KINDS
                   and w.get("finished") and time.time() - w["finished"] < 12 * 3600][:3]
         if recent:
-            lines += ["Recently finished:"] + [describe(w) for w in recent]
-    return "\n".join(lines) if lines else "Nothing is training or being watched right now."
+            lines += ["", "Recently finished:"] + [describe(w) for w in recent]
+    return ("\n\n" if detailed else "\n").join(x for x in lines if x) \
+        if lines else "Nothing is training or being watched right now."

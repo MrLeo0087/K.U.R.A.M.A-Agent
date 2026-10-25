@@ -19,6 +19,10 @@ def _ago(t: float) -> str:
 
 def training_lines() -> list[str]:
     from jarvis.core import training
+    try:  # pull the latest Colab metrics now, so "status" is near real-time (not the last background poll)
+        training.refresh_colab()
+    except Exception:
+        pass
     out = []
     for w in store.watches_list(("active",)):
         if w["kind"] not in training.KINDS:

@@ -46,7 +46,7 @@ def training(action: Literal["status", "watch", "colab", "stop", "stop_now", "st
     from jarvis.workers import process_watch as pw
 
     if action == "status":
-        return tg.status_text()
+        return tg.status_text(detailed=True)  # fetches the latest Colab metrics right now, formatted
     if action == "colab":
         cell = tg.colab_setup(label)
         path = Path(config.OUTPUTS_DIR) / "kurama_colab_cell.py"
