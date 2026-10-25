@@ -811,6 +811,8 @@ def _daily_intent(t: str) -> Intent | None:
         return Intent("net", "internet_doctor", "system", {"action": "speed"})
     if _NET_BACK.match(t):
         return Intent("net", "internet_doctor", "system", {"action": "notify_when_back"})
+    if ia := app_install_intent(t):
+        return ia
     if m := _INSTALL.match(t):
         pkg = m.group("p")
         if pkg.lower() in ("it", "this", "that", "them"):  # "install it" right after a ModuleNotFoundError
@@ -936,6 +938,37 @@ def convert_intent(t: str) -> Intent | None:
     if src.lower() in ("", "this", "it", "that"):
         src = "this"
     return Intent("convert", "convert_file", "files", {"path": src, "to": to, "src_ext": ext})
+
+
+_PY_HINT = re.compile(r"\b(?:pip|module|library|package|python|requirements|venv)\b", I)
+_PY_COMMON = {"numpy", "pandas", "scipy", "matplotlib", "seaborn", "sklearn", "scikit-learn", "torch", "tensorflow",
+              "keras", "transformers", "requests", "flask", "fastapi", "django", "langchain", "openai", "groq",
+              "opencv-python", "cv2", "pillow", "tqdm", "pytest", "jupyter", "notebook", "streamlit", "gradio",
+              "xgboost", "lightgbm", "nltk", "spacy", "sympy", "plotly", "beautifulsoup4", "bs4", "selenium",
+              "playwright", "uvicorn", "pydantic", "sqlalchemy", "faiss-cpu", "fastembed", "datasets", "accelerate"}
+_APP_INSTALL = re.compile(r"^(?:please\s+)?(?:install|download\s+and\s+install|set\s+up)\s+(?:the\s+|a\s+)?"
+                          r"(?P<n>[\w .+-]{2,40}?)(?:\s+(?:app|application|software|program))?(?:\s+on\s+(?:my\s+)?"
+                          r"(?:laptop|computer|pc))?$", I)
+_APP_REMOVE = re.compile(r"^(?:please\s+)?(?:uninstall\s+(?:the\s+)?(?P<a>[\w .+-]{2,40}?)(?:\s+app)?|remove\s+(?:the\s+)?"
+                         r"(?P<b>[\w .+-]{2,40}?)\s+(?:app|application|software|program))$", I)
+_APP_UPDATE = re.compile(r"^(?:please\s+)?(?:update|upgrade)\s+(?:all\s+)?(?:(?:my|the)\s+)?(?:apps|applications|"
+                         r"everything|system|software|packages|laptop|ubuntu)(?:\s+(?:apps|packages))?$", I)
+
+
+def app_install_intent(t: str) -> Intent | None:
+    """'install obs', 'install vs code', 'uninstall zoom', 'update all apps'. Python packages stay with python_env."""
+    if _APP_UPDATE.match(t):
+        return Intent("app", "install_app", "apps", {"action": "update", "name": ""})
+    if m := _APP_REMOVE.match(t):
+        return Intent("app", "install_app", "apps", {"action": "remove", "name": (m.group("a") or m.group("b")).strip()})
+    m = _APP_INSTALL.match(t)
+    if not m or _PY_HINT.search(t):
+        return None
+    name = m.group("n").strip()
+    if (name.lower() in _PY_COMMON or name.lower() in ("it", "this", "that", "them") or re.search(r"[=<>\[]", name)
+            or re.search(r"\s(?:in|into|for)\s", name, I)):  # "install timm in my project" = a Python package
+        return None
+    return Intent("app", "install_app", "apps", {"action": "install", "name": name})
 
 
 def video_dl_intent(t: str) -> Intent | None:
