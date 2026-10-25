@@ -54,13 +54,58 @@ def _ensure_running() -> None:
         time.sleep(0.5)
 
 
-def _password() -> str:
-    pw = store.kv_get(_PW_KEY)
-    if not pw:
-        alphabet = string.ascii_lowercase + string.digits
-        pw = "".join(secrets.choice(alphabet) for _ in range(8))
-        store.kv_set(_PW_KEY, pw)
+def _restart() -> None:
+    """Restart the rustdesk GUI/app so a config change takes effect (user-level, no sudo)."""
+    try:
+        subprocess.run(["pkill", "-x", "rustdesk"], capture_output=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        pass
+    time.sleep(1)
+    _ensure_running()
+
+
+def _new_password() -> str:
+    # a fresh password every time remote desktop is turned on, so it never stays a fixed standing risk
+    alphabet = string.ascii_lowercase + string.digits
+    pw = "".join(secrets.choice(alphabet) for _ in range(8))
+    store.kv_set(_PW_KEY, pw)
     return pw
+
+
+def _config_path():
+    from pathlib import Path
+    return Path.home() / ".config" / "rustdesk" / "RustDesk2.toml"
+
+
+def _ensure_unattended() -> None:
+    """Set RustDesk to accept a password without anyone clicking 'accept' at the laptop (unattended access)."""
+    p = _config_path()
+    try:
+        text = p.read_text() if p.exists() else ""
+    except OSError:
+        return
+    wanted = {"approve-mode": "'password'", "verification-method": "'use-permanent-password'"}
+    lines = text.splitlines()
+    if "[options]" not in text:
+        lines += ["", "[options]"]
+    out, done = [], set()
+    for ln in lines:
+        key = ln.split("=", 1)[0].strip() if "=" in ln else ""
+        if key in wanted:
+            out.append(f"{key} = {wanted[key]}")
+            done.add(key)
+        else:
+            out.append(ln)
+    # add any missing keys right after [options]
+    idx = next((i for i, ln in enumerate(out) if ln.strip() == "[options]"), None)
+    if idx is not None:
+        for key, val in wanted.items():
+            if key not in done:
+                out.insert(idx + 1, f"{key} = {val}")
+    try:
+        p.write_text("\n".join(out) + "\n")
+    except OSError as e:
+        log.warning("couldn't write rustdesk config: %s", e)
 
 
 def get_id() -> str | None:
@@ -70,13 +115,14 @@ def get_id() -> str | None:
 
 
 def start() -> dict:
-    """Launch RustDesk with unattended access; returns {id, password} or {error}."""
+    """Launch RustDesk with unattended access and a fresh password; returns {id, password} or {error}."""
     if not installed():
         return {"error": INSTALL_HINT}
-    _ensure_running()
-    pw = _password()
-    _run(["--password", pw])  # set the permanent (unattended) password
-    time.sleep(1.5)
+    _ensure_unattended()  # password-only access, no "accept" prompt at the laptop
+    _restart()            # pick up the config + make sure the service/app is fresh
+    pw = _new_password()
+    _run(["--password", pw])  # set the permanent (unattended) password to the fresh one
+    time.sleep(2)
     rid = get_id()
     for _ in range(6):  # the ID can take a moment on first launch
         if rid:
@@ -92,6 +138,7 @@ def start() -> dict:
 def status_text(fix: dict) -> str:
     if "error" in fix:
         return fix["error"]
-    return (f"Remote desktop is on. In the RustDesk app on your phone, enter:\n"
-            f"ID: {fix['id']}\nPassword: {fix['password']}\n"
-            f"Then you have full control of the laptop screen. (Anyone with this ID+password can connect — keep it private.)")
+    return (f"Remote desktop is on (unattended — no need to accept at the laptop). In the RustDesk app on your "
+            f"phone, enter:\nID: {fix['id']}\nPassword: {fix['password']}\n"
+            f"This password is NEW each time you turn remote desktop on, so it's not a fixed standing risk. "
+            f"The ID stays the same. Keep these private while connected.")
