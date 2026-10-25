@@ -54,8 +54,10 @@ def zip_dir(path: str | Path) -> Path:
             continue
         files.append(f)
         if total > cap:
-            raise ValueError(f"the folder “{p.name}” is over {config.TELEGRAM_FILE_MAX_MB} MB (Telegram's limit); "
-                             f"I skip venv/.git/node_modules but it's still too big to send")
+            raise ValueError(
+                f"“{p.name}” is too big for Telegram — it's over {config.TELEGRAM_FILE_MAX_MB} MB even after skipping "
+                f"venv/.git/node_modules (Telegram bots can't send more than {config.TELEGRAM_FILE_MAX_MB} MB). "
+                f"I can send a smaller sub-folder or a specific file from it instead — tell me which part you need.")
     if not files:
         raise ValueError(f"the folder “{p.name}” is empty (or only junk), nothing to send")
     out_dir = Path(config.OUTPUTS_DIR) / "zips"

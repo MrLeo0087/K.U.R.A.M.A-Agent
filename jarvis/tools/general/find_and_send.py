@@ -39,8 +39,21 @@ def search(query: str, ftype: str = "f") -> list[Path]:
     from jarvis.core.paths import all_disks
     from jarvis.tools.interactive.find_files import search_names
 
-    found, _ = search_names(query, all_disks(), MAX_LIST, ftype)
-    return [Path(f) for f in found]
+    found, _ = search_names(query, all_disks(), MAX_LIST * 2, ftype)
+    internal = Path(config.DATA_DIR).resolve()
+    paths = []
+    for f in found:
+        p = Path(f)
+        try:
+            if internal in p.resolve().parents:  # never send KURAMA's own generated/internal files as "your" files
+                continue
+        except OSError:
+            pass
+        paths.append(p)
+    # prefer an exact name match (so "clz_project" never sends "clz_project_demo"); otherwise keep order
+    want = query.strip().lower()
+    exact = [p for p in paths if p.name.lower() == want]
+    return (exact or paths)[:MAX_LIST]
 
 
 def last_list() -> list[Path]:
