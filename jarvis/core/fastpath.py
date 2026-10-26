@@ -1654,9 +1654,22 @@ def copy_history_intent(t: str) -> Intent | None:
     return Intent("clip", "clipboard", "clipboard", args)
 
 
+_RL_CUE = r"(?:read(?:ing)?\s*later|reading\s+list|for\s+later|to\s+read\s+later)"
+
+
 def read_later_intent(t: str) -> Intent | None:
     """'read this later', 'I will read this later', 'save this link for later', 'add this to my reading list',
-    'what's on my reading list', 'open the first article from my reading list', 'mark 2 as read'."""
+    'can you keep this link for read later', 'give me the read later link I gave you', 'what's on my reading list',
+    'open the first article from my reading list', 'mark 2 as read'."""
+    if re.search(_RL_CUE, t, I) and len(t.split()) <= 20:
+        if re.search(r"\b(?:give|show|tell|send|what(?:'s|\s+is|\s+was)|which|where)\b.{0,40}\b(?:link|links|url|page|article)\b"
+                     r"|\b(?:link|links|url)\b.{0,30}\b(?:i\s+(?:gave|give|saved|save|added|kept)|you\s+saved)\b", t, I):
+            return Intent("readlater", "read_later", "browser", {"action": "last" if not re.search(
+                r"\b(?:links|all|list|everything)\b", t, I) else "list"})
+        if re.search(r"\b(?:keep|save|store|add|put|bookmark|remember|note)\b", t, I) and not re.search(
+                r"\b(?:open|show|remove|delete|mark)\b", t, I):
+            u = URL_RE.search(t)
+            return Intent("readlater", "read_later", "browser", {"action": "add", "url": u.group(0) if u else ""})
     if re.fullmatch(r"(?:please\s+|kurama\W+)*(?:i(?:'ll|\s+will)\s+read\s+(?:this|it|that)\s+later|read\s+(?:this|it|that)\s+later|"
                     r"(?:save|keep|bookmark|add)\s+(?:this|that|it|the|these)?\s*(?:link|links|page|article|tab|post|video)?\s*"
                     r"(?:for\s+later|to\s+(?:my\s+)?" + _RL_LIST + r"|(?:to\s+)?read\s+later)|read\s+later)[\s.!]*", t, I):
@@ -2090,6 +2103,8 @@ def try_answer(text: str, lang: str | None = None, confirm=None, mode: str = "te
                                                     "jobs": started})
         ok, output = res.ok, res.output
         if shelf:
+            from jarvis.core import workspace
+            output = workspace.strip_note(output)  # "[The full result ... is shown in the workspace]" is for the AI
             intent.args.setdefault("_published", shelf[-1])
     if intent.name in ("time", "weather") and "couldn't find a place" in (output or ""):
         return None  # unknown place: let the LLM path try (it can fix spelling)
@@ -2098,6 +2113,10 @@ def try_answer(text: str, lang: str | None = None, confirm=None, mode: str = "te
         return FastResult(answer, intent, ok, int((time.monotonic() - t0) * 1000), [], started)
     answer = render(intent, ok, output, lang or "en")
     published = [intent.args.pop("_published")] if "_published" in intent.args else []
+    if published and ok:
+        from jarvis.core import workspace  # the tool already saved the full text: one short line in the chat
+        if workspace.too_long(answer):
+            answer = workspace.short_line(answer, lang or "en")
     if ok and not published and not intent.tool.startswith("_") and (ctx or {}).get("channel") != "telegram":
         from jarvis.core import workspace  # long answers: one line in the chat, the full text in the workspace
         answer, path = workspace.to_workspace(intent.label or text[:60] or intent.name, answer, lang or "en")

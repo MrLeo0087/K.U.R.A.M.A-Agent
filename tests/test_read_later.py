@@ -44,7 +44,7 @@ def test_list_open_read_remove(rl):
     st, opened = rl
     for x in ("x1", "x2", "x3"):
         readlater.add(f"https://e.com/{x}")
-    assert readlater.show().startswith("Reading list (3 unread):\n1. Title of x3")
+    assert readlater.show().startswith("Reading list (3 unread):\n1. Title of x3") and "https://e.com/x3" in readlater.show()
     assert readlater.run("open", n=1) == "Opened: Title of x3 (marked as read)." and opened == ["https://e.com/x3"]
     assert readlater.run("read", n=2) == "Marked as read: Title of x1"
     assert readlater.run("remove", n=1) == "Removed: Title of x2"
@@ -65,3 +65,26 @@ def test_routing(monkeypatch):
     assert a("what is on my reading list") == {"action": "list"}
     assert a("open number 3 from my reading list") == {"action": "open", "n": 3}
     assert a("mark 2 as read in my reading list") == {"action": "read", "n": 2}
+
+
+def test_last_link_and_no_invented_links(rl, monkeypatch):
+    st, _ = rl
+    from jarvis.core import safety
+    readlater.add("https://e.com/real")
+    copied = []
+    monkeypatch.setattr(rewrite, "_xclip", lambda a, text=None: copied.append(text))
+    assert readlater.run("last").startswith("Title of real\nhttps://e.com/real") and copied == ["https://e.com/real"]
+    # real bug: the AI called read_later(url='https://example.com') for 'keep this link for read later'
+    monkeypatch.setattr(safety, "context", lambda: {"user_text": "Can you keep this link for read later?"})
+    monkeypatch.setattr(readlater, "save_this", lambda: "saved the open page")
+    assert readlater.run("add", "https://example.com") == "saved the open page"
+
+
+def test_owner_phrasings(monkeypatch):
+    monkeypatch.setattr(config, "FASTPATH", True)
+    a = lambda t: (fastpath.match(t).tool, fastpath.match(t).args)
+    assert a("Can you keep this link for read later?") == ("read_later", {"action": "add", "url": ""})
+    # STT heard 'read later' as 'read letter'; it went to the screen reader
+    assert a("Can you give me the read letter link that I gave you just a minute ago?") == ("read_later", {"action": "last"})
+    assert a("show me all my read later links") == ("read_later", {"action": "list"})
+    assert a("read this letter")[0] == "read_text"

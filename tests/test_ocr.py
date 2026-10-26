@@ -35,11 +35,11 @@ def test_tesseract_reads_printed_text_for_free(tmp_path, copied, monkeypatch):
 
 def test_poor_result_uses_vision_once(tmp_path, copied, monkeypatch):
     p = _img(tmp_path / "hand.png", "")
-    monkeypatch.setattr(ocr, "tesseract", lambda p: ocr.Result("~~ ,, ..", "tesseract", 20.0))
+    monkeypatch.setattr(ocr, "tesseract", lambda p, langs="": ocr.Result("~~ ,, ..", "tesseract", 20.0))
     calls = []
     monkeypatch.setattr(ocr, "vision", lambda p, focus=False: calls.append(p) or ocr.Result("Buy milk and eggs", "vision", 100.0))
     out = ocr.run("file", str(p))
-    assert out.startswith("Buy milk and eggs") and "read by the AI" in out and len(calls) == 1
+    assert out.startswith("Buy milk and eggs") and "by the AI" in out and len(calls) == 1
     monkeypatch.setattr(config, "OCR_VISION", False)  # never send pictures: Tesseract's best try
     out = ocr.run("file", str(p))
     assert "Some words may be wrong" in out or "couldn't find any text" in out
@@ -47,7 +47,7 @@ def test_poor_result_uses_vision_once(tmp_path, copied, monkeypatch):
 
 def test_vision_failure_keeps_tesseract(tmp_path, copied, monkeypatch):
     p = _img(tmp_path / "x.png", "")
-    monkeypatch.setattr(ocr, "tesseract", lambda p: ocr.Result("half readable", "tesseract", 40.0))
+    monkeypatch.setattr(ocr, "tesseract", lambda p, langs="": ocr.Result("half readable", "tesseract", 40.0))
 
     def boom(p, focus=False):
         raise RuntimeError("AI is off")
@@ -95,7 +95,7 @@ def test_screen_with_few_words_is_a_photo_for_the_ai(tmp_path, copied, monkeypat
     words per megapixel) and never saw the page: the AI must read it, told to read only the main content."""
     p = _img(tmp_path / "w.png", "")
     sidebar = ocr.Result("PEN Nepal\nNo comments yet", "tesseract", 83.0, 0.1, 15.0)
-    monkeypatch.setattr(ocr, "tesseract", lambda p: sidebar)
+    monkeypatch.setattr(ocr, "tesseract", lambda p, langs="": sidebar)
     seen = {}
     monkeypatch.setattr(ocr, "vision", lambda p, focus=False: seen.update(focus=focus) or
                         ocr.Result("१. नेपाली अक्षर", "vision", 100.0))
@@ -124,3 +124,49 @@ def test_never_backgrounded_and_background_note_is_not_shown(monkeypatch):
     monkeypatch.setattr(safety, "execute", lambda *a, **k: safety.ToolResult(True, note))
     res = fastpath.try_answer("convert this pdf into md file")
     assert res.answer == safety.BACKGROUND_SAID.format(id=45) and "Tell the user" not in res.answer
+
+
+@pytest.mark.skipif(not shutil.which("tesseract"), reason="tesseract not installed")
+def test_light_text_on_dark_background_with_pen_marks_is_read_free(tmp_path, monkeypatch):
+    """Video frames: white text on black + green pen strokes (Tesseract read 'AOF.INE! WOR FOrtis' before)."""
+    from PIL import Image, ImageDraw, ImageFont
+    im = Image.new("RGB", (1100, 260), (12, 12, 14))
+    d = ImageDraw.Draw(im)
+    f = ImageFont.truetype("DejaVuSans.ttf", 34)
+    d.text((20, 30), "What it is: Part of the framework for building", fill=(235, 235, 235), font=f)
+    d.text((20, 120), "web pages that users access via a browser.", fill=(235, 235, 235), font=f)
+    d.line([(20, 80), (700, 85)], fill=(40, 220, 40), width=6)  # a green underline
+    d.ellipse([(800, 100), (1050, 240)], outline=(40, 220, 40), width=6)
+    p = tmp_path / "frame.png"
+    im.save(p)
+    monkeypatch.setattr(ocr, "vision", lambda p, focus=False: pytest.fail("clean text must stay free"))
+    r = ocr.read(p)
+    assert r.engine == "tesseract" and "framework for building" in r.text and "via a browser" in r.text
+
+
+def test_garbage_goes_to_the_ai():
+    junk = ocr.Result("AOF.INE! WOR FOrtis a er eres Cy aS om oo\nVIYIe QUW DPRB frobnic", "tesseract", 88.0, 0.05, 300)
+    assert ocr._english_ratio(junk.text) < config.OCR_MIN_ENGLISH and ocr.looks_poor(junk)
+    mixed = ocr.Result("What it is: Part of the framework र ४ W ४ for building pages", "tesseract", 90.0, 0.05, 300)
+    assert ocr.looks_poor(mixed)
+    good = ocr.Result("What it is: Part of the framework for building web pages users access", "tesseract", 90.0, 0.05, 300)
+    assert not ocr.looks_poor(good)
+
+
+def test_tidy_bullets_and_junk_lines():
+    assert ocr.tidy("¢ How it works: pages\n© Model: data\noo000\n— —_— _,\n0 View: users") == \
+        "• How it works: pages\n• Model: data\n• View: users"
+
+
+def test_fastpath_hides_the_ai_note_and_keeps_the_chat_short(monkeypatch, tmp_path):
+    from jarvis.core import safety, workspace
+    monkeypatch.setattr(config, "FASTPATH", True)
+    monkeypatch.setattr(config, "OUTPUTS_DIR", tmp_path)
+    long = "\n".join(f"line {i}: some text that was read from the picture" for i in range(40))
+
+    def run(name, args, confirm=None, ctx=None, **k):
+        ctx["published"].append("answers/x.md")
+        return safety.ToolResult(True, long + "\n(Copied.)" + workspace.NOTES[("dash", False)].format(n=41))
+    monkeypatch.setattr(safety, "execute", run)
+    res = fastpath.try_answer("read this area")
+    assert "[The full result" not in res.answer and "line 39" not in res.answer and "workspace" in res.answer

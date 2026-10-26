@@ -134,21 +134,66 @@ def latest_image() -> Path | None:
 
 
 # --- reading it ------------------------------------------------------------------------------------------------
+def _otsu(hist: list[int]) -> int:
+    """Otsu's threshold from a 256-bin grey histogram (pure Python)."""
+    total = sum(hist)
+    sum_all = sum(i * h for i, h in enumerate(hist))
+    best, cut, w0, s0 = 0.0, 127, 0, 0.0
+    for t in range(256):
+        w0 += hist[t]
+        if w0 == 0 or w0 == total:
+            continue
+        s0 += t * hist[t]
+        m0, m1 = s0 / w0, (sum_all - s0) / (total - w0)
+        between = w0 * (total - w0) * (m0 - m1) ** 2
+        if between > best:
+            best, cut = between, t
+    return cut
+
+
 def _prepare(src: Path) -> Path:
-    """Grey, upscaled when small, auto-contrast: Tesseract reads phone photos and small screen text much better."""
-    from PIL import Image, ImageOps
+    """Black text on white, big enough: grey -> light text on a dark background (videos, dark themes) is inverted
+    -> upscaled so letters are ~30 px tall -> auto-contrast -> Otsu black/white (drops coloured pen marks and
+    gradients). Tesseract was trained on exactly this."""
+    from PIL import Image, ImageOps, ImageStat
     with Image.open(src) as im:
-        im = ImageOps.exif_transpose(im).convert("L")
-        if max(im.size) < 1600:
-            f = min(3.0, 1600 / max(im.size))
+        im = ImageOps.exif_transpose(im)
+        rgb = im.convert("RGB")
+        im = rgb.convert("L")
+        sat = rgb.convert("HSV").split()[1]
+        ink = sat.point(lambda v: 255 if v > 110 else 0)  # coloured pen / highlighter strokes (text is grey/black/white)
+        if ImageStat.Stat(ink).mean[0] < 255 * 0.25:  # a little colour = pen marks; a colourful photo stays as it is
+            hist = im.histogram()
+            im.paste(hist.index(max(hist)), mask=ink)  # paint them in the background's colour
+        if ImageStat.Stat(im).mean[0] < 110:
+            im = ImageOps.invert(im)
+        f = min(4.0, max(1.0, 2000 / max(im.size)))
+        if f > 1.05:
             im = im.resize((int(im.width * f), int(im.height * f)), Image.LANCZOS)
         im = ImageOps.autocontrast(im, cutoff=1)
+        cut = _otsu(im.histogram())
+        im = im.point(lambda v: 255 if v > cut else 0)
         out = _tmp()
         im.save(out)
     return out
 
 
-def tesseract(src: Path) -> Result:
+_BULLET = re.compile(r"^(?:[¢©°•●◦▪■□oe*«»>-]|0|o0|oo)\s+(?=\S)")
+
+
+def tidy(text: str) -> str:
+    """Tesseract's bullets ('¢ ', '© ', '° ', 'e ', '0 ') -> '• ', lines that are only symbols dropped, spaces fixed."""
+    out = []
+    for ln in text.splitlines():
+        ln = _BULLET.sub("• ", ln.strip())
+        ln = re.sub(r"\s+([,.;:!?])", r"\1", re.sub(r"\s{2,}", " ", ln))
+        if ln and (not re.search(r"[^\W_]{2,}|\d", ln) or re.fullmatch(r"[oO0°•.\s]+", ln)):
+            continue  # symbol-only lines, a column of small bullets read as 'oo000'
+        out.append(ln)
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(out)).strip()
+
+
+def tesseract(src: Path, langs: str = "") -> Result:
     """0 tokens. Text in reading order + the mean word confidence (0-100)."""
     if not shutil.which("tesseract"):
         return Result("", "none", 0.0)
@@ -156,7 +201,7 @@ def tesseract(src: Path) -> Result:
     with Image.open(src) as im:
         mpx = max(0.05, im.width * im.height / 1e6)
     img = _prepare(src)
-    langs = config.OCR_LANGS
+    langs = langs or config.OCR_LANGS
     try:
         tsv = subprocess.run(["tesseract", str(img), "stdout", "-l", langs, "--psm", "3", "tsv"],
                              capture_output=True, timeout=90).stdout.decode(errors="replace")
@@ -175,54 +220,107 @@ def tesseract(src: Path) -> Result:
         if conf < 0:
             continue
         confs.append(conf)
-        lines.setdefault((int(c[2]), int(c[3]), int(c[4])), []).append(c[11])  # block, paragraph, line
+        word = c[11]
+        if conf < 35 or not re.search(r"[^\W_]", word) and not re.fullmatch(r"[-–—=+*/<>{}()\[\]→←|&%$#@!?.,:;\"']{1,3}", word):
+            word = ""  # pen strokes / specks read as 'oo000', '—_—', 'QUW'
+        lines.setdefault((int(c[2]), int(c[3]), int(c[4])), []).append(word)  # block, paragraph, line
     out, last_par = [], None
+    lines = {k: ws for k, ws in ((k, [w for w in ws if w]) for k, ws in lines.items()) if ws}
     for (b, p, _), words in lines.items():
         if last_par is not None and (b, p) != last_par:
             out.append("")  # a blank line between paragraphs
         out.append(" ".join(words))
         last_par = (b, p)
-    text = "\n".join(out).strip()
-    unsure = sum(1 for c in confs if c < 50) / len(confs) if confs else 1.0  # handwriting: many unsure words
+    text = tidy("\n".join(out).strip())
+    unsure = sum(1 for c in confs if c < 70) / len(confs) if confs else 1.0  # handwriting / noise: many unsure words
     return Result(text, "tesseract", sum(confs) / len(confs) if confs else 0.0, unsure, len(confs) / mpx)
 
 
 def vision(src: Path, focus: bool = False) -> Result:
-    """The vision model reads it (handwriting / hard photos): one call, picture shrunk to 1280 px. focus = a screen
-    capture: read only the main content (the photo / paper / page), not the app around it."""
+    """The vision model reads it: one call. Small crops are enlarged (the model reads small letters badly), big
+    pictures kept up to 1600 px. focus = a window/screen capture: only the main content, not the app around it."""
     from PIL import Image, ImageOps
     from jarvis.core import llm
     with Image.open(src) as im:
         im = ImageOps.exif_transpose(im).convert("RGB")
-        im.thumbnail((1280, 1280))
+        if max(im.size) < 900:
+            f = min(3.0, 1200 / max(im.size))
+            im = im.resize((int(im.width * f), int(im.height * f)), Image.LANCZOS)
+        im.thumbnail((1600, 1600))
         buf = io.BytesIO()
-        im.save(buf, "JPEG", quality=80)
+        im.save(buf, "JPEG", quality=88)
     b64 = base64.b64encode(buf.getvalue()).decode()
+    ask = (("This is a screenshot: read only the MAIN content (the page, slide, photo, paper or handwriting), not "
+            "menus, tabs, buttons, player controls, names or comments around it. " if focus else
+            "This is ONE picture cut from the user's screen (a page, slide, video frame, photo or handwriting). ") +
+           "Transcribe ALL of its text exactly as written, top to bottom: keep headings, line breaks, bullets, "
+           "numbering, code and symbols (→, ε, {}) as they are; a table row per line. Handwritten words and notes "
+           "too; ignore drawings and pen marks that are not words. Nepali/Hindi in Devanagari. Do not describe the "
+           "picture, do not split it into parts, do not add anything. '[?]' for a word you can't read.")
     r = llm.chat([{"role": "user", "content": [
-        {"type": "text", "text": ("This is a screenshot. Read only the MAIN content: the photo, paper, handwriting or "
-                                  "document in it, not menus, tabs, buttons, names or comments around it. "
-                                  if focus else "") +
-         "Write out exactly the text (handwriting too), keeping its lines, numbering and language (Nepali/Hindi in "
-         "Devanagari). Only the text; '[?]' for a word you can't read."},
+        {"type": "text", "text": ask},
         {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}]}],
-        tier="vision", purpose="ocr_vision", max_tokens=1500)
+        tier="vision", purpose="ocr_vision", max_tokens=2000)
     return Result((r.text or "").strip(), "vision", 100.0)
 
 
+def _english_ratio(text: str) -> float:
+    """Share of the letter-words (3+ letters) that are real English words (/usr/share/dict). Tesseract garbage
+    from a video frame ('AOF.INE! WOR FOrtis a er eres Cy aS om') scores low even when its confidence is high."""
+    raw = re.findall(r"[A-Za-z]{3,}", text)
+    if not raw:
+        return 0.0
+    vocab = _vocab()
+    if not vocab:
+        return 1.0
+
+    def real(w: str) -> bool:
+        if re.search(r"[a-z][A-Z]|^[A-Z]{2,}[a-z]", w) and not re.fullmatch(r"[A-Z][a-z]+(?:[A-Z][a-z]+)+", w):
+            return False  # 'FOrtis', 'aS': case junk (CamelCase like 'ModelView' is fine)
+        lw = w.lower()
+        if lw in vocab or (w.isupper() and len(w) <= 6):  # acronyms: HTML, ASP, MVC
+            return True
+        stem = re.sub(r"(?:ing|ed|es|s|ly|er|est)$", "", lw)
+        return len(stem) >= 3 and (stem in vocab or stem + "e" in vocab)
+    return sum(1 for w in raw if real(w)) / len(raw)
+
+
+def _vocab() -> set[str]:
+    """~100k English words, read when needed (~60 ms) and not kept: ~8 MB stays free between reads."""
+    for f in ("/usr/share/dict/words", "/usr/share/dict/american-english", "/usr/share/dict/british-english"):
+        try:
+            return {w.strip().lower() for w in Path(f).read_text(errors="ignore").split() if w.isalpha()}
+        except OSError:
+            continue
+    return set()
+
+
 def looks_poor(r: Result, focus: bool = False) -> bool:
-    """Tesseract wasn't sure: low mean confidence, many unsure words, hardly any words, or (a screen capture) very
-    few words for its size: the main thing on screen is a photo / handwriting it can't see, and it only read the
-    app around it (a Facebook photo of a handwritten page: 14 words/Mpx, all from the sidebar)."""
+    """Tesseract can't be trusted here: low mean confidence, many unsure words, hardly any words, not real English
+    (a video frame read as garbage), mixed-up scripts, or (a screen capture) very few words for its size: the main
+    thing on screen is a photo / handwriting it can't see (a Facebook photo of a handwritten page: 14 words/Mpx)."""
     words = re.findall(r"[^\W\d_]{2,}", r.text)
-    sparse = focus and r.density < config.OCR_MIN_DENSITY
-    return r.conf < config.OCR_MIN_CONF or r.unsure > 0.25 or len(words) < 2 or sparse
+    if r.conf < config.OCR_MIN_CONF or r.unsure > 0.15 or len(words) < 3 or (focus and r.density < config.OCR_MIN_DENSITY):
+        return True
+    latin = len(re.findall(r"[A-Za-z]", r.text))
+    deva = len(re.findall(r"[\u0900-\u097F]", r.text))
+    if latin and deva and min(latin, deva) / (latin + deva) > 0.03:
+        return True  # 'र ४ W ४ | Vv.' in an English slide: Tesseract guessing
+    return latin > deva and _english_ratio(r.text) < config.OCR_MIN_ENGLISH
 
 
 def read(src: Path, allow_vision: bool | None = None, focus: bool = False) -> Result:
-    """Tesseract first; the vision model only when that looks poor (and it's allowed)."""
-    r = tesseract(src)
+    """Accuracy first: Tesseract (free) only when its result is clean English (or clean Nepali); anything doubtful
+    goes to the vision model (one call, ~1-3k tokens)."""
+    r = tesseract(src, "eng")
+    if not looks_poor(r, focus):
+        return r
+    if "nep" in config.OCR_LANGS:
+        n = tesseract(src, "nep")  # a Nepali document: Devanagari words Tesseract is sure about
+        if len(re.findall(r"[\u0900-\u097F]", n.text)) > 40 and n.conf >= 80 and n.unsure <= 0.1:
+            return n
     allow = config.OCR_VISION if allow_vision is None else allow_vision
-    if looks_poor(r, focus) and allow:
+    if allow:
         try:
             v = vision(src, focus)
             if v.text:
@@ -269,6 +367,6 @@ def run(source: str = "area", path: str = "") -> str:
     if not r.text.strip():
         return "I couldn't find any text in that picture."
     copy(r.text)
-    how = " (read by the AI: handwriting/hard photo)" if r.engine == "vision" else ""
-    unsure = " Some words may be wrong (blurry or handwriting)." if r.engine == "tesseract" and looks_poor(r) else ""
+    how = " by the AI" if r.engine == "vision" else ""
+    unsure = " Some words may be wrong." if r.engine == "tesseract" and looks_poor(r) else ""
     return f"{r.text}\n\n(Copied{how}.{unsure})"

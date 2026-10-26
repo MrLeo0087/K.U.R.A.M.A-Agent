@@ -94,6 +94,8 @@ STT_FIXES: dict[str, str] = {
     r"\bselective\b": "selected",
     r"\b(this|the|that|a|selected|highlighted)\s+(?:o\.?\s?auth|oauth|wordt|ward)\b": r"\1 word",  # "this word" misheard
     r"\bselect(?:ed)?\s+output\b": "selected word",
+    r"\bread\s+letters?\b(?=\s+(?:link|links|list|page|pages|article|articles|item|items)\b)": "read later",
+    r"\b(for|to|in|my)\s+read\s+letters?\b": r"\1 read later",
     r"\b(?:return|written|britain|ridden)\s+(in|on)\s+(?=(?:the\s+)?(?:selected|this|that|my)\s)": r"written \1 ",  # "written in"
     r"\b(?:space|speak|speec|speach|spich)\s+(?:to|2)\s+text\b": "speech to text",
     r"\b(?:b\.?\s?s\.?|be\s?as|versus|vs\.?|v\.\s?s\.)\s+(?:code|cold|cord|court|coat)\b": "VS Code",
@@ -223,7 +225,8 @@ DIRECT_REPLY_TOOLS = {"open_url": "open", "open_app": "open", "audio": "audio", 
                       "screenshot": "screenshot", "send_message_telegram": None, "get_time": "time"}
 # --- OCR (read_text): Tesseract first (0 tokens); the vision model only for handwriting / hard photos ---
 OCR_LANGS = os.getenv("KURAMA_OCR_LANGS", "eng+nep")
-OCR_MIN_CONF = float(os.getenv("KURAMA_OCR_MIN_CONF", "62"))  # Tesseract's mean word confidence below this = poor
+OCR_MIN_CONF = float(os.getenv("KURAMA_OCR_MIN_CONF", "75"))  # Tesseract's mean word confidence below this = poor
+OCR_MIN_ENGLISH = 0.85  # Tesseract's English must be this share of real dictionary words, else the AI reads it
 OCR_MIN_DENSITY = 60.0  # screen capture: fewer words per megapixel = a photo/handwriting Tesseract can't see
 OCR_VISION = os.getenv("KURAMA_OCR_VISION", "1").lower() not in ("0", "false", "no", "off")
 # a dashboard answer longer than this goes to the workspace in full; the chat gets one short line

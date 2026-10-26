@@ -34,6 +34,14 @@ NOTES = {
 }
 
 
+_NOTE_RE = re.compile(r"\n\[(?:The full result|Full result|The user asked for all)[^\]]*\]\s*$")
+
+
+def strip_note(text: str) -> str:
+    """Remove the note offer() adds for the LLM (the fast path shows tool output to the user directly)."""
+    return _NOTE_RE.sub("", text or "")
+
+
 def wants_all(text: str) -> bool:
     """The user asked for everything (whole list, all of them...), so don't summarize it away."""
     return bool(_ALL.search(text or ""))
@@ -129,7 +137,7 @@ def offer(name: str, text: str) -> str:
     if shelf is None or not worth_it(name, text):
         return ""
     request = (ctx.get("user_text") or ctx.get("request") or name).strip()
-    path = publish(f"{name.replace('_', ' ')}: {request[:60]}", text)
+    path = publish(f"{name.replace('_', ' ')}: {request[:60]}", text, folder="answers")  # always listed
     if path is None:
         return ""
     phone = ctx.get("channel") == "telegram"

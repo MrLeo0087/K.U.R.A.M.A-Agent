@@ -130,7 +130,7 @@ def show(limit: int = 15) -> str:
     rows = unread()
     if not rows:
         return "Your reading list is empty. Select a link (or open a page) and say 'read this later'."
-    lines = [f"{i}. {r['title'][:90]} ({r['site']}, {r['saved'][:10]})" for i, r in enumerate(rows[:limit], 1)]
+    lines = [f"{i}. {r['title'][:90]} ({r['saved'][:10]})\n   {r['link']}" for i, r in enumerate(rows[:limit], 1)]
     more = f"\n…and {len(rows) - limit} more in {path().name}." if len(rows) > limit else ""
     return f"Reading list ({len(rows)} unread):\n" + "\n".join(lines) + more
 
@@ -192,9 +192,29 @@ def save_this() -> str:
     return "Select a link (or open the page in your browser) and say 'read this later' again."
 
 
+def last() -> str:
+    """'give me the read later link I gave you': the newest saved item, with its link (also copied)."""
+    rows = sheets.load(path(), HEAD)
+    if not rows:
+        return "Your reading list is empty."
+    r = rows[0]
+    from jarvis.core import rewrite
+    rewrite._xclip(["-selection", "clipboard"], r["link"])
+    return f"{r['title']}\n{r['link']}\n(Copied. Saved {r['saved']}.)"
+
+
+def _given(url: str) -> bool:
+    """The AI may only pass a link the user really said/typed (it once invented https://example.com)."""
+    from jarvis.core import safety
+    said = (safety.context().get("user_text") or "")
+    return bool(url) and (url.rstrip("/") in said or not said)
+
+
 def run(action: str = "add", url: str = "", n: int = 0) -> str:
     if action == "add":
-        return add(url) if url.strip() else save_this()
+        return add(url) if url.strip() and _given(url.strip()) else save_this()
+    if action == "last":
+        return last()
     if action == "open":
         return open_item(n or 1)
     if action == "read":
