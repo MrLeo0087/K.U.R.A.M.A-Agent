@@ -691,6 +691,7 @@ TIMETABLE_LEAD_MIN = 10  # heads-up this long before each class
 DOWNLOAD_DIR = "~/Downloads"  # download manager default folder
 DOWNLOAD_NIGHT_HOUR = 1  # "tonight" downloads start at this hour
 WIFI_SHARE_IDLE_MIN = 30  # a Wi-Fi share link stops after this many idle minutes
+READ_LATER_FILE = os.getenv("KURAMA_READ_LATER", "~/Documents/KURAMA/read_later.xlsx")  # reading list (Excel)
 CONTACTS_FILE = os.getenv("KURAMA_CONTACTS", "~/Documents/KURAMA/contacts.xlsx")  # name/phone sheet (Excel)
 DICTATION_PAUSE_MS = 900  # a pause this long ends a dictated phrase (then it is typed)
 DICTATION_DEVANAGARI_LANG = os.getenv("JARVIS_DICTATION_DEVANAGARI", "ne")  # auto mode: Nepali/Hindi speech -> this

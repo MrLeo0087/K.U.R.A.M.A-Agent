@@ -1608,6 +1608,40 @@ _OCR_FILE = re.compile(r"\b(?:" + _OCR_VERB + r"|what\s+(?:does|is)|what's)\b.{0
 _QR = r"(?:qr(?:\s+code)?|q\.?\s?r\.?(?:\s+code)?|barcode|bar\s+code|scanner\s+code|cure\s+code|queue\s+are\s+code)"
 
 
+URL_RE = re.compile(r"https?://\S+", I)
+_RL_LIST = r"(?:reading\s+list|read[\s-]+later(?:\s+list)?|saved\s+(?:links|articles|pages))"
+_NUM = {"first": 1, "1st": 1, "one": 1, "second": 2, "2nd": 2, "two": 2, "third": 3, "3rd": 3, "three": 3, "fourth": 4,
+        "4th": 4, "four": 4, "fifth": 5, "5th": 5, "five": 5, "last": -1, "next": 1, "top": 1, "newest": 1, "latest": 1}
+
+
+def _nth(t: str) -> int:
+    if m := re.search(r"\b(?:number|no\.?|item|#)?\s*(\d{1,3})\b", t):
+        return int(m.group(1))
+    m = re.search(r"\b(" + "|".join(_NUM) + r")\b", t, I)
+    return _NUM[m.group(1).lower()] if m else 1
+
+
+def read_later_intent(t: str) -> Intent | None:
+    """'read this later', 'I will read this later', 'save this link for later', 'add this to my reading list',
+    'what's on my reading list', 'open the first article from my reading list', 'mark 2 as read'."""
+    if re.fullmatch(r"(?:please\s+|kurama\W+)*(?:i(?:'ll|\s+will)\s+read\s+(?:this|it|that)\s+later|read\s+(?:this|it|that)\s+later|"
+                    r"(?:save|keep|bookmark|add)\s+(?:this|that|it|the|these)?\s*(?:link|links|page|article|tab|post|video)?\s*"
+                    r"(?:for\s+later|to\s+(?:my\s+)?" + _RL_LIST + r"|(?:to\s+)?read\s+later)|read\s+later)[\s.!]*", t, I):
+        u = URL_RE.search(t)
+        return Intent("readlater", "read_later", "browser", {"action": "add", "url": u.group(0) if u else ""})
+    if not re.search(_RL_LIST, t, I):
+        return None
+    if re.search(r"\b(?:open|read|show\s+me\s+the)\b.*\b(?:article|link|item|page|one|number|\d)\b", t, I):
+        return Intent("readlater", "read_later", "browser", {"action": "open", "n": _nth(t)})
+    if re.search(r"\bmark\b.*\bread\b|\b(?:done|finished)\s+(?:with|reading)\b", t, I):
+        return Intent("readlater", "read_later", "browser", {"action": "read", "n": _nth(t)})
+    if re.search(r"\b(?:remove|delete)\b", t, I):
+        return Intent("readlater", "read_later", "browser", {"action": "remove", "n": _nth(t)})
+    if re.search(r"\b(?:show|what|list|open|see|check|my)\b", t, I) and len(t.split()) <= 12:
+        return Intent("readlater", "read_later", "browser", {"action": "list"})
+    return None
+
+
 def qr_intent(t: str) -> Intent | None:
     """'scan the qr code on my screen', 'read this qr', 'scan the qr and open it', 'scan the wifi qr and connect',
     'scan the qr in this photo', 'scan the qr in this area' -> scan_qr (0 tokens)."""
@@ -1669,6 +1703,8 @@ def match(text: str) -> Intent | None:
         return si
     if pi := plan_answer_intent(t):
         return pi
+    if rl := read_later_intent(t):
+        return rl
     if qi := qr_intent(t):
         return qi
     if oi := ocr_intent(t):
