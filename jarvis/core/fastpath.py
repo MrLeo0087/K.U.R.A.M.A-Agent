@@ -1191,6 +1191,16 @@ _WHERE_PATH = re.compile(r"^(?:give\s+me\s+|tell\s+me\s+|what(?:'s|\s+is)\s+)?(?
                          r"^where\s+is\s+(?:that|this|it)(?:\s+(?:folder|file))?[\s?.!]*$", I)
 
 
+# "can you fix this sentence?", "fix the format of this sentence more good", "correct the highlighted text please":
+# any rewrite verb + anything that points at text, unless it is about code/errors/the laptop
+_RW_VERB = re.compile(r"\b(?:fix|correct|improve|rewrite|re-?write|rephrase|reword|polish|format|edit|proof-?read|clean\s+up|"
+                      r"make\s+(?:it|this|that)\s+(?:better|good|nice|nicer|formal|professional|polite|clear)|paraphrase|"
+                      r"simplify|shorten|translate|grammar)\b", I)
+_RW_OBJ = re.compile(r"\b(?:this|it|that|sentence|sentences|text|paragraph|line|lines|selection|selected|highlighted|message|"
+                     r"email|mail|wording|words|grammar|spelling|para)\b", I)
+_RW_NOT = re.compile(r"\b(?:error|errors|bug|bugs|code|crash|traceback|exception|laptop|computer|wifi|internet|sound|"
+                     r"audio|mic|camera|screen|brightness|test|tests|file|folder|pdf|docx?|png|jpe?g|mp[34]|installation|"
+                     r"build|server|issue\s+with|problem\s+with|reminder|alarm|time|date)\b", I)
 _SEL = r"(?:this|it|that|the\s+selected\s+text|the\s+selection|selected\s+text|selection|this\s+(?:text|paragraph|line|sentence|email|message))"
 _REWRITE = re.compile(r"^(?:please\s+)?(?:make\s+" + _SEL + r"\s+(?:more\s+)?(?:formal|informal|polite|professional|simple|simpler|"
                       r"shorter|longer|clear(?:er)?|friendly|casual|concise|better|nicer|funny|serious)|"
@@ -1248,6 +1258,8 @@ def everyday_intent(t: str) -> Intent | None:
         return Intent("kaggle", "kaggle_train", "watch", {"action": "status"})
     if re.fullmatch(r"(?:please\s+)?(?:set\s*up|install|configure)\s+kaggle(?:\s+(?:gpu|tool|cli))?[\s.!]*", t, I):
         return Intent("kaggle", "kaggle_train", "watch", {"action": "setup"})
+    if _RW_VERB.search(t) and _RW_OBJ.search(t) and not _RW_NOT.search(t) and len(t.split()) <= 22:
+        return Intent("rewrite", "rewrite_text", "clipboard", {"instruction": t})
     if m := _REWRITE.match(t):
         ins = re.sub(r"\s+(?:this|it|that|the\s+selected\s+text|the\s+selection|selected\s+text|selection)\b", "",
                      m.group(0), count=1, flags=I).strip(" .!")

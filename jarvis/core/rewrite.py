@@ -1,9 +1,9 @@
 """Rewrite the selected text in place, in any app: select text, say "make this formal" / "fix grammar" /
 "translate to Nepali" / "shorten this", and the new text replaces the selection.
 
-X11 keeps the current selection in the PRIMARY buffer, so nothing has to be copied first. The rewrite is one fast
-LLM call (~2x the text in tokens); the result is pasted over the still-selected text with the app's paste key, and
-the user's clipboard is put back afterwards. If KURAMA's own window is in front (the request was typed in the
+KURAMA copies the selection in that app itself (Ctrl+C there; the user copies nothing). The rewrite is one fast
+LLM call (~2x the text in tokens); the result is pasted over the still-selected text with the app's paste key and
+also left on the clipboard (read-only text can't be replaced in place). If KURAMA's own window is in front (the request was typed in the
 dashboard), KURAMA switches back to the window the user was in (the one right below it) and pastes there; the
 selection is still highlighted in that app.
 """
@@ -83,31 +83,48 @@ def transform(text: str, instruction: str) -> str:
     return (reply.text or "").strip().strip('"“”')
 
 
+def _window_name(wid: int) -> str:
+    try:
+        return subprocess.run(["xdotool", "getwindowname", str(wid)], capture_output=True, text=True,
+                              timeout=3).stdout.strip()[:60]
+    except (OSError, subprocess.SubprocessError):
+        return "that window"
+
+
 def rewrite(instruction: str, text: str = "") -> str:
+    """Copy the selection FROM the app the user is working in (Ctrl+C there, not the X PRIMARY buffer, which also
+    changes when text is selected inside KURAMA), rewrite it, paste it back over the selection."""
     if text.strip():
         return transform(text[:MAX_CHARS], instruction) or "error: the rewrite came back empty"
-    sel = selection()
-    if not sel.strip():
-        return "Select the text first (highlight it with the mouse), then ask again."
+    from jarvis.core import uiagent
+    wid, in_front = target_window()
+    if wid is None:
+        return "I couldn't find the window with your text. Highlight the text there, then ask again."
+    if not in_front:  # asked from KURAMA's window: go back to the document (its selection is still there)
+        _activate(wid)
+        time.sleep(0.35)
+    term = uiagent.family(uiagent.active_class()) == "terminal"
+    sentinel = f"__kurama_copy_{time.time()}__"
+    _xclip(["-selection", "clipboard"], sentinel)
+    uiagent.key("ctrl+shift+c" if term else "ctrl+c")
+    time.sleep(0.35)
+    sel = _xclip(["-selection", "clipboard"])
+    if not sel.strip() or sel == sentinel:
+        sel = selection() if in_front else ""  # some apps only set PRIMARY
+    if not sel.strip() or sel == sentinel:
+        _xclip(["-selection", "clipboard"], "")
+        return (f"I couldn't see any highlighted text in '{_window_name(wid)}'. Highlight the words there (they must "
+                "be in a box you can type in, to be replaced), then ask again.")
     if len(sel) > MAX_CHARS:
         return f"That selection is too long ({len(sel)} characters, max {MAX_CHARS}). Select a smaller part."
     new = transform(sel, instruction)
     if not new:
         return "error: the rewrite came back empty; nothing was changed"
-    old_clip = _xclip(["-selection", "clipboard"])
     _xclip(["-selection", "clipboard"], new)
-    wid, in_front = target_window()
-    if wid is None and not in_front:
-        return "Done. The new text is on your clipboard: click where it should go and press Ctrl+V.\n\n" + new
-    if not in_front:  # asked from KURAMA's window: go back to the document (its selection is still there)
-        _activate(wid)
-        time.sleep(0.35)
-    from jarvis.core import uiagent
-    paste = "ctrl+shift+v" if uiagent.family(uiagent.active_class()) == "terminal" else "ctrl+v"
-    time.sleep(0.15)
-    uiagent.key(paste)
-    time.sleep(0.4)
-    if old_clip:
-        _xclip(["-selection", "clipboard"], old_clip)  # leave the user's clipboard as it was
-    words = len(new.split())
-    return f"Replaced the selected text ({words} words)."
+    if not in_front:
+        _activate(wid)  # the LLM call took a moment: make sure the document is still in front
+        time.sleep(0.2)
+    uiagent.key("ctrl+shift+v" if term else "ctrl+v")
+    time.sleep(0.3)
+    return (f"Replaced the highlighted text in '{_window_name(wid)}' ({len(new.split())} words). If it couldn't be "
+            f"replaced there (read-only text), it is on your clipboard: press Ctrl+V where you want it.\n\n{new}")
