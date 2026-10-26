@@ -332,6 +332,32 @@ async def wallpaper():
     return FileResponse(p, headers={"Cache-Control": "max-age=86400"})
 
 
+def _real_wallpaper():
+    """The user's OWN desktop picture (saved by the screen app before it shows its snapshot there), else the current one."""
+    import json as _json
+    from pathlib import Path as _P
+    try:
+        d = _json.loads((_P.home() / ".local/share/kurama/real-wallpaper.json").read_text(encoding="utf-8"))
+        uri = d.get("picture-uri-dark") or d.get("picture-uri") or ""
+        q = _P(uri.removeprefix("file://")) if uri.startswith("file://") else None
+        if q and q.is_file() and "kurama" not in str(q):
+            return q
+    except (OSError, ValueError):
+        pass
+    return _wallpaper_path()
+
+
+@router.get("/wallpaper/real", summary="The user's own desktop picture (the dashboard background)")
+async def wallpaper_real():
+    from fastapi.responses import FileResponse
+    p = await run_in_threadpool(_real_wallpaper)
+    if not p:
+        return JSONResponse({"error": "no wallpaper image"}, status_code=404)
+    head = p.open("rb").read(12)
+    kind = "image/png" if head.startswith(b"\x89PNG") else "image/webp" if head[8:12] == b"WEBP" else "image/jpeg"
+    return FileResponse(p, media_type=kind, headers={"Cache-Control": "max-age=3600"})
+
+
 # ---------- this laptop (dashboard card): Wi-Fi, volume, brightness, battery health, next reminder ----------
 @router.get("/device", summary="This laptop at a glance (cached 15 s)")
 async def device_info():

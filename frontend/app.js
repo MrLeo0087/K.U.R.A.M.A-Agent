@@ -21,10 +21,11 @@ let minimized = false; // the dashboard is minimized to the floating button (win
 let miniGhost = false; // mini panel closed while in talk mode: it keeps listening, replies show beside the button
 
 // ---------- orb ----------
-const orb = new Orb($("orb-canvas"), { halo: document.querySelector("#orb .halo"), lowPower: lowPowerOn(), reducedMotion });
+// the canvas orb is hidden (the KURAMA mark replaced it): kept static, so it never runs a loop
+const orb = new Orb($("orb-canvas"), { halo: document.querySelector("#orb .halo"), lowPower: true, reducedMotion });
 document.body.classList.toggle("low-power", lowPowerOn());
 const dust = new Dust($("bg-dust"), { orbEl: $("orb"), lowPower: lowPowerOn() });
-if (params.get("dust") !== "0" && !MINI) orb.attach(dust); // one loop drives the orb and the background field (?dust=0: off)
+// no background dust field (static wallpaper instead) // one loop drives the orb and the background field (?dust=0: off)
 if (!MINI) orb.start();
 
 // ---------- voice plumbing ----------
@@ -105,6 +106,7 @@ function updateState() {
   orb.setMode(om);
   if (document.body.dataset.mode !== om) { document.body.dataset.mode = om; $("composer").querySelector(".modes").dataset.mode = om; }
   document.body.dataset.state = performance.now() < errUntil ? "error" : FORCE_ORB || st;
+  markKick();
   const vs = $("voice-state"), txt = stateText(st);
   if (vs.textContent !== txt) { vs.textContent = txt; retrigger(vs, "fl-a", "fl-b"); }
   const chip = $("chat-state");
@@ -118,6 +120,24 @@ function updateState() {
   $("m-mute").setAttribute("aria-pressed", String(conv.muted));
   if (!mic.open && !player.active && !recording) audioSleepSoon(); // free the audio thread when idle (asleep = API listens)
 }
+
+// ---------- the KURAMA mark: glows and shifts colour with the voice (only while listening / speaking) ----------
+let markRaf = 0, markAt = 0;
+const MARK_HUE = { speaking: [28, 44], listening: [140, 160], capturing: [140, 160], thinking: [38, 46] };
+function markLoop(now) {
+  markRaf = 0;
+  const st = document.body.dataset.state, hue = MARK_HUE[st];
+  const el = $("orb");
+  if (!hue || MINI || paused || minimized || document.hidden) { el.style.removeProperty("--lv"); el.style.removeProperty("--kh"); return; }
+  if (now - markAt >= 66) { // ~15 fps: enough for a soft glow
+    markAt = now;
+    const lv = player.playing ? player.level() : mic.open ? mic.level() : st === "thinking" ? 0.25 + 0.2 * Math.sin(now / 260) : 0;
+    el.style.setProperty("--lv", Math.min(1, lv).toFixed(2));
+    el.style.setProperty("--kh", (hue[0] + (hue[1] - hue[0]) * Math.min(1, lv * 1.6)).toFixed(0));
+  }
+  markRaf = requestAnimationFrame(markLoop);
+}
+function markKick() { if (!markRaf && MARK_HUE[document.body.dataset.state]) markRaf = requestAnimationFrame(markLoop); }
 
 function flashError() {
   errUntil = performance.now() + 1400;
@@ -726,7 +746,14 @@ function setBar(id, pct, cls = "") {
 
 const RING = 2 * Math.PI * 27; // ring circumference (r = 27)
 function setRing(id, pct) {
-  const arc = $(id).querySelector(".arc"), v = Math.max(0, Math.min(100, pct || 0));
+  const v = Math.max(0, Math.min(100, pct || 0)), fill = $(id).querySelector(".fill");
+  if (fill) { // the System card's bars
+    const w = Math.round(v) + "%";
+    if (fill.style.width !== w) fill.style.width = w;
+    $(id).classList.toggle("hot", v >= 85);
+    return;
+  }
+  const arc = $(id).querySelector(".arc");
   const off = (RING * (1 - v / 100)).toFixed(1);
   if (arc.dataset.off !== off) { arc.dataset.off = off; arc.style.strokeDashoffset = off; }
   $(id).classList.toggle("hot", v >= 85);
@@ -1427,7 +1454,7 @@ async function loadWall() {
     if (m === wallMtime) return;
     wallMtime = m;
     const box = $("wall");
-    if (!m) { box.classList.remove("on"); return; }
+    if (!m) { box.style.backgroundImage = `url("${api.url("/api/v1/wallpaper/real", true)}")`; box.classList.add("on"); return; } // your own picture
     const img = new Image();
     img.onload = () => { box.style.backgroundImage = `url("${img.src}")`; box.classList.add("on"); };
     img.src = api.wallpaperUrl(m);
@@ -1984,8 +2011,7 @@ function setWake(on) { // the wake word on/off (settings checkbox or the power m
 }
 function setLowPower(on) {
   S.lowPower = on;
-  orb.setLowPower(on);
-  dust.setLowPower(on);
+  dust.setLowPower(on); // (the hidden orb stays static whatever this says)
   document.body.classList.toggle("low-power", on);
 }
 function applyModeClient(cur, changed) { // the parts of a mode that live in this page: wake word, screen

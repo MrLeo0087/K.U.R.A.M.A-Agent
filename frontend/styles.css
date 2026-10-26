@@ -968,3 +968,80 @@ body.minimized .mode-pill { opacity: 0.35; }
 .vmeter #vm-lvl.on { background: var(--ok); }
 .vmeter #vm-thr { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--accent); left: 30%; }
 #set-voice input[type="range"] { width: 100%; accent-color: var(--accent); }
+
+/* ======================= KURAMA look v2 (owner's mockup, 2026-10-26) =======================
+   Your own wallpaper behind, flat dark cards, the KURAMA mark in the middle (it alone reacts: a glow and a colour
+   shift that follow the voice, ~15 fps, only while listening / thinking / speaking). Nothing else moves, no blur,
+   no shadows, no masks: cheap for WebKitGTK without GPU compositing. The mini panel keeps its own look. */
+body:not(.mini) { --card: rgba(12, 13, 18, 0.86); --card-border: rgba(255, 255, 255, 0.08); --line: rgba(255, 255, 255, 0.06);
+  --text: #edeae5; --muted: #9b968f; --dim: #6c6863; }
+body:not(.mini) *, body:not(.mini) *::before, body:not(.mini) *::after { animation: none !important; transition: none !important; }
+body:not(.mini) .bg-grid, body:not(.mini) .bg-glow, body:not(.mini) .bg-dust,
+body:not(.mini) .orb canvas, body:not(.mini) .orb .halo, body:not(.mini) .orb-static,
+body:not(.mini) .card::after, body:not(.mini) .col .card::after { display: none !important; }
+body:not(.mini) .wall { opacity: 0; }
+body:not(.mini) .wall.on { opacity: 0.62; }
+body:not(.mini) .wall::after { background: linear-gradient(180deg, rgba(6, 7, 10, 0.45) 0%, rgba(6, 7, 10, 0.2) 40%, rgba(6, 7, 10, 0.8) 100%); }
+
+body:not(.mini) .layout { grid-template-columns: minmax(280px, 21vw) minmax(0, 1fr) minmax(290px, 22vw); gap: clamp(20px, 2.6vw, 44px);
+  padding: 34px 40px 26px; }
+body:not(.mini) .col { gap: 14px; overflow: hidden; }
+body:not(.mini) .col.right { overflow-y: auto; scrollbar-width: none; }
+body:not(.mini) .card { background: var(--card); border: 1px solid var(--card-border); border-radius: 14px; box-shadow: none;
+  padding: 14px 18px; }
+body:not(.mini) .card-title { font-size: 14px; letter-spacing: 0.02em; text-transform: none; color: var(--text); font-weight: 500; }
+body:not(.mini) .pill { background: rgba(255, 255, 255, 0.05); border-color: transparent; }
+
+/* clock */
+body:not(.mini) .clock-block { margin-bottom: 4px; }
+body:not(.mini) .clock { font-weight: 200; }
+body:not(.mini) .date { letter-spacing: 0.22em; text-transform: uppercase; font-size: 12px; color: var(--muted); }
+body:not(.mini) .date::after { content: ""; display: block; width: 26px; height: 2px; margin-top: 12px; background: var(--accent-2); }
+body:not(.mini) .wx-head .date::after { display: none; }
+
+/* weather card (left) */
+body:not(.mini) .wx-head.card { display: block; cursor: pointer; }
+body:not(.mini) .wx-head .wx-big { font-size: 30px; }
+body:not(.mini) .wx-head .wx-line { letter-spacing: 0.08em; font-size: 11px; margin-top: 4px; }
+
+/* system: three bars */
+.sbars { display: grid; gap: 10px; margin: 12px 0 4px; }
+.sbar { display: grid; grid-template-columns: 40px 1fr 48px; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
+.sbar i { display: block; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.sbar .fill { display: block; height: 100%; width: 0; border-radius: 3px; background: #f39a3d; }
+#rg-ram .fill { background: #f0c35e; }
+#rg-disk .fill { background: #5fc0ad; }
+.sbar.hot .fill { background: var(--danger); }
+.sbar em { font-style: normal; text-align: right; } .sbar em b { color: var(--text); font-weight: 400; }
+body:not(.mini) .perf .spark.short { height: 22px; margin-top: 6px; opacity: 0.8; }
+
+/* centre: the KURAMA mark */
+body:not(.mini) .core { justify-content: center; padding-bottom: 6px; }
+body:not(.mini) .orb { width: clamp(84px, 7vw, 120px); --lv: 0; --kh: 28; }
+.kmark { position: absolute; inset: 16%; width: 68%; height: 68%; display: none; }
+.kring { position: absolute; inset: 0; border-radius: 50%; display: none; }
+body:not(.mini) .kmark, body:not(.mini) .kring { display: block; }
+.kmark path { stroke: none; }
+.kmark .k1 { fill: hsl(var(--kh) 92% 56%); }
+.kmark .k2 { fill: hsl(var(--kh) 85% 32%); }
+.kmark .k3, .kmark .k4 { fill: #0c0d11; }
+.kring { border: 2px solid hsla(var(--kh), 95%, 60%, calc(0.14 + var(--lv) * 0.75));
+  background: radial-gradient(circle, hsla(var(--kh), 95%, 55%, calc(0.05 + var(--lv) * 0.22)) 0%, transparent 70%);
+  transform: scale(calc(1 + var(--lv) * 0.22)); }
+body:not(.mini) .name { margin-top: 18px; font-size: clamp(20px, 1.7vw, 28px); letter-spacing: 0.5em; padding-left: 0.5em; font-weight: 400; text-shadow: none; }
+.tagline { display: none; }
+body:not(.mini) .tagline { display: block; margin-top: 6px; font-size: 13px; color: var(--muted); }
+body:not(.mini) .voice-state { font-size: 13px; margin-top: 14px; }
+
+/* centre: conversation = messages + a pill composer + chips below */
+body:not(.mini) .chat { background: transparent; border: 0; width: min(760px, 100%); }
+body:not(.mini) .chat-head { border-bottom: 0; padding: 4px 4px 6px 6px; }
+body:not(.mini) .chat-head .card-title { color: var(--muted); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; }
+body:not(.mini) .messages { mask-image: none; background: rgba(10, 11, 15, 0.72); border: 1px solid var(--card-border); border-radius: 14px;
+  scroll-behavior: auto; }
+body:not(.mini) .chat > .ask { order: 5; border-top: 0; margin-top: 12px; padding: 6px 6px 6px 10px; align-items: center;
+  background: rgba(12, 13, 18, 0.92); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 30px; }
+body:not(.mini) .chat > #suggest { order: 6; justify-content: center; margin-top: 12px; }
+body:not(.mini) .ask textarea { background: transparent; border: 0; padding: 10px 8px; }
+body:not(.mini) .send { background: #f5a83a; box-shadow: none; color: #16100a; }
+body:not(.mini) .suggest button { border-radius: 20px; padding: 7px 14px; background: rgba(12, 13, 18, 0.85); border: 1px solid rgba(255, 255, 255, 0.1); }
