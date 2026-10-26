@@ -789,7 +789,7 @@ function wxKind(it) {
   return "cloud";
 }
 async function loadWeather() {
-  if (MINI) return;
+  if (MINI || minimized) return;
   let it = null;
   try { it = (await api.fetchWeather()).items?.[0] || null; } catch { it = null; }
   const ok = !!it && !it.error && it.temp_c != null;
@@ -1288,7 +1288,7 @@ function renderSuggest() {
 // ---------- a wallpaper KURAMA made is drawn behind the dashboard (this window covers the real desktop) ----------
 let wallMtime = -1;
 async function loadWall() {
-  if (MINI) return;
+  if (MINI || minimized || paused) return;
   try {
     const w = await api.wallpaperInfo();
     const m = w.kurama ? w.mtime : 0;
@@ -1430,8 +1430,10 @@ function stopClock() { clearTimeout(clockTimer); clockTimer = 0; }
 // ---------- pause / visibility (wallpaper covered, tab hidden) ----------
 function applyActivity() {
   const idle = paused || document.hidden;
-  document.body.classList.toggle("paused", idle);
-  orb.pause(paused || MINI);
+  // minimized = mini KURAMA is the UI: the dashboard behind it freezes completely (orb stops, no CSS animation,
+  // no polling) so it costs ~0 CPU while you work; restore brings it all back
+  document.body.classList.toggle("paused", idle || minimized);
+  orb.pause(paused || MINI || minimized);
   if (idle || minimized) { stopStatus(); stopClock(); clearTimeout(devTimer); devTimer = 0; clearTimeout(schedTimer); schedTimer = 0; clearTimeout(dashTimer); dashTimer = 0; }
   else { if (!clockTimer) tick(); if (!es && !pollTimer) startStatus(); if (!devTimer) loadDevice(); if (!schedTimer) loadToday(); if (!dashTimer) loadDash(); }
   syncAmbient();

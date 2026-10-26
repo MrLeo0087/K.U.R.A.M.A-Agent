@@ -556,7 +556,7 @@ h1.name { animation: tracking 1.8s cubic-bezier(.2, .8, .2, 1) 0.3s both; }
 .low-power .orb, .low-power h1.name, .low-power .layout > .col { animation: none; }
 
 /* ---------- minimized: only the orb stays on the desktop (click it to restore) ---------- */
-body.minimized .col, body.minimized .chat { display: none; }
+body.minimized .col, body.minimized .chat, body.minimized .bg-dust { display: none; }
 body.minimized .orb { cursor: pointer; }
 
 /* ---------- mini KURAMA (?mini=1): just the conversation, in the small panel over every app ---------- */

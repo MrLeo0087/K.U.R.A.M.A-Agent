@@ -50,7 +50,9 @@ def embedder() -> Any:
     global _embedder
     if _embedder is None:
         from jarvis.core.memory import Embedder
-        _embedder = Embedder()
+        # kept loaded much longer than the knowledge index's: reloading the model took 3-18 s and made every
+        # free-phrased request after a 2-minute pause feel stuck (~120 MB while loaded, in a child process)
+        _embedder = Embedder(idle_s=config.SEMANTIC_EMBED_IDLE_S)
     return _embedder
 
 
@@ -81,6 +83,15 @@ def _load() -> tuple[list[str], Any]:
         log.info("semantic router: embedded %d documents", len(docs))
     _index = (key, [g for g, _ in docs], mat)
     return _index[1], _index[2]
+
+
+def warm() -> None:
+    """Load the model + index now (server start / wake-up), so the first real request is fast."""
+    if config.SEMANTIC_ROUTER:
+        try:
+            scores("open youtube")
+        except Exception as e:  # noqa: BLE001
+            log.warning("semantic warm-up failed: %s", e)
 
 
 def scores(text: str) -> list[tuple[str, float]]:

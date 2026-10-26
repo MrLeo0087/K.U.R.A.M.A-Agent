@@ -163,6 +163,8 @@ class Engine:
             if hasattr(a, "warm"):
                 a.warm()
             self.ready = True
+            from jarvis.core import semantic
+            semantic.warm()  # free phrasing is routed by meaning: have the model ready before the first request
         except Exception as e:  # best effort; the first chat retries
             log.warning("agent warm-up failed: %s", e)
 

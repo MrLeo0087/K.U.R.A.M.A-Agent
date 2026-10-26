@@ -88,6 +88,7 @@ TYPO_FIXES: dict[str, str] = {
     "foler": "folder", "fodler": "folder", "folde": "folder", "summarise": "summarize",
 }
 STT_FIXES: dict[str, str] = {
+    r"\b(?:space|speak|speec|speach|spich)\s+(?:to|2)\s+text\b": "speech to text",
     r"\b(?:b\.?\s?s\.?|be\s?as|versus|vs\.?|v\.\s?s\.)\s+(?:code|cold|cord|court|coat)\b": "VS Code",
     r"\bvisual\s+studio(?:\s+code)?\b": "VS Code",
     r"\bbear\s+skull\b": "VS Code",
@@ -752,6 +753,7 @@ EMBED_BATCH = 8  # measured on the repo: batch 8 peaks at ~475 MB vs ~680 MB for
 EMBED_NICE = 10  # the embedding process and the index job thread run at low CPU priority
 EMBED_IN_SUBPROCESS = True  # model in a child process: unloading frees ALL its RAM (incl. imports)
 EMBED_IDLE_UNLOAD_S = 120.0  # stop the embedding process after this idle time
+SEMANTIC_EMBED_IDLE_S = float(os.getenv("KURAMA_SEMANTIC_IDLE_S", "2700"))  # the router's model: 45 min warm
 MEMORY_DB_PATH = DATA_DIR / "memory.db"  # chunks + FTS5 + float32 vectors (separate from jarvis.db)
 MEMORY_ROOTS: list[Path] = [ROOT] + ([Path.home() / "notes"] if (Path.home() / "notes").is_dir() else [])
 MEMORY_EXTS = (".py", ".md", ".txt", ".toml", ".yaml", ".yml", ".json", ".ipynb", ".js", ".jsx", ".ts",
