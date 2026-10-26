@@ -39,7 +39,7 @@ def no_raw(text):
 
 def test_registered_safe_and_small_group():
     tools = {t.name: t for t in registry.schemas_for(["codequality"])}
-    assert set(tools) == {"dependency_doctor", "repo_check", "review_code"}
+    assert set(tools) == {"dependency_doctor", "repo_check", "review_code", "code_tidy"}
     assert all(registry.safety_of(t) == "safe" for t in tools.values())
 
 

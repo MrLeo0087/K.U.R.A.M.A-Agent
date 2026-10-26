@@ -1270,6 +1270,31 @@ _A_NOT_SEL = re.compile(r"\b(?:error|errors|traceback|exception|warning|file|fol
                         r"message\s+from|notification|alert)\b|\bmy\s+name\b", I)
 
 
+_TIDY_FILE = r"(?P<f>(?:this|my|the)\s+(?:whole\s+|entire\s+|full\s+|python\s+)?(?:code|file|script|program)(?:\s+file)?|" \
+             r"[\w./~-]+\.(?:py|pyi|json))"
+
+
+def code_tidy_intent(t: str) -> Intent | None:
+    """'format my code / this file / main.py', 'check this file', 'lint my code', 'any errors in this file',
+    'fix the problems' -> code_tidy (ruff, 0 tokens)."""
+    def path(m):
+        f = (m.groupdict().get("f") or "").strip()
+        return f if re.search(r"\.\w+$", f) else ""
+    if m := re.fullmatch(r"(?:please\s+|can\s+you\s+)*(?:format|beautify|indent|reformat|prettify|pretty\s+print|tidy(?:\s+up)?|"
+                         r"clean\s+up\s+the\s+formatting\s+of|fix\s+the\s+(?:formatting|indentation)\s+(?:of|in))\s+"
+                         + _TIDY_FILE + r"(?:\s+please)?[\s.!?]*", t, I):
+        return Intent("tidy", "code_tidy", "codequality", {"action": "format", "path": path(m)})
+    if m := (re.fullmatch(r"(?:please\s+|can\s+you\s+)*(?:check|lint|scan)\s+" + _TIDY_FILE +
+                          r"(?:\s+for\s+(?:errors|problems|mistakes|bugs))?[\s.!?]*", t, I)
+             or re.fullmatch(r"(?:are\s+there\s+(?:any\s+)?|any\s+)(?:errors|problems|mistakes)\s+in\s+" + _TIDY_FILE + r"\s*\??",
+                             t, I)):
+        return Intent("tidy", "code_tidy", "codequality", {"action": "check", "path": path(m)})
+    if re.fullmatch(r"(?:please\s+)?fix\s+(?:the|those|these|all\s+the|all)\s+(?:problems|lint\s+errors|errors|issues)"
+                    r"(?:\s+(?:in\s+(?:this|my|the)\s+(?:file|code)|safely))?[\s.!]*", t, I):
+        return Intent("tidy", "code_tidy", "codequality", {"action": "fix", "path": ""})
+    return None
+
+
 def assist_intent(t: str) -> Intent | None:
     """Highlighted text/code help, 0 tokens to route: explain / meaning / translate / fix code / write code / file."""
     from jarvis.core.assist import lang_of
@@ -1304,8 +1329,10 @@ def assist_intent(t: str) -> Intent | None:
     if re.search(r"\b(?:explain|explanation|summari[sz]e|what\s+(?:does|is))\b", t, I) and WHOLE_CODE.search(t) \
             and len(t.split()) <= 16:  # "explain my whole code" = the file open in VS Code
         return Intent("assist", "text_assist", "clipboard", {"action": "explain_file", "path": "this", "lang": lang})
-    if re.search(r"\b(?:format|fix|clean\s+up|refactor|improve|optimi[sz]e|indent|beautify|tidy(?:\s+up)?|correct)\b", t, I) \
-            and WHOLE_CODE.search(t) and len(t.split()) <= 20:  # "format my whole code" / "fix this file"
+    if ct := code_tidy_intent(t):  # format / check / fix with ruff, 0 tokens
+        return ct
+    if re.search(r"\b(?:fix|clean\s+up|refactor|improve|optimi[sz]e|correct)\b", t, I) \
+            and WHOLE_CODE.search(t) and len(t.split()) <= 20:  # "fix this file" / "improve my whole code": the AI
         return Intent("assist", "text_assist", "clipboard", {"action": "improve", "request": t})
     if re.search(r"\b(?:meaning|means?|definition|define|artha|matlab)\b|अर्थ", t, I) and _A_POINT.search(t) \
             and len(t.split()) <= 16 and not _A_NOT_SEL.search(t):  # any way of asking what the selection means

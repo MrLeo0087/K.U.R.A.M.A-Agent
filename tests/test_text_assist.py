@@ -213,7 +213,7 @@ def test_any_way_of_asking_about_the_selection():
     assert a("What is the meaning of this word in Nepali?") == ("text_assist", "meaning", "ne")
     assert a("translate this into japanese") == ("text_assist", "translate", "ja")
     assert a("convert this to french") == ("text_assist", "translate", "fr")
-    assert a("format my whole code")[1] == "improve" and a("explain my whole code")[1] == "explain_file"
+    assert a("improve my whole code")[1] == "improve" and a("explain my whole code")[1] == "explain_file"
     assert a("what is the meaning of this code")[1] == "code"
     assert fastpath.match("what is the meaning of life") is None
 
@@ -239,7 +239,7 @@ def test_format_whole_file_waits_for_yes(desk, tmp_path, monkeypatch):
     monkeypatch.setattr(rewrite, "target_window", lambda: (7, False))
     monkeypatch.setattr(rewrite, "_window_name", lambda wid: "calc.py - x - Visual Studio Code")
     monkeypatch.setattr(assist, "_llm", lambda *a, **k: "def add(a, b):\n    return a + b")
-    assert assist.run("improve", "format my whole code") == "Improving the selected code in calc.py…"
+    assert assist.run("improve", "improve my whole code") == "Improving the selected code in calc.py…"
     assert _wait_pending() and assist.apply_pending_code() == "Replaced in calc.py."
     assert f.read_text() == "def add(a, b):\n    return a + b\n"
 
