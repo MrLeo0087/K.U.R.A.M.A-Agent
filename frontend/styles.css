@@ -1063,3 +1063,14 @@ body:not(.mini)[data-state="listening"] .kmark .k3, body:not(.mini)[data-state="
 body:not(.mini)[data-state="speaking"] .kmark .k3 { fill: #ffe08a; }
 body:not(.mini)[data-state="thinking"] .kmark .k3 { fill: #ffd27a; }
 body:not(.mini)[data-state="error"] .kmark .k3 { fill: #ff6b6b; }
+
+/* layout (owner): Now & today on the left, a compact weather, Work up, and the rest of the right column = the workspace */
+body:not(.mini) .col.right .wx-head { height: auto; margin-bottom: 0; }
+body:not(.mini) .col.right .wx-big { font-size: clamp(34px, 3.2vw, 56px); }
+body:not(.mini) .col.right .wx-head .wx-hours { display: none; }
+body:not(.mini) .col.right .code-card { flex: none; }
+body:not(.mini) .col.right .code-card .code-body .cfiles { display: none; }
+body:not(.mini) .col.right .ws-card { flex: 1 1 0; min-height: 320px; }
+body:not(.mini) .col.right { overflow: hidden; }
+body:not(.mini) .col.left .today-card { flex: none; }
+body:not(.mini) .col.left { overflow-y: auto; scrollbar-width: none; }
