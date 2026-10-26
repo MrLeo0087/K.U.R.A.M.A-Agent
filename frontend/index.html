@@ -250,7 +250,7 @@
       <label>API token <small>only if the server sets JARVIS_API_TOKEN · stored in this browser</small>
         <input id="set-token" type="password" autocomplete="off" spellcheck="false">
       </label>
-      <label>Language
+      <label>Language <small>English = fastest and most accurate if you mostly speak English (Auto also tries Nepali)</small>
         <select id="set-lang">
           <option value="auto">Auto-detect</option>
           <option value="en">English</option>
@@ -261,6 +261,26 @@
       <label class="check"><input id="set-wake" type="checkbox"><span>Wake word <small>talk mode on at start, asleep until “wake up KURAMA”; “sleep now” to sleep</small></span></label>
       <label class="check"><input id="set-hear" type="checkbox"><span>Hear device sound <small>on (default): normal speaker sound · off: the laptop's own sound is removed from the mic, but this can make your speakers quieter</small></span></label>
       <label class="check"><input id="set-low" type="checkbox"><span>Low power <small>static orb, CSS glow only</small></span></label>
+      <div class="set-group" id="set-voice">
+        <span class="label">Voice</span>
+        <div class="vmeter" aria-hidden="true"><i id="vm-lvl"></i><i id="vm-thr" title="speech starts above this line"></i></div>
+        <div class="row"><small id="vm-txt" class="note grow">Speak to see your level.</small><button type="button" id="vm-test" class="btn">Test mic</button></div>
+        <label>Speech sensitivity <small id="v-sens-v"></small><small>left: noisy room (only clear speech) · right: quiet voice / far away</small>
+          <input id="v-sens" type="range" min="1" max="10" step="1"></label>
+        <label>Wait after you stop talking <small id="v-pause-v"></small><small>longer = you can pause mid-sentence</small>
+          <input id="v-pause" type="range" min="0.5" max="2.5" step="0.1"></label>
+        <label>Ignore sounds shorter than <small id="v-min-v"></small><small>clicks, coughs, taps</small>
+          <input id="v-min" type="range" min="100" max="700" step="50"></label>
+        <label>Microphone volume (laptop) <small id="v-vol-v"></small>
+          <input id="v-vol" type="range" min="20" max="150" step="5"></label>
+        <label class="check"><input id="v-ns" type="checkbox"><span>Remove background noise <small>fans, traffic, TV (browser noise suppression)</small></span></label>
+        <label class="check"><input id="v-ec" type="checkbox"><span>Remove KURAMA's own voice <small>echo cancellation, so it doesn't hear itself</small></span></label>
+        <label class="check"><input id="v-agc" type="checkbox"><span>Automatic volume <small>evens out loud and quiet speech</small></span></label>
+        <label>Wake word sensitivity <small>how easily "KURAMA" / "wake up" wakes it</small>
+          <select id="v-wake"><option value="low">Low (noisy room)</option><option value="normal">Normal</option><option value="high">High (quiet / far)</option></select></label>
+        <small id="v-tip" class="note"></small>
+        <div class="row"><span class="grow"></span><button type="button" id="v-reset" class="btn">Reset voice settings</button></div>
+      </div>
       <div class="set-group">
         <span class="label">Memory</span>
         <label>Understanding model <small>local, 0 tokens: understands free-form requests (~250 MB while loaded)</small>

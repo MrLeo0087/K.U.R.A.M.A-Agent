@@ -1,6 +1,6 @@
 // KURAMA UI controller. Talks to the KURAMA backend ONLY through the HTTP API (api.js).
 import { Api } from "./api.js";
-import { loadSettings, saveSettings } from "./config.js";
+import { VOICE_DEFAULTS, loadSettings, saveSettings } from "./config.js";
 import { Dust } from "./dust.js";
 import { Orb } from "./orb.js";
 import { Conversation, Mic, Player, Recorder, SentenceSplitter, audioCtx, audioSleepSoon, insertAtCursor } from "./voice.js";
@@ -1965,8 +1965,75 @@ function openSettings(msg) {
   $("set-lang").value = S.lang || "auto";
   $("set-msg").textContent = msg || "";
   loadMemory();
+  loadVoice();
   if (!dlg.open) dlg.showModal();
 }
+
+// ---------- Settings -> Voice: live level, sensitivity, pause, noise / echo / volume, mic volume, wake word ----------
+function applyVoiceSettings() {
+  mic.proc = { ns: !!S.voice.ns, ec: !!S.voice.ec, agc: !!S.voice.agc };
+  conv.applyVoice(S.voice);
+}
+applyVoiceSettings();
+let vmRaf = 0, vmOwnMic = false;
+function showVoice() {
+  const v = S.voice;
+  $("v-sens").value = v.sens; $("v-sens-v").textContent = `${v.sens}/10`;
+  $("v-pause").value = v.pause; $("v-pause-v").textContent = `${Number(v.pause).toFixed(1)} s`;
+  $("v-min").value = v.minMs; $("v-min-v").textContent = `${v.minMs} ms`;
+  $("v-ns").checked = v.ns; $("v-ec").checked = v.ec; $("v-agc").checked = v.agc;
+}
+async function loadVoice() {
+  showVoice();
+  try {
+    const r = await api.voiceSettings();
+    if (r.mic.volume != null) { $("v-vol").value = r.mic.volume; $("v-vol-v").textContent = `${r.mic.volume}%`; }
+    $("v-vol").disabled = r.mic.volume == null;
+    $("v-wake").value = r.wake;
+    $("v-tip").textContent = r.mic.echo_canceller ? "The laptop's echo canceller is on (\"Hear device sound\" is off). It can make your voice less clear: if KURAMA mishears you, turn \"Hear device sound\" on and keep \"Remove KURAMA's own voice\" on." : "";
+  } catch { /* API busy */ }
+  if (!vmRaf) vmRaf = requestAnimationFrame(voiceMeter);
+}
+function voiceMeter() {
+  if (!dlg.open) { vmRaf = 0; if (vmOwnMic && !conv.on) { mic.stop?.(); } vmOwnMic = false; return; }
+  if (mic.open) {
+    const rms = mic.rms(), thr = conv.threshold(), scale = (x) => Math.min(100, Math.sqrt(x / 0.2) * 100);
+    $("vm-lvl").style.width = `${scale(rms)}%`;
+    $("vm-lvl").classList.toggle("on", rms > thr);
+    $("vm-thr").style.left = `${scale(thr)}%`;
+    $("vm-txt").textContent = rms > thr ? "Speech heard ✓" : `Room noise ${Math.round(scale(conv.floor))} · speech starts at ${Math.round(scale(thr))}`;
+  }
+  vmRaf = requestAnimationFrame(voiceMeter);
+}
+$("vm-test").onclick = async () => {
+  if (mic.open) { toast("The mic is already on: speak and watch the bar."); return; }
+  try { await mic.start(); vmOwnMic = true; toast("Speak normally: the bar should pass the line only when you talk."); }
+  catch (e) { toast("Couldn't open the mic: " + e.message); }
+};
+function setVoice(patch, restartMic = false) {
+  S.voice = { ...S.voice, ...patch };
+  saveSettings(S);
+  applyVoiceSettings();
+  showVoice();
+  if (restartMic && mic.open && !mic.plain) mic.restart({ plain: false, force: true }).catch(() => {});
+}
+$("v-sens").oninput = (e) => setVoice({ sens: Number(e.target.value) });
+$("v-pause").oninput = (e) => setVoice({ pause: Number(e.target.value) });
+$("v-min").oninput = (e) => setVoice({ minMs: Number(e.target.value) });
+for (const k of ["ns", "ec", "agc"]) $("v-" + k).onchange = (e) => setVoice({ [k]: e.target.checked }, true);
+let volTimer = 0;
+$("v-vol").oninput = (e) => {
+  $("v-vol-v").textContent = `${e.target.value}%`;
+  clearTimeout(volTimer);
+  volTimer = setTimeout(() => api.setVoiceSettings({ mic_volume: Number(e.target.value) }).catch(() => toast("Couldn't change the mic volume.")), 250);
+};
+$("v-wake").onchange = (e) => api.setVoiceSettings({ wake: e.target.value })
+  .then(() => toast("Wake word sensitivity: " + e.target.selectedOptions[0].text + ".")).catch(() => toast("Couldn't change it."));
+$("v-reset").onclick = () => {
+  setVoice({ ...VOICE_DEFAULTS }, true);
+  api.setVoiceSettings({ wake: "normal" }).then(() => { $("v-wake").value = "normal"; }).catch(() => {});
+  toast("Voice settings are back to the defaults.");
+};
 async function loadMemory() { // Settings -> Memory: what each part uses, and the model's mode
   try {
     const r = await api.resources();

@@ -40,6 +40,14 @@ VARIANTS: tuple[str, ...] = ()
 CANON: tuple[str, ...] = ()
 
 
+
+def _ratio() -> float:
+    try:
+        from jarvis.core import voicecfg
+        return voicecfg.wake_ratio()
+    except Exception:  # noqa: BLE001 - no DB (tests, CLI): the default
+        return config.WAKE_MATCH_RATIO
+
 def refresh_names() -> None:
     """Wake words = "kurama" + the user's chosen name (core/identity.py); rebuilt after a rename."""
     global VARIANTS, CANON
@@ -76,14 +84,14 @@ def _best(cand: str, options: tuple[str, ...]) -> float:
 
 
 def _is_greet(word: str) -> bool:
-    return word in GREETS or (len(word) >= 4 and _best(word, GREETS) >= config.WAKE_MATCH_RATIO)
+    return word in GREETS or (len(word) >= 4 and _best(word, GREETS) >= _ratio())
 
 
 def _name_at(words: list[str], i: int, options: tuple[str, ...] | None = None,
              ratio: float | None = None) -> int:
     """Number of words (1 or 2) at words[i] that form an assistant name, or 0."""
     options = VARIANTS if options is None else options
-    ratio = config.WAKE_MATCH_RATIO if ratio is None else ratio
+    ratio = _ratio() if ratio is None else ratio
     if i >= len(words):
         return 0
     one = _best(words[i], options)
@@ -414,7 +422,8 @@ class WakeListener:
         self.busy = busy
         self.command_stt = command_stt
         self.stream_factory = stream_factory or audio._input_stream
-        self.detector = detector or BurstDetector(min_rms=config.WAKE_MIN_RMS)  # stricter than turn VAD: fewer noise checks
+        from jarvis.core import voicecfg  # the dashboard's wake-word sensitivity (low / normal / high)
+        self.detector = detector or BurstDetector(min_rms=voicecfg.wake_min_rms())  # stricter than turn VAD
         self.checks = 0
         self.skipped = 0
 

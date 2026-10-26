@@ -174,6 +174,28 @@ def remove(n: int) -> str:
     return f"Removed: {r['title']}"
 
 
+def selected_links() -> list[tuple[str, str]]:
+    """[(url, text)] of the links inside what was just copied (browsers also put the selection on the clipboard as
+    text/html, where every link keeps its href)."""
+    import html
+    import subprocess
+    try:
+        targets = subprocess.run(["xclip", "-selection", "clipboard", "-t", "TARGETS", "-o"], capture_output=True,
+                                 timeout=3).stdout.decode(errors="replace")
+        if "text/html" not in targets:
+            return []
+        page = subprocess.run(["xclip", "-selection", "clipboard", "-t", "text/html", "-o"], capture_output=True,
+                              timeout=3).stdout.decode("utf-8", "replace")
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    out = []
+    for href, inner in re.findall(r"<a\b[^>]*?href=[\"']([^\"']+)[\"'][^>]*>(.*?)</a>", page, re.I | re.S):
+        href = html.unescape(href)
+        if href.startswith(("http://", "https://")):
+            out.append((href, html.unescape(re.sub(r"<[^>]+>", "", inner)).strip()))
+    return list(dict.fromkeys(out))[:10]
+
+
 def save_this() -> str:
     """'read this later': the highlighted link(s), else the page open in the browser (+ the highlighted text)."""
     from jarvis.core import rewrite
@@ -182,6 +204,10 @@ def save_this() -> str:
     g = rewrite.grab()
     sel = g.text if isinstance(g, rewrite.Grab) else ""
     links = list(dict.fromkeys(u.rstrip(".,;") for u in URL.findall(sel)))
+    if sel and not links:  # a link's words were selected ('Attention Is All You Need'): its address is in the HTML copy
+        found = selected_links()
+        if found:
+            return "\n".join(add(u, t) for u, t in found)
     if links:
         return "\n".join(add(u) for u in links[:10])
     page = current_page(title)

@@ -938,3 +938,10 @@ body.minimized .mode-pill { opacity: 0.35; }
 .mhelp small { color: var(--dim); font-size: 11px; line-height: 1.4; }
 .mhelp.off { opacity: 0.45; cursor: default; }
 @media (max-width: 700px) { .mswitch { grid-template-columns: 1fr; } .mswitch .tile.span2 { grid-column: auto; } }
+
+/* Settings -> Voice: live mic level with the "speech starts here" line */
+.vmeter { position: relative; height: 10px; border-radius: 5px; background: rgba(255, 255, 255, 0.07); overflow: hidden; margin: 6px 0 4px; }
+.vmeter #vm-lvl { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--dim); transition: width 0.06s linear; }
+.vmeter #vm-lvl.on { background: var(--ok); }
+.vmeter #vm-thr { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--accent); left: 30%; }
+#set-voice input[type="range"] { width: 100%; accent-color: var(--accent); }

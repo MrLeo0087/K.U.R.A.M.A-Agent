@@ -134,7 +134,10 @@ const TAP_WORKLET = `class KuramaTap extends AudioWorkletProcessor {
 registerProcessor("kurama-tap", KuramaTap);`;
 
 export class Mic {
-  constructor() { this.stream = null; this.sinks = new Set(); this.muted = false; this.hearDevice = false; }
+  constructor() {
+    this.stream = null; this.sinks = new Set(); this.muted = false; this.hearDevice = false;
+    this.proc = { ns: true, ec: true, agc: true }; // Settings -> Voice: the browser's noise / echo / volume cleaning
+  }
   get open() { return !!this.stream; }
 
   // muted: the track delivers silence (nothing is heard, recorded or sent) until unmuted
@@ -157,7 +160,8 @@ export class Mic {
       // hearDevice: the user wants KURAMA to hear the laptop's sound too, so the page doesn't cancel it either
       // browser echo cancellation only cleans KURAMA's own mic capture (it never touches speaker volume), so keep
       // it on regardless of the system "hear device sound" setting
-      audio: { echoCancellation: !plain, noiseSuppression: !plain, autoGainControl: !plain, channelCount: 1 },
+      audio: { echoCancellation: !plain && this.proc.ec, noiseSuppression: !plain && this.proc.ns,
+               autoGainControl: !plain && this.proc.agc, channelCount: 1 },
     });
     stream.getAudioTracks().forEach((t) => { t.enabled = !this.muted; });
     const ctx = audioCtx(); // full rate: a 16 kHz context made speech recognition noticeably worse
@@ -433,7 +437,19 @@ export class Conversation {
     this.MAX_UTTERANCE_MS = 30000;
     this.RESTART_IDLE_MS = 8000; // restart the recorder during long silences (keeps uploads small)
     this.AUTO_OFF_MS = 120000;
+    this.thrMult = 3; this.thrMin = 0.016; // speech must be this much louder than the room (sensitivity 5)
   }
+
+  // Settings -> Voice: sens 1 (noisy room: only clear speech) .. 10 (quiet voice), pause before sending (s),
+  // the shortest sound that counts as speech (ms)
+  applyVoice(v) {
+    const s = Math.max(1, Math.min(10, Number(v.sens) || 5));
+    this.thrMult = 3 * Math.pow(1.18, 5 - s);
+    this.thrMin = 0.016 * Math.pow(1.25, 5 - s);
+    this.END_SILENCE_MS = Math.round(Math.max(0.5, Math.min(3, Number(v.pause) || 1)) * 1000);
+    this.MIN_SPEECH_MS = Math.max(100, Math.min(800, Number(v.minMs) || 300));
+  }
+  threshold() { return Math.max(this.floor * this.thrMult, this.thrMin); }
 
   _set(s) { this.state = s; this.cb.onState?.(s); }
 
@@ -491,7 +507,7 @@ export class Conversation {
     this.lastTick = now;
     const rms = this.mic.rms();
     if (this.state === "listening" || this.state === "capturing" || this.state === "sleeping") {
-      const thr = Math.max(this.floor * 3, 0.016);
+      const thr = this.threshold();
       if (!this.started && rms < thr) this.floor = this.floor * 0.97 + rms * 0.03; // adaptive noise floor
       if (rms > thr) {
         this.speechMs += dt; this.silenceMs = 0;

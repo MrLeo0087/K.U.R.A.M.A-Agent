@@ -75,7 +75,7 @@ MY_WORDS = os.getenv("JARVIS_MY_WORDS", "Darshan Chaulagain, Nepalgunj, Kathmand
 MY_WORDS_NE = os.getenv("JARVIS_MY_WORDS_NE", "दर्शन चौलागाईं, नेपालगञ्ज, काठमाडौं, पोखरा")
 STT_PROMPT = os.getenv("JARVIS_STT_PROMPT", MY_WORDS + ", "
                        "Kurama, KURAMA, VS Code, Bluetooth, Brave, YouTube, Spotify, Instagram, Telegram, Wi-Fi, gesture control, "
-                       "GitHub, Colab.")
+                       "GitHub, Colab, QR code, read later, workspace.")
 # Common mishearings fixed after transcription (regex, case-insensitive, word-bounded).
 # Typing slips seen in the real chat log, fixed before matching (word-level, case-insensitive)
 TYPO_FIXES: dict[str, str] = {
@@ -92,6 +92,7 @@ STT_FIXES: dict[str, str] = {
     r"\b(this|the|my|better|python|selected|selective|that|whole|most|mouse|simple|clean|detail|detailed|good|new|"
     r"improved)\s+coat\b": r"\1 code",
     r"\bselective\b": "selected",
+    r"\b(?:q\.?\s?mar|qmar|key\s?mark|q\.?\s?are|queue\s+are|cue\s+are|kyu\s?ar|q\.?\s?r\.?)\s+(?:code|word|cord|coat)s?\b": "QR code",
     r"\b(this|the|that|a|selected|highlighted)\s+(?:o\.?\s?auth|oauth|wordt|ward)\b": r"\1 word",  # "this word" misheard
     r"\bselect(?:ed)?\s+output\b": "selected word",
     r"\bread\s+letters?\b(?=\s+(?:link|links|list|page|pages|article|articles|item|items)\b)": "read later",

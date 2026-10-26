@@ -17,12 +17,15 @@ export const DEFAULTS = Object.freeze({
   wakeListen: true, // talk mode on at start, asleep until "wake up KURAMA"; "sleep now" puts it back to sleep
   lowPower: null, // null = follow prefers-reduced-motion
   lang: "auto", // auto | en | ne | hi
+  // Settings -> Voice (the best general values; the user tunes them for their mic/room)
+  voice: { sens: 5, pause: 1.0, minMs: 300, ns: true, ec: true, agc: true },
 });
+export const VOICE_DEFAULTS = DEFAULTS.voice;
 
 export function loadSettings() {
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch { saved = {}; }
-  const s = { ...DEFAULTS, ...saved };
+  const s = { ...DEFAULTS, ...saved, voice: { ...DEFAULTS.voice, ...(saved.voice || {}) } };
   try {
     const q = new URLSearchParams(location.search).get("api");
     if (q && /^https?:\/\//i.test(q)) { s.apiBase = q.replace(/\/+$/, ""); saveSettings(s); }

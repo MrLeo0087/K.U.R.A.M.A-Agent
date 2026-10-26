@@ -84,3 +84,27 @@ async def device_sound_get():
 async def device_sound_set(body: DeviceSoundIn):
     from jarvis.core import devaudio
     return await run_in_threadpool(devaudio.set_hear, body.hear)
+
+
+class VoiceSettingsIn(BaseModel):
+    mic_volume: int | None = Field(None, ge=10, le=150, description="laptop microphone volume %")
+    wake: str | None = Field(None, description="wake word sensitivity: low | normal | high")
+
+
+@router.get("/voice/settings", summary="Microphone volume + wake word sensitivity")
+async def voice_settings_get():
+    from jarvis.core import voicecfg
+    return await run_in_threadpool(voicecfg.status)
+
+
+@router.post("/voice/settings", summary="Change the microphone volume and/or the wake word sensitivity")
+async def voice_settings_set(body: VoiceSettingsIn):
+    from jarvis.core import voicecfg
+    try:
+        if body.mic_volume is not None:
+            await run_in_threadpool(voicecfg.set_mic_volume, body.mic_volume)
+        if body.wake:
+            voicecfg.set_wake_level(body.wake)
+    except ValueError as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
+    return {"ok": True, **(await run_in_threadpool(voicecfg.status))}

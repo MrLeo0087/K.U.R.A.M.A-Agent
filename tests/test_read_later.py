@@ -88,3 +88,12 @@ def test_owner_phrasings(monkeypatch):
     assert a("Can you give me the read letter link that I gave you just a minute ago?") == ("read_later", {"action": "last"})
     assert a("show me all my read later links") == ("read_later", {"action": "list"})
     assert a("read this letter")[0] == "read_text"
+
+
+def test_selected_link_words_use_the_html_href(rl, monkeypatch):
+    """The owner selects a link on a page (its words, not its address) and says 'keep it for read later'."""
+    st, _ = rl
+    st["sel"] = "Attention Is All You Need"
+    monkeypatch.setattr(readlater, "selected_links", lambda: [("https://arxiv.org/abs/1706.03762", "Attention Is All You Need")])
+    assert readlater.run("add") == "Saved for later: Attention Is All You Need"
+    assert readlater.unread()[0]["link"] == "https://arxiv.org/abs/1706.03762"

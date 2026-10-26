@@ -51,6 +51,8 @@ export class Api {
   stopwatch(action) { return this.request(`/api/v1/stopwatch/${action}`, { method: "POST", body: {} }); }
   wakeSleep() { return this.request("/api/v1/wake/sleep", { method: "POST", body: {} }); }
   deviceSound() { return this.request("/api/v1/voice/device-sound"); }
+  voiceSettings() { return this.request("/api/v1/voice/settings"); }
+  setVoiceSettings(body) { return this.request("/api/v1/voice/settings", { method: "POST", body }); }
   setDeviceSound(hear) { return this.request("/api/v1/voice/device-sound", { method: "POST", body: { hear } }); }
   wakeAwake() { return this.request("/api/v1/wake/awake", { method: "POST", body: {} }); }
   wakeEvents() { return new EventSource(this.url("/api/v1/wake/events", true)); }
