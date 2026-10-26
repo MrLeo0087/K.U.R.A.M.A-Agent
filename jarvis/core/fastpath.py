@@ -103,6 +103,22 @@ TIME_PLACE = _rx(
     r"कति बज्यो|कितने बजे (?:हैं|है)|time kya hai)",
 )
 
+# --- date (separate from time: full date + weekday, Bikram Sambat by default) ---
+_CAL = (r"(?:(?: in| according to| as per)? (?:a\.?d\.?|b\.?s\.?|english|gregorian|international|"
+        r"nepali|bikram ?sambat|angreji|अंग्रेजी|अङ्ग्रेजी|विक्रम ?सम्वत|ईस्वी))?")
+DATE_LOCAL = _rx(
+    _TQ + r"what(?:'s| is| was)?(?: the| today'?s)? date(?: (?:today|now|of today|is it|is today))?" + _CAL,
+    _TQ + r"(?:what(?:'s| is)?|which) (?:day|weekday)(?: of the week)?(?: is it| is today| today| is this)?" + _CAL,
+    _TQ + r"(?:tell me |say )?(?:the |what(?:'s| is) the )?(?:today'?s )?date" + _CAL,
+    _TQ + r"(?:what|which) (?:week|day of the week)(?: is (?:it|this|today))?",
+    r"(?:today'?s date|date today|what day today)" + _CAL,
+    # Nepali / Hindi romanized + script
+    r"(?:aaja?|आज)(?: ko| ka)? (?:kati gate|kun din|kun baar|kaun din|kya (?:din|tarikh|taarikh))(?: ho| hai| hun)?",
+    r"(?:aajako|आजको) (?:miti|miti k ho|din)",
+    r"आज (?:कति गते|कुन दिन|कुन बार|कौन सा दिन|क्या (?:दिन|तारीख))(?: हो| है)?",
+    r"आजको मिति(?: के हो)?", r"मिति (?:कति|के हो)",
+)
+
 # --- weather ---
 _PRE = r"(?:(?:tell me|show me|check|get|give me|provide|find|say) )?(?:what(?:'s| is) |how(?:'s| is) )?(?:the )?(?:current |today'?s |todays )?"
 _WHEN = r"(?: (?P<when>today|now|right now|tomorrow|this week|next 3 days|for the next 3 days|outside))?"
@@ -1795,6 +1811,9 @@ def match(text: str) -> Intent | None:
         return ci
     if ti := time_weather_intent(t):  # "time and weather (in X)" -- also the misheard "time in the weather"
         return ti
+    if _full(DATE_LOCAL, t):
+        ad = bool(re.search(r"\b(?:a\.?d\.?|english|gregorian|international|angreji|अंग्रेजी|अङ्ग्रेजी|ईस्वी)\b", t, I))
+        return Intent("date", "get_date", "general", {"calendar": "ad" if ad else "bs"})
     if m := _full(TIME_LOCAL, t):
         want_date = bool(re.search(r"\b(?:date|day|today)\b|गते|तारीख|बार", t, I))
         return Intent("time", "get_time", "general", {"_date": True} if want_date else {})
@@ -1971,6 +1990,19 @@ def render(intent: Intent, ok: bool, output: str, lang: str) -> str:
         return intent.args.get(lang) or intent.args["en"]
     if intent.name == "where" and ok:
         return {"hi": f"पूरा पाथ: {output}", "ne": f"पूरा पाथ: {output}"}.get(lang, f"The full path is {output}")
+    if intent.name == "date" and ok:
+        if lang in ("ne", "hi"):
+            from datetime import date as _d
+
+            from jarvis.core import nepdate
+            d = _d.today()
+            wk = str(nepdate.week_of_year(d)).translate(str.maketrans("0123456789", "०१२३४५६७८९"))
+            if intent.args.get("calendar") == "ad":
+                return f"आज {nepdate.ad_phrase(d)} {'हो' if lang == 'ne' else 'है'}।"
+            bs = nepdate.bs_phrase(d, nepali_script=True)
+            return (f"आज {bs}, वर्षको {wk} औं हप्ता।" if lang == "ne"
+                    else f"आज {bs}, साल का {wk}वाँ हफ्ता।")
+        return output
     if intent.name == "weather" and intent.args.get("_time") and ok and not output.strip().lower().startswith("error"):
         from jarvis.tools.general.echo_time import get_time
         rest = render(Intent(intent.name, intent.tool, intent.group,

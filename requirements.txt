@@ -46,3 +46,4 @@ Markdown==3.11.2
 fpdf2==2.8.4
 uharfbuzz==0.53.3
 openpyxl==3.1.5
+nepali-datetime==1.0.8.5  # Bikram Sambat date conversion; pure python, no deps

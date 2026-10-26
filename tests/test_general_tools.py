@@ -111,6 +111,27 @@ def test_get_time_local_and_world(http):
     assert "couldn't find" in get_time("Atlantis")
 
 
+def test_get_date_bs_and_ad(monkeypatch):
+    import datetime as _dt
+
+    from jarvis.core import nepdate
+    from jarvis.tools.general.get_date import get_date
+
+    class _FixedDate(_dt.date):
+        @classmethod
+        def today(cls):
+            return cls(2026, 10, 26)  # a Monday
+
+    monkeypatch.setattr(nepdate, "_date", _FixedDate)
+    monkeypatch.setattr("jarvis.tools.general.get_date.date", _FixedDate)
+    bs = get_date()  # default: Bikram Sambat with weekday
+    assert "Monday" in bs and "Kartik 9, 2083 BS" in bs and "week 44" in bs
+    assert "October 2026" in bs  # also gives the English date
+    ad = get_date("ad")  # explicit AD: English only, no BS
+    assert ad == "Today is Monday, 26 October 2026 (week 44 of the year)."
+    assert "Bikram" not in ad
+
+
 # --- apps ---
 def test_open_app_fuzzy_match(apps):
     from jarvis.tools.general.open_app import open_app
@@ -257,10 +278,19 @@ def test_time_answer_is_short_and_date_only_when_asked():
     out = "It's 1:06 PM on Friday, 23 October 2026 in Tokyo, Japan."
     i = fastpath.Intent("time", "get_time", "general", {"place": "Tokyo"}, "Tokyo")
     assert fastpath.render(i, True, out, "en") == "It's 1:06 PM in Tokyo, Japan."
-    assert fastpath.match("what's the date today").args == {"_date": True}
-    local = fastpath.Intent("time", "get_time", "general", {"_date": True})
-    assert fastpath.render(local, True, "It's 9:05 AM on Friday, 23 October 2026.", "en") == \
-        "It's 9:05 AM, Friday, 23 October 2026."
+
+
+def test_date_fastpath_routes_to_date_tool_bs_by_default():
+    # "date"/"which day" go to the dedicated date tool, not the time tool
+    assert fastpath.match("what's the date today").tool == "get_date"
+    assert fastpath.match("what is the date of today").args == {"calendar": "bs"}
+    assert fastpath.match("which day is today").args == {"calendar": "bs"}
+    assert fastpath.match("what is the date in AD").args == {"calendar": "ad"}
+    assert fastpath.match("what's today's date in english").args == {"calendar": "ad"}
+    # English render passes the tool's sentence through as-is
+    d = fastpath.Intent("date", "get_date", "general", {"calendar": "bs"})
+    assert fastpath.render(d, True, "Today is Monday, Kartik 9, 2083 BS.", "en") == \
+        "Today is Monday, Kartik 9, 2083 BS."
 
 
 def test_geocode_prefers_named_country(monkeypatch):

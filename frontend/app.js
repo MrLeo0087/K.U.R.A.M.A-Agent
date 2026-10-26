@@ -439,7 +439,7 @@ function speakPart(sentence, lang, gen) {
 async function sendChat(text, { voice = false, lang = null, speak = false, ambient = false } = {}) {
   text = (text || "").trim();
   if (!text) return;
-  if (wantsSleep(text) && mode === "conv" && S.wakeListen) { addUser(text, voice); goSleep(); return; } // talk mode sleeps
+  if (wantsSleep(text) && mode === "conv") { addUser(text, voice); goSleep(); return; } // talk mode: "sleep" puts KURAMA to sleep, never the laptop
   if (busy) { // e.g. a barge-in utterance while the previous turn is still closing
     abortChat();
     for (let i = 0; busy && i < 40; i++) await new Promise((r) => setTimeout(r, 50));
@@ -1729,9 +1729,14 @@ const SLEEP_RE = /^(?:ok(?:ay)?[,\s]+)?(?:(?:kurama|jarvis)[,\s]+)?(?:(?:now\s+)
 function wantsSleep(text) {
   const t = (text || "").trim();
   if (SLEEP_RE.test(t)) return true;
-  const last = t.split(/[,.;!?]+/).map((s) => s.trim()).filter(Boolean).pop() || "";
-  return /\bsleep\b/i.test(last) && /\b(?:you|yourself|kurama|jarvis)\b/i.test(last)
-    && !/\b(?:laptop|computer|pc|screen|system|display|monitor|mode)\b/i.test(last) && last.split(/\s+/).length <= 7;
+  // Scan each clause: "so actually I want you to sleep now", "sleep now. sleep now." etc.
+  const clauses = t.split(/[,.;!?।]+/).map((s) => s.trim()).filter(Boolean);
+  for (const c of clauses) {
+    if (!/\bsleep\b|सो\s*जा|सुत/i.test(c)) continue;
+    if (/\b(?:laptop|computer|pc|screen|system|display|monitor|mode|machine|device)\b/i.test(c)) continue; // that's suspend-the-laptop, not this
+    if (/\b(?:you|yourself|kurama|jarvis)\b/i.test(c) || /\b(?:go|going|now|good\s*night)\b/i.test(c) || c.split(/\s+/).length <= 3) return true;
+  }
+  return false;
 }
 const WAKE_NAMES = ["kurama", "karama", "corama", "kuruma", "kurma", "koorama", "kurrama", "jarvis", "करामा", "कुरामा"];
 function wakeRest(text) { // null = no wake phrase; else what came after it ("wake up kurama, open youtube" -> "open youtube")
