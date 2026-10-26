@@ -28,6 +28,8 @@ def tmp_store(tmp_path, monkeypatch):
         raise AssertionError(f"real system command in a test: {argv}")
     monkeypatch.setattr(_sys, "_exec", no_real_system)  # never touch volume/brightness/lock/clipboard
     monkeypatch.setattr(config, "GOALS_FILE", str(tmp_path / "goals.xlsx"))  # never the real goals sheet
+    monkeypatch.setattr(config, "READ_LATER_FILE", str(tmp_path / "read_later.xlsx"))  # never the real to-do list
+    monkeypatch.setattr(config, "CONTACTS_FILE", str(tmp_path / "contacts.xlsx"))  # never the real contacts
     monkeypatch.setattr(config, "LINKS_FILE", str(tmp_path / "links.xlsx"))
     monkeypatch.setattr(config, "GOALS_DIR", str(tmp_path / "goals"))
     monkeypatch.setattr(config, "SKILLS_DIR", tmp_path / "skills")  # P7c: never the real saved skills

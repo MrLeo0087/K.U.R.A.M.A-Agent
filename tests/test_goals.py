@@ -205,3 +205,34 @@ def test_todo_vs_long_tasks_vs_code(sent):
         assert args(q) == {"action": "list"}, q
     assert args("what am I working on") == {"action": "overview"}
     assert fastpath.normalize("I need to pay income tax") == "I need to pay income tax"
+
+
+def test_owner_log_midnight_todo(sent, monkeypatch):
+    """Owner's 12:02 AM log: 'What's on today?' said 'no timetable', 'remove all the tasks' / 'remove the review 30 day
+    study plan' were AI claims with no tool (the item stayed on screen), 'schedule the task' lost its follow-up."""
+    from jarvis.core import readlater
+    readlater.add_todo("Review 30-day exam plan", when_text="at 9 pm")
+    readlater.add_todo("Buy milk")
+    goals.add("Exam", "in 30 days")
+    i = fastpath.match("What's on today?")
+    assert i.args == {"action": "today"}
+    out = readlater.run(**i.args)
+    assert "Review 30-day exam plan" in out and "Long tasks" in out and "Exam: 30 days left" in out
+    i = fastpath.match("Remove the review 30 day study plan from the to-do list.")
+    assert i.args == {"action": "remove", "text": "review 30 day study plan"}
+    assert readlater.run(**i.args).startswith("Removed: Review 30-day exam plan")
+    assert [r["title"] for r in readlater.ordered()] == ["Buy milk"]
+    assert fastpath.match("Not only is there any task for me.").args == {"action": "list", "text": "todo"}
+    i = fastpath.match("Remove all the tasks for me.")
+    assert i.args == {"action": "clear", "text": "todo"}
+    assert readlater.run(**i.args) == "Removed 1: Buy milk." and readlater.ordered() == []
+    i = fastpath.match("Okay, schedule the task for the task.")
+    assert i.args["action"] == "ask" and readlater.run(**i.args).startswith("What should I add, and when?")
+    i = fastpath.match("Read the book at 12:15 am")
+    assert i.args == {"action": "todo", "text": "Read the book", "when": "at 12:15 am"}
+    readlater.run(**i.args)
+    assert not readlater.pending()
+    # the three kinds of work never mix
+    assert fastpath.match("give me the code work for today").tool == "where_was_i"
+    assert fastpath.match("show my long workers").tool == "goals"
+    assert fastpath.match("what classes do I have today").tool == "timetable"

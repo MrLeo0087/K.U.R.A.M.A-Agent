@@ -1836,7 +1836,36 @@ def todo_now_intent(t: str) -> Intent | None:
     time (heads-up 10 min before + at the time; NOT schedule_command, which runs computer commands and asks first).
     'is there anything in my to-do', 'what is my reminder today', 'what is the current work I have to do',
     'any task for me today' -> the to-do list (reminders + tasks)."""
+    from jarvis.core import readlater
     low = t.strip(" .!?").lower()
+    L = lambda a, **k: Intent("todo", "read_later", "browser", {"action": a, **k})  # noqa: E731
+    lead = r"(?:okay\W+|ok\W+|so\W+|please\W+|kurama\W+|can\s+you\s+|could\s+you\s+|now\W+)*"
+    # 'schedule a task' was asked without details: this short reply is the task (and maybe its time)
+    if readlater.pending() and len(low.split()) <= 14 and not t.strip().endswith("?") and not re.match(
+            r"(?:no|cancel|never\s*mind|stop|what|why|how|open|close|show)\b", low):
+        extra, rest = _extras(t.strip(" .!"))
+        task = re.sub(r"^(?:it'?s|it\s+is|to|for)\s+", "", rest.strip(" ,."), flags=I)
+        if len(task) >= 2:
+            return L("todo", text=task, **extra)
+    if readlater.pending() and re.match(r"(?:no|cancel|never\s*mind)\b", low):
+        readlater.clear_pending()
+    # 'what's on today' = the whole day: to-do + reminders, classes, long tasks
+    if re.fullmatch(lead + r"(?:what(?:'s|\s+is)\s+(?:on\s+)?(?:for\s+)?today|what\s+(?:do\s+i\s+have|have\s+i\s+got)\s+today|"
+                    r"(?:my|today'?s)\s+(?:plan|schedule|day)(?:\s+today)?|what(?:'s|\s+is)\s+(?:my|the)\s+(?:plan|schedule)\s+(?:for\s+)?today|"
+                    r"how\s+(?:does|is)\s+my\s+day\s+look(?:ing)?)", low, I):
+        return L("today")
+    # remove everything / one named item
+    if m := re.fullmatch(lead + r"(?:remove|delete|clear|cancel|erase|empty)\s+(?:all|every|everything)?\s*(?:of\s+)?(?:the\s+|my\s+)?"
+                         r"(?P<k>tasks?|to[\s-]?dos?|reminders?|to[\s-]?do\s*list|list|reading\s+list|read\s+later(?:\s+list)?)(?:\s+for\s+me)?", low, I):
+        if re.search(r"\ball\b|\bevery|\bclear\b|\bempty\b|\blist\b", low):
+            return L("clear", text="read" if re.search(r"read", m.group("k")) else "todo")
+    if m := re.fullmatch(lead + r"(?:remove|delete|cancel|drop|forget|take|cross|strike|tick)\s+(?:off\s+|out\s+)?(?:the\s+|my\s+)?(?P<x>.+?)\s+"
+                         r"(?:from|off|out\s+of|in)\s+(?:the\s+|my\s+)?(?:to[\s-]?do(?:\s*list)?|list|tasks?|reminders?)", low, I):
+        return L("remove", text=m.group("x"))
+    if (m := re.fullmatch(lead + r"(?:i\s+(?:have\s+)?(?:finished|completed|did|done)|i'?m\s+done\s+with|done\s+with|mark)\s+(?:the\s+)?(?P<x>.+?)"
+                          r"(?:\s+as\s+(?:done|complete(?:d)?|finished))?", low, I)) and not re.search(r"\d", m.group("x")[:3]) \
+            and readlater.find(m.group("x"), ("reminder", "todo")):
+        return L("remove", text=m.group("x"))
     if re.fullmatch(r"(?:okay\W+|ok\W+|so\W+|please\W+|kurama\W+|can\s+you\s+|could\s+you\s+)*(?:"
                     r"(?:is|are)\s+there\s+(?:anything|something|any\s+(?:tasks?|work|to[\s-]?dos?|reminders?))\s+(?:in|on|for)\s+(?:me\s+)?(?:my\s+|the\s+)?"
                     r"(?:to[\s-]?do(?:\s*list)?|list|today|now)(?:\s+(?:for\s+)?today)?"
@@ -1849,6 +1878,12 @@ def todo_now_intent(t: str) -> Intent | None:
                     r"(?:current\s+)?(?:work|tasks?)(?:\s+i\s+have\s+to\s+do)?)?(?:\s+(?:for\s+)?today)?"
                     r"|(?:my\s+)?(?:tasks?|to[\s-]?dos?|reminders?)\s+(?:for\s+)?today)", low, I):
         return Intent("todo", "read_later", "browser", {"action": "list", "text": "todo"})
+    if len(low.split()) <= 12 and re.search(r"\b(?:tasks?|todos?|to-dos?|(?:my|any|the)\s+to\s+dos?)\b", low) and re.search(
+            r"\b(?:any|anything|is\s+there|are\s+there|what|which|show|list|tell|have\s+i|do\s+i)\b", low) and not re.search(
+            r"\b(?:long|code|coding|add|schedule|plan|remove|delete|clear|cancel|set|create|make|remind\s+me)\b", low):
+        return L("list", text="todo")
+    if re.fullmatch(lead + r"(?:schedule|plan|add)\s+(?:a|the|my|one|new)?\s*(?:task|work|to[\s-]?do|thing)(?:\s+for\s+(?:me|the\s+task))?", low, I):
+        return L("ask", text=t)
     m = re.fullmatch(r"(?:okay\W+|ok\W+|so\W+|please\W+|kurama\W+|can\s+you\s+|could\s+you\s+)*(?:schedule|plan)\s+(?P<x>.+)", low, I)
     if not m or _TD_CMD.search(m.group("x")) or re.search(r"\b(?:timer|alarm|meeting\s+with\s+kurama)\b", low):
         return None
@@ -1914,6 +1949,13 @@ def goal_intent(t: str) -> Intent | None:
     from jarvis.core import goals
     low = t.strip(" .!?").lower()
     G = lambda a, **k: Intent("goals", "goals", "schedule", {"action": a, **k})  # noqa: E731
+    # the CODE work (what you're doing in your project): 'code work for today', 'code worker', 'what do I have to do
+    # in my code', 'related to code' -> where was I (git changes, errors, next step)
+    if len(low.split()) <= 20 and (re.search(r"\b(?:code|coding|programming)\s+(?:work(?:er)?s?|tasks?|jobs?|progress|to[\s-]?dos?)\b", low)
+                                   or re.search(r"\b(?:related\s+to|in|on|for)\s+(?:my\s+|the\s+)?(?:code|coding|project\s+code)\b", low)
+                                   and re.search(r"\b(?:work|do|doing|task|left|pending|today)\b", low)) \
+            and not re.search(r"\b(?:write|explain|fix|format|improve|review|run|test|commit|error)\b", low):
+        return Intent("code", "where_was_i", "git", {})
     # an answer to the open check-in question
     if _G_PROGRESS.match(low) and len(low.split()) <= 80 and (w := goals.waiting()):
         return G("log", goal=w["id"], text=t.strip())
@@ -1926,7 +1968,7 @@ def goal_intent(t: str) -> Intent | None:
     if re.fullmatch(r"(?:please\s+)?(?:show|list|see|open|check|tell\s+me|what\s+are|what'?s|give\s+me)?\s*(?:me\s+)?(?:all\s+)?"
                     r"(?:my\s+|the\s+)?(?:goals?|long[\s-]?(?:term\s+)?tasks?|countdowns?)(?:\s+list)?", low, I):
         return G("list")
-    if re.search(r"\b(?:this|my|the|for\s+(?:the|my|this))\s+month\b|\bmonthly\s+(?:tasks?|work|goals?)\b|\blong[\s-]?(?:term\s+)?(?:tasks?|work)\b", low) \
+    if re.search(r"\b(?:this|my|the|for\s+(?:the|my|this))\s+month\b|\bmonthly\s+(?:tasks?|work|goals?)\b|\blong[\s-]?(?:term\s+)?(?:tasks?|work(?:ers?)?|projects?)\b", low) \
             and re.search(r"\b(?:what|which|show|list|tell|any|have\s+to|need\s+to|running)\b", low) and len(low.split()) <= 18 \
             and not goals.end_in(low):
         return G("list")

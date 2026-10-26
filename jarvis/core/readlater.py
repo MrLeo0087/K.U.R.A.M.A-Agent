@@ -339,6 +339,91 @@ def remove(n: int) -> str:
     return f"Removed: {r['title']}"
 
 
+def _words(s: str) -> set[str]:
+    return {w for w in re.findall(r"[a-z0-9]+", (s or "").lower()) if len(w) > 2 or w.isdigit()} - {
+        "the", "and", "for", "from", "list", "todo", "task", "my"}
+
+
+def find(text: str, kinds: tuple[str, ...] = ("reminder", "todo", "read")) -> dict | None:
+    """The list item a loose title means ('the review 30 day study plan' -> 'Review 30-day exam plan')."""
+    want = _words(text)
+    if not want:
+        return None
+    best, score = None, 0.0
+    for r in ordered():
+        if r["type"] not in kinds:
+            continue
+        have = _words(r["title"].replace("-", " ").replace("‑", " "))
+        if not have:
+            continue
+        s = len(want & have) / len(want | have)
+        if text.lower().strip() in r["title"].lower():
+            s = 1.0
+        if s > score:
+            best, score = r, s
+    return best if score >= 0.34 else None
+
+
+def remove_named(text: str) -> str:
+    r = find(text)
+    if r is None:
+        return f"I couldn't find '{text}' in your list.\n" + show(kind="todo")
+    _drop(r)
+    return f"Removed: {r['title']}. " + (f"{len(ordered())} left." if ordered() else "Your list is empty now 🎉")
+
+
+def clear(kind: str = "todo") -> str:
+    """'remove all my tasks': every to-do and reminder (kind 'todo'), or the reading list (kind 'read')."""
+    kinds = ("reminder", "todo") if kind == "todo" else ("read",)
+    gone = [r for r in ordered() if r["type"] in kinds]
+    for r in gone:
+        _drop(r)
+    if not gone:
+        return "Nothing to remove: your to-do list is already empty." if kind == "todo" else "Your reading list is already empty."
+    return f"Removed {len(gone)}: " + ", ".join(r["title"][:40] for r in gone) + "."
+
+
+def today() -> str:
+    """'What's on today?': reminders + to-dos, today's classes, and the running long tasks, in one short answer."""
+    parts = []
+    rows = [r for r in ordered() if r["type"] in ("reminder", "todo")]
+    parts.append(show(kind="todo") if rows else "✅ To-do: nothing yet.")
+    try:
+        from jarvis.core import study
+        if study.classes():
+            parts.append(study.show("today"))
+    except Exception:
+        pass
+    try:
+        from jarvis.core import goals
+        live = [g for g in goals.all_goals() if g["status"] == "active"]
+        if live:
+            parts.append("📂 Long tasks:\n" + "\n".join(goals.status_text(g) for g in live))
+    except Exception:
+        pass
+    return "\n\n".join(parts)
+
+
+PENDING_KEY = "todo_pending"  # 'schedule a task' with no task/time: the next short reply fills it in
+
+
+def ask_details(text: str = "") -> str:
+    store.kv_set(PENDING_KEY, json.dumps({"ts": time.time(), "text": text}))
+    return "What should I add, and when? For example: 'reading the book at 12:15 am'."
+
+
+def pending() -> bool:
+    try:
+        d = json.loads(store.kv_get(PENDING_KEY) or "{}")
+    except ValueError:
+        return False
+    return bool(d) and time.time() - float(d.get("ts", 0)) <= 180
+
+
+def clear_pending() -> None:
+    store.kv_delete(PENDING_KEY)
+
+
 def nudge(now: float | None = None) -> str | None:
     """Now and then (random time, at most NUDGE_PER_DAY a day, NUDGE_HOURS only) remind the user of ONE open item
     that has no due time. Returns the message sent, or None. Cheap: a kv read until it's time."""
@@ -453,6 +538,7 @@ def run(action: str = "add", url: str = "", n: int = 0, text: str = "", tag: str
             return add(url, tag=tag, when_text=when)
         return save_this(tag, when)
     if action == "todo":
+        clear_pending()
         return add_todo(text, tag, when)
     if action == "last":
         return last()
@@ -461,5 +547,11 @@ def run(action: str = "add", url: str = "", n: int = 0, text: str = "", tag: str
     if action in ("done", "read"):
         return done(n or 1)
     if action == "remove":
-        return remove(n or 1)
+        return remove_named(text) if text and not n else remove(n or 1)
+    if action == "clear":
+        return clear(text or "todo")
+    if action == "today":
+        return today()
+    if action == "ask":
+        return ask_details(text)
     return show(tag=tag, kind={"todo": "todo", "read": "read", "reminder": "reminder"}.get(text, ""))

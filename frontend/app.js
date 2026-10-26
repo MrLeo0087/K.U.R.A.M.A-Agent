@@ -531,6 +531,7 @@ async function sendChat(text, { voice = false, lang = null, speak = false, ambie
     bot.finish();
     updateState();
     maybeResume();
+    fresh = true; setTimeout(() => { loadDash(); loadToday(); }, 300); // a turn may have changed the list / goals / reminders: show it now
   }
 }
 
@@ -1180,13 +1181,13 @@ document.addEventListener("keydown", (e) => {
 });
 
 // ---------- live panels: memory by app, coding, now & today, switches, KURAMA (one /dashboard call, every 10 s) ----------
-let dash = null, dashTimer = 0, dashBusy = false;
+let dash = null, dashTimer = 0, dashBusy = false, fresh = false;
 const gbOf = (b) => (b >= 1e9 ? `${(b / 1e9).toFixed(1)} GB` : `${Math.round(b / 1e6)} MB`);
 async function loadDash() {
   clearTimeout(dashTimer); dashTimer = 0;
   if (MINI || paused || minimized || document.hidden || dashBusy) return; // applyActivity starts it again
   dashBusy = true;
-  try { dash = await api.dashboard(); renderDash(); } catch { /* API busy: next round */ }
+  try { dash = await api.dashboard(fresh); fresh = false; renderDash(); } catch { /* API busy: next round */ }
   finally { dashBusy = false; }
   dashTimer = setTimeout(loadDash, 10000);
 }

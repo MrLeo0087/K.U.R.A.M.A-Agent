@@ -185,8 +185,11 @@ def summary() -> dict:
             "kurama": safe(_kurama, {}), "switches": _cached("switches", 15, lambda: safe(_switches, {}))}
 
 
-@router.get("/dashboard", summary="Everything the dashboard cards show (cached 8 s)")
-async def dashboard():
+@router.get("/dashboard", summary="Everything the dashboard cards show (cached 8 s; ?fresh=1 right after a chat turn)")
+async def dashboard(fresh: bool = False):
+    if fresh:  # the turn may have changed the to-do list / long tasks / reminders: never show the old ones
+        for k in ("summary", "work"):
+            _cache.pop(k, None)
     return await run_in_threadpool(lambda: _cached("summary", 8, summary))
 
 
