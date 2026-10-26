@@ -1234,8 +1234,20 @@ function renderWork(w) {
   const parts = [l.todo && `<b>${l.todo}</b> to-do`, l.reminders && `<b>${l.reminders}</b> reminder${l.reminders > 1 ? "s" : ""}`, l.read && `<b>${l.read}</b> to read`].filter(Boolean);
   const nx = l.next ? ` · next: ${esc(l.next.title)} ${esc(fmtDue(l.next.due))}` : "";
   $("list-line").innerHTML = parts.length ? parts.join(" · ") + nx : (gs.length ? "" : 'No goals yet: say “my exam is in 30 days, remind me every day”.');
+  const ic = { reminder: "⏰", todo: "✅" };
+  $("todo-items").innerHTML = (w.items || []).map((r) => `<li><span class="ell" title="${esc(r.title)}">${ic[r.type] || "•"} ${esc(r.title)}</span>
+    <small>${esc(fmtDue(r.due))}</small><button type="button" class="tb ok" data-todo="done" data-title="${esc(r.title)}" data-type="${r.type}" title="Done" aria-label="Done">✓</button>
+    <button type="button" class="tb" data-todo="remove" data-title="${esc(r.title)}" data-type="${r.type}" title="Delete" aria-label="Delete">✕</button></li>`).join("");
   $("work-pill").textContent = gs.length ? `${gs.length} goal${gs.length > 1 ? "s" : ""}` : "";
 }
+document.addEventListener("click", async (e) => { // Work card: ✓ done / ✕ delete one to-do or reminder (no chat, 0 tokens)
+  const b = e.target.closest("[data-todo]");
+  if (!b) return;
+  e.stopPropagation();
+  b.disabled = true;
+  try { const r = await api.todo(b.dataset.todo, b.dataset.title, b.dataset.type); toast(r.text); } catch { toast("Couldn't change it right now."); }
+  fresh = true; loadDash(); loadToday();
+}, true);
 function fmtDue(due) { // '2026-10-27 17:00' -> 'tomorrow 5 PM'
   if (!due) return "";
   const [d, t] = due.split(" "), today = new Date(), tm = new Date(today.getTime() + 864e5);

@@ -163,11 +163,14 @@ def test_owner_log_remove_and_correct(sent):
     assert args("Okay, I think the exam is postponed") == {"action": "postponed", "goal": "1"}
     assert "When is Exam now?" in goals.run(**args("the exam is postponed"))
     assert args("the exam got postponed to December 10")["action"] == "edit"
-    for q in ("Okay, I think the exam is postponed, so can we remove that 30 day exam routing.",
-              "delete my exam goal", "cancel the exam countdown", "I don't need the exam reminder anymore"):
+    for q in ("Okay, I think the exam is postponed, so can we remove that 30 day exam long task.",
+              "delete my exam goal", "cancel the exam countdown"):
         assert args(q) == {"action": "delete", "goal": "1"}, q
+    # without 'long task / goal / countdown / monthly' a remove never touches long tasks (owner: tasks = to-do)
+    i = fastpath.match("Okay, I think the exam is postponed, so can we remove that 30 day exam routing.")
+    assert i is None or i.tool != "goals"
     assert fastpath.match("delete exam.pdf") is None or fastpath.match("delete exam.pdf").tool != "goals"
-    assert goals.run(**args("remove the exam")).startswith("Deleted the long task 'Exam'") and goals.show().startswith("No long tasks")
+    assert goals.run(**args("remove the exam long task")).startswith("Deleted the long task 'Exam'") and goals.show().startswith("No long tasks")
 
 
 def test_correction_never_hits_another_goal(sent):
@@ -236,3 +239,34 @@ def test_owner_log_midnight_todo(sent, monkeypatch):
     assert fastpath.match("give me the code work for today").tool == "where_was_i"
     assert fastpath.match("show my long workers").tool == "goals"
     assert fastpath.match("what classes do I have today").tool == "timetable"
+
+
+def test_short_tasks_win_over_long_tasks(sent):
+    """Owner's 12:17 AM log: 'remove the review 30 day exam plan' deleted the long task 'Exam'; 'remove the second
+    task' and '... from your task from the To-Do' failed. Task / work / reminder = the to-do unless long words are said."""
+    from jarvis.core import readlater
+    readlater.add_todo("Reading the book", when_text="in 2 hours")
+    readlater.add_todo("Review 30-day exam plan", when_text="in 5 hours")
+    goals.add("Exam", "in 30 days")
+    assert fastpath.match("Okay, remove the review 30 day exam plan.").args == {"action": "remove", "text": "review 30 day exam plan"}
+    assert fastpath.match("No, no, actually, remove the 30-day review plan from your task from the To-Do.").args["action"] == "remove"
+    assert fastpath.match("Okay, remove the second task from my list of tasks.").args == {"action": "remove", "n": 2}
+    i = fastpath.match("move reading the book to 11 pm")
+    assert i.args["action"] == "reschedule"
+    assert "moved to" in readlater.run(**i.args)
+    i = fastpath.match("rename the reading the book task to Read chapter 3")
+    assert readlater.run(**i.args) == "Renamed 'Reading the book' to 'Read chapter 3'."
+    assert readlater.run(**fastpath.match("Okay, remove the review 30 day exam plan.").args).startswith("Removed: Review 30-day exam plan")
+    assert [g["name"] for g in goals.all_goals("active")] == ["Exam"]  # the long task is untouched
+    assert fastpath.match("delete my exam goal").args["action"] == "delete"  # only with 'goal / long task'
+    assert fastpath.match("remove the exam long task").args["action"] == "delete"
+
+
+def test_work_card_buttons(sent):
+    from jarvis.api.routes import dash
+    from jarvis.core import readlater
+    readlater.add_todo("Buy milk")
+    assert dash._work()["items"] == [{"type": "todo", "title": "Buy milk", "due": ""}]
+    import asyncio
+    r = asyncio.run(dash.todo_action(dash.TodoIn(action="done", title="Buy milk", type="todo")))
+    assert r == {"ok": True, "text": "Done: Buy milk"} and readlater.ordered() == []

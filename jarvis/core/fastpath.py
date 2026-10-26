@@ -1720,15 +1720,15 @@ _QR = r"(?:qr(?:\s+code)?|q\.?\s?r\.?(?:\s+code)?|barcode|bar\s+code|scanner\s+c
 
 URL_RE = re.compile(r"https?://\S+", I)
 _RL_LIST = r"(?:reading\s+list|read[\s-]+later(?:\s+list)?|saved\s+(?:links|articles|pages))"
-_NUM = {"first": 1, "1st": 1, "one": 1, "second": 2, "2nd": 2, "two": 2, "third": 3, "3rd": 3, "three": 3, "fourth": 4,
+_ORD = {"first": 1, "1st": 1, "one": 1, "second": 2, "2nd": 2, "two": 2, "third": 3, "3rd": 3, "three": 3, "fourth": 4,
         "4th": 4, "four": 4, "fifth": 5, "5th": 5, "five": 5, "last": -1, "next": 1, "top": 1, "newest": 1, "latest": 1}
 
 
 def _nth(t: str) -> int:
     if m := re.search(r"\b(?:number|no\.?|item|#)?\s*(\d{1,3})\b", t):
         return int(m.group(1))
-    m = re.search(r"\b(" + "|".join(_NUM) + r")\b", t, I)
-    return _NUM[m.group(1).lower()] if m else 1
+    m = re.search(r"\b(" + "|".join(_ORD) + r")\b", t, I)  # (_NUM further down is the cardinal-number table)
+    return _ORD[m.group(1).lower()] if m else 1
 
 
 _WORDNUM = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
@@ -1746,7 +1746,7 @@ def copy_history_intent(t: str) -> Intent | None:
     if re.fullmatch(r"(?:please\s+)?(?:clear|delete|forget|erase)\s+(?:my\s+|the\s+)?(?:clipboard|copy|copied)\s+history[\s.!]*", t, I):
         return Intent("clip", "clipboard", "clipboard", {"action": "clear_history"})
     if m := re.fullmatch(r"(?:please\s+)?(?:copy|put|bring)\s+(?:back\s+)?(?:the\s+)?(?:number|item|no\.?)?\s*(\d{1,2}|" +
-                         "|".join(_NUM) + r")(?:\s+(?:one|item))?(?:\s+(?:back|again))?(?:\s+(?:to|on)\s+(?:the\s+)?clipboard)?[\s.!]*", t, I):
+                         "|".join(_ORD) + r")(?:\s+(?:one|item))?(?:\s+(?:back|again))?(?:\s+(?:to|on)\s+(?:the\s+)?clipboard)?[\s.!]*", t, I):
         if re.search(r"\b(?:back|again|number|item|no)\b", t, I):
             return Intent("clip", "clipboard", "clipboard", {"action": "history", "restore": _nth(m.group(0))})
     if m := re.search(r"\b(?:the\s+)?(?P<q>[\w.-]+(?:\s+[\w.-]+)?)\s+(?:that\s+)?i\s+copied\b", t, I):
@@ -1859,9 +1859,27 @@ def todo_now_intent(t: str) -> Intent | None:
                          r"(?P<k>tasks?|to[\s-]?dos?|reminders?|to[\s-]?do\s*list|list|reading\s+list|read\s+later(?:\s+list)?)(?:\s+for\s+me)?", low, I):
         if re.search(r"\ball\b|\bevery|\bclear\b|\bempty\b|\blist\b", low):
             return L("clear", text="read" if re.search(r"read", m.group("k")) else "todo")
-    if m := re.fullmatch(lead + r"(?:remove|delete|cancel|drop|forget|take|cross|strike|tick)\s+(?:off\s+|out\s+)?(?:the\s+|my\s+)?(?P<x>.+?)\s+"
-                         r"(?:from|off|out\s+of|in)\s+(?:the\s+|my\s+)?(?:to[\s-]?do(?:\s*list)?|list|tasks?|reminders?)", low, I):
+    rm = r"(?:remove|delete|cancel|drop|forget|take|cross|strike|tick|clear|done|finish(?:ed)?|complete(?:d)?)"
+    if m := re.fullmatch(lead + r"(?P<v>" + rm + r")\s+(?:off\s+|with\s+)?(?:the\s+|my\s+)?(?P<n>first|second|third|fourth|fifth|last|1st|2nd|3rd|4th|5th|"
+                         r"(?:number|no\.?|item)\s*\d{1,2}|\d{1,2})(?:\s+(?:one|task|item|reminder|to[\s-]?do|work))?(?:\s+(?:from|in|on|off)\s+.*)?", low, I):
+        n = _nth(m.group("n"))
+        done = re.match(r"(?:done|finish|complete|tick)", m.group("v"))
+        return L("done" if done else "remove", n=n if n > 0 else len(readlater.ordered()))
+    if m := re.fullmatch(lead + r"(?:no\W+)*(?:actually\W+)?" + rm + r"\s+(?:off\s+|out\s+)?(?:the\s+|my\s+)?(?P<x>.+?)\s+"
+                         r"(?:from|off|out\s+of|in)\s+.*?\b(?:to[\s-]?do(?:\s*list)?|list|tasks?|reminders?)\b.*", low, I):
         return L("remove", text=m.group("x"))
+    if (m := re.fullmatch(lead + r"(?:no\W+)*(?:actually\W+)?" + rm + r"\s+(?:the\s+|my\s+)?(?P<x>.+?)(?:\s+(?:task|reminder|to[\s-]?do))?", low, I)) \
+            and not _LONG_WORDS.search(low) and readlater.find(m.group("x"), ("reminder", "todo")):
+        return L("remove", text=m.group("x"))
+    if (m := re.fullmatch(lead + r"(?:move|change|shift|reschedule|update|push|postpone|set)\s+(?:the\s+|my\s+)?(?P<x>.+?)(?:\s+(?:task|reminder|to[\s-]?do))?"
+                          r"\s+(?:to|for|at|till|until)\s+(?P<w>.+)", low, I)) and not _LONG_WORDS.search(low) \
+            and readlater.find(m.group("x"), ("reminder", "todo", "read")):
+        from jarvis.core import when
+        if when.resolve(m.group("w"), use_llm=False):
+            return L("reschedule", text=m.group("x"), when=m.group("w"))
+    if (m := re.fullmatch(lead + r"rename\s+(?:the\s+|my\s+)?(?P<x>.+?)(?:\s+(?:task|reminder|to[\s-]?do))?\s+(?:to|as)\s+(?P<y>.+)", t.strip(" .!?"), I)) \
+            and readlater.find(m.group("x"), ("reminder", "todo", "read")):
+        return L("rename", text=m.group("x") + " » " + m.group("y"))
     if (m := re.fullmatch(lead + r"(?:i\s+(?:have\s+)?(?:finished|completed|did|done)|i'?m\s+done\s+with|done\s+with|mark)\s+(?:the\s+)?(?P<x>.+?)"
                           r"(?:\s+as\s+(?:done|complete(?:d)?|finished))?", low, I)) and not re.search(r"\d", m.group("x")[:3]) \
             and readlater.find(m.group("x"), ("reminder", "todo")):
@@ -1940,7 +1958,26 @@ def _goal_name(low: str, raw: str) -> str:
     return re.sub(r"\s*long[\s-]?(?:term\s+)?task$", "", n, flags=I) or "Goal"
 
 
+_LONG_WORDS = re.compile(r"\b(?:long[\s-]?(?:term\s+)?(?:tasks?|works?|workers?|projects?)|goals?|monthly|countdowns?|"
+                         r"(?:this|my|the|for\s+(?:the|my|this))\s+month)\b", I)
+
+
 def goal_intent(t: str) -> Intent | None:
+    """Long tasks only when the user says so: 'task / work / reminder' means the short to-do (owner). A sentence
+    that names an item of the to-do list goes to the to-do unless 'long task / monthly / goal' is said."""
+    i = _goal_intent(t)
+    if i is None or i.args.get("action") in ("list", "add", "overview") or i.tool != "goals":
+        return i
+    low = t.strip(" .!?").lower()
+    if _LONG_WORDS.search(low):
+        return i
+    from jarvis.core import readlater
+    if readlater.find(low, ("reminder", "todo")) or re.search(r"\b(?:to[\s-]?do|reminders?|tasks?)\b", low):
+        return None
+    return i
+
+
+def _goal_intent(t: str) -> Intent | None:
     """Long goals. 'my exam starts in 30 days, remind me every day', 'I started a project that ends in 6 months, ask
     me every day what I did', 'show my goals', 'how many days until my exam', 'what did we do today in the project',
     'Thesis update: wrote chapter 2', a plain 'today I fixed the login' right after a check-in question, 'move my
@@ -2005,13 +2042,14 @@ def goal_intent(t: str) -> Intent | None:
     # remove / delete / cancel a goal named anywhere in the sentence ('can we remove that 30 day exam routing')
     _FILEISH = r"\b(?:files?|folders?|photos?|pictures?|images?|pdfs?|docs?|documents?|trash|downloads?|screenshots?|videos?|songs?)\b|\.\w{2,4}\b"
     if re.search(r"\b(?:remove|delete|cancel|drop|clear|forget|erase|discard|get\s+rid\s+of|don'?t\s+need|no\s+longer\s+need)\b", low) \
-            and not re.search(_FILEISH, low) and len(low.split()) <= 25:
+            and not re.search(_FILEISH, low) and len(low.split()) <= 25 and _LONG_WORDS.search(low):
         g = goals.named_in(low) or (goals.last_touched() if re.search(r"\b(?:that|this|the)\s+(?:goal|countdown|long\s+task|"
                                                                         r"routine|tracking)\b", low) else None)
         if g:
             return G("delete", goal=g["id"])
     # postponed / moved: a new date -> change it, no date -> ask for it
     if re.search(r"\b(?:postponed?|delayed|pushed\s+back|rescheduled|shifted|moved|changed)\b", low) \
+            and not re.search(r"\b(?:remove|delete|cancel|drop|clear|forget)\b", low) \
             and not re.search(_FILEISH, low) and (g := goals.named_in(low)):
         return G("edit", goal=g["id"], end=low) if goals.end_in(low) else G("postponed", goal=g["id"])
     # a correction right after adding/changing a goal: 'no, it's actually 30 days', 'make it 2 months'

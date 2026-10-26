@@ -168,7 +168,8 @@ def _work() -> dict:
     from jarvis.core import goals, readlater
     rows = readlater.ordered()
     nxt = next((r for r in rows if r["due"]), None)
-    return {"goals": goals.cards(),
+    items = [{"type": r["type"], "title": r["title"][:80], "due": r["due"]} for r in rows if r["type"] in ("reminder", "todo")][:6]
+    return {"goals": goals.cards(), "items": items,
             "list": {"todo": sum(r["type"] == "todo" for r in rows), "read": sum(r["type"] == "read" for r in rows),
                      "reminders": sum(r["type"] == "reminder" for r in rows),
                      "next": {"title": nxt["title"][:60], "due": nxt["due"], "type": nxt["type"]} if nxt else None}}
@@ -183,6 +184,27 @@ def summary() -> dict:
                 if isinstance(default, dict) else default
     return {"apps": safe(_apps, {}), "coding": safe(_coding, {}), "work": _cached("work", 20, lambda: safe(_work, {})), "now": safe(_now, []), "today": safe(_today_chips, []),
             "kurama": safe(_kurama, {}), "switches": _cached("switches", 15, lambda: safe(_switches, {}))}
+
+
+class TodoIn(BaseModel):
+    action: str  # done | remove
+    title: str
+    type: str = ""
+
+
+@router.post("/todo", summary="Work card buttons: finish or delete one to-do / reminder (by its title)")
+async def todo_action(body: TodoIn):
+    from jarvis.core import readlater
+
+    def run() -> dict:
+        r = next((x for x in readlater.ordered() if x["title"] == body.title and (not body.type or x["type"] == body.type)), None)
+        if r is None:
+            return {"ok": False, "text": "It's not in the list any more."}
+        readlater._drop(r)
+        _cache.pop("summary", None)
+        _cache.pop("work", None)
+        return {"ok": True, "text": ("Done: " if body.action == "done" else "Removed: ") + r["title"]}
+    return await run_in_threadpool(run)
 
 
 @router.get("/dashboard", summary="Everything the dashboard cards show (cached 8 s; ?fresh=1 right after a chat turn)")

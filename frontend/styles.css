@@ -998,10 +998,7 @@ body:not(.mini) .date { letter-spacing: 0.22em; text-transform: uppercase; font-
 body:not(.mini) .date::after { content: ""; display: block; width: 26px; height: 2px; margin-top: 12px; background: var(--accent-2); }
 body:not(.mini) .wx-head .date::after { display: none; }
 
-/* weather card (left) */
-body:not(.mini) .wx-head.card { display: block; cursor: pointer; }
-body:not(.mini) .wx-head .wx-big { font-size: 30px; }
-body:not(.mini) .wx-head .wx-line { letter-spacing: 0.08em; font-size: 11px; margin-top: 4px; }
+/* weather: back on top of the right column in its original style (owner) */
 
 /* system: three bars */
 .sbars { display: grid; gap: 10px; margin: 12px 0 4px; }
@@ -1043,3 +1040,26 @@ body:not(.mini) .chat > #suggest { order: 6; justify-content: center; margin-top
 body:not(.mini) .ask textarea { background: transparent; border: 0; padding: 10px 8px; }
 body:not(.mini) .send { background: #f5a83a; box-shadow: none; color: #16100a; }
 body:not(.mini) .suggest button { border-radius: 20px; padding: 7px 14px; background: rgba(12, 13, 18, 0.85); border: 1px solid rgba(255, 255, 255, 0.1); }
+
+/* Work card: each to-do / reminder with ✓ done and ✕ delete */
+.tlist { list-style: none; margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.tlist:empty { display: none; }
+.tlist li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; align-items: center; gap: 6px; font-size: 12.5px; }
+.tlist small { color: var(--dim); font-size: 11px; white-space: nowrap; }
+.tlist .tb { width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.03);
+  color: var(--muted); font-size: 12px; line-height: 1; display: grid; place-items: center; padding: 0; }
+.tlist .tb:hover { color: var(--danger); border-color: rgba(255, 93, 93, 0.4); }
+.tlist .tb.ok:hover { color: var(--ok); border-color: rgba(127, 209, 139, 0.4); }
+
+/* the old animated circle with KURAMA's face in its centre: a dark fox face, amber eyes that glow brighter when it
+   listens / speaks (colour only; the circle itself does the motion) */
+body:not(.mini) .orb .kmark { display: block; inset: 31%; width: 38%; height: 38%; z-index: 2; pointer-events: none; }
+body:not(.mini) .kmark .k1 { fill: rgba(14, 9, 6, 0.9); }
+body:not(.mini) .kmark .k2 { fill: #4a2108; }
+body:not(.mini) .kmark .k3 { fill: #ffb547; }
+body:not(.mini) .kmark .k4 { fill: #ff9b3d; }
+body:not(.mini) .kmark { filter: drop-shadow(0 0 2px rgba(255, 170, 60, 0.55)); }
+body:not(.mini)[data-state="listening"] .kmark .k3, body:not(.mini)[data-state="capturing"] .kmark .k3 { fill: #9dffb0; }
+body:not(.mini)[data-state="speaking"] .kmark .k3 { fill: #ffe08a; }
+body:not(.mini)[data-state="thinking"] .kmark .k3 { fill: #ffd27a; }
+body:not(.mini)[data-state="error"] .kmark .k3 { fill: #ff6b6b; }

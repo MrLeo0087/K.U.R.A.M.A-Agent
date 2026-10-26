@@ -372,6 +372,55 @@ def remove_named(text: str) -> str:
     return f"Removed: {r['title']}. " + (f"{len(ordered())} left." if ordered() else "Your list is empty now 🎉")
 
 
+def reschedule(text: str, when_text: str) -> str:
+    """'move reading the book to 1 am': a new time for a to-do or a reminder (the old alert is replaced)."""
+    r = find(text, ("reminder", "todo", "read"))
+    if r is None:
+        return f"I couldn't find '{text}' in your list.\n" + show(kind="todo")
+    from jarvis.core import when
+    w = when.resolve(when_text, datetime.now(), use_llm=False)
+    if w is None or w.ts <= time.time():
+        return f"I couldn't use the time '{when_text}'" + (" (it's already past)." if w else ".")
+    if r["type"] == "reminder":
+        store.schedule_update(int(r["reminder"]), next_run=w.ts, enabled=1)
+        return f"Reminder '{r['title']}' moved to {when.describe(w.ts)}."
+    with sheets.locked(path()):
+        rows = _rows()
+        x = next((y for y in rows if _same(y, r)), None)
+        if x is None:
+            return f"I couldn't find '{text}' in your list."
+        _cancel(x)
+        x["due"], x["reminder"] = _schedule(x, when_text)
+        _save(rows)
+    return f"'{r['title']}' moved to {when.describe(w.ts)} (I'll remind you 10 min before)."
+
+
+def rename(text: str, new: str) -> str:
+    r = find(text, ("reminder", "todo", "read"))
+    if r is None:
+        return f"I couldn't find '{text}' in your list."
+    new = new.strip(" .'\"")[:200]
+    if r["type"] == "reminder":
+        store.schedule_update(int(r["reminder"]), text=new)
+        return f"Renamed the reminder to '{new}'."
+    with sheets.locked(path()):
+        rows = _rows()
+        x = next((y for y in rows if _same(y, r)), None)
+        if x is None:
+            return f"I couldn't find '{text}' in your list."
+        when_text = x["due"]
+        if when_text:
+            _cancel(x)
+        x["title"] = new
+        if when_text:
+            try:
+                x["due"], x["reminder"] = _schedule(x, datetime.strptime(when_text, "%Y-%m-%d %H:%M").strftime("%B %d %I:%M %p"))
+            except ValueError:
+                x["due"], x["reminder"] = "", ""
+        _save(rows)
+    return f"Renamed '{r['title']}' to '{new}'."
+
+
 def clear(kind: str = "todo") -> str:
     """'remove all my tasks': every to-do and reminder (kind 'todo'), or the reading list (kind 'read')."""
     kinds = ("reminder", "todo") if kind == "todo" else ("read",)
@@ -548,6 +597,11 @@ def run(action: str = "add", url: str = "", n: int = 0, text: str = "", tag: str
         return done(n or 1)
     if action == "remove":
         return remove_named(text) if text and not n else remove(n or 1)
+    if action == "reschedule":
+        return reschedule(text, when)
+    if action == "rename":
+        old, _, new = text.partition(" » ")
+        return rename(old, new)
     if action == "clear":
         return clear(text or "todo")
     if action == "today":

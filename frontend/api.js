@@ -74,6 +74,7 @@ export class Api {
   cancelJob(id) { return this.request(`/api/v1/jobs/${encodeURIComponent(id)}/cancel`, { method: "POST", body: {} }); }
   alerts() { return this.request("/api/v1/alerts?limit=20"); }
   alertsRead() { return this.request("/api/v1/alerts/read", { method: "POST", body: {} }); }
+  todo(action, title, type = "") { return this.request("/api/v1/todo", { method: "POST", body: { action, title, type } }); }
   dashboard(fresh = false) { return this.request(`/api/v1/dashboard${fresh ? "?fresh=1" : ""}`); }
   detail(panel) { return this.request(`/api/v1/dashboard/detail/${encodeURIComponent(panel)}`); }
   weatherFull() { return this.request("/api/v1/weather/full"); }

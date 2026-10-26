@@ -23,15 +23,10 @@
 
   <div class="layout">
     <!-- left: clock, processes, KURAMA -->
-    <section class="col left" aria-label="Clock, weather, system and laptop">
+    <section class="col left" aria-label="Clock, system and laptop">
       <header class="clock-block">
         <div class="clock" role="timer" aria-live="off"><span id="clock-hm"><span id="clock-h">--</span><span id="clock-colon" class="colon">:</span><span id="clock-m">--</span></span><span class="clock-side"><span id="clock-ap"></span><span id="clock-s" class="sec">00</span></span></div>
         <div id="date" class="date"></div>
-      </header>
-      <header class="card wx-head" id="weather" data-sheet="weather" tabindex="0" role="button" aria-label="Weather: open the forecast">
-        <div class="wx-big"><span id="wx-icon" class="wx-icon" aria-hidden="true"></span><b id="wx-temp">--</b><span class="deg">°C</span></div>
-        <div class="date wx-line"><span id="wx-place">NEPALGUNJ</span> · <span id="wx-desc">–</span></div>
-        <div class="wx-row"><small id="wx-sub"></small><div id="wx-hours" class="wx-hours" aria-label="Next hours"></div></div>
       </header>
       <div class="card perf" id="system" data-sheet="system" tabindex="0" role="button" aria-label="System: open details">
         <div class="card-title">System <span id="uptime" class="pill"></span><span class="more" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg></span></div>
@@ -165,7 +160,12 @@
     </main>
 
     <!-- right: performance + jobs -->
-    <section class="col right" aria-label="Today, work and recent results">
+    <section class="col right" aria-label="Weather, today, work and recent results">
+      <header class="wx-head" id="weather" data-sheet="weather" tabindex="0" role="button" aria-label="Weather: open the forecast">
+        <div class="wx-big"><span id="wx-icon" class="wx-icon" aria-hidden="true"></span><b id="wx-temp">--</b><span class="deg">°C</span></div>
+        <div class="date wx-line"><span id="wx-place">NEPALGUNJ</span> · <span id="wx-desc">–</span></div>
+        <div class="wx-row"><small id="wx-sub"></small><div id="wx-hours" class="wx-hours" aria-label="Next hours"></div></div>
+      </header>
       <div class="card today-card" id="today" data-sheet="now" tabindex="0" role="button" aria-label="Now and today: open details">
         <div class="card-title">Now &amp; today <span id="today-count" class="pill"></span><span class="more" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg></span></div>
         <ul id="now-list" class="nowl"></ul>
@@ -179,6 +179,7 @@
         <div class="card-title">Work <span id="work-pill" class="pill"></span><span class="more" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg></span></div>
         <div id="goal-body" class="goal-body"></div>
         <div id="list-line" class="list-line"></div>
+        <ul id="todo-items" class="tlist" aria-label="To-do and reminders"></ul>
         <div class="work-sub">Coding <span id="code-snap"></span></div>
         <div id="code-body" class="code-body"><p class="empty">Looking for your project…</p></div>
       </div>
