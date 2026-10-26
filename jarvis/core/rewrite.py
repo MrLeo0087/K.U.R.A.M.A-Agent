@@ -6,6 +6,11 @@ LLM call (~2x the text in tokens); the result is pasted over the still-selected 
 also left on the clipboard (read-only text can't be replaced in place). If KURAMA's own window is in front (the request was typed in the
 dashboard), KURAMA switches back to the window the user was in (the one right below it) and pastes there; the
 selection is still highlighted in that app.
+
+Typed requests: the copy-history worker also watches the X PRIMARY selection and remembers the newest text the
+user highlighted OUTSIDE KURAMA (memory only, SELECTION_MEMORY_S), with the window it was in. So "what does this
+mean" typed in KURAMA's chat knows the word without switching windows or pressing Ctrl+C (that sometimes landed in
+another VS Code pane or found the highlight gone), and selecting text inside KURAMA never replaces it.
 """
 from __future__ import annotations
 
@@ -91,6 +96,35 @@ def _window_name(wid: int) -> str:
         return "that window"
 
 
+# the newest selection made OUTSIDE KURAMA (set by the clipboard_watch worker in the same process)
+_LAST: dict = {"text": "", "wid": None, "title": "", "cls": "", "ts": 0.0, "kurama_newer": False, "watching": False}
+
+
+def remember_selection(text: str, wid: int | None, title: str, cls: str, in_kurama: bool) -> None:
+    """Called on every PRIMARY change (debounced). Inside KURAMA only flags that PRIMARY is now KURAMA's."""
+    _LAST["watching"] = True
+    if in_kurama:
+        _LAST["kurama_newer"] = True
+        return
+    if text.strip():
+        _LAST.update(text=text, wid=wid, title=title, cls=cls, ts=time.time(), kurama_newer=False)
+
+
+def remembered() -> "Grab | None":
+    """The selection the user made outside KURAMA before typing the request (None: nothing fresh / not watching)."""
+    from jarvis.core import config, uiagent
+    if not _LAST["watching"] or not _LAST["ts"] or time.time() - _LAST["ts"] > config.SELECTION_MEMORY_S:
+        return None
+    text = _LAST["text"]
+    if not _LAST["kurama_newer"]:  # PRIMARY still belongs to that app: its current text is the freshest
+        cur = selection()
+        if cur.strip():
+            text = cur
+    if not text.strip() or len(text) > MAX_CHARS:
+        return None
+    return Grab(text, _LAST["wid"], False, uiagent.family(_LAST["cls"]) == "terminal", _LAST["title"] or "that window")
+
+
 class Grab:
     """The highlighted text, copied from the app the user works in, and where it came from."""
 
@@ -103,6 +137,8 @@ def grab() -> Grab | str:
     changes when text is selected inside KURAMA). Returns a Grab, or a message for the user."""
     from jarvis.core import uiagent
     wid, in_front = target_window()
+    if not in_front and (mem := remembered()):  # typed in KURAMA: what was highlighted out there, no switching
+        return mem
     if wid is None:
         return "I couldn't find the window with your text. Highlight the text there, then ask again."
     if not in_front:  # asked from KURAMA's window: go back to the document (its selection is still there)

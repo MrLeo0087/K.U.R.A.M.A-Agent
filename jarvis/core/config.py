@@ -706,6 +706,7 @@ WIFI_SHARE_IDLE_MIN = 30  # a Wi-Fi share link stops after this many idle minute
 NUDGE_PER_DAY = int(os.getenv("KURAMA_NUDGE_PER_DAY", "2"))  # random 'still want to do this?' for undated list items
 NUDGE_HOURS = (10, 21)  # only between these hours
 TASK_OVERDUE_S = float(os.getenv("KURAMA_TASK_OVERDUE_S", str(60 * 60)))  # due to-do still open this long after -> 'not done yet'
+SELECTION_MEMORY_S = float(os.getenv("KURAMA_SELECTION_MEMORY_S", "600"))  # a highlight outside KURAMA counts this long
 READ_LATER_FILE = os.getenv("KURAMA_READ_LATER", "~/Documents/KURAMA/read_later.xlsx")  # reading list (Excel)
 CONTACTS_FILE = os.getenv("KURAMA_CONTACTS", "~/Documents/KURAMA/contacts.xlsx")  # name/phone sheet (Excel)
 DICTATION_PAUSE_MS = 900  # a pause this long ends a dictated phrase (then it is typed)
