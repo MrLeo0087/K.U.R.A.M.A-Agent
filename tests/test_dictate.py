@@ -68,3 +68,10 @@ def test_nepali_text_is_pasted_not_typed(monkeypatch):
     monkeypatch.setattr(dictation.time, "sleep", lambda s: None)
     dictation.handle_text("नमस्ते, म ठिक छु")
     assert ev == [("ctrl+v", "नमस्ते, म ठिक छु ")] and clip["c"] == "old"
+
+
+def test_wake_up_alone_and_names():
+    from jarvis.core import config, wake
+    assert wake.match_wake("wake up").command == "" and wake.match_wake("wake up, open youtube").command == "open youtube"
+    assert wake.match_wake("Kumara") is not None and wake.match_wake("I have to wake up early") is None
+    assert "Darshan Chaulagain" in config.STT_PROMPT

@@ -34,7 +34,8 @@ GREETS = ("hey", "hi", "hello", "ok", "okay", "hay", "hai", "hei", "hallo", "hel
           "ay", "ey", "he", "namaste", "हे", "हाय", "हेलो")
 CANONICAL = {"kurama": ("kurama", "कुरामा")}
 MISHEARD = {"kurama": ("karama", "corama", "kuruma", "ku rama", "koorama", "करामा", "kurma", "kurrama", "corona",
-                       "koroma", "carama", "karuma", "jarvis")}  # "jarvis": the owner's old habit still wakes it
+                       "koroma", "carama", "karuma", "jarvis", "kumara", "krama", "kurrumma", "kuramaa", "gurama",
+                       "purama", "kirama", "kurama's", "karamaa", "कुरमा", "कुराम", "कुरामा।")}  # "jarvis": the owner's old habit still wakes it
 VARIANTS: tuple[str, ...] = ()
 CANON: tuple[str, ...] = ()
 
@@ -168,6 +169,14 @@ def match_wake(text: str, name_alone: bool | None = None) -> WakeHit | None:
         n = _name_at(w, 0)
         if n == len(w):
             return WakeHit("", text)
+    if config.WAKE_UP_ALONE:  # "wake up" on its own (or "wake up, open youtube") is the main wake phrase too
+        for start in range(min(2, len(w))):
+            if start == 1 and w[0] not in LEAD_FILLERS:
+                break
+            lead = _wake_lead(w, start)
+            if lead >= 2 or (lead == 1 and w[start] in ("utha", "utho", "उठ", "उठो", "wakeup")):
+                cmd = _rest(toks, owner, start + lead)
+                return WakeHit("" if _only_wake(cmd) else cmd, text)
     return None
 
 

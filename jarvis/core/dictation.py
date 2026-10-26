@@ -38,12 +38,14 @@ COMMANDS: dict[str, tuple[str, ...]] = {
     "ctrl+z": ("undo", "undo that", "press undo"),
     "ctrl+s": ("save", "save it", "save the file", "press save"),
 }
-COMMANDS["Return"] += ("नयाँ लाइन", "अर्को लाइन", "लाइन बदल", "इन्टर", "नई लाइन", "अगली लाइन", "लाइन बदलो")
+COMMANDS["Return"] += ("नयाँ लाइन", "नयाँ लाईन", "नयाँलाइन", "नयाँलाईन", "नया लाइन", "नया लाईन", "अर्को लाइन",
+                       "अर्को लाईन", "लाइन बदल", "लाईन बदल", "इन्टर", "नई लाइन", "अगली लाइन", "लाइन बदलो")
 COMMANDS["Return Return"] += ("नयाँ अनुच्छेद", "अर्को अनुच्छेद", "नया पैराग्राफ", "नयाँ प्याराग्राफ")
 COMMANDS["space"] += ("स्पेस", "खाली ठाउँ")
 COMMANDS["ctrl+z"] += ("अनडु", "पछाडि फर्क")
 _CMD_PHRASE = {ph: k for k, phs in COMMANDS.items() for ph in phs}
-_INLINE = sorted((ph for ph in _CMD_PHRASE if " " in ph and ph not in ("go down", "save it", "undo that")),
+_INLINE = sorted((ph for ph in _CMD_PHRASE if (" " in ph or not ph.isascii()) and ph not in ("go down", "save it",
+                                                                                             "undo that", "स्पेस")),
                  key=len, reverse=True)
 # Whisper is told these words exist, so "change line" stops coming back as "align tinge"
 VOCAB = "Okay, new line, change the line, new paragraph, press enter, tab key, give space, stop dictation."
@@ -156,26 +158,60 @@ def _type(text: str) -> None:
         rewrite._xclip(["-selection", "clipboard"], old)
 
 
-def _stt_loop(q: "queue.Queue[bytes | None]") -> None:
+def _google(pcm: bytes, lang: str) -> str:
+    """Google's free web speech recognizer: far better than Whisper at Nepali (and good at Hindi)."""
+    import speech_recognition as sr
+    return sr.Recognizer().recognize_google(sr.AudioData(pcm, RATE, 2), language=_GOOGLE_LANG[lang]) or ""
+
+
+_GOOGLE_LANG = {"ne": "ne-NP", "hi": "hi-IN"}
+
+
+def recognize(pcm: bytes, lang: str | None) -> tuple[str, str]:
+    """(text, detected language) for one phrase, ONE recognizer call in the common case:
+    Nepali/Hindi -> Google (Whisper fallback); English/auto -> Whisper with the command + name vocabulary, and if
+    Whisper says it was actually Nepali/Hindi, Google re-hears it in that language."""
     from jarvis.core import audio, stt
-    lang = _state["lang"]
-    # this thread only: bias Whisper toward the editing commands, in the dictation language and script
-    # (an English prompt made Nepali come back romanized: "Namaste as a moussom ramroosa")
-    stt.set_thread_prompt({"ne": VOCAB_NE, "hi": VOCAB_HI}.get(lang or "", VOCAB))
+    if lang in _GOOGLE_LANG:
+        try:
+            if text := _google(pcm, lang).strip():
+                return text, {"ne": "nepali", "hi": "hindi"}[lang]
+        except Exception as e:  # noqa: BLE001 - offline / not understood: Whisper below
+            log.info("google %s failed: %s", lang, e)
     models = [config.STT_MODEL, config.STT_FALLBACK]
     if lang in config.STT_PREFER_FALLBACK_LANGS:
         models.reverse()  # large-v3 is much better than turbo at Nepali
+    tr = stt._one(audio.pcm_to_wav(pcm, RATE), lang, models)
+    text, raw = (tr.text or "").strip(), (tr.raw_lang or lang or "english")
+    spoken = stt.LANG_MAP.get(raw.strip().lower())
+    if spoken in _GOOGLE_LANG:  # Whisper often calls Nepali "Hindi": the owner's Devanagari language wins
+        spoken = config.DICTATION_DEVANAGARI_LANG
+    if lang is None and spoken in _GOOGLE_LANG and text:
+        try:
+            if better := _google(pcm, spoken).strip():
+                return better, raw
+        except Exception as e:  # noqa: BLE001
+            log.info("google re-hear failed: %s", e)
+    return text, raw
+
+
+def _stt_loop(q: "queue.Queue[bytes | None]") -> None:
+    from jarvis.core import stt
+    lang = _state["lang"]
+    # this thread only: bias Whisper toward the editing commands and the owner's names, in the dictation
+    # language's script (an English prompt made Nepali come back romanized: "Namaste as a moussom ramroosa")
+    stt.set_thread_prompt({"ne": VOCAB_NE + " " + config.MY_WORDS_NE, "hi": VOCAB_HI}.get(
+        lang or "", VOCAB + " " + config.MY_WORDS + "."))
     while True:
         pcm = q.get()
         if pcm is None:
             return
-        try:  # ONE fast Whisper call per phrase (not the dual Nepali pass of voice chat): less lag, fewer requests
-            tr = stt._one(audio.pcm_to_wav(pcm, RATE), lang, models)
+        try:
+            text, raw = recognize(pcm, lang)
         except Exception as e:  # noqa: BLE001 - one failed phrase must not end dictation
             log.warning("dictation STT failed: %s", e)
             continue
-        text = (getattr(tr, "text", "") or "").strip()
-        if is_noise(text, getattr(tr, "raw_lang", "") or (lang or "english")):
+        if is_noise(text, raw):
             continue
         if STOP.match(text):
             _state["stop"].set()

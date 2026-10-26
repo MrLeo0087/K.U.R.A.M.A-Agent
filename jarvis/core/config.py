@@ -69,9 +69,13 @@ STT_EN_MIN_LOGPROB = -0.6  # auto "English" below this confidence is treated as 
 # Whisper vocabulary hint (biases spelling of names/apps; tested not to break hi/ne detection).
 STT_NO_SPEECH_MAX = 0.6  # Whisper's no_speech_prob above this...
 STT_NOISE_MAX_LOGPROB = -0.8  # ...and confidence below this: background noise, not a command
-STT_PROMPT = os.getenv("JARVIS_STT_PROMPT",
+# The owner's own names and places, so speech-to-text spells them right (dictation + voice chat). Add more in .env:
+# JARVIS_MY_WORDS="Darshan Chaulagain, Nepalgunj, ..."
+MY_WORDS = os.getenv("JARVIS_MY_WORDS", "Darshan Chaulagain, Nepalgunj, Kathmandu, Pokhara")
+MY_WORDS_NE = os.getenv("JARVIS_MY_WORDS_NE", "दर्शन चौलागाईं, नेपालगञ्ज, काठमाडौं, पोखरा")
+STT_PROMPT = os.getenv("JARVIS_STT_PROMPT", MY_WORDS + ", "
                        "Kurama, KURAMA, VS Code, Bluetooth, Brave, YouTube, Spotify, Instagram, Telegram, Wi-Fi, gesture control, "
-                       "GitHub, Colab, Nepalgunj, Kathmandu, Pokhara.")
+                       "GitHub, Colab.")
 # Common mishearings fixed after transcription (regex, case-insensitive, word-bounded).
 # Typing slips seen in the real chat log, fixed before matching (word-level, case-insensitive)
 TYPO_FIXES: dict[str, str] = {
@@ -168,13 +172,14 @@ WAKE_ENGINE = os.getenv("JARVIS_WAKE_ENGINE", "groq")  # groq (Whisper: hears "K
 WAKE_GOOGLE_LANG = os.getenv("JARVIS_WAKE_LANG", "en-IN")
 WAKE_GOOGLE_TIMEOUT_S = 4.0
 WAKE_GOOGLE_RETRY_S = 60.0  # after a Google failure (offline), use Groq for this long
-WAKE_MAX_CHECKS_PER_MIN = int(os.getenv("JARVIS_WAKE_CHECKS_PER_MIN", "8"))
+WAKE_MAX_CHECKS_PER_MIN = int(os.getenv("JARVIS_WAKE_CHECKS_PER_MIN", "12"))
 # Wake bursts must be this loud (room noise sent 11 bursts/min to Google at the turn-VAD level of 900).
-WAKE_MIN_RMS = float(os.getenv("JARVIS_WAKE_MIN_RMS", "1600"))
-WAKE_MATCH_RATIO = 0.75  # difflib ratio for wake-name tokens
+WAKE_MIN_RMS = float(os.getenv("JARVIS_WAKE_MIN_RMS", "900"))  # lower = hears a quieter/farther "KURAMA"
+WAKE_MATCH_RATIO = 0.7  # difflib ratio for wake-name tokens (lower = more forgiving of mishearings)
+WAKE_UP_ALONE = os.getenv("JARVIS_WAKE_UP_ALONE", "1").lower() not in ("0", "false", "no", "off")  # "wake up" wakes
 WAKE_NAME_ALONE = os.getenv("JARVIS_WAKE_NAME_ALONE", "1").lower() not in ("0", "false", "no", "off")
 WAKE_BURST_MIN_S = 0.4  # speech bursts outside this range are never recognized
-WAKE_BURST_MAX_S = 2.5
+WAKE_BURST_MAX_S = 3.0
 WAKE_LONG_BURSTS = True  # 2.5-6 s bursts: check the first WAKE_LONG_HEAD_S ("hey jarvis what's the time")
 WAKE_LONG_MAX_S = 6.0
 WAKE_LONG_HEAD_S = 2.0
@@ -669,6 +674,7 @@ DOWNLOAD_NIGHT_HOUR = 1  # "tonight" downloads start at this hour
 WIFI_SHARE_IDLE_MIN = 30  # a Wi-Fi share link stops after this many idle minutes
 CONTACTS_FILE = os.getenv("KURAMA_CONTACTS", "~/Documents/KURAMA/contacts.xlsx")  # name/phone sheet (Excel)
 DICTATION_PAUSE_MS = 900  # a pause this long ends a dictated phrase (then it is typed)
+DICTATION_DEVANAGARI_LANG = os.getenv("JARVIS_DICTATION_DEVANAGARI", "ne")  # auto mode: Nepali/Hindi speech -> this
 DICTATION_IDLE_S = 180  # dictation stops after 3 min of silence
 DICTATION_MAX_S = 3600  # ...or after 1 hour in total
 ORGANIZE_MAX_FILES = 80  # files looked at per organize run (newest first)
