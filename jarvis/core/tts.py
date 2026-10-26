@@ -110,6 +110,35 @@ def voice_for(lang: str | None) -> str:
     return config.VOICES.get(lang or "", config.VOICES["en_multi"])
 
 
+_DEVA_RUN = re.compile(r"[\u0900-\u097F](?:[\u0900-\u097F\d.,;:!?'\"\-–—]|\s+(?=[\u0900-\u097F]))*")
+
+
+def voice_parts(sentence: str, lang: str | None) -> list[tuple[str, str]]:
+    """(text, voice) pieces of one sentence: Devanagari is read by the Nepali (or Hindi) voice, the rest by the
+    reply language's voice, so 'result: नतिजा (noun)' is read fully instead of skipping the Nepali word."""
+    deva_voice = voice_for("hi" if lang == "hi" else "ne")
+    if not _DEVA_RUN.search(sentence):
+        return [(sentence, voice_for(lang))]
+    if not re.search(r"[A-Za-z]{2,}", sentence):
+        return [(sentence, deva_voice)]
+    parts: list[tuple[str, str]] = []
+    pos = 0
+    for m in _DEVA_RUN.finditer(sentence):
+        if m.start() > pos and sentence[pos:m.start()].strip(" ,.;:-–—()"):
+            parts.append((sentence[pos:m.start()], voice_for("en")))
+        parts.append((m.group(), deva_voice))
+        pos = m.end()
+    if sentence[pos:].strip(" ,.;:-–—()"):
+        parts.append((sentence[pos:], voice_for("en")))
+    merged: list[tuple[str, str]] = []
+    for text, v in parts:  # neighbours with the same voice: one request
+        if merged and merged[-1][1] == v:
+            merged[-1] = (merged[-1][0] + " " + text, v)
+        else:
+            merged.append((text, v))
+    return merged
+
+
 async def edge_synth(text: str, voice: str, rate: str | None = None) -> AsyncIterator[bytes]:
     """Stream mp3 chunks for one sentence from edge-tts (warm pooled socket when possible)."""
     if config.TTS_WARM_SOCKETS:
@@ -280,12 +309,15 @@ class Speaker:
                 s = await loop.run_in_executor(None, sentences.get)
                 if s is _DONE or stop.is_set():
                     break
+                v = voice
+                if isinstance(s, tuple):  # (text, voice): a Nepali piece inside an English answer
+                    s, v = s
                 text = clean_for_speech(s)
                 if not text:
                     continue
                 await slots.acquire()
                 q: asyncio.Queue = asyncio.Queue()
-                asyncio.ensure_future(self._synth_one(text, voice, q, stop, slots))
+                asyncio.ensure_future(self._synth_one(text, v, q, stop, slots))
                 await order.put(q)
             await order.put(None)
 

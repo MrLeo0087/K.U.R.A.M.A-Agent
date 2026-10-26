@@ -25,6 +25,20 @@ from jarvis.core import config, rewrite
 
 log = logging.getLogger(__name__)
 LANGS = {"ne": "Nepali (Devanagari script)", "hi": "Hindi (Devanagari script)", "en": "English"}
+# any language can be a translation target: spoken name -> code (the code is only a key; the prompt uses the name)
+_LANG_NAMES = {"nepali": "ne", "नेपाली": "ne", "hindi": "hi", "हिन्दी": "hi", "हिंदी": "hi", "english": "en",
+               "अंग्रेजी": "en", "french": "fr", "spanish": "es", "german": "de", "italian": "it", "portuguese": "pt",
+               "russian": "ru", "japanese": "ja", "chinese": "zh", "mandarin": "zh", "korean": "ko", "arabic": "ar",
+               "urdu": "ur", "bengali": "bn", "bangla": "bn", "tamil": "ta", "telugu": "te", "marathi": "mr",
+               "gujarati": "gu", "punjabi": "pa", "kannada": "kn", "malayalam": "ml", "maithili": "mai",
+               "bhojpuri": "bho", "newari": "new", "nepal bhasa": "new", "sanskrit": "sa", "tibetan": "bo",
+               "sinhala": "si", "turkish": "tr", "thai": "th", "vietnamese": "vi", "indonesian": "id", "malay": "ms",
+               "dutch": "nl", "polish": "pl", "ukrainian": "uk", "persian": "fa", "farsi": "fa", "hebrew": "he",
+               "greek": "el", "swedish": "sv", "norwegian": "no", "danish": "da", "finnish": "fi", "filipino": "tl",
+               "swahili": "sw"}
+for _n, _c in _LANG_NAMES.items():
+    LANGS.setdefault(_c, _n.title())
+LANG_ALT = "|".join(sorted((re.escape(n) for n in _LANG_NAMES), key=len, reverse=True))  # for the router regexes
 _CODE_HINT = re.compile(r"(?m)^\s*(?:def |class |import |from \S+ import|function |const |let |var |public |private |"
                         r"#include|for\s*\(|if\s*\(|while\s*\(|return\b|async |@\w+)|[{};]\s*$|=>|::|\)\s*:\s*$")
 _EXT_LANG = {".py": "Python", ".js": "JavaScript", ".ts": "TypeScript", ".jsx": "React JSX", ".tsx": "React TSX",
@@ -34,14 +48,13 @@ _EXT_LANG = {".py": "Python", ".js": "JavaScript", ".ts": "TypeScript", ".jsx": 
 
 
 def lang_of(text: str) -> str:
-    """'nepali' / 'hindi' / 'english' mentioned (or Devanagari typed) -> ne / hi / en; '' if none."""
+    """A language named in the request ('nepali', 'into japanese', 'हिन्दी') -> its code; '' if none. The one after
+    'to/into/in' wins ('translate this english text to french' -> fr)."""
     t = (text or "").lower()
-    if re.search(r"\bnepali\b|नेपाली", t):
-        return "ne"
-    if re.search(r"\bhindi\b|हिन्दी|हिंदी", t):
-        return "hi"
-    if re.search(r"\benglish\b|अंग्रेजी", t):
-        return "en"
+    if m := re.search(r"\b(?:to|into|in)\s+(" + LANG_ALT + r")(?![\w])", t):
+        return _LANG_NAMES[m.group(1)]
+    if m := re.search(r"(?<![\w])(" + LANG_ALT + r")(?![\w])", t):
+        return _LANG_NAMES[m.group(1)]
     return ""
 
 
@@ -76,25 +89,31 @@ def explain(text: str, lang: str = "") -> str:
         return explain_code(text, lang)
     return _llm(f"Explain what the user's selected text means, for a learner who isn't a native English speaker: "
                 f"what it is really saying, in simple words, then any hard word briefly. Reply in {out}. Short "
-                f"(2-6 sentences) unless the text is long.", text[:6000], smart=lang in ("ne", "hi"),
+                f"(1-3 sentences, a few more only for a long text).", text[:6000], smart=lang in ("ne", "hi"),
                 max_tokens=700, purpose="assist_explain")
 
 
-def meaning(text: str, lang: str = "ne") -> str:
-    out = LANGS.get(lang or "ne", "Nepali (Devanagari script)")
-    words = len(text.split())
-    if words <= 4:
-        sys = (f"Dictionary entry for the user's English word/phrase in {out}: the meaning(s) in {out} (most common "
-               f"first), the part of speech, and ONE short English example sentence with its {out} translation. "
-               f"Compact, no extra talk.")
-    else:
-        sys = f"Give the exact meaning of the user's sentence in {out}, naturally, then 1 line on any hard word."
-    return _llm(sys, text[:3000], smart=True, max_tokens=500, purpose="assist_meaning")
+def meaning(text: str, lang: str = "en") -> str:
+    """A word / phrase -> a 1-2 line dictionary meaning (English by default, or in the language asked);
+    a sentence -> what it means, briefly. Short on purpose: it stays in the chat."""
+    out = LANGS.get(lang or "en", "English")
+    if len(text.split()) <= 4:
+        if (lang or "en") == "en":
+            sys = ("Give the meaning of the user's word/phrase like a learner's dictionary, in simple English. Format: "
+                   "'<word> (<part of speech>): <meaning in a few words>.' then 'Example: <one short sentence>.' "
+                   "Two lines, nothing else.")
+        else:
+            sys = (f"Give the meaning of the user's English word/phrase in {out}. Format: '<word> (<part of speech>): "
+                   f"<1-3 {out} words for it> – <a few simple English words>.' then 'Example: <short English "
+                   f"sentence> → <its {out} translation>.' Two lines, nothing else.")
+        return _llm(sys, text[:200], smart=(lang or "en") != "en", max_tokens=200, purpose="assist_meaning")
+    sys = (f"In {out}, say what the user's sentence means in 1-2 short, simple sentences (for a learner). Nothing else.")
+    return _llm(sys, text[:3000], smart=(lang or "en") != "en", max_tokens=300, purpose="assist_meaning")
 
 
 def translate(text: str, lang: str = "ne") -> str:
-    out = LANGS.get(lang or "ne", "Nepali (Devanagari script)")
-    return _llm(f"Translate the user's text into {out}. Natural, accurate, everyday language as people really speak "
+    out = LANGS.get(lang or "ne", lang or "Nepali (Devanagari script)")
+    return _llm(f"Translate the user's text (any language) into {out}. Natural, accurate, everyday language as people really speak "
                 f"and write it (for Nepali: Nepal's Nepali, not Hindi words); keep names, code and technical terms "
                 f"as they are; same meaning and formatting. Output ONLY the translation.", text[:6000], smart=True, max_tokens=min(3000, len(text) + 400),
                 purpose="assist_translate")
@@ -345,12 +364,33 @@ def cancel_pending_code() -> str:
     return "Okay, left it as it was." if had else "No code change was waiting."
 
 
+WHOLE_CODE = re.compile(r"\b(?:whole|entire|full|complete|all\s+(?:of\s+)?(?:the|my))\s+(?:code|file|program|script)\b|"
+                        r"\b(?:this|the|my)\s+(?:code\s+)?file\b", re.I)
+WHOLE_MAX_CHARS = 10000  # bigger files: select a part (the model must return every line)
+
+
+def improve_whole_file(request: str) -> str:
+    """'format my whole code' / 'fix this file': the file open in VS Code, as one background change that waits
+    for a yes like a selection (it replaces the whole file, backup kept)."""
+    f = open_file_in_editor()
+    if f is None or not f.is_file():
+        return "Open the file in VS Code first, then ask again."
+    text = f.read_text(errors="replace")
+    if not text.strip():
+        return f"{f.name} is empty."
+    if len(text) > WHOLE_MAX_CHARS:
+        return f"{f.name} is too big to rewrite in one go ({text.count(chr(10)) + 1} lines). Select a part and ask again."
+    wid, _ = rewrite.target_window()
+    g = rewrite.Grab(text, wid, False, False, rewrite._window_name(wid) if wid else f.name)
+    return start_code_improve(g, clean_instruction(request))
+
+
 # --- one entry point the tool calls ---------------------------------------------------------------------------
 def run(action: str, request: str = "", lang: str = "", replace: bool = False, path: str = "",
         text: str = "") -> str:
     lang = lang if lang in LANGS else lang_of(request)
     if text.strip() and action in ("explain", "meaning", "translate", "code"):  # typed, not highlighted
-        return {"meaning": lambda: meaning(text, lang or "ne"), "translate": lambda: translate(text, lang or "ne"),
+        return {"meaning": lambda: meaning(text, lang or "en"), "translate": lambda: translate(text, lang or "ne"),
                 "code": lambda: explain_code(text, lang)}.get(action, lambda: explain(text, lang))()
     if action == "apply_code":
         return apply_pending_code()
@@ -369,6 +409,8 @@ def run(action: str, request: str = "", lang: str = "", replace: bool = False, p
         target = open_file_in_editor() if path.strip().lower() in ("", "this", "this file", "it") else None
         target = target or resolve_target(path or "this")
         return target if isinstance(target, str) else explain_file(target, lang)
+    if action == "improve" and WHOLE_CODE.search(request or ""):  # "format my whole code": the file open in the editor
+        return improve_whole_file(request)
     g = rewrite.grab()
     if isinstance(g, str):
         import time
@@ -386,19 +428,18 @@ def run(action: str, request: str = "", lang: str = "", replace: bool = False, p
         if not new:
             return "error: nothing came back; the selection was not changed"
         rewrite.put(g, new)
-        return (f"Done, I replaced the highlighted {'code' if is_code(sel) else 'text'} in {_short(g.title)}. "
-                f"Control Z there undoes it.")
+        return "Replaced. Ctrl+Z undoes it."
     if action == "translate":
         out = translate(sel, lang or "ne")
         if replace:
             rewrite.put(g, out)
-            return f"Replaced it with the {LANGS.get(lang or 'ne', '').split(' ')[0]} translation.\n\n{out}"
+            return f"Replaced with the {LANGS.get(lang or 'ne', '').split(' ')[0]} translation."
         rewrite._xclip(["-selection", "clipboard"], out)
-        return out + "\n\n(Also on your clipboard. Say 'replace it with the translation' to put it in place.)"
-    if action == "meaning":
-        return meaning(sel, lang or "ne")
+        return out + "\n(Copied. Say 'replace it' to put it in place.)"
+    if action == "meaning":  # code selected: what the code does; otherwise the word / sentence meaning
+        return explain_code(sel, lang) if is_code(sel) else meaning(sel, lang or "en")
     if action == "code":
         return explain_code(sel, lang)
-    if not is_code(sel) and len(sel.split()) <= 3:  # one word / short phrase: a dictionary meaning (Nepali)
-        return meaning(sel, lang or "ne")
+    if not is_code(sel) and len(sel.split()) <= 3:  # one word / short phrase: a dictionary meaning
+        return meaning(sel, lang or "en")
     return explain(sel, lang)

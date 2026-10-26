@@ -51,7 +51,8 @@ class TTSStream:
         self.stop = threading.Event()
         sentences: queue.Queue = queue.Queue()
         for s in tts.split_sentences(text):
-            sentences.put(s)
+            for part in tts.voice_parts(s, lang):  # Devanagari pieces get the Nepali/Hindi voice
+                sentences.put(part)
         sentences.put(self._done)
         # Speaker with a no-op player: only its synth pipeline is used (nothing plays on the laptop)
         self.speaker = tts.Speaker(synth=tts.edge_synth, player_factory=lambda *a, **k: None)

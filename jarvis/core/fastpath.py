@@ -19,6 +19,8 @@ from pathlib import Path
 from jarvis.core import config, safety, store
 from jarvis.core import notes as notes_mod
 from jarvis.core import study as study_mod
+from jarvis.core.assist import LANG_ALT as _LANG_ALT  # any language: nepali, hindi, english, japanese, french...
+from jarvis.core.assist import WHOLE_CODE
 
 log = logging.getLogger("jarvis.fastpath")
 
@@ -1238,7 +1240,7 @@ _SELREF = (r"(?:(?:this|that|these|the)\s+(?:whole\s+|entire\s+|full\s+|complete
            r"(?:word|words|sentence|sentences|paragraph|paragraphs|text|line|lines|part|passage|question|phrase|section|"
            r"code|function|thing|para)|this|it|that|these|the\s+selected(?:\s+\w+)?|the\s+highlighted(?:\s+\w+)?|"
            r"selected\s+\w+|highlighted\s+\w+|the\s+selection|what\s+i\s+(?:selected|highlighted))")
-_LANGW = r"(?:in|into|to)\s+(?:nepali|hindi|english|नेपाली|हिन्दी)"
+_LANGW = r"(?:in|into|to)\s+(?:" + _LANG_ALT + r")"
 _A_EXPLAIN = re.compile(r"^(?:please\s+|kurama\W+|can\s+you\s+|could\s+you\s+)*(?:explain(?:\s+me)?|what\s+(?:does|do|is)\s+"
                         + _SELREF + r"\s+(?:mean|meaning|saying|say|talking\s+about|about|doing|do)|what\s+is\s+(?:the\s+)?meaning\s+of\s+"
                         r"(?:this|that|the)\s+(?:sentence|line|paragraph|question|passage|text)|i\s+(?:don'?t|do\s+not|can'?t)\s+"
@@ -1246,8 +1248,8 @@ _A_EXPLAIN = re.compile(r"^(?:please\s+|kurama\W+|can\s+you\s+|could\s+you\s+)*(
 _A_MEANING = re.compile(r"^(?:please\s+|kurama\W+|can\s+you\s+)*(?:(?:what(?:'s|\s+is)\s+)?(?:the\s+)?(?:meaning|artha|matlab)\s+of\s+"
                         r"(?P<x>.+?)|(?P<y>.+?)\s+(?:ko|को)\s+(?:meaning|artha|अर्थ|matlab)(?:\s+k(?:e|a|ya)\s*(?:ho|hai|cha)?)?|"
                         r"(?:what\s+does\s+)?(?P<z>[\w'-]{2,30})\s+(?:mean|means))(?:\s+" + _LANGW + r")?\s*\??$", I)
-_A_TRANSLATE = re.compile(r"^(?:please\s+|kurama\W+|can\s+you\s+)*translate\s+(?P<x>.+?)\s+(?:in|into|to)\s+(?P<l>nepali|hindi|english|"
-                          r"नेपाली|हिन्दी)(?P<r>\s+and\s+replace(?:\s+it)?|\s+(?:in\s+place|here))?\s*[.!]*$", I)
+_A_TRANSLATE = re.compile(r"^(?:please\s+|kurama\W+|can\s+you\s+)*translate\s+(?P<x>.+?)\s+(?:in|into|to)\s+(?P<l>"
+                          + _LANG_ALT + r")(?:\s+language)?(?P<r>\s+and\s+replace(?:\s+it)?|\s+(?:in\s+place|here))?\s*[.!]*$", I)
 _A_CODEFIX = re.compile(r"\b(?:improve|optimi[sz]e|fix|refactor|format|clean\s+up|modify|change|update|edit|enhance|expand|rewrite|"
                         r"correct|add\s+(?:comments|docstrings|type\s+hints)\s+to|"
                         r"simplify|speed\s+up|debug|make\s+(?:it|this)\s+(?:faster|cleaner|better))\b.*\b(?:code|function|class|"
@@ -1260,6 +1262,14 @@ _A_FILE = re.compile(r"^(?:please\s+|can\s+you\s+)*(?:explain|summari[sz]e|what\
                      r"(?:\s+(?:do|does|about))?(?:\s+" + _LANGW + r")?\s*\??$", I)
 
 
+_A_BARE_SEL = re.compile(r"^(?:(?:this|that|the)\s+(?:selected\s+|highlighted\s+)?(?:word|one|phrase|term)|(?:the\s+)?"
+                         r"(?:selected|highlighted)\s+(?:word|one|phrase|term)|this\s+selected\s+\w+|"
+                         r"(?:the\s+)?(?:word|one)\s+i\s+(?:selected|highlighted|select))[\s.!?]*$", I)
+_A_POINT = re.compile(r"\b(?:this|that|these|selected|highlighted|i\s+select(?:ed)?)\b", I)
+_A_NOT_SEL = re.compile(r"\b(?:error|errors|traceback|exception|warning|file|folder|project|life|world|song|movie|dream|"
+                        r"message\s+from|notification|alert)\b|\bmy\s+name\b", I)
+
+
 def assist_intent(t: str) -> Intent | None:
     """Highlighted text/code help, 0 tokens to route: explain / meaning / translate / fix code / write code / file."""
     from jarvis.core.assist import lang_of
@@ -1269,7 +1279,7 @@ def assist_intent(t: str) -> Intent | None:
         return Intent("assist", "text_assist", "clipboard", {"action": "explain_file", "path": "this" if f.lower() ==
                                                              "this file" else f, "lang": lang})
     if m := re.match(r"^(?:please\s+|kurama\W+|kura\W+|can\s+you\s+)*(?:convert|change|turn|put|write|say|make)\s+(?P<x>.+?)\s+"
-                     r"(?:in|into|to)\s+(?P<l>nepali|hindi|english|नेपाली|हिन्दी)(?:\s+language)?(?P<r>\s+and\s+replace(?:\s+it)?)?\s*[.!?]*$", t, I):
+                     r"(?:in|into|to)\s+(?P<l>" + _LANG_ALT + r")(?:\s+language)?(?P<r>\s+and\s+replace(?:\s+it)?)?\s*[.!?]*$", t, I):
         x = m.group("x").strip()
         sel = bool(re.fullmatch(_SELREF + r"(?:\s+(?:word|sentence|paragraph|text|line|part))?", x, I))
         if sel or not re.search(r"\.\w{2,5}\b|\bfile\b", x, I):  # a language target: translation, not a file
@@ -1289,6 +1299,21 @@ def assist_intent(t: str) -> Intent | None:
             r"\b(?:this|that|the)\s+(?:whole\s+|entire\s+|full\s+)?(?:sentence|sentences|paragraph|paragraphs|passage|"
             r"question|line|lines|para|text|section)\b", t, I) and len(t.split()) <= 20:
         return Intent("assist", "text_assist", "clipboard", {"action": "explain", "lang": lang})
+    if _A_BARE_SEL.match(t):  # "this word." / "the selected word" (answering "which word?")
+        return Intent("assist", "text_assist", "clipboard", {"action": "meaning", "lang": lang or "en", "text": ""})
+    if re.search(r"\b(?:explain|explanation|summari[sz]e|what\s+(?:does|is))\b", t, I) and WHOLE_CODE.search(t) \
+            and len(t.split()) <= 16:  # "explain my whole code" = the file open in VS Code
+        return Intent("assist", "text_assist", "clipboard", {"action": "explain_file", "path": "this", "lang": lang})
+    if re.search(r"\b(?:format|fix|clean\s+up|refactor|improve|optimi[sz]e|indent|beautify|tidy(?:\s+up)?|correct)\b", t, I) \
+            and WHOLE_CODE.search(t) and len(t.split()) <= 20:  # "format my whole code" / "fix this file"
+        return Intent("assist", "text_assist", "clipboard", {"action": "improve", "request": t})
+    if re.search(r"\b(?:meaning|means?|definition|define|artha|matlab)\b|अर्थ", t, I) and _A_POINT.search(t) \
+            and len(t.split()) <= 16 and not _A_NOT_SEL.search(t):  # any way of asking what the selection means
+        if re.search(r"\b(?:code|function|class|method|script|snippet|loop|regex)\b", t, I):
+            return Intent("assist", "text_assist", "clipboard", {"action": "code", "lang": lang})
+        if not re.search(r"\b(?:word|words|phrase|term|meaning|definition|define|artha|matlab)\b|अर्थ", t, I):
+            return Intent("assist", "text_assist", "clipboard", {"action": "explain", "lang": lang})  # "what does this mean"
+        return Intent("assist", "text_assist", "clipboard", {"action": "meaning", "lang": lang or "en", "text": ""})
     if m := _A_MEANING.match(t):
         x = (m.group("x") or m.group("y") or m.group("z") or "").strip(" '\"")
         if m.group("z") and x.lower() in ("this", "that", "it", "these"):  # "what does this mean" = explain it
@@ -1296,7 +1321,7 @@ def assist_intent(t: str) -> Intent | None:
         sel = not x or bool(re.fullmatch(_SELREF + r"(?:\s+(?:word|sentence|line|phrase|paragraph))?", x, I))
         if x and not sel and (re.search(r"\b(?:my|your|it all|this world)\b", x, I) or x.lower() in ("life", "love", "existence")):
             return None  # "what is the meaning of my life" is a question, not a dictionary lookup
-        return Intent("assist", "text_assist", "clipboard", {"action": "meaning", "lang": lang or "ne",
+        return Intent("assist", "text_assist", "clipboard", {"action": "meaning", "lang": lang or "en",
                                                              "text": "" if sel else x})
     if re.match(r"^(?:please\s+)?(?:what\s+(?:does|is)\s+(?:this|that|the\s+selected)\s+(?:code|function|class|method|snippet|script|"
                 r"loop|regex|query)\s+(?:do|doing|for|mean)|how\s+does\s+this\s+(?:code|function|class|method|work))\b", t, I):

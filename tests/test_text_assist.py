@@ -200,3 +200,53 @@ def test_answers_while_a_code_change_waits(monkeypatch):
 def test_misheard_code_requests():
     i = fastpath.match("Can you replace this code from the better end detail coat?")
     assert i and i.args["action"] == "improve" and "better and detailed code" in i.args["request"]
+
+
+def test_any_way_of_asking_about_the_selection():
+    def a(t):
+        i = fastpath.match(t)
+        return i and (i.tool, i.args.get("action"), i.args.get("lang"))
+    # owner's 1:28 PM log: every one of these went to the LLM ("which word?")
+    for t in ("Can I explain the meaning of this word?", "This word.", "This select output.",
+              "Can you explain the meaning of this word?", "what is the meaning of this OAuth"):
+        assert a(t) == ("text_assist", "meaning", "en"), t
+    assert a("What is the meaning of this word in Nepali?") == ("text_assist", "meaning", "ne")
+    assert a("translate this into japanese") == ("text_assist", "translate", "ja")
+    assert a("convert this to french") == ("text_assist", "translate", "fr")
+    assert a("format my whole code")[1] == "improve" and a("explain my whole code")[1] == "explain_file"
+    assert a("what is the meaning of this code")[1] == "code"
+    assert fastpath.match("what is the meaning of life") is None
+
+
+def test_meaning_is_short_and_english_by_default(desk):
+    st, calls = desk
+    st["sel"] = "result"
+    assert assist.run("meaning", "what is the meaning of this word") == "[assist_meaning]"
+    assert calls[-1] == ("assist_meaning", False)  # English: the fast model
+    assist.run("meaning", "meaning of this word in nepali", "ne")
+    assert calls[-1] == ("assist_meaning", True)
+    st["sel"] = "def f(x):\n    return x * 2"
+    assert assist.run("meaning", "what does this mean") == "[assist_code_explain]"
+
+
+def test_format_whole_file_waits_for_yes(desk, tmp_path, monkeypatch):
+    st, calls = desk
+    monkeypatch.setattr(assist.config, "OUTPUTS_DIR", tmp_path / "out")
+    monkeypatch.setattr(assist.config, "DATA_DIR", str(tmp_path / "data"))
+    f = tmp_path / "calc.py"
+    f.write_text("def add(a,b):\n  return a+b\n")
+    monkeypatch.setattr(assist, "open_file_in_editor", lambda: f)
+    monkeypatch.setattr(rewrite, "target_window", lambda: (7, False))
+    monkeypatch.setattr(rewrite, "_window_name", lambda wid: "calc.py - x - Visual Studio Code")
+    monkeypatch.setattr(assist, "_llm", lambda *a, **k: "def add(a, b):\n    return a + b")
+    assert assist.run("improve", "format my whole code") == "Improving the selected code in calc.py…"
+    assert _wait_pending() and assist.apply_pending_code() == "Replaced in calc.py."
+    assert f.read_text() == "def add(a, b):\n    return a + b\n"
+
+
+def test_tts_reads_nepali_parts_with_the_nepali_voice():
+    from jarvis.core import config, tts
+    parts = tts.voice_parts("result: नतिजा (noun) – the outcome.", "en")
+    assert [v for _, v in parts] == [config.VOICES["en"], config.VOICES["ne"], config.VOICES["en"]]
+    assert tts.voice_parts("यो वाक्य हो।", "en") == [("यो वाक्य हो।", config.VOICES["ne"])]
+    assert tts.voice_parts("Hello.", "en") == [("Hello.", config.VOICES["en"])]
