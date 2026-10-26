@@ -38,9 +38,9 @@ HELP = (
     "/guard on | off — photo + location if someone uses the laptop\n"
     "/track on | off — lost mode: location on every move (ends by itself after 6 h)\n"
     "\n🔕 Notifications\n"
-    "/mute [ram|location|jobs|all] [min] — pause alerts (e.g. /mute ram 20)\n"
-    "/unmute [what] — turn them back on\n"
-    "/muted — what is paused now\n"
+    "/mute [ram|location|jobs|all] [min] — pause alerts (e.g. /mute ram 20; no time = 30 min, max 24 h)\n"
+    "/unmute [what] — turn them back on before the time ends (/unmute = all)\n"
+    "/notifications — every alert: on, or paused with the minutes left (/notification-status works too)\n"
     "↩️ Reply to an alert with 'stop' or 'mute 20 min' to pause just that kind\n"
     "\n📋 Clipboard & files\n"
     "copy: <text> — put text on the laptop's clipboard\n"
@@ -63,7 +63,7 @@ HELP = (
 # the Telegram "/" menu (setMyCommands): the commands you can't remember, one tap away
 MENU = (("list", "all commands"), ("status", "what the laptop is doing"), ("battery", "battery level"),
         ("ram", "RAM / CPU / disk"), ("screen", "screenshot"), ("camera", "camera photo"), ("where", "laptop location"),
-        ("mute", "pause alerts: /mute ram 20"), ("unmute", "turn alerts back on"), ("muted", "what is paused"),
+        ("mute", "pause alerts: /mute ram 20"), ("unmute", "turn alerts back on"), ("notifications", "which alerts are on / paused"),
         ("guard", "anti-theft on/off"), ("track", "lost mode on/off"), ("clip", "laptop clipboard"),
         ("jobs", "background jobs"), ("control", "remote desktop"), ("lock", "block risky actions"),
         ("stop", "stop a stuck task"), ("clearchat", "clear this chat"))
@@ -342,6 +342,11 @@ class TelegramBot(Worker):
                 dev = "laptop" if arg.startswith("laptop") else "phone"
                 hrs = next((int(w) for w in text.split()[1:] if w.isdigit()), 24)
                 return locationlog.summary(dev, hrs)
+            if cmd in ("/notifications", "/notification", "/notification-status", "/notification_status",
+                       "/notifications-status", "/notifications_status", "/alerts", "/notifacation-status"):
+                cmd = "/muted"
+            if cmd in ("/unmutu", "/unmte", "/umute"):
+                cmd = "/unmute"
             if cmd in ("/mute", "/unmute", "/muted"):
                 from jarvis.tools.general.mute_alerts import mute_alerts
                 words = text.split()[1:]

@@ -750,7 +750,8 @@ MUTE_KINDS: dict[str, tuple[str, ...]] = {
     "digest": ("daily_digest",), "backup": ("backup",), "kaggle": ("kaggle",), "internet": ("netdoctor",),
     "guard": ("guard",), "reminders": ("scheduler", "timer")}
 MUTE_ALL_KEEPS = ("scheduler", "timer", "guard")
-MUTE_DEFAULT_MIN = 60.0  # 'mute alerts' without a time
+MUTE_DEFAULT_MIN = 30.0  # 'mute alerts' without a time (owner: never mute for life)
+MUTE_MAX_MIN = 24 * 60.0  # no mute lasts longer than a day
 # Telegram remote control (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID from .env; skipped when empty)
 TELEGRAM_POLL_TIMEOUT_S = 6  # long-poll seconds (short so Ctrl+C stops the workers quickly)
 TELEGRAM_CONFIRM_TIMEOUT_S = 60.0  # "Reply yes/no": no answer in time means no

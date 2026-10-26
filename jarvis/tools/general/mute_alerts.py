@@ -28,6 +28,23 @@ def _human(minutes: float) -> str:
     return f"{h} h" + (f" {r} min" if r else "")
 
 
+def status() -> str:
+    """Every alert kind: allowed, or paused with the minutes left (the /notifications command)."""
+    now = time.time()
+    paused, allowed = [], []
+    for kind, sources in config.MUTE_KINDS.items():
+        until = max(notify.muted(s) for s in sources)
+        (paused if until > now else allowed).append((kind, until))
+    if not paused:
+        return "🔔 All notifications are ON: " + ", ".join(LABEL[k] for k, _ in allowed) + "."
+    lines = ["🔔 Notifications", "🔕 Paused:"]
+    lines += [f"• {LABEL[k]}: {_human((u - now) / 60 + 0.5)} left (until {_at(u)})"
+              for k, u in sorted(paused, key=lambda x: x[1])]
+    lines += ["✅ On: " + (", ".join(LABEL[k] for k, _ in allowed) or "nothing else")]
+    lines += ["/unmute <what> (e.g. /unmute ram) or /unmute = all back on now."]
+    return "\n".join(lines)
+
+
 @tool(group="telegram", safety="safe",
       description="Mute KURAMA alerts for a while (laptop + Telegram): what = resource (RAM), location, jobs, "
                   "all... or last (the alert just sent). off = unmute, status = what is muted.")
@@ -38,7 +55,7 @@ def mute_alerts(action: Literal["on", "off", "status"] = "on", what: str = "last
         action: on = mute, off = unmute, status = list current mutes.
         what: resource, location, jobs, downloads, watchdog, web, commands, digest, backup, internet, guard,
             reminders, all, or last (whatever alert was sent most recently).
-        minutes: how long (default 60).
+        minutes: how long (default 30, at most 24 h: never forever).
     """
     what = (what or "last").strip().lower()
     if what == "last":  # the alert the user replied to on Telegram, else the newest one
@@ -46,14 +63,10 @@ def mute_alerts(action: Literal["on", "off", "status"] = "on", what: str = "last
         what = _BY_SOURCE.get(src, src or "all")
     label = LABEL.get(what, f"{what} alerts")
     if action == "status":
-        mutes = notify.active_mutes()
-        if not mutes:
-            return "Nothing is muted: every alert comes through."
-        names = sorted({("all" if s == "*" else _BY_SOURCE.get(s, s), until) for s, until in mutes.items()})
-        return "Muted: " + "; ".join(f"{LABEL.get(k, k)} until {_at(u)}" for k, u in names) + "."
+        return status()
     if action == "off":
         gone = notify.unmute(what)
         return f"Unmuted {label}." if gone else "Nothing like that was muted."
-    minutes = minutes or config.MUTE_DEFAULT_MIN
+    minutes = min(minutes or config.MUTE_DEFAULT_MIN, config.MUTE_MAX_MIN)
     until = notify.mute(what, minutes)
     return f"OK, no {label} for {_human(minutes)} (until {_at(until)}). Say 'unmute alerts' to undo."

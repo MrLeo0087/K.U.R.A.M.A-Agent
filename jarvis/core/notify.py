@@ -158,7 +158,7 @@ def mute_sources(kind: str) -> tuple[str, ...]:
 
 def mute(kind: str, minutes: float) -> float:
     """Silence one kind of alert (or 'all') for `minutes`. Returns the until timestamp."""
-    until = time.time() + max(1.0, minutes) * 60
+    until = time.time() + min(max(1.0, minutes), config.MUTE_MAX_MIN) * 60  # never forever
     d = _mutes()
     for src in mute_sources(kind):
         d[src] = until

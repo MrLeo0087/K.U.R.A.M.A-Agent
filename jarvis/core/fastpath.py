@@ -658,7 +658,8 @@ def mute_intent(t: str) -> Intent | None:
     """0-token alert mute / unmute / status; the time is required unless an alert word is named."""
     low = t.lower().strip(" .!?")
     if re.fullmatch(r"(?:please\s+)?(?:which|what)\s+(?:alerts?|notifications?|warnings?)\s+(?:are|is)\s+(?:muted|"
-                    r"paused|off|silenced)|(?:show\s+)?muted\s+(?:alerts?|notifications?)", low):
+                    r"paused|off|silenced)|(?:show\s+)?muted\s+(?:alerts?|notifications?)|(?:show\s+(?:me\s+)?)?(?:my\s+)?"
+                    r"(?:notifications?|alerts?|warnings?)\s+status", low):
         return Intent("mute", "mute_alerts", "telegram", {"action": "status"})
     if m := (re.fullmatch(r"(?:please\s+)?(?:unmute|resume|turn\s+(?:back\s+)?on|enable|allow|bring\s+back)\s+(?:the\s+|my\s+)?"
                           r"(?P<k>\w+\s+)?" + _MUTE_NOUN + r"(?:\s+again|\s+back(?:\s+on)?)?(?:\s+please)?", low)

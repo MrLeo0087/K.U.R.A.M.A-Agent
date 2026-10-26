@@ -150,7 +150,8 @@ def test_notify_mute_by_kind_and_all(tg, monkeypatch):
     assert notify.notify("Resource alert: ram", "91%", "warning", source="resource_guard") == ["store"]
     assert store.alerts_recent()[0]["channels"] == "muted" and not tg["sent"]
     assert notify.notify("Backup failed", "x", "warning", source="backup") == ["telegram", "store"]  # others still come
-    assert "RAM / resource warnings until" in mute_alerts("status")
+    st = mute_alerts("status")
+    assert "🔕 Paused:\n• RAM / resource warnings: 20 min left (until" in st and "✅ On: location messages" in st
     assert mute_alerts("off", "resource") == "Unmuted RAM / resource warnings."
     assert notify.notify("Resource alert: ram", "92%", "warning", source="resource_guard") == ["telegram", "store"]
     mute_alerts("on", "all", 30)  # 'all' never silences reminders or the anti-theft guard
@@ -159,14 +160,18 @@ def test_notify_mute_by_kind_and_all(tg, monkeypatch):
     mute_alerts("on", "last", 10)  # 'this one' = the newest alert's kind (jobs)
     assert "job-done messages" in mute_alerts("status")
     notify.unmute("all")
-    assert mute_alerts("status").startswith("Nothing is muted")
+    assert mute_alerts("status").startswith("🔔 All notifications are ON")
+    assert "for 30 min" in mute_alerts("on", "jobs")  # no time given = 30 min, never forever
+    assert "for 24 h" in mute_alerts("on", "jobs", 99999)  # at most a day
+    notify.unmute("all")
 
 
 def test_telegram_mute_command(monkeypatch):
     bot = telegram_bot.TelegramBot()
     assert "RAM / resource warnings for 20 min" in bot.answer("/mute ram 20")
-    assert "until" in bot.answer("/muted")
-    assert bot.answer("/unmute ram") == "Unmuted RAM / resource warnings."
+    assert "20 min left" in bot.answer("/notification-status") and "20 min left" in bot.answer("/notifications")
+    assert bot.answer("/unmutu ram") == "Unmuted RAM / resource warnings."  # before the time ends
+    assert bot.answer("/notifications").startswith("🔔 All notifications are ON")
 
 
 def test_telegram_errors_never_leak_token(monkeypatch):
@@ -396,7 +401,7 @@ def test_telegram_reply_to_an_alert_mutes_that_kind(tg, monkeypatch):
     quoted = {"text": "⚠️ Resource alert: ram\nram 91% (limit 90)."}
     assert "no RAM / resource warnings for 20 min" in bot.answer("mute 20 min", quoted)
     assert notify.muted("resource_guard") and not notify.muted("backup")
-    assert "no backup messages for 1 h" in bot.answer("stop", {"text": "⚠️ Backup failed\ndisk full"})
+    assert "no backup messages for 30 min" in bot.answer("stop", {"text": "⚠️ Backup failed\ndisk full"})
     # a longer reply goes on normally; 'this' in it means the replied alert, and the AI sees the quote
     notify.unmute("all")
     assert "RAM / resource warnings for 30 min" in bot.answer("do not send this alert for 30 min", quoted)
