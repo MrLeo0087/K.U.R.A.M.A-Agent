@@ -14,7 +14,9 @@ const lowPowerOn = () => (S.lowPower === null ? reducedMotion : !!S.lowPower);
 const api = new Api(() => S);
 if (params.get("wallpaper") === "1") document.body.classList.add("wallpaper");
 const MINI = params.get("mini") === "1"; // the small chat panel of mini KURAMA (no orb, stats or workspace)
+const WSONLY = MINI && params.get("ws") === "1"; // mini KURAMA's separate workspace window: just the workspace
 document.body.classList.toggle("mini", MINI);
+document.body.classList.toggle("wsonly", WSONLY);
 let minimized = false; // the dashboard is minimized to the floating button (window.kuramaMinimized)
 let miniGhost = false; // mini panel closed while in talk mode: it keeps listening, replies show beside the button
 
@@ -1502,7 +1504,15 @@ async function mwsShow() {
     body.append(pre);
   }
 }
-$("m-ws").onclick = () => { if ($("mws").hidden) mwsOpen(true); else $("mws").hidden = true; };
+// mini KURAMA: the workspace is its own small window (host "ws"); in a plain browser it's a sheet over the chat
+function openWorkspace(focus = true) {
+  if (hostSay(focus ? "ws:open" : "ws:quiet")) return;
+  mwsOpen(true);
+}
+$("m-ws").onclick = () => { if (host) openWorkspace(true); else if ($("mws").hidden) mwsOpen(true); else $("mws").hidden = true; };
+if (MINI && !WSONLY) $("m-ws").hidden = false; // always reachable from the panel header
+window.kuramaWsRefresh = () => { if (WSONLY) mwsOpen(true); };
+if (WSONLY) { document.title = "KURAMA · Workspace"; mwsOpen(true); }
 $("mws-close").onclick = () => { $("mws").hidden = true; };
 $("mws-prev").onclick = () => { if (mws.cur < mws.items.length - 1) { mws.cur++; mwsShow(); } };
 $("mws-next").onclick = () => { if (mws.cur > 0) { mws.cur--; mwsShow(); } };
@@ -1582,7 +1592,7 @@ function announceJob(r) {
   const own = ok && String(r.progress || "").startsWith("» ") ? r.progress.slice(2) : ""; // the job wrote its own reply
   const msg = own || (ok ? `Done: ${title}.${r.output_path ? " It's in your workspace." : ""}`
     : `Sorry, ${title} failed${r.error ? `: ${r.error.slice(0, 120)}` : "."}`);
-  if (ok && r.output_path && MINI) mwsOpen(); // mini panel: the result opens in its small workspace
+  if (ok && r.output_path && MINI) openWorkspace(false); // mini: the result opens in the workspace window
   const b = new BotBubble();
   b.append(msg);
   b.finish();

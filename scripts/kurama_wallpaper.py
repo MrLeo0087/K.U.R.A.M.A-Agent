@@ -58,6 +58,7 @@ CHECK_MS = 2000
 STATE_FILE = Path(__file__).resolve().parent.parent / "data" / "mini.json"  # minimized? + button position
 BUBBLE = 56  # floating button size (px)
 PANEL_W, PANEL_H = 400, 600  # mini chat panel
+WS_W, WS_H = 480, 620  # mini workspace window
 PANEL_KEEP_S = 180  # a hidden panel is closed after this long (frees its page); reopening restores the chat
 CAPTION_W = 340  # reply caption next to the button while talking with the panel closed
 RING = {"listening": (0.25, 0.85, 0.78), "capturing": (0.25, 0.95, 0.6), "thinking": (1, 0.75, 0.25),
@@ -355,7 +356,7 @@ class Wallpaper:
             self.restore()
         elif msg == "hide" and self.mini:
             self.mini.hide_panel()
-        elif self.mini and msg.startswith(("talk:", "state:", "caption:")):  # only the mini panel sends these
+        elif self.mini and msg.startswith(("talk:", "state:", "caption:", "ws:")):  # only the mini panel sends these
             self.mini.on_page(msg)
 
     def minimize(self):
@@ -489,6 +490,7 @@ class Mini:
         self.ghost = False  # panel "closed" but still alive (invisible, click-through) so talk mode keeps going
         self.state = "idle"  # voice state shown by the ring while ghosted
         self.caption = None  # Caption window, made on first use
+        self.ws = self.ws_view = None  # the workspace window, made when needed
         b = self.bubble = Gtk.Window(title="KURAMA mini")
         b.set_decorated(False)
         b.set_resizable(False)
@@ -541,6 +543,8 @@ class Mini:
             if rest != self.state:
                 self.state = rest
                 self.bubble.queue_draw()
+        elif kind == "ws":  # the panel asks for its workspace window (button, or a finished job with a result)
+            self.open_ws(focus=rest != "quiet")
         elif kind == "caption" and self.ghost:
             with contextlib.suppress(ValueError, TypeError):
                 d = json.loads(rest)
@@ -730,7 +734,40 @@ class Mini:
             self.panel = self.view = None
         return False
 
+    # ---------- workspace: its OWN small window next to the chat (close / minimize / move it like any window) ----
+    def open_ws(self, focus: bool = True) -> None:
+        if self.ws is not None:
+            run_js(self.ws_view, "window.kuramaWsRefresh && window.kuramaWsRefresh()")
+            if focus:
+                self.ws.present()
+            return
+        w = self.ws = Gtk.Window(title="KURAMA · Workspace")
+        w.set_default_size(WS_W, min(WS_H, workarea().height - 60))
+        w.set_skip_pager_hint(True)
+        with contextlib.suppress(Exception):
+            w.set_icon_name("folder-documents")
+        v = self.ws_view = WebKit2.WebView(related_view=self.wp.view, user_content_manager=self.wp.ucm)
+        v.set_settings(self.wp.view.get_settings())
+        v.set_background_color(Gdk.RGBA(0.043, 0.047, 0.078, 1))
+        v.connect("decide-policy", self.wp.on_policy)
+        u = urlsplit(self.wp.url)
+        v.load_uri(f"{u.scheme}://{u.netloc}/?mini=1&ws=1")  # the workspace-only page: no chat, no mic
+        w.add(v)
+        w.connect("destroy", self._ws_closed)
+        bx, by = self.bubble.get_position()  # on the other side of the button from the chat panel
+        wa = workarea()
+        right = bx + BUBBLE / 2 > wa.x + wa.width / 2
+        x = bx - PANEL_W - WS_W - 30 if right else bx + BUBBLE + PANEL_W + 30
+        w.move(clamp(x, wa.x + 8, wa.x + wa.width - WS_W - 8), clamp(by - WS_H + BUBBLE, wa.y + 8, wa.y + wa.height - WS_H))
+        w.set_focus_on_map(focus)  # opened by a finished job: don't steal the keyboard from what you're typing
+        w.show_all()
+
+    def _ws_closed(self, *_):
+        self.ws = self.ws_view = None  # closing frees its page
+
     def close(self) -> None:
+        if self.ws is not None:
+            self.ws.destroy()
         if self.reaper:
             GLib.source_remove(self.reaper)
         if self.panel is not None:

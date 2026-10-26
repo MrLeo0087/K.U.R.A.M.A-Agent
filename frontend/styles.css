@@ -889,3 +889,9 @@ body.mini .mws:not([hidden]) { display: flex; flex-direction: column; position: 
 .mws-body img { max-width: 100%; border-radius: 8px; display: block; margin: 0 auto; }
 #m-ws { position: relative; }
 #m-ws .dot { position: absolute; top: 5px; right: 5px; width: 7px; height: 7px; border-radius: 50%; background: #ff7a1a; }
+
+/* mini KURAMA's separate workspace window (?mini=1&ws=1): only the workspace, full window */
+body.wsonly .chat-head, body.wsonly #log, body.wsonly #composer, body.wsonly #suggest, body.wsonly #mws-close { display: none !important; }
+body.wsonly .chat { border: 0; }
+body.wsonly .mws:not([hidden]) { top: 0; border-top: 0; }
+body.wsonly .mws-title { font-size: 13px; }
