@@ -43,3 +43,28 @@ def test_spoken_editing_commands(monkeypatch):
     dictation.handle_text("Thanks a lot. Change line. See you")
     assert keys == ["TYPE Thanks a lot. ", "Return", "TYPE See you "]
     assert dictation.command_for("Enter the room now") is None and dictation.command_for("Hello there") is None
+
+
+def test_stop_noise_and_nepali(monkeypatch):
+    for said in ("StopDetect.", "Stop Detective.", "stop detection", "Stop.", "रोक", "बन्द गर"):
+        assert dictation.STOP.match(said), said
+    for echo in ("Press.", "Dictation.", "Okay.", "Thank you."):
+        assert dictation.is_noise(echo, "english"), echo
+    assert dictation.is_noise("E aí", "portuguese") and not dictation.is_noise("Hello how are you", "english")
+    assert dictation.command_for("नयाँ लाइन") == "Return" and dictation.command_for("स्पेस") == "space"
+    from jarvis.core import fastpath
+    assert fastpath.match("stop detection").args == {"action": "stop"}
+    assert fastpath.match("turn off speech to text").args == {"action": "stop"}
+
+
+def test_nepali_text_is_pasted_not_typed(monkeypatch):
+    from jarvis.core import rewrite, uiagent
+    clip, ev = {"c": "old"}, []
+    monkeypatch.setattr(rewrite, "_xclip", lambda a, text=None: clip.__setitem__("c", text) or "" if text is not None
+                        else clip["c"])
+    monkeypatch.setattr(uiagent, "active_class", lambda: "brave-browser")
+    monkeypatch.setattr(uiagent, "key", lambda k: ev.append((k, clip["c"])))
+    monkeypatch.setattr(uiagent, "type_text", lambda t: ev.append(("TYPE", t)))
+    monkeypatch.setattr(dictation.time, "sleep", lambda s: None)
+    dictation.handle_text("नमस्ते, म ठिक छु")
+    assert ev == [("ctrl+v", "नमस्ते, म ठिक छु ")] and clip["c"] == "old"

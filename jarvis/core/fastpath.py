@@ -1234,9 +1234,16 @@ def everyday_intent(t: str) -> Intent | None:
         if not re.fullmatch(r"(?:the\s+)?(?:screen|laptop|computer|pc|kurama|phone|door|it\s+now)", p, I):
             act = "unlock" if m.group("a").lower() in ("unlock", "decrypt") else "lock"
             return Intent("lock", "folder_lock", "filesearch", {"action": act, "path": p}, p)
-    if m := re.fullmatch(r"(?:please\s+)?(?:(?P<stop>stop|end|finish|cancel)\s+(?:the\s+)?(?:dictation|dictating|voice\s+typing|typing)|"
-                         r"(?:start\s+|begin\s+)?(?:dictat(?:e|ion|ing)|voice\s+typing)|(?:start\s+)?typ(?:e|ing)\s+what\s+i\s+(?:say|speak))"
+    if re.fullmatch(r"(?:nepali\s*ma|नेपालीमा|नेपाली\s*मा)\s+(?:type|lekha|lekh|लेख|लेखन|टाइप)\s*(?:gara|garnu|गर|गर्नु)?\w*[\s.!]*", t, I):
+        return Intent("dictate", "dictate", "windows", {"action": "start", "lang": "ne"})
+    _STT = r"(?:dictation|dictating|detection|voice\s+typing|typing|speech[\s-]+to[\s-]+text|stt|voice\s+input)"
+    if m := re.fullmatch(r"(?:please\s+)?(?:(?P<stop>stop|end|finish|cancel|disable|turn\s+off|switch\s+off|close|exit)\s+(?:the\s+)?"
+                         + _STT + r"(?:\s+mode)?|" + _STT + r"\s+(?P<stop2>off)|(?:start\s+|begin\s+|enable\s+|turn\s+on\s+|switch\s+on\s+|"
+                         r"activate\s+)?(?:the\s+)?(?:dictat(?:e|ion|ing)|voice\s+typing|speech[\s-]+to[\s-]+text|stt)(?:\s+mode)?|"
+                         r"(?:start\s+)?typ(?:e|ing)\s+what\s+i\s+(?:say|speak))"
                          r"(?:\s+(?:in|for)\s+(?P<lang>english|nepali|hindi))?(?:\s+mode)?[\s.!]*", t, I):
+        if m.group("stop2"):
+            return Intent("dictate", "dictate", "windows", {"action": "stop"})
         if m.group("stop"):
             return Intent("dictate", "dictate", "windows", {"action": "stop"})
         lang = {"english": "en", "nepali": "ne", "hindi": "hi"}.get((m.group("lang") or "").lower(), "auto")

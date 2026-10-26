@@ -20,8 +20,9 @@ from jarvis.core import config
 log = logging.getLogger(__name__)
 RATE, FRAME_MS = 16000, 30
 FRAME_BYTES = RATE * 2 * FRAME_MS // 1000
-STOP = re.compile(r"^\W*(?:(?:please\s+)?(?:stop|end|finish|cancel|exit|close)\s+(?:the\s+)?(?:dictation|dictating|typing|voice\s+typing)"
-                  r"|dictation\s+(?:off|stop)|stop\s+(?:it|now)|बन्द\s+गर|रोक)\W*$", re.I)
+STOP = re.compile(r"^\W*(?:please\s+|ok(?:ay)?\s+|kurama\W+)?(?:(?:stop|end|finish|cancel|exit|close|disable|turn\s+off|switch\s+off)"
+                  r"(?:\W+\w+){0,2}|stop\w*|dictation\s+(?:off|stop)|speech\s+to\s+text\s+off)\W*$|"
+                  r"^\W*(?:रोक|रोक्नुहोस्|बन्द\s*गर|बन्द\s*गर्नुहोस्|पुग्यो|बंद\s*करो|रुको|बस)\W*$", re.I)
 # Spoken editing commands. A whole short phrase is matched (exact, then fuzzy for mishearings like "please enter");
 # the clearly multi-word ones also work inside a longer sentence ("... thanks. new line. see you").
 COMMANDS: dict[str, tuple[str, ...]] = {
@@ -37,17 +38,23 @@ COMMANDS: dict[str, tuple[str, ...]] = {
     "ctrl+z": ("undo", "undo that", "press undo"),
     "ctrl+s": ("save", "save it", "save the file", "press save"),
 }
+COMMANDS["Return"] += ("नयाँ लाइन", "अर्को लाइन", "लाइन बदल", "इन्टर", "नई लाइन", "अगली लाइन", "लाइन बदलो")
+COMMANDS["Return Return"] += ("नयाँ अनुच्छेद", "अर्को अनुच्छेद", "नया पैराग्राफ", "नयाँ प्याराग्राफ")
+COMMANDS["space"] += ("स्पेस", "खाली ठाउँ")
+COMMANDS["ctrl+z"] += ("अनडु", "पछाडि फर्क")
 _CMD_PHRASE = {ph: k for k, phs in COMMANDS.items() for ph in phs}
 _INLINE = sorted((ph for ph in _CMD_PHRASE if " " in ph and ph not in ("go down", "save it", "undo that")),
                  key=len, reverse=True)
 # Whisper is told these words exist, so "change line" stops coming back as "align tinge"
-VOCAB = ("Dictation. New line. Next line. Change line. New paragraph. Change the paragraph. Press enter. Press tab. "
-         "Tab key. Give space. Backspace. Undo. Stop dictation.")
+VOCAB = "Okay, new line, change the line, new paragraph, press enter, tab key, give space, stop dictation."
+VOCAB_NE = "नमस्ते। यो नेपाली लेखाइ हो। नयाँ लाइन। अर्को अनुच्छेद। स्पेस। रोक।"
+VOCAB_HI = "नमस्ते। यह हिंदी लेखन है। नई लाइन। अगला पैराग्राफ। स्पेस। रुको।"
+_VOCAB_WORDS = set(re.sub(r"[^\w\s]", " ", VOCAB.lower()).split()) | {"dictation", "press", "line", "enter"}
 
 
 def command_for(phrase: str) -> str | None:
     """xdotool key(s) for a phrase that is only a command, else None."""
-    t = re.sub(r"[^\w\s]", " ", phrase.lower())
+    t = re.sub(r"[^\w\s\u0900-\u097F]", " ", phrase.lower())
     t = re.sub(r"^(?:please|okay|ok|and|now|then)\s+|\s+(?:please|now)$", "", " ".join(t.split())).strip()
     if not t or len(t.split()) > 5:
         return None
@@ -97,7 +104,7 @@ def handle_text(text: str) -> bool:
     for m in _CMD.finditer(t):
         before = t[pos:m.start()].strip().rstrip(",")
         if before:
-            uiagent.type_text(before + " ")
+            _type(before + " ")
             _state["typed"] += len(before.split())
         cmd = " ".join(m.group(1).lower().split())
         if cmd.startswith(("stop", "end", "finish")):
@@ -106,24 +113,76 @@ def handle_text(text: str) -> bool:
         pos = m.end()
     rest = t[pos:].strip()
     if rest:
-        uiagent.type_text(rest + " ")
+        _type(rest + " ")
         _state["typed"] += len(rest.split())
     return True
 
 
+def is_noise(text: str, raw_lang: str) -> bool:
+    """Prompt echoes ('Dictation.', 'Press.'), Whisper's silence phrases, and short bits in a language the user
+    doesn't speak (room talk / TV) are not dictation."""
+    from jarvis.core import stt
+    words = re.sub(r"[^\w\s\u0900-\u097F]", " ", text.lower()).split()
+    if not words or stt.is_hallucination(text):
+        return True
+    if command_for(text) or STOP.match(text):
+        return False
+    if set(words) <= _VOCAB_WORDS:
+        return True
+    return raw_lang.strip().lower() not in stt.LANG_MAP and len(words) < 5
+
+
+def _front_is_kurama() -> bool:
+    try:
+        from jarvis.core import rewrite
+        wid, in_front = rewrite.target_window()
+        return not in_front  # the front window is KURAMA's own
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _type(text: str) -> None:
+    from jarvis.core import uiagent
+    if text.isascii():
+        uiagent.type_text(text)
+        return
+    from jarvis.core import rewrite  # Nepali/Hindi: paste (xdotool can't type every Devanagari sign reliably)
+    old = rewrite._xclip(["-selection", "clipboard"])
+    rewrite._xclip(["-selection", "clipboard"], text)
+    term = uiagent.family(uiagent.active_class()) == "terminal"
+    uiagent.key("ctrl+shift+v" if term else "ctrl+v")
+    time.sleep(0.2)
+    if old:
+        rewrite._xclip(["-selection", "clipboard"], old)
+
+
 def _stt_loop(q: "queue.Queue[bytes | None]") -> None:
     from jarvis.core import audio, stt
-    stt.set_thread_prompt(VOCAB)  # this thread only: bias Whisper toward the editing commands
+    lang = _state["lang"]
+    # this thread only: bias Whisper toward the editing commands, in the dictation language and script
+    # (an English prompt made Nepali come back romanized: "Namaste as a moussom ramroosa")
+    stt.set_thread_prompt({"ne": VOCAB_NE, "hi": VOCAB_HI}.get(lang or "", VOCAB))
+    models = [config.STT_MODEL, config.STT_FALLBACK]
+    if lang in config.STT_PREFER_FALLBACK_LANGS:
+        models.reverse()  # large-v3 is much better than turbo at Nepali
     while True:
         pcm = q.get()
         if pcm is None:
             return
-        try:
-            tr = stt.transcribe(audio.pcm_to_wav(pcm, RATE), _state["lang"])
+        try:  # ONE fast Whisper call per phrase (not the dual Nepali pass of voice chat): less lag, fewer requests
+            tr = stt._one(audio.pcm_to_wav(pcm, RATE), lang, models)
         except Exception as e:  # noqa: BLE001 - one failed phrase must not end dictation
             log.warning("dictation STT failed: %s", e)
             continue
-        if not handle_text(getattr(tr, "text", "") or ""):
+        text = (getattr(tr, "text", "") or "").strip()
+        if is_noise(text, getattr(tr, "raw_lang", "") or (lang or "english")):
+            continue
+        if STOP.match(text):
+            _state["stop"].set()
+            return
+        if _front_is_kurama() and not command_for(text):
+            continue  # never type into KURAMA's own window (that's how chat got flooded)
+        if not handle_text(text):
             _state["stop"].set()
             return
 
@@ -156,7 +215,7 @@ def _run(delay: float) -> None:
                 voiced.append(frame)
                 silence_ms = 0 if speech else silence_ms + FRAME_MS
                 if silence_ms >= config.DICTATION_PAUSE_MS or len(voiced) * FRAME_MS >= 15000:
-                    if len(voiced) * FRAME_MS >= 400:
+                    if len(voiced) * FRAME_MS >= 600:  # shorter = a cough/click, not words
                         q.put(b"".join(voiced))
                     voiced, ring, talking = [], [], False
                     last_voice = time.time()
