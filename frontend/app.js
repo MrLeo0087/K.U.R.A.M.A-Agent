@@ -204,9 +204,13 @@ async function toggleConv() {
   audioCtx();
   if (mode === "conv" && (conv.on || asleep)) { setMode("text"); return; } // talk button again: leave talk mode
   if (recording) setMode("text");
-  if (!MINI && S.wakeListen) { startListening(); return; } // talk mode starts asleep: "hey KURAMA" starts it
+  // an explicit click on the talk button = "listen to me now", NOT "wait for the wake word" (that passive,
+  // asleep-until-"hey KURAMA" state is only the boot default; clicking should start capturing right away)
+  asleep = false;
+  api.wakeAwake().catch(() => {}); // stop the server's asleep wake-listener so it hands the mic to the page
   mode = "conv";
   try { await conv.start(); } catch (e) { toast(micError(e)); flashError(); setMode("text"); return; }
+  conv.sleep(false); // make sure the loop is awake (not only listening for the wake phrase)
   setMode("conv");
 }
 
