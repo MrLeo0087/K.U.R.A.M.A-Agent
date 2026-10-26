@@ -1467,6 +1467,10 @@ window.kuramaMinimized = (on) => { // dashboard: hide the panels, keep the orb (
   if (minimized && !asleep) setMode("text"); // one mic user at a time; the wake word (asleep) keeps listening
   applyActivity();
 };
+window.kuramaMiniWake = (rest = "") => { // minimized: the host heard "KURAMA / wake up" -> talk in this panel
+  if (!MINI) return;
+  wakeUp(rest || "");
+};
 window.kuramaMiniShown = (on, keepTalking = false) => { // mini panel opened / hidden
   miniGhost = !on && keepTalking && mode === "conv" && conv.on; // talk mode goes on with the panel closed
   document.body.classList.toggle("paused", !on); // freeze CSS animations while hidden

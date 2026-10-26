@@ -10,7 +10,8 @@ While a maximized / full-screen window covers the desktop (checked with libwnck 
 paused through window.kuramaPause(true): the orb loop, clock, status stream and CSS animations stop, so
 the wallpaper costs ~0 CPU while you work. The page stays clickable: chat works from the desktop.
 
-Minimize (the button in the chat header) hides the dashboard panels and shows mini KURAMA: a small round
+Minimize (the button in the chat header) switches the big dashboard OFF (page unloaded, window hidden; the
+desktop shows its saved snapshot; WakeBridge keeps the wake word through the API) and shows mini KURAMA: a small round
 button that floats above every app (drag it anywhere, right-click for a menu). Clicking it opens a small
 chat-only panel (same page with ?mini=1: text, mic and conversation mode) over whatever you are using.
 Talk mode keeps working when that panel is closed: the panel turns invisible and click-through instead of
@@ -30,6 +31,9 @@ import json
 import math
 import os
 import sys
+import threading
+import time
+import urllib.request
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -197,6 +201,8 @@ class Wallpaper:
         self.paused: bool | None = None
         self.state = load_state()
         self.mini: Mini | None = None
+        self.wake: WakeBridge | None = None
+        self.asleep_page = False
         self.win = Gtk.Window(title="KURAMA")
         # the page asks for minimize / restore / hide through window.webkit.messageHandlers.kurama
         self.ucm = WebKit2.UserContentManager()
@@ -276,7 +282,8 @@ class Wallpaper:
             self.loaded = True
             GLib.timeout_add(2200, self.uncover)  # after the page's boot animation, hidden under the cover
             GLib.timeout_add_seconds(SNAP_FIRST_S, lambda: self.snapshot() and False)  # once
-            GLib.timeout_add_seconds(SNAP_EVERY_S, self.snapshot)
+            if not getattr(self, "_snap_timer", 0):  # once, even after restore reloads the page
+                self._snap_timer = GLib.timeout_add_seconds(SNAP_EVERY_S, self.snapshot)
         if event == WebKit2.LoadEvent.FINISHED:
             if self.paused:
                 run_js(self.view, "window.kuramaPause && window.kuramaPause(true)")
@@ -305,6 +312,8 @@ class Wallpaper:
         """Save how the dashboard looks now (one render + PNG every 10 min; skipped in window mode)."""
         if self.bg is None:
             return False
+        if self.asleep_page:
+            return True  # minimized: there is no dashboard to photograph (keep the timer for later)
 
         def done(view, res):
             try:
@@ -350,21 +359,47 @@ class Wallpaper:
             self.mini.on_page(msg)
 
     def minimize(self):
+        """Mini mode: the big dashboard is switched OFF (its page unloaded, its window hidden; the desktop shows the
+        saved snapshot), so only the floating button, its panel and the backend run. Only "Restore full KURAMA"
+        (right-click the button) brings it back."""
         if self.mini is None:
             self.mini = Mini(self)
         self.state["minimized"] = True
         save_state(self.state)
-        run_js(self.view, "window.kuramaMinimized && window.kuramaMinimized(true)")
+        run_js(self.view, "window.kuramaMinimized && window.kuramaMinimized(true)")  # let it stop its mic first
+        GLib.timeout_add(600, self.deep_sleep)
+
+    def deep_sleep(self):
+        if not self.state.get("minimized"):
+            return False
+        self.asleep_page = True
+        self.view.load_uri("about:blank")  # frees the dashboard's DOM, JS, orb and timers
+        self.win.hide()
+        if self.wake is None:
+            u = urlsplit(self.url)
+            self.wake = WakeBridge(f"{u.scheme}://{u.netloc}", lambda cmd: self.mini and self.mini.wake(cmd))
+        return False
 
     def restore(self):
+        if self.wake is not None:
+            self.wake.stop()
+            self.wake = None
         if self.mini is not None:
             self.mini.close()
             self.mini = None
         self.state["minimized"] = False
         save_state(self.state)
-        run_js(self.view, "window.kuramaMinimized && window.kuramaMinimized(false)")
+        if getattr(self, "asleep_page", False):
+            self.asleep_page = False
+            self.loaded = False
+            self.win.show_all()
+            self.view.load_uri(self.url)  # back to the full dashboard
+        else:
+            run_js(self.view, "window.kuramaMinimized && window.kuramaMinimized(false)")
 
     def check_covered(self):
+        if self.asleep_page:
+            return True  # minimized: nothing to pause
         try:
             covered = desktop_covered(self.screen)
         except Exception:
@@ -373,6 +408,70 @@ class Wallpaper:
             self.paused = covered
             run_js(self.view, f"window.kuramaPause && window.kuramaPause({str(covered).lower()})")
         return True
+
+
+def _api_token() -> str:
+    """JARVIS_API_TOKEN from KURAMA's .env (empty = the API needs none)."""
+    env = Path(__file__).resolve().parent.parent / ".env"
+    with contextlib.suppress(OSError):
+        for line in env.read_text().splitlines():
+            if line.startswith("JARVIS_API_TOKEN="):
+                return line.split("=", 1)[1].strip().strip('"\'')
+    return os.getenv("JARVIS_API_TOKEN", "")
+
+
+class WakeBridge:
+    """While minimized, the big dashboard page is unloaded, so THIS process keeps the wake word: it asks the API
+    to listen (cheap, server-side) and, on "KURAMA / wake up", opens the mini panel in talk mode."""
+
+    def __init__(self, base: str, on_wake) -> None:
+        self.base, self.on_wake = base.rstrip("/"), on_wake
+        self.stop_ev = threading.Event()
+        self.armed = threading.Event()
+        self.token = _api_token()
+        threading.Thread(target=self._run, daemon=True, name="wake-bridge").start()
+
+    def _req(self, path: str, method: str = "GET", timeout: float = 10):
+        r = urllib.request.Request(self.base + path, method=method, data=b"{}" if method == "POST" else None,
+                                   headers={"Content-Type": "application/json",
+                                            **({"Authorization": f"Bearer {self.token}"} if self.token else {})})
+        return urllib.request.urlopen(r, timeout=timeout)
+
+    def arm(self) -> None:
+        """Listen for the wake phrase again (after a conversation in the panel ended)."""
+        self.armed.set()
+
+    def disarm(self) -> None:
+        self.armed.clear()
+        with contextlib.suppress(Exception):
+            self._req("/api/v1/wake/awake", "POST").close()
+
+    def stop(self) -> None:
+        self.stop_ev.set()
+        self.disarm()
+
+    def _run(self) -> None:
+        self.armed.set()
+        while not self.stop_ev.is_set():
+            if not self.armed.wait(1):
+                continue
+            try:
+                self._req("/api/v1/wake/sleep", "POST").close()
+                with self._req("/api/v1/wake/events", timeout=3600) as resp:
+                    for raw in resp:
+                        if self.stop_ev.is_set() or not self.armed.is_set():
+                            break
+                        line = raw.decode(errors="replace").strip()
+                        if not line.startswith("data:"):
+                            continue
+                        with contextlib.suppress(ValueError):
+                            ev = json.loads(line[5:])
+                            if ev.get("type") == "wake":
+                                self.armed.clear()  # the panel has the mic now; re-armed when talk ends
+                                GLib.idle_add(self.on_wake, ev.get("command") or "")
+                                break
+            except Exception:  # API restarting / offline: try again shortly
+                time.sleep(5)
 
 
 class Mini:
@@ -429,6 +528,8 @@ class Mini:
         kind, _, rest = msg.partition(":")
         if kind == "talk":
             self.talking = rest == "on"
+            if not self.talking and self.wp.wake is not None:
+                self.wp.wake.arm()  # conversation over: the backend listens for "KURAMA / wake up" again
             if not self.talking and self.ghost:  # talk mode ended while closed: really hide now
                 self.panel.hide()
                 self.unghost()
@@ -534,6 +635,21 @@ class Mini:
         m.popup_at_pointer(ev)
 
     # ---------- the chat panel ----------
+    def wake(self, command: str = "") -> bool:
+        """The wake phrase was heard while minimized: open the panel and talk (the panel's page wakes up)."""
+        fresh = self.panel is None
+        self.show_panel()
+        js = f"window.kuramaMiniWake && window.kuramaMiniWake({json.dumps(command)})"
+        if fresh:  # the page is still loading: wake it once it is there
+            def loaded(view, event):
+                if event == WebKit2.LoadEvent.FINISHED:
+                    view.disconnect(hid)
+                    GLib.timeout_add(400, lambda: run_js(view, js) and False)
+            hid = self.view.connect("load-changed", loaded)
+        else:
+            run_js(self.view, js)
+        return False
+
     def ensure_panel(self) -> None:
         if self.panel is not None:
             return
