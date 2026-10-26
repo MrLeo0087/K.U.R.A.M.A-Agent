@@ -44,6 +44,12 @@ def test_routing(monkeypatch):
     assert a("find the link I copied") == {"action": "history", "query": "link", "limit": 5}
     assert a("copy back number 2") == {"action": "history", "restore": 2}
     assert a("clear my clipboard history") == {"action": "clear_history"}
+    # owner's general phrasings
+    assert a("what is my copy ten minutes ago")["minutes_ago"] == 10
+    assert a("what was copied ten minutes ago")["minutes_ago"] == 10
+    assert a("show my last 20 copies") == {"action": "history", "limit": 20}
+    assert a("give me what I copied before") == {"action": "history", "limit": 8}
+    assert a("what is on my clipboard") == {"action": "read"}
 
 
 def test_worker_registered_and_in_modes():
@@ -51,3 +57,10 @@ def test_worker_registered_and_in_modes():
     from jarvis.workers import supervisor
     assert "clipboard_watch" in supervisor.WORKERS and "clipboard_watch" in modes.ESSENTIAL
     assert "clipboard_watch" not in modes.PRESETS["lowram"]["workers"]
+
+
+def test_copy_event_detection_works_with_real_xlib_classes():
+    """python-xlib makes its own event class per display: isinstance() never matched and nothing was recorded."""
+    Fake = type("SetSelectionOwnerNotify", (), {"selection": 518})
+    assert cw.is_copy_event(Fake(), 518) and not cw.is_copy_event(Fake(), 1)
+    assert not cw.is_copy_event(type("PropertyNotify", (), {"selection": 518})(), 518)

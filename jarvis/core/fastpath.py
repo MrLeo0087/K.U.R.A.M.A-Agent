@@ -1626,13 +1626,17 @@ def _nth(t: str) -> int:
     return _NUM[m.group(1).lower()] if m else 1
 
 
-_WORDNUM = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "ten": 10, "fifteen": 15, "twenty": 20, "thirty": 30,
+_WORDNUM = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+            "fifteen": 15, "twenty": 20, "thirty": 30, "forty": 40, "fifty": 50,
             "half an": 0.5, "an": 1, "a": 1}
 
 
 def copy_history_intent(t: str) -> Intent | None:
     """'what did I copy 10 minutes ago', 'show my clipboard history', 'find the link I copied',
     'copy back number 2', 'clear my copy history' -> clipboard history (0 tokens)."""
+    if re.fullmatch(r"(?:please\s+)?(?:what(?:'s|\s+is)\s+(?:on|in)\s+(?:my|the)\s+clipboard(?:\s+now)?|(?:read|show)\s+(?:me\s+)?"
+                    r"(?:my|the)\s+clipboard)[\s?.!]*", t, I):
+        return Intent("clip", "clipboard", "clipboard", {"action": "read"})
     hist = r"(?:clipboard|copy|copied)\s+history|(?:what|which)\s+(?:did|have)\s+i\s+(?:copy|copied)|things\s+i\s+copied|my\s+copies"
     if re.fullmatch(r"(?:please\s+)?(?:clear|delete|forget|erase)\s+(?:my\s+|the\s+)?(?:clipboard|copy|copied)\s+history[\s.!]*", t, I):
         return Intent("clip", "clipboard", "clipboard", {"action": "clear_history"})
@@ -1643,11 +1647,18 @@ def copy_history_intent(t: str) -> Intent | None:
     if m := re.search(r"\b(?:the\s+)?(?P<q>[\w.-]+(?:\s+[\w.-]+)?)\s+(?:that\s+)?i\s+copied\b", t, I):
         if re.match(r"(?:please\s+)?(?:find|show|get|what\s+(?:was|is)|give\s+me|copy\s+back|where\s+is)\b", t, I):
             q = re.sub(r"^(?:the|a|that)\s+", "", m.group("q"), flags=I)
-            if q.lower() not in ("what", "thing", "things", "text", "stuff", "something"):
+            if not re.search(r"\b(?:what|me|everything|all|thing|things|text|stuff|something|it)\b", q, I):
                 return Intent("clip", "clipboard", "clipboard", {"action": "history", "query": q, "limit": 5})
-    if not re.search(hist, t, I) or len(t.split()) > 14:
+    general = (re.search(r"\b(?:copy|copies|copied|clipboard)\b", t, I)
+               and re.search(r"\bago\b|\b(?:history|last|earlier|before|previous|previously|recent|recently|today|list|"
+                             r"all)\b|\bmy\s+cop(?:y|ies)\b|\bwhat\s+(?:did|have|was|were)\b", t, I)
+               and not re.search(r"\b(?:file|files|folder|path|this|that|it)\s*(?:to|into|$)|\bcopy\s+(?:this|that|the\s+(?:file|"
+                                 r"folder|link|text|code))\b|\bon\s+(?:my|the)\s+clipboard\s*\??$|^(?:read|what(?:'s|\s+is)\s+on)\b", t, I))
+    if not (re.search(hist, t, I) or general) or len(t.split()) > 16:
         return None
     args: dict = {"action": "history", "limit": 8}
+    if m := re.search(r"\blast\s+(\d{1,2})\b", t, I):
+        args["limit"] = min(20, int(m.group(1)))
     if m := re.search(r"\b(\d{1,3}|" + "|".join(_WORDNUM) + r")\s+(min(?:ute)?s?|hours?|hrs?)\s+ago\b", t, I):
         n = int(m.group(1)) if m.group(1).isdigit() else _WORDNUM[m.group(1).lower()]
         args["minutes_ago"] = n * (60 if m.group(2).lower().startswith("h") else 1)

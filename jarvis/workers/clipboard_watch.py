@@ -43,9 +43,17 @@ def keep(text: str, targets: str, owner_class: str) -> bool:
     return not looks_secret(text)
 
 
+def is_copy_event(ev, atom: int) -> bool:
+    """XFixes 'the clipboard has a new owner' = someone copied. python-xlib builds this event's class per display,
+    so isinstance(ev, xfixes.SetSelectionOwnerNotify) is False: check its name and selection instead (that check
+    silently dropped every copy at first)."""
+    return type(ev).__name__ == "SetSelectionOwnerNotify" and getattr(ev, "selection", None) == atom
+
+
 class ClipboardWatch(Worker):
     name = "clipboard_watch"
     interval_s = 5.0
+    selection = "CLIPBOARD"  # tests use a private selection, never the user's clipboard
 
     def available(self) -> str | None:
         import os
@@ -63,10 +71,9 @@ class ClipboardWatch(Worker):
         if not self.d.has_extension("XFIXES"):
             raise RuntimeError("no XFixes extension")
         self.d.xfixes_query_version()
-        self.atom = self.d.get_atom("CLIPBOARD")
+        self.atom = self.d.get_atom(self.selection)
         self.d.xfixes_select_selection_input(self.d.screen().root, self.atom, xfixes.XFixesSetSelectionOwnerNotifyMask)
         self.d.flush()
-        self.ev_type = xfixes.SetSelectionOwnerNotify
         self.saved = 0
 
     def teardown(self) -> None:
@@ -99,7 +106,7 @@ class ClipboardWatch(Worker):
                 if not self.d.pending_events():
                     continue
             ev = self.d.next_event()
-            if not isinstance(ev, self.ev_type):
+            if not is_copy_event(ev, self.atom):
                 continue
             time.sleep(0.05)  # let the new owner answer requests
             targets = _xclip("-t", "TARGETS", "-o")
