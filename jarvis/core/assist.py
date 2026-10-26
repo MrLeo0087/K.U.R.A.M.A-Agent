@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 import re
+import textwrap
 from pathlib import Path
 
 from jarvis.core import config, rewrite
@@ -125,19 +126,20 @@ def clean_instruction(request: str) -> str:
     return t or "fix and improve this code"
 
 
-def improve_code(code: str, instruction: str, lang_name: str = "") -> str:
-    """Fixed / optimized / formatted code, same indentation, ONLY the rewritten selection (not a bigger program)."""
-    first = next((ln for ln in code.splitlines() if ln.strip()), "")
-    indent = first[: len(first) - len(first.lstrip())]
+def improve_code(code: str, instruction: str, lang_name: str = "", context: str = "") -> str:
+    """The improved selection, at indentation level 0 (the caller puts it back at the block's real indentation).
+    ONLY the rewritten selection, not a bigger program."""
     a = code.count("\n") + 1
     system = ("You edit code. Apply the user's instruction to their SELECTED code and return ONLY the new version of "
               "that selection (no explanation, no markdown fences). It replaces exactly the selection inside a bigger "
               "file, so: no example usage, no tests, no demo or main block, no new imports or functions the "
               "instruction didn't ask for. 'Better' or 'detailed' means clearer names, a short docstring or comments, "
               "input checks and error handling, not a bigger program. Keep about the same length (at most twice "
-              "the lines). Keep the same behaviour unless asked, the same names used by other code, and the same "
-              "indentation level." + (f" Language: {lang_name}." if lang_name else ""))
-    user = f"Instruction: {instruction}\n\nSelected code ({a} lines):\n{code[:12000]}"
+              "the lines). Keep the same behaviour unless asked and the same names used by other code. The "
+              "selection is given at indentation level 0: return it at level 0 too, with correct, consistent "
+              "indentation inside it." + (f" Language: {lang_name}." if lang_name else ""))
+    user = (f"Instruction: {instruction}\n\n" + (f"Surrounding code (for context only, do not return it):\n{context}\n\n"
+                                                   if context else "") + f"Selected code ({a} lines):\n{code[:12000]}")
     budget = min(4000, len(code) // 2 + 800)
     new = _strip_fence(_llm(system, user, smart=True, max_tokens=budget, purpose="assist_code_fix"))
     limit = max(3 * a + 10, 30)
@@ -147,9 +149,64 @@ def improve_code(code: str, instruction: str, lang_name: str = "") -> str:
                                   max_tokens=budget, purpose="assist_code_fix"))
         if again.strip():
             new = again
-    if indent and new and not new.startswith(indent):  # the model dropped the block's indentation: put it back
-        new = "\n".join(indent + ln if ln.strip() else ln for ln in new.splitlines())
-    return new
+    return textwrap.dedent(new.strip("\n"))
+
+
+def _indent_of(line: str) -> str:
+    return line[: len(line) - len(line.lstrip())]
+
+
+def _guess_lead(old: str) -> str:
+    """No file to look at: the indentation the first line had before the selection began (people often start a
+    selection at 'try:', after its spaces). Same as the shallowest later line, one level less after 'try:' / '{'
+    unless that line continues the block ('except', 'else', '}')."""
+    lines = old.splitlines()
+    rest = [ln for ln in lines[1:] if ln.strip()]
+    if not lines or _indent_of(lines[0]) or not rest:
+        return ""
+    low = min((_indent_of(ln) for ln in rest), key=len)
+    at_low = [ln.strip() for ln in rest if _indent_of(ln) == low]
+    opens = lines[0].rstrip().endswith((":", "{", "(", "["))
+    if opens and not any(re.match(r"(?:except|else|elif|finally|catch)\b|[}\])]", x) for x in at_low):
+        deeper = sorted({len(_indent_of(ln)) for ln in rest if len(_indent_of(ln)) > len(low)})
+        unit = (deeper[0] - len(low)) if deeper else 4
+        return low[: max(0, len(low) - unit)]
+    return low
+
+
+def _layout(old: str, f: Path | None) -> tuple[str, str, str]:
+    """(lead, base, code0): the whitespace before the selection on its first line, the block's base indentation and
+    the selection re-based to level 0 (what the model sees)."""
+    lead = ""
+    text = f.read_text(errors="replace") if f and f.is_file() else ""
+    if text and text.count(old) == 1:
+        i = text.index(old)
+        before = text[text.rfind("\n", 0, i) + 1: i]
+        lead = before if not before.strip() else ""
+    else:
+        lead = _guess_lead(old)
+    full = lead + old
+    code0 = textwrap.dedent(full)
+    first = next((ln for ln in full.splitlines() if ln.strip()), "")
+    first0 = next((ln for ln in code0.splitlines() if ln.strip()), "")
+    base = first[: len(first) - len(first0)]
+    return lead, base, code0
+
+
+def _context(f: Path | None, old: str, chars: int = 1500) -> str:
+    """A little of the file around the selection, so the model knows the names it uses."""
+    if not f or not f.is_file():
+        return ""
+    text = f.read_text(errors="replace")
+    i = text.find(old)
+    if i < 0:
+        return ""
+    return (text[max(0, i - chars): i] + "<<SELECTION>>" + text[i + len(old): i + len(old) + chars // 2]).strip("\n")
+
+
+def _rebase(new0: str, base: str, old: str) -> str:
+    out = "\n".join(base + ln if ln.strip() else "" for ln in new0.splitlines())
+    return out + "\n" if old.endswith("\n") else out
 
 
 def open_file_in_editor() -> Path | None:
@@ -230,57 +287,62 @@ def start_code_improve(g, instruction: str) -> str:
 
     def run(ctx) -> str | None:
         ctx.progress("improving the code")
-        new = improve_code(old, instruction, lang_name)
+        lead, base, code0 = _layout(old, f)
+        new0 = improve_code(code0, instruction, lang_name, _context(f, old))
         ctx.check()
-        if not new.strip():
-            ctx.progress("» Sorry, no improved code came back; nothing was changed.")
+        if not new0.strip():
+            ctx.progress("» No improved code came back; nothing changed.")
             return None
+        new = _rebase(new0, base, old)
         out = Path(config.OUTPUTS_DIR) / "code" / f"{Path(name).stem}-improved-{time.strftime('%H%M%S')}{Path(name).suffix or '.txt'}"
         out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(new + "\n", encoding="utf-8")
+        out.write_text(new.rstrip("\n") + "\n", encoding="utf-8")
         _pending.clear()
-        _pending.update(old=old, new=new, file=str(f) if f else "", wid=g.wid, term=g.term, title=g.title,
+        _pending.update(old=old, new=new, lead=lead, file=str(f) if f else "", wid=g.wid, term=g.term, title=g.title,
                         expires=time.time() + config.ASSIST_PENDING_TTL_S)
-        a, b = old.count("\n") + 1, new.count("\n") + 1
-        ctx.progress(f"» I improved the selected code in {name} ({a} lines to {b} lines). It's in the workspace. "
-                     f"Should I replace it? Say yes or no.")
+        a, b = old.strip("\n").count("\n") + 1, new.strip("\n").count("\n") + 1
+        ctx.progress(f"» Ready: {a} → {b} lines, in the workspace. Replace it?")
         return str(out)
     jobs.get_manager().submit(f"Improve code in {name}", "code", run)
-    return (f"I'm improving the selected code in {name} in the background. I'll show it in the workspace and ask "
-            f"before replacing anything.")
+    return f"Improving the selected code in {name}…"
 
 
 def apply_pending_code() -> str:
-    """'yes': put the improved code in place of exactly the code that was selected."""
+    """'yes': put the improved code in place of exactly the code that was selected (at its real indentation)."""
     if not pending_code_active():
         _pending.clear()
-        return "There's no code change waiting (it expires after a few minutes)."
+        return "No code change is waiting (it expires after a few minutes)."
     p = dict(_pending)
     _pending.clear()
+    lead = p.get("lead", "")
     f = Path(p["file"]) if p["file"] else None
     dirty = p["title"].lstrip().startswith(("●", "•"))  # unsaved edits in the editor: don't write the file under it
     if f and f.is_file() and not dirty:
         text = f.read_text(errors="replace")
         if text.count(p["old"]) == 1:  # replace exactly the selected block on disk; the editor reloads the file
+            i = text.index(p["old"])
+            start = i - len(lead)  # the selection began after the line's own spaces: replace those too
+            if text[start:i] != lead:
+                start = i
             backup = Path(config.DATA_DIR) / "code_backups" / f"{f.name}.{int(__import__('time').time())}.bak"
             backup.parent.mkdir(parents=True, exist_ok=True)
             backup.write_text(text, encoding="utf-8")
-            f.write_text(text.replace(p["old"], p["new"], 1), encoding="utf-8")
-            return f"Done, I replaced the selected code in {f.name}. The old version is saved as a backup."
-    g = rewrite.Grab(p["old"], p["wid"], False, p["term"], p["title"])  # fall back: paste over the selection
+            new = p["new"] if start < i else p["new"][len(lead):] if p["new"].startswith(lead) else p["new"]
+            f.write_text(text[:start] + new + text[i + len(p["old"]):], encoding="utf-8")
+            return f"Replaced in {f.name}."
+    paste = p["new"][len(lead):] if lead and p["new"].startswith(lead) else p["new"]  # the line's spaces stay
     again = rewrite.grab()
     if isinstance(again, rewrite.Grab) and again.text.strip() == p["old"].strip():
-        rewrite.put(again, p["new"])
-        return f"Done, I replaced the selected code in {_short(g.title)}. Control Z there undoes it."
-    rewrite._xclip(["-selection", "clipboard"], p["new"])
-    return ("The code isn't selected anymore, so I didn't change the file. The improved code is on your clipboard: "
-            "select the old code and press Control V.")
+        rewrite.put(again, paste)
+        return "Replaced. Ctrl+Z undoes it."
+    rewrite._xclip(["-selection", "clipboard"], paste)
+    return "The code isn't selected anymore, so I put the new code on your clipboard: select the old code, Ctrl+V."
 
 
 def cancel_pending_code() -> str:
     had = pending_code_active()
     _pending.clear()
-    return "Okay, I left your code as it was." if had else "There was no code change waiting."
+    return "Okay, left it as it was." if had else "No code change was waiting."
 
 
 # --- one entry point the tool calls ---------------------------------------------------------------------------

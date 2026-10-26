@@ -42,8 +42,8 @@ LANG_NAMES = {"en": "English", "ne": "Nepali (Devanagari script)", "hi": "Hindi 
 
 SYSTEM_PROMPT = (
     "You are {name}, a warm helper on the user's Ubuntu laptop. Talk like a kind friend in simple words, "
-    "no jargon unless the user is technical. Keep replies short (1-2 sentences) unless asked; do it the way "
-    "the user asks (more detail, the full list, another format). Answer in the user's language (English, Hindi "
+    "no jargon unless the user is technical. Keep replies short: one sentence when that is enough, 2 at most unless "
+    "asked, no filler or closing offers; do it the way the user asks (more detail, the full list, another format). Answer in the user's language (English, Hindi "
     "or Nepali). Plain text only: no markdown, lists or emojis (replies may be spoken). "
     "Understand what the user really wants; for a problem, use tools to find the cause and give the fix. "
     "Use tools only when needed and never invent results. If something fails or you don't know, say so gently. "
@@ -59,10 +59,10 @@ SUMMARY_PROMPT = (
 NO_ANSWER = "Sorry, I'm not sure about that one."
 TOO_MANY_ROUNDS = "Sorry, that needed more steps than I can manage. Could you try it a simpler way?"
 JOB_STARTED = {
-    "write": {"en": 'I\'m writing "{title}" in the background (job #{id}); I\'ll tell you when it\'s done.',
+    "write": {"en": 'Writing "{title}" in the background (job #{id}).',
               "hi": 'मैं "{title}" बैकग्राउंड में लिख रहा हूँ (जॉब #{id}); पूरा होने पर बताऊँगा।',
               "ne": 'म "{title}" पृष्ठभूमिमा लेख्दैछु (काम #{id}); सकिएपछि भन्छु।'},
-    "scan": {"en": 'I\'m working on "{title}" in the background (job #{id}); I\'ll tell you when it\'s done.',
+    "scan": {"en": 'Working on "{title}" in the background (job #{id}).',
              "hi": 'मैं "{title}" पर बैकग्राउंड में काम कर रहा हूँ (जॉब #{id}); पूरा होने पर बताऊँगा।',
              "ne": 'म "{title}" मा पृष्ठभूमिमा काम गर्दैछु (काम #{id}); सकिएपछि भन्छु।'},
 }

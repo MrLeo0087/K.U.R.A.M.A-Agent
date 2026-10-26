@@ -1313,7 +1313,7 @@ def assist_intent(t: str) -> Intent | None:
             return None  # "explain quantum physics" is a normal question for the AI, not about a selection
         return Intent("assist", "text_assist", "clipboard", {"action": "explain", "lang": lang})
     if re.search(r"\b(?:make|turn)\b.{0,40}\b(?:code|function|class|script)\b.{0,40}\b(?:better|cleaner|faster|detailed|readable|"
-                 r"good|nicer|efficient|professional)\b|\breplace\s+(?:this|the|my|that)\s+(?:\w+\s+)?(?:code|function)\s+with\b", t, I) \
+                 r"good|nicer|efficient|professional)\b|\breplace\s+(?:this|the|my|that)\s+(?:\w+\s+)?(?:code|function)\s+(?:with|from|by|into|to)\b", t, I) \
             and len(t.split()) <= 30:
         return Intent("assist", "text_assist", "clipboard", {"action": "improve", "request": t})
     if _A_CODEFIX.search(t) and len(t.split()) <= 25 and not re.search(r"\b(?:file|project|repo)\b", t, I):
@@ -1463,6 +1463,11 @@ _SELECTED_NOW = re.compile(r"^(?:(?:ok(?:ay)?|now|yes|kurama|see|look)\W+)*(?:do
                            r"(?:selected|highlighted))(?:\s+(?:it|that|this|the\s+\w+|them))?(?:\s+now)?)\s*[.!]*$", I)
 
 
+_YES_START = re.compile(r"^(?:yes|yeah|yep|yup|ya|sure|ok(?:ay)?|haan|ho|हो|हुन्छ)\b", I)
+_APPLY_CODE = re.compile(r"\b(?:replace|apply|put|use|paste|change)\b.{0,30}\b(?:it|new|improved|updated|that|this\s+one|"
+                         r"now|there)\b|\b(?:you\s+can|go\s+and|please)\s+(?:replace|apply|change)\b|^replace[\s.!]*$", I)
+
+
 def plan_answer_intent(t: str) -> Intent | None:
     """While an organize plan is waiting: 'yes good' applies it, 'no' cancels it, anything that sounds like a
     change ('keep the pictures where they are') edits it. Costs one kv read when no plan waits."""
@@ -1470,10 +1475,15 @@ def plan_answer_intent(t: str) -> Intent | None:
     if assist.retry_active() and _SELECTED_NOW.match(t):  # 'nothing highlighted' earlier; now it is
         return Intent("assist", "text_assist", "clipboard", {"action": "retry"})
     if assist.pending_code_active():  # an improved code is waiting in the workspace
-        if _YES_PLAN.match(t) or re.search(r"\breplace\s+it\b|\bput\s+it\s+in\b", t, I):
-            return Intent("assist", "text_assist", "clipboard", {"action": "apply_code"})
-        if _NO_PLAN.match(t):
+        if _NO_PLAN.match(t) or re.fullmatch(r"(?:no|nope|nah)\b[\s,.!]*(?:(?:don'?t|do\s+not|keep|leave)\b.*)?", t, I):
             return Intent("assist", "text_assist", "clipboard", {"action": "cancel_code"})
+        fresh = re.search(r"\b(?:better|good|improve|fix|optimi[sz]e|detail|clean|faster|simpl|short|long|more|less|"
+                          r"but|instead|add|remove|comment)", t, I)
+        if _YES_PLAN.match(t) or (not fresh and (_YES_START.match(t) or _APPLY_CODE.search(t))):
+            return Intent("assist", "text_assist", "clipboard", {"action": "apply_code"})
+        if fresh and (_YES_START.match(t) or re.match(r"(?:no|but|and|now|also|instead)\b|make\s+it\b", t, I)) \
+                and len(t.split()) <= 16:  # 'yes but make it shorter': a new version of the same selection
+            return Intent("assist", "text_assist", "clipboard", {"action": "improve", "request": t})
     if not organizer.pending_active():
         return None
     if _YES_PLAN.match(t):
