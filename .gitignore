@@ -10,3 +10,5 @@ logs/
 
 # large local archives (GitHub rejects files > 100 MB)
 *.zip
+data/wp_probe.js
+data/wp_probe.out

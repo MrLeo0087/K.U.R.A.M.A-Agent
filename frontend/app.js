@@ -812,6 +812,7 @@ async function pollOnce() {
 function startStatus() {
   stopStatus();
   if (document.hidden || paused || MINI || minimized) return;
+  if (lowPowerOn()) { pollOnce(); pollTimer = setInterval(pollOnce, 5000); return; } // lean: every 5 s, not 2
   try {
     es = api.statusStream();
     es.onmessage = (e) => { try { renderStatus(JSON.parse(e.data)); } catch { /* ignore */ } };
@@ -1571,7 +1572,7 @@ function tick() {
   $("clock-m").textContent = mm ?? "";
   $("clock-colon").classList.toggle("off", alive() && now.getSeconds() % 2 === 1);
   $("clock-ap").textContent = parts[1] || "";
-  $("clock-s").textContent = String(now.getSeconds()).padStart(2, "0");
+  if (!S.lowPower) $("clock-s").textContent = String(now.getSeconds()).padStart(2, "0"); // lean: no ticking seconds
   $("date").textContent = now.toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" });
   renderTodayLive();
   clockTimer = setTimeout(tick, 1000 - (Date.now() % 1000) + 5);
@@ -1614,6 +1615,7 @@ function shrinkPage() { // covered for a while: drop what isn't on screen so Web
 window.kuramaState = () => [`mode=${mode}`, `asleep=${asleep}`, `busy=${busy}`, `conv=${conv.state}`, `mic=${mic.open}`,
   `micOff=${micIsOff()}`, `speaking=${player.active}`, `msgs=${log.children.length}`, `sheet=${$("sheet").open}`,
   `paused=${paused}`, `min=${minimized}`].join(" ");
+window.__k = { orb, dust, mic, player, conv }; // developer probes (data/wp_probe.js) read these; nothing else uses it
 window.kuramaPause = (on) => {
   paused = !!on;
   clearTimeout(shrinkTimer);
@@ -2010,6 +2012,7 @@ function setLowPower(on) {
   orb.setLowPower(on);
   dust.setLowPower(on);
   document.body.classList.toggle("low-power", on);
+  if (!paused && !minimized && !document.hidden) startStatus(); // 5 s polling (lean) or the 2 s stream
 }
 function applyModeClient(cur, changed) { // the parts of a mode that live in this page: wake word, screen
   powerMode = cur;

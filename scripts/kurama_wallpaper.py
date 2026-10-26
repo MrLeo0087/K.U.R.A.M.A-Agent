@@ -53,7 +53,7 @@ except (ValueError, ImportError):
     Wnck = None
 
 PORT = os.getenv("JARVIS_API_PORT", "8000")
-DEFAULT_URL = os.getenv("KURAMA_UI_URL", f"http://127.0.0.1:{PORT}/?lowpower=0&wallpaper=1")
+DEFAULT_URL = os.getenv("KURAMA_UI_URL", f"http://127.0.0.1:{PORT}/?wallpaper=1")
 CHECK_MS = 2000
 STATE_FILE = Path(__file__).resolve().parent.parent / "data" / "mini.json"  # minimized? + button position
 BUBBLE = 56  # floating button size (px)
@@ -68,6 +68,8 @@ SNAP = SNAP_DIR / "desktop.png"
 REAL_WALLPAPER = SNAP_DIR / "real-wallpaper.json"
 SNAP_FIRST_S, SNAP_EVERY_S = 8, 600  # after the page is up (boot animation done), then every 10 min
 HANG_S = float(os.getenv("KURAMA_WP_HANG_S", "25"))  # a page that doesn't answer for this long is frozen: restart it
+PROBE_IN = Path(__file__).resolve().parent.parent / "data" / "wp_probe.js"  # developer probe: JS to run in the page
+PROBE_OUT = PROBE_IN.with_suffix(".out")  # ...its answer (read-only checks: CPU / frame costs, no clicks)
 PING_S = 10  # how often the watchdog asks the page for a tiny answer
 WEB_MEM_MB = int(os.getenv("KURAMA_WP_MEM_MB", "220"))  # web process memory budget (WebKit's default: 3 GB)
 
@@ -273,8 +275,17 @@ class Watchdog:
             with contextlib.suppress(Exception):
                 r = view.evaluate_javascript_finish(res) if hasattr(view, "evaluate_javascript_finish") else \
                     view.run_javascript_finish(res).get_js_value()
-                self.last = str(r.to_string())[:300] if r is not None else ""
+                self.last = str(r.to_string())[:4000] if r is not None else ""
         code = "window.kuramaState ? window.kuramaState() : 'up'"
+        if PROBE_IN.is_file():  # a developer probe waits: run it instead of the ping, its answer goes to PROBE_OUT
+            with contextlib.suppress(OSError):
+                code = PROBE_IN.read_text(encoding="utf-8")
+                PROBE_IN.unlink()
+
+                def done(view, res, _ping=done):  # noqa: F811
+                    _ping(view, res)
+                    with contextlib.suppress(OSError):
+                        PROBE_OUT.write_text(self.last, encoding="utf-8")
         if hasattr(v, "evaluate_javascript"):
             v.evaluate_javascript(code, -1, None, None, None, done)
         else:

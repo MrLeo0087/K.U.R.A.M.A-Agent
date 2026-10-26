@@ -109,6 +109,13 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 @keyframes drift { from { transform: translateX(-2px); } to { transform: translateX(2px); } }
 @keyframes drop { from { transform: translateY(-2px); opacity: 0; } 30% { opacity: 1; } to { transform: translateY(5px); opacity: 0; } }
 .low-power .wx-icon * { animation: none !important; }
+/* lean screen: measured in the live page, animations + transitions + blur/shadows were ~2/3 of its CPU (WebKitGTK
+   repaints large areas for each). Everything stays visible; only the motion and the soft effects go. */
+body.low-power *, body.low-power *::before, body.low-power *::after {
+  animation: none !important; transition: none !important; filter: none !important; backdrop-filter: none !important;
+  box-shadow: none !important; text-shadow: none !important; }
+body.low-power .bg-dust { display: none; }
+body.low-power #clock-s { display: none; }
 
 /* ---------- segmented controls ---------- */
 .seg { display: inline-flex; padding: 3px; gap: 2px; border-radius: 999px; background: rgba(255, 255, 255, 0.035); border: 1px solid var(--line); }
