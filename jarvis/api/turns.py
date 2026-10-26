@@ -210,6 +210,12 @@ class Engine:
                 last = getattr(ag, "last", None) or {}
                 tier = last.get("tier") or ("fastpath" if last.get("fastpath") else "")
                 reply = "".join(parts).strip()
+                published = list(last.get("workspace") or [])
+                if reply and not (last.get("fastpath") and published):  # the fast path already did it
+                    from jarvis.core import workspace  # long answers: one line in the chat, the rest in the workspace
+                    reply, path = workspace.to_workspace(text[:60], reply, reply_lang(reply, last.get("lang") or lang))
+                    if path is not None:
+                        last.setdefault("workspace", []).append(str(path))
                 turn.push({"type": "done", "text": reply, "route": _route(last.get("route")), "tier": tier,
                            "tokens": _turn_tokens(ts0), "ms": int((time.monotonic() - t0) * 1000),
                            "lang": reply_lang(reply, last.get("lang") or lang),

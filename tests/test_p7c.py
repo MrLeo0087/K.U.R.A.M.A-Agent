@@ -368,7 +368,7 @@ def meta_hint():
 
 # --- tone ---
 def test_tone_prompt_is_warm_and_short():
-    text = agent.SYSTEM_PROMPT + agent.VOICE_SUFFIX.format(lang="Nepali (Devanagari script)")
+    text = agent.SYSTEM_PROMPT + agent.SCREEN_SUFFIX + agent.VOICE_SUFFIX.format(lang="Nepali (Devanagari script)")
     assert len(text) / 4 < 250
     assert "warm" in agent.SYSTEM_PROMPT and "jargon" in agent.SYSTEM_PROMPT
 

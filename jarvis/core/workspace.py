@@ -51,10 +51,11 @@ def worth_it(name: str, text: str) -> bool:
     return len(lines) >= config.WORKSPACE_MIN_LINES or len(text) > config.WORKSPACE_MIN_CHARS
 
 
-def publish(title: str, text: str) -> Path | None:
-    """Save one result; returns its path (None when saving failed)."""
+def publish(title: str, text: str, folder: str = "results") -> Path | None:
+    """Save one result; returns its path (None when saving failed). answers/ = long chat answers (always shown
+    in the workspace); results/ = raw tool output (small ones are not listed)."""
     slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:48] or "result"
-    path = results_dir() / f"{time.strftime('%Y%m%d-%H%M%S')}-{slug}.md"
+    path = Path(config.OUTPUTS_DIR) / folder / f"{time.strftime('%Y%m%d-%H%M%S')}-{slug}.md"
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(f"# {title}\n\n{text.strip()}\n", encoding="utf-8")
@@ -62,6 +63,51 @@ def publish(title: str, text: str) -> Path | None:
     except OSError as e:
         log.warning("could not save workspace result: %s", e)
         return None
+
+
+# --- long answers: the chat (and the voice) get one short line, the full answer goes to the workspace -------------
+_CODEY = re.compile(r"[{};=]\s*$|^\s{4,}\S|^\s*(?:def|class|import|return|for|if)\b")
+_ITEM = re.compile(r"^\s*(?:\d+[.)]|[-*•]|[A-Za-z][\w ]{0,30}:)\s+\S")
+
+
+def too_long(text: str) -> bool:
+    """Lists, several paragraphs, code or anything over ~3 lines of text belongs in the workspace, not the chat."""
+    text = (text or "").strip()
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    codey = sum(1 for ln in lines if _CODEY.search(ln))
+    return len(text) > config.CHAT_MAX_CHARS or len(lines) > config.CHAT_MAX_LINES or "```" in text or codey >= 3
+
+
+def short_line(text: str, lang: str = "en") -> str:
+    """What the chat shows instead: a list -> its heading + how many items; prose -> its first sentence or two."""
+    tail = {"ne": "पूरा उत्तर workspace मा छ।", "hi": "पूरा जवाब workspace में है।"}.get(lang, "The full answer is in the workspace.")
+    lines = [ln.strip() for ln in re.sub(r"```.*?```", "\n", text.strip(), flags=re.S).splitlines() if ln.strip()]
+    items = [ln for ln in lines[1:] if _ITEM.match(ln)]
+    if lines and lines[0].endswith(":") and len(lines[0]) <= 120 and len(items) >= 2 \
+            and len(items) >= (len(lines) - 1) // 2:  # "Latest news:" + items -> heading + how many
+        n = {"ne": f"{len(items)} वटा workspace मा छन्।", "hi": f"{len(items)} आइटम workspace में हैं।"}.get(
+            lang, f"{len(items)} items, in the workspace.")
+        return f"{lines[0].rstrip(':').strip()}: {n}"
+    plain = " ".join(re.sub(r"(?<=[^\s.!?:;।])$", ".", ln.strip(" -*•#"))  # each line ends like a sentence
+                     for ln in lines if not _CODEY.search(ln) and not re.search(r"/[\w.-]+/", ln))
+    if not plain and lines:  # only code / paths: the first line, cut short
+        plain = lines[0][:160]
+    head = ""
+    for sn in re.split(r"(?<=[.!?।])\s+", plain):
+        if head and len(head) + len(sn) > 200:
+            break
+        head += (" " if head else "") + sn
+    if len(head) > 240:
+        head = head[:220].rsplit(" ", 1)[0] + "…"
+    return (head.strip() + " " if head.strip() else "") + tail
+
+
+def to_workspace(title: str, text: str, lang: str = "en") -> tuple[str, Path | None]:
+    """(chat line, saved file) for a long answer; the text itself and None when it is short or saving failed."""
+    if not too_long(text):
+        return text, None
+    path = publish(title or "Answer", text, folder="answers")
+    return (short_line(text, lang), path) if path else (text, None)
 
 
 def results_dir() -> Path:

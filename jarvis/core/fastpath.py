@@ -1719,28 +1719,6 @@ def _say(key: str, lang: str, x: str) -> str:
     return (random.choice(v) if isinstance(v, tuple) else v).format(x=x)  # a few wordings: less robotic
 
 
-def _needs_workspace(text: str) -> bool:
-    """Too long to listen to, or full of code / paths: the chat (and the voice) get a short version."""
-    lines = [ln for ln in text.splitlines() if ln.strip()]
-    codey = sum(1 for ln in lines if re.search(r"[{};=]\s*$|^\s{4,}\S|^\s*(?:def|class|import|return|for|if)\b", ln))
-    return len(text) > 700 or "```" in text or codey >= 3
-
-
-def _speakable_head(text: str, lang: str) -> str:
-    """The first 2-3 plain sentences (no code, no paths) + where the rest is."""
-    plain = re.sub(r"```.*?```", " ", text, flags=re.S)
-    plain = " ".join(ln.strip(" -*•") for ln in plain.splitlines()
-                     if ln.strip() and not re.search(r"[{};=]\s*$|^\s{4,}\S|/[\w.-]+/", ln))
-    sents = re.split(r"(?<=[.!?।])\s+", plain)
-    head = ""
-    for sn in sents:
-        if len(head) + len(sn) > 320 and head:
-            break
-        head += (" " if head else "") + sn
-    tail = {"ne": "पूरा उत्तर workspace मा छ।", "hi": "पूरा जवाब workspace में है।"}.get(lang, "The full answer is in the workspace.")
-    return (head.strip() or "Done.") + " " + tail
-
-
 def render(intent: Intent, ok: bool, output: str, lang: str) -> str:
     if intent.name == "say":
         return intent.args.get(lang) or intent.args["en"]
@@ -1895,12 +1873,11 @@ def try_answer(text: str, lang: str | None = None, confirm=None, mode: str = "te
         return None  # unknown place: let the LLM path try (it can fix spelling)
     answer = render(intent, ok, output, lang or "en")
     published = [intent.args.pop("_published")] if "_published" in intent.args else []
-    if ok and _needs_workspace(answer) and not published and not intent.tool.startswith("_") \
-            and intent.group not in ("self", "usage"):  # private / status answers stay in the chat
-        from jarvis.core import workspace
-        if (path := workspace.publish(intent.label or intent.name or "Result", answer)) is not None:
+    if ok and not published and not intent.tool.startswith("_") and (ctx or {}).get("channel") != "telegram":
+        from jarvis.core import workspace  # long answers: one line in the chat, the full text in the workspace
+        answer, path = workspace.to_workspace(intent.label or text[:60] or intent.name, answer, lang or "en")
+        if path is not None:
             published = [str(path)]
-            answer = _speakable_head(answer, lang or "en")
     if mode == "voice" and intent.name in _VOICE_FIRST_LINE:
         answer = answer.split("\n", 1)[0]
     ms = int((time.monotonic() - t0) * 1000)

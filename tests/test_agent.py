@@ -157,7 +157,7 @@ def test_warm_builds_graph(fake):
 
 
 def test_system_prompt_is_short():
-    text = agent.SYSTEM_PROMPT + agent.VOICE_SUFFIX.format(lang="Nepali (Devanagari script)")
+    text = agent.SYSTEM_PROMPT + agent.SCREEN_SUFFIX + agent.VOICE_SUFFIX.format(lang="Nepali (Devanagari script)")
     assert len(text) / 4 < 250
 
 

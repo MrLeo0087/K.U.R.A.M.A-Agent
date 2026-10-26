@@ -350,7 +350,12 @@ class BotBubble {
     if (this.timer) return;
     this.timer = setTimeout(() => { this.timer = 0; this._render(); }, 50); // throttle re-renders
   }
-  _render() { this._show(); this.content.innerHTML = renderMarkdown(this.text); scrollDown(); }
+  _render() { // a long answer is still arriving: the chat shows its start; the server moves it to the workspace
+    this._show();
+    const t = !this.final && CHAT_LONG(this.text) ? chatHead(this.text) : this.text;
+    this.content.innerHTML = renderMarkdown(t);
+    scrollDown();
+  }
   tool(ev) {
     const c = el("span", "chip tool " + (ev.ok ? "ok" : "fail"));
     c.textContent = `${ev.name}${ev.ms != null ? " · " + ev.ms + " ms" : ""}`;
@@ -388,6 +393,7 @@ class BotBubble {
   note(t) { this._show(); this.content.append(el("div", "note", esc(t))); }
   done(ev) {
     clearTimeout(this.timer); this.timer = 0;
+    this.final = true;
     if (ev.text) this.text = ev.text;
     if (this.text) this._render();
     const route = ev.route && typeof ev.route === "object" ? [].concat(ev.route.groups || []).join("+") || ev.route.method : ev.route;
@@ -478,6 +484,7 @@ async function sendChat(text, { voice = false, lang = null, speak = false, ambie
           miniCaption("bot", bot.text || ev.text || "Done.", true);
           wsFromReply(text, bot.text);
           if (ev.jobs?.length) watchJobs(ev.jobs); // background work: tell the user when it's done
+          if (MINI && ev.workspace?.length) openWorkspace(false); // the long answer went there: show it (no focus steal)
           setTimeout(loadToday, 600); // a reminder / alarm / timer may have changed
           setTimeout(loadOutputs, 800); // a tool may have just saved a file (long results go to the workspace)
           setTimeout(loadWall, 1500);
@@ -953,6 +960,9 @@ for (const b of document.querySelectorAll("[data-sw]")) {
 const ws = { items: [], cur: -1, seen: new Set(), loaded: false, tab: "all" };
 const wsTitle = (name) => name.replace(/^.*\//, "").replace(/^\d{8}-\d{4,6}-?/, "").replace(/\.[a-z0-9]+$/i, "").replace(/[-_]+/g, " ").trim() || name;
 // only a big answer goes to the Workspace too (simple ones stay in the chat)
+// same rule as the server (config.CHAT_MAX_CHARS / CHAT_MAX_LINES): long answers belong in the workspace
+const CHAT_LONG = (t) => !!t && (t.length > 380 || t.split("\n").filter((l) => l.trim()).length > 3 || t.includes("```"));
+const chatHead = (t) => (t.split("\n").find((l) => l.trim()) || "").slice(0, 200).replace(/:\s*$/, "") + " … (putting it in the workspace)";
 const LONG_REPLY = (t) => t && (t.split("\n").filter((l) => l.trim()).length >= 14 || t.length > 1500);
 const WS_MAX = 100; // kept in the panel (the files themselves stay in data/outputs for good)
 const WS_SHOW = 10; // listed per tab: the last 10 documents, 10 pictures, 10 code files...

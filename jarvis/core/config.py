@@ -218,6 +218,9 @@ TOOL_OUTPUT_MAX_CHARS = 800  # tool results are truncated to this before going b
 DIRECT_REPLY_TOOLS = {"open_url": "open", "open_app": "open", "audio": "audio", "brightness": "brightness",
                       "media_control": "media", "lock_screen": "lock",
                       "screenshot": "screenshot", "send_message_telegram": None, "get_time": "time"}
+# a dashboard answer longer than this goes to the workspace in full; the chat gets one short line
+CHAT_MAX_CHARS = int(os.getenv("KURAMA_CHAT_MAX_CHARS", "380"))
+CHAT_MAX_LINES = int(os.getenv("KURAMA_CHAT_MAX_LINES", "3"))
 WORKSPACE_MIN_LINES = 40  # only big results go to the Workspace (simple answers stay in the chat)
 WORKSPACE_MIN_CHARS = 4000
 WORKSPACE_SHOW_ALL = ("list_folder", "training")  # results the user wants to see in full, to pick from

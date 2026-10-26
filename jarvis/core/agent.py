@@ -42,13 +42,15 @@ LANG_NAMES = {"en": "English", "ne": "Nepali (Devanagari script)", "hi": "Hindi 
 
 SYSTEM_PROMPT = (
     "You are {name}, a warm helper on the user's Ubuntu laptop. Talk like a kind friend in simple words, "
-    "no jargon unless the user is technical. Keep replies short: one sentence when that is enough, 2 at most unless "
-    "asked, no filler or closing offers; do it the way the user asks (more detail, the full list, another format). Answer in the user's language (English, Hindi "
-    "or Nepali). Plain text only: no markdown, lists or emojis (replies may be spoken). "
-    "Understand what the user really wants; for a problem, use tools to find the cause and give the fix. "
-    "Use tools only when needed and never invent results. If something fails or you don't know, say so gently. "
-    "If the user is stuck or asks what you can do, use find_capability or about_me and offer next steps."
+    "no jargon unless the user is technical. One short sentence when enough, 2 at most unless asked; no filler. "
+    "Do it the way the user asks. Answer in the user's language (English, Hindi or Nepali). Plain text, no "
+    "emojis or tables. Understand what the user really wants; for a problem, use tools to find the cause and "
+    "give the fix. Use tools only when needed and never invent results; if something fails or you don't know, "
+    "say so gently. If the user is stuck or asks what you can do, use find_capability or about_me."
 )
+# the dashboard: a small chat + the workspace window (turns.py moves long answers there; Telegram has no workspace)
+SCREEN_SUFFIX = (" Screen: a small chat and a workspace window. Anything long (lists, code, steps, essays) goes to "
+                 "the workspace by itself and the chat shows only your first sentence: start with a one-line summary.")
 VOICE_SUFFIX = (" Spoken reply: 1-2 short sentences by default, up to 6 if asked to explain. "
                 "The user spoke {lang}; reply in {lang}.")
 SUMMARY_SUFFIX = " Earlier conversation (summary): {summary}"
@@ -505,6 +507,8 @@ class Agent:
     # --- history ---
     def _messages(self, user_text: str, mode: str, lang: str | None) -> list[BaseMessage]:
         system = SYSTEM_PROMPT.replace("{name}", identity.name())
+        if getattr(self, "channel", "") != "telegram":
+            system += SCREEN_SUFFIX
         if mode == "voice":
             system += VOICE_SUFFIX.format(lang=LANG_NAMES.get(lang or "en", "English"))
         with self._lock:

@@ -499,7 +499,7 @@ def test_fastpath_p7_answers_zero_tokens(monkeypatch):
     store.log_llm(config.LLM_FAST, "agent_text", 10, 5, 1, True)
     voice = fastpath.try_answer("how many tokens did I use today", lang="en", mode="voice").answer
     text = fastpath.try_answer("how many tokens did I use today", lang="en").answer
-    assert "\n" not in voice and "\n" in text and text.split(";")[0] == voice.split(";")[0]
+    assert "\n" not in voice and "workspace" in text and text.split(";")[0] == voice.split(";")[0]
     assert "earlier conversations" in fastpath.try_answer("what did we talk about last time", lang="en").answer \
         or fastpath.match("what did we talk about last time").name == "session"
 

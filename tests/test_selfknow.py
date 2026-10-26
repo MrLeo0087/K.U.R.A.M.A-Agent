@@ -24,7 +24,7 @@ def clean(monkeypatch):
 def test_public_topic_and_paths():
     out = fastpath.try_answer("where do you store the output").answer
     from jarvis.core import config
-    assert str(config.OUTPUTS_DIR) in out and "Workspace" in out
+    assert str(config.OUTPUTS_DIR) in out and "workspace" in out.lower()
 
 
 def test_locked_topic_needs_password_then_unlocks():

@@ -91,8 +91,9 @@ def test_more_free_phrasings():
 
 def test_long_answers_go_to_the_workspace():
     long = "This function adds numbers. It loops over the list. " + "Then it returns.\n    total = a + b;\n" * 40
-    assert fastpath._needs_workspace(long)
-    head = fastpath._speakable_head(long, "en")
+    from jarvis.core import workspace
+    assert workspace.too_long(long)
+    head = workspace.short_line(long, "en")
     assert head.startswith("This function adds numbers.") and "workspace" in head and "total =" not in head
     assert assist._short("● test.py - KURAMA - Claude-1 - Visual Studio Code") == "test.py"
 
