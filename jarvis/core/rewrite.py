@@ -4,7 +4,8 @@
 X11 keeps the current selection in the PRIMARY buffer, so nothing has to be copied first. The rewrite is one fast
 LLM call (~2x the text in tokens); the result is pasted over the still-selected text with the app's paste key, and
 the user's clipboard is put back afterwards. If KURAMA's own window is in front (the request was typed in the
-dashboard), the result goes to the clipboard instead, ready for Ctrl+V.
+dashboard), KURAMA switches back to the window the user was in (the one right below it) and pastes there; the
+selection is still highlighted in that app.
 """
 from __future__ import annotations
 
@@ -33,13 +34,45 @@ def selection() -> str:
     return _xclip(["-selection", "primary"])
 
 
-def _front_is_kurama() -> bool:
-    try:
-        out = subprocess.run(["xdotool", "getactivewindow", "getwindowname"], capture_output=True, text=True,
-                             timeout=3).stdout.lower()
-    except (OSError, subprocess.SubprocessError):
+def _is_kurama(name: str, cls: tuple | None) -> bool:
+    """KURAMA's own window: the wallpaper/panel app, or a browser tab showing the dashboard (a folder that happens
+    to be called KURAMA in the file manager is NOT it)."""
+    n, c = (name or "").strip().lower(), str(cls[0]).lower() if cls else ""
+    if c.startswith("kurama") or "127.0.0.1:8000" in n or "localhost:8000" in n:
         return True
-    return "kurama" in out or "127.0.0.1:8000" in out or "localhost:8000" in out
+    return n.startswith("kurama") and any(b in c for b in ("brave", "chrome", "chromium", "firefox"))
+
+
+def target_window() -> tuple[int | None, bool]:
+    """(window to paste into, it_is_the_active_one). When KURAMA's own window is in front (the request was typed in
+    the dashboard), the target is the window right below it in the stacking order = where the user just was."""
+    try:
+        from Xlib import X, display
+        d = display.Display()
+        root = d.screen().root
+        active = root.get_full_property(d.intern_atom("_NET_ACTIVE_WINDOW"), X.AnyPropertyType)
+        active_id = active.value[0] if active and len(active.value) else None
+        stack = root.get_full_property(d.intern_atom("_NET_CLIENT_LIST_STACKING"), X.AnyPropertyType)
+        name_atom = d.intern_atom("_NET_WM_NAME")
+
+        def info(wid: int) -> tuple[str, tuple | None]:
+            w = d.create_resource_object("window", wid)
+            nm = w.get_full_property(name_atom, 0)
+            return (nm.value.decode(errors="replace") if nm else ""), w.get_wm_class()
+        if active_id and not _is_kurama(*info(active_id)):
+            return active_id, True
+        for wid in reversed(list(stack.value) if stack else []):  # top of the stack first
+            name, cls = info(wid)
+            if name and not _is_kurama(name, cls) and cls and cls[0] not in ("gnome-shell", "desktop_window"):
+                return wid, False
+    except Exception as e:  # noqa: BLE001 - no Xlib/X: treat the front window as the target
+        log.info("window lookup failed: %s", e)
+        return None, True
+    return None, False
+
+
+def _activate(wid: int) -> None:
+    subprocess.run(["xdotool", "windowactivate", "--sync", str(wid)], capture_output=True, timeout=5)
 
 
 def transform(text: str, instruction: str) -> str:
@@ -63,8 +96,12 @@ def rewrite(instruction: str, text: str = "") -> str:
         return "error: the rewrite came back empty; nothing was changed"
     old_clip = _xclip(["-selection", "clipboard"])
     _xclip(["-selection", "clipboard"], new)
-    if _front_is_kurama():
+    wid, in_front = target_window()
+    if wid is None and not in_front:
         return "Done. The new text is on your clipboard: click where it should go and press Ctrl+V.\n\n" + new
+    if not in_front:  # asked from KURAMA's window: go back to the document (its selection is still there)
+        _activate(wid)
+        time.sleep(0.35)
     from jarvis.core import uiagent
     paste = "ctrl+shift+v" if uiagent.family(uiagent.active_class()) == "terminal" else "ctrl+v"
     time.sleep(0.15)
