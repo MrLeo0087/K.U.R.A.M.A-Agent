@@ -125,10 +125,11 @@ def test_get_date_bs_and_ad(monkeypatch):
     monkeypatch.setattr(nepdate, "_date", _FixedDate)
     monkeypatch.setattr("jarvis.tools.general.get_date.date", _FixedDate)
     bs = get_date()  # default: Bikram Sambat with weekday
-    assert "Monday" in bs and "Kartik 9, 2083 BS" in bs and "week 44" in bs
-    assert "October 2026" in bs  # also gives the English date
+    assert bs == "Today is Monday, Kartik 9, 2083."  # short: no AD, no week
+    assert get_date(week=True) == "Today is Monday, Kartik 9, 2083, week 44 of the year."
+    assert "October" not in bs  # no English date unless asked
     ad = get_date("ad")  # explicit AD: English only, no BS
-    assert ad == "Today is Monday, 26 October 2026 (week 44 of the year)."
+    assert ad == "Today is Monday, 26 October 2026."
     assert "Bikram" not in ad
 
 
@@ -287,6 +288,8 @@ def test_date_fastpath_routes_to_date_tool_bs_by_default():
     assert fastpath.match("which day is today").args == {"calendar": "bs"}
     assert fastpath.match("what is the date in AD").args == {"calendar": "ad"}
     assert fastpath.match("what's today's date in english").args == {"calendar": "ad"}
+    assert fastpath.match("which week is this").args == {"calendar": "bs", "week": True}
+    assert fastpath.match("what day of the week is it").args == {"calendar": "bs"}
     # English render passes the tool's sentence through as-is
     d = fastpath.Intent("date", "get_date", "general", {"calendar": "bs"})
     assert fastpath.render(d, True, "Today is Monday, Kartik 9, 2083 BS.", "en") == \

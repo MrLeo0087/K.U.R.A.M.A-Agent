@@ -29,7 +29,7 @@ def ad_phrase(d: _date | None = None) -> str:
 def bs_phrase(d: _date | None = None, nepali_script: bool = False) -> str:
     """Bikram Sambat date with weekday.
 
-    nepali_script=False -> 'Monday, Kartik 9, 2083 BS'
+    nepali_script=False -> 'Monday, Kartik 9, 2083'
     nepali_script=True  -> 'सोमबार, कार्तिक ९, २०८३'
     """
     d = d or _date.today()
@@ -37,4 +37,4 @@ def bs_phrase(d: _date | None = None, nepali_script: bool = False) -> str:
     if nepali_script:
         return b.strftime("%G, %N %D, %K")
     day = b.strftime("%d").lstrip("0") or "0"
-    return f"{d.strftime('%A')}, {b.strftime('%B')} {day}, {b.strftime('%Y')} BS"
+    return f"{d.strftime('%A')}, {b.strftime('%B')} {day}, {b.strftime('%Y')}"

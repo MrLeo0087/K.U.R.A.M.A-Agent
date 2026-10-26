@@ -36,7 +36,7 @@ def test_request_tools_then_real_tool(fake):
     a = agent.Agent()
     assert a.run("I wonder how late it has gotten") == "It is noon."
     assert calls[0]["tools"] == ["request_tools"]
-    assert calls[1]["tools"] == ["get_time"]  # the chosen group's tools bound for the next round
+    assert calls[1]["tools"] == ["get_time", "get_date"]  # the chosen group's tools bound for the next round
     loaded = [m for m in calls[1]["messages"] if isinstance(m, ToolMessage)]
     assert loaded and loaded[0].content.startswith("Loaded tools for: general")
     assert a.last["route"].method == "meta" and a.last["route"].groups == ["general"]

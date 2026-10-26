@@ -1818,7 +1818,10 @@ def match(text: str) -> Intent | None:
         return ti
     if _full(DATE_LOCAL, t):
         ad = bool(re.search(r"\b(?:a\.?d\.?|english|gregorian|international|angreji|अंग्रेजी|अङ्ग्रेजी|ईस्वी)\b", t, I))
-        return Intent("date", "get_date", "general", {"calendar": "ad" if ad else "bs"})
+        args = {"calendar": "ad" if ad else "bs"}
+        if re.search(r"\b(?:week|hapta|हप्ता|हफ्ता)\b", t, I) and not re.search(r"day of the week", t, I):
+            args["week"] = True  # the week number only when asked ("which week is this")
+        return Intent("date", "get_date", "general", args)
     if m := _full(TIME_LOCAL, t):
         want_date = bool(re.search(r"\b(?:date|day|today)\b|गते|तारीख|बार", t, I))
         return Intent("time", "get_time", "general", {"_date": True} if want_date else {})
@@ -2001,10 +2004,12 @@ def render(intent: Intent, ok: bool, output: str, lang: str) -> str:
 
             from jarvis.core import nepdate
             d = _d.today()
-            wk = str(nepdate.week_of_year(d)).translate(str.maketrans("0123456789", "०१२३४५६७८९"))
             if intent.args.get("calendar") == "ad":
                 return f"आज {nepdate.ad_phrase(d)} {'हो' if lang == 'ne' else 'है'}।"
             bs = nepdate.bs_phrase(d, nepali_script=True)
+            if not intent.args.get("week"):
+                return f"आज {bs}।"
+            wk = str(nepdate.week_of_year(d)).translate(str.maketrans("0123456789", "०१२३४५६७८९"))
             return (f"आज {bs}, वर्षको {wk} औं हप्ता।" if lang == "ne"
                     else f"आज {bs}, साल का {wk}वाँ हफ्ता।")
         return output

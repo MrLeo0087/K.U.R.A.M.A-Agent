@@ -64,7 +64,7 @@ def test_tool_call_then_answer(fake):
     calls = fake(call(), AIMessage(content="It is 11:42."))
     a = agent.Agent()
     assert a.run("what time is it?") == "It is 11:42."
-    assert calls[0]["tools"] == ["get_time"] and calls[0]["model"] == config.LLM_FAST
+    assert calls[0]["tools"] == ["get_time", "get_date"] and calls[0]["model"] == config.LLM_FAST
     second = calls[1]["messages"]
     assert second[-2].tool_calls[0]["name"] == "get_time"
     assert isinstance(second[-1], ToolMessage) and second[-1].tool_call_id == "c1"
