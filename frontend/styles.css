@@ -1098,3 +1098,14 @@ body:not(.mini) .col.right .wx-head .wx-row small { font-size: 12px; color: var(
 body:not(.mini) .col.right .wx-head .wx-hours { display: none; }
 body:not(.mini) .col .card::before { content: none; display: none; } /* no HUD corner marks */
 body:not(.mini) #wx-desc { display: inline-block; } body:not(.mini) #wx-desc::first-letter { text-transform: uppercase; }
+
+/* balance (owner): both side columns end at the same line; the System card takes the left column's spare height and
+   its CPU history graph grows into it */
+body:not(.mini) .col.left .perf { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
+body:not(.mini) .col.left .perf .spark.short { flex: 1 1 auto; height: auto; min-height: 40px; margin: 10px 0 8px; }
+body:not(.mini) .col.left .perf .sbars { flex: none; }
+.spark-legend { display: none; }
+body:not(.mini) .col.left .perf .spark-legend { display: flex; align-items: center; gap: 6px; margin-top: 14px; font-size: 11px; color: var(--muted); }
+.spark-legend i { width: 10px; height: 2px; border-radius: 1px; display: inline-block; }
+.spark-legend .lc { background: #ff8a2b; } .spark-legend .lr { background: #f0c35e; margin-left: 8px; }
+.spark-legend span { margin-left: auto; color: var(--dim); }

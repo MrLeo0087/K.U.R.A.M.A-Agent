@@ -683,7 +683,7 @@ class Spark {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const w = this.c.clientWidth, h = this.c.clientHeight;
     if (!w || !h) return;
-    if (this.c.width !== Math.round(w * dpr)) { this.c.width = Math.round(w * dpr); this.c.height = Math.round(h * dpr); }
+    if (this.c.width !== Math.round(w * dpr) || this.c.height !== Math.round(h * dpr)) { this.c.width = Math.round(w * dpr); this.c.height = Math.round(h * dpr); }
     const ctx = this.ctx;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
@@ -714,7 +714,7 @@ class Spark {
     }
   }
 }
-const cpuSpark = new Spark($("cpu-spark"), [{ color: "#ff8a2b", fill: "rgba(255,122,26,0.26)" }]);
+const cpuSpark = new Spark($("cpu-spark"), [{ color: "#ff8a2b", fill: "rgba(255,122,26,0.22)" }, { color: "#f0c35e", fill: "rgba(240,195,94,0.08)" }]);
 addEventListener("resize", () => cpuSpark.draw());
 
 // ---------- status ----------
@@ -766,7 +766,7 @@ function renderStatus(s) {
   const cpu = s.cpu || {};
   tweenTo("cpu", cpu.percent ?? 0);
   setRing("rg-cpu", cpu.percent);
-  cpuSpark.push([cpu.percent ?? 0]);
+  cpuSpark.push([cpu.percent ?? 0, s.ram?.percent ?? 0]); // CPU + RAM history (last 2 min)
   $("cpu-temp").textContent = cpu.temp_c != null ? `${Math.round(cpu.temp_c)} °C` : "– °C";
   const ram = s.ram || {};
   tweenTo("ram", ram.percent ?? 0);
