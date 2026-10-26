@@ -977,25 +977,12 @@ body.minimized .mode-pill { opacity: 0.35; }
 #set-voice input[type="range"] { width: 100%; accent-color: var(--accent); }
 
 /* ============ MINIMAL (lean screen, the default) ============
-   Owner: KURAMA must stay responsive all day; a plain dark page with all the information and ONE still circle.
-   Nothing moves, nothing is translucent (no blending over layers), no gradients/glows/blur/shadows. */
+   Owner: KURAMA must stay responsive all day; a plain dark page with all the information and the animated orb
+   (its own capped canvas loop). Nothing else moves, cards are not translucent (no blending over layers), no gradients/glows/blur/shadows. */
 body.low-power { --bg: #0b0c10; --card: #12141a; --card-border: #1e2129; --line: #1c1f26; }
 body.low-power .wall, body.low-power .bg-grid, body.low-power .bg-glow, body.low-power .bg-dust,
-body.low-power .orb canvas, body.low-power .halo, body.low-power .orb-static,
 body.low-power .card::after, body.low-power .card::before { display: none !important; }
 body.low-power .card { background: var(--card); border-color: var(--card-border); border-radius: 10px; }
-body.low-power .orb { width: min(200px, 14vw, 24vh); }
-/* KURAMA = a still ring; its colour tells the state (no animation) */
-body.low-power .orb::before { content: ""; position: absolute; inset: 0; border-radius: 50%;
-  border: 3px solid var(--accent); background: #0f1015; }
-body.low-power .orb::after { content: ""; position: absolute; inset: 34%; border-radius: 50%; background: var(--accent); opacity: 0.9; }
-body.low-power[data-state="listening"] .orb::before, body.low-power[data-state="capturing"] .orb::before { border-color: var(--ok); }
-body.low-power[data-state="listening"] .orb::after, body.low-power[data-state="capturing"] .orb::after { background: var(--ok); }
-body.low-power[data-state="thinking"] .orb::before { border-color: var(--accent-2); }
-body.low-power[data-state="thinking"] .orb::after { background: var(--accent-2); }
-body.low-power[data-state="speaking"] .orb::before { border-color: var(--cool); }
-body.low-power[data-state="speaking"] .orb::after { background: var(--cool); }
-body.low-power[data-state="error"] .orb::before { border-color: var(--danger); }
 body.low-power .name { letter-spacing: 0.45em; font-weight: 400; margin-top: 22px; }
 body.low-power .bar i { background: var(--accent); }
 body.low-power .rg .arc { stroke: var(--accent); }

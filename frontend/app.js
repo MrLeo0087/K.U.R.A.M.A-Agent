@@ -21,10 +21,10 @@ let minimized = false; // the dashboard is minimized to the floating button (win
 let miniGhost = false; // mini panel closed while in talk mode: it keeps listening, replies show beside the button
 
 // ---------- orb ----------
-const orb = new Orb($("orb-canvas"), { halo: document.querySelector("#orb .halo"), lowPower: lowPowerOn(), reducedMotion });
+const orb = new Orb($("orb-canvas"), { halo: document.querySelector("#orb .halo"), lowPower: false, reducedMotion }); // the orb always lives (owner); lean only stills the rest
 document.body.classList.toggle("low-power", lowPowerOn());
 const dust = new Dust($("bg-dust"), { orbEl: $("orb"), lowPower: lowPowerOn() });
-if (params.get("dust") !== "0" && !MINI) orb.attach(dust); // one loop drives the orb and the background field (?dust=0: off)
+if (params.get("dust") !== "0" && !MINI && !lowPowerOn()) orb.attach(dust); // one loop drives the orb and the background field (?dust=0: off)
 if (!MINI) orb.start();
 
 // ---------- voice plumbing ----------
@@ -149,6 +149,7 @@ function setMode(m) {
 async function toggleMic() {
   audioCtx();
   if (S.textOnly) setTextOnly(false);
+  if (conv.muted) { conv.mute(false); S.micMuted = false; saveSettings(S); syncMicOff(); }
   if (mode === "conv") setMode("text");
   if (!recording) {
     try { await mic.start(); } catch (e) { toast(micError(e)); flashError(); return; }
@@ -204,6 +205,7 @@ function dictate(text, lang) {
 async function toggleConv() {
   audioCtx();
   if (S.textOnly) setTextOnly(false);
+  if (conv.muted && !(mode === "conv" && conv.on)) { conv.mute(false); S.micMuted = false; saveSettings(S); syncMicOff(); } // talk = unmuted
   if (mode === "conv" && (conv.on || asleep)) { setMode("text"); return; } // talk button again: leave talk mode
   if (recording) setMode("text");
   // an explicit click on the talk button = "listen to me now", NOT "wait for the wake word" (that passive,
@@ -2009,8 +2011,8 @@ function setWake(on) { // the wake word on/off (settings checkbox or the power m
 }
 function setLowPower(on) {
   S.lowPower = on;
-  orb.setLowPower(on);
   dust.setLowPower(on);
+  if (on) orb.fx = null; else if (!MINI && params.get("dust") !== "0") orb.attach(dust); // lean: no background field
   document.body.classList.toggle("low-power", on);
   if (!paused && !minimized && !document.hidden) startStatus(); // 5 s polling (lean) or the 2 s stream
 }
@@ -2292,7 +2294,7 @@ async function syncDeviceSound() { // the server owns this setting (it changes t
 async function bootVoice() { // first load after KURAMA starts: say hello, then wait (asleep) for the wake word
   if (MINI || params.get("debug") === "1") return;
   syncMicOff(); // the server learns the saved mute / text-mode choice (the mini wake bridge obeys it too)
-  if (S.wakeListen && !S.textOnly) { mode = "conv"; setMode("conv"); } // talk mode is the default
+  if (S.wakeListen && !micIsOff()) { mode = "conv"; setMode("conv"); } // talk mode is the default
   let g = "";
   try { g = (await api.greeting()).text || ""; } catch { /* no greeting */ }
   if (!g) { startListening(); return; }
