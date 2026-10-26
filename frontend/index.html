@@ -23,7 +23,7 @@
 
   <div class="layout">
     <!-- left: clock, processes, KURAMA -->
-    <section class="col left" aria-label="Clock, today, coding and laptop">
+    <section class="col left" aria-label="Clock, today, work and laptop">
       <header class="clock-block">
         <div class="clock" role="timer" aria-live="off"><span id="clock-hm"><span id="clock-h">--</span><span id="clock-colon" class="colon">:</span><span id="clock-m">--</span></span><span class="clock-side"><span id="clock-ap"></span><span id="clock-s" class="sec">00</span></span></div>
         <div id="date" class="date"></div>
@@ -39,8 +39,11 @@
         </div>
       </div>
 
-      <div class="card code-card" id="coding" data-sheet="coding" tabindex="0" role="button" aria-label="Coding: open details">
-        <div class="card-title">Coding <span id="code-snap" class="pill"></span><span class="more" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg></span></div>
+      <div class="card code-card" id="coding" data-sheet="work" tabindex="0" role="button" aria-label="Work: goals, to-do and coding. Open details">
+        <div class="card-title">Work <span id="work-pill" class="pill"></span><span class="more" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg></span></div>
+        <div id="goal-body" class="goal-body"></div>
+        <div id="list-line" class="list-line"></div>
+        <div class="work-sub">Coding <span id="code-snap"></span></div>
         <div id="code-body" class="code-body"><p class="empty">Looking for your project…</p></div>
       </div>
 

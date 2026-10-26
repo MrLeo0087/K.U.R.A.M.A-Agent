@@ -18,12 +18,16 @@ def locked(p: Path):
             fcntl.flock(lk, fcntl.LOCK_UN)
 
 
-def load(p: Path, head: list[str]) -> list[dict]:
-    """Rows as {lowercase column: text}; columns found by their heading, so the user may reorder them."""
+def load(p: Path, head: list[str], sheet: str = "") -> list[dict]:
+    """Rows as {lowercase column: text}; columns found by their heading, so the user may reorder them.
+    sheet = a named tab (missing tab = no rows); '' = the first one."""
     if not p.exists():
         return []
     from openpyxl import load_workbook
-    ws = load_workbook(p, read_only=True).active
+    wb = load_workbook(p, read_only=True)
+    if sheet and sheet[:31] not in wb.sheetnames:
+        return []
+    ws = wb[sheet[:31]] if sheet else wb.active
     rows = list(ws.iter_rows(values_only=True))
     if not rows:
         return []
@@ -38,19 +42,25 @@ def load(p: Path, head: list[str]) -> list[dict]:
 
 
 def save(p: Path, head: list[str], rows: list[dict], title: str, widths: tuple[int, ...] = ()) -> None:
+    save_book(p, [(title, head, rows, widths)])
+
+
+def save_book(p: Path, tabs: list[tuple[str, list[str], list[dict], tuple[int, ...]]]) -> None:
+    """Several tabs in one workbook: (title, head, rows, widths) each."""
     from openpyxl import Workbook
     from openpyxl.styles import Font
     wb = Workbook()
-    ws = wb.active
-    ws.title = title[:31]
-    ws.append(head)
-    for c in ws[1]:
-        c.font = Font(bold=True)
-    for r in rows:
-        ws.append([r.get(k.lower(), "") for k in head])
-    for i, w in enumerate(widths):
-        ws.column_dimensions[chr(65 + i)].width = w
-    ws.freeze_panes = "A2"
+    for n, (title, head, rows, widths) in enumerate(tabs):
+        ws = wb.active if n == 0 else wb.create_sheet()
+        ws.title = title[:31]
+        ws.append(head)
+        for c in ws[1]:
+            c.font = Font(bold=True)
+        for r in rows:
+            ws.append([r.get(k.lower(), "") for k in head])
+        for i, w in enumerate(widths):
+            ws.column_dimensions[chr(65 + i)].width = w
+        ws.freeze_panes = "A2"
     tmp = p.with_suffix(".tmp.xlsx")
     wb.save(tmp)
     tmp.replace(p)

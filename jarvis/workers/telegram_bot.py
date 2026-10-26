@@ -334,6 +334,10 @@ class TelegramBot(Worker):
     def answer(self, text: str, reply: dict | None = None) -> str:
         quoted = self.quoted(reply)
         if quoted:
+            from jarvis.core import goals
+            if not REPLY_MUTE.match(text or "") and (saved := goals.answer_quote(text, quoted)) is not None:
+                # a reply to a goal check-in = its answer ('stop' / 'mute 1 hour' still mutes)
+                return saved
             if (done := self.reply_to_alert(text, quoted)) is not None:
                 return done
             notify.set_replied(quoted)  # 'this' in a mute = the replied alert's kind; the AI sees the quote

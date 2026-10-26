@@ -254,6 +254,9 @@ ROUTER_MAX_GROUPS = 3
 # Free phrasing for tools: paraphrases embedded by the semantic router (0 tokens), so "enable speech to text
 # mode" finds dictate even though no keyword rule says so. Add a few lines here for any tool that gets missed.
 TOOL_EXAMPLES: dict[str, tuple[str, ...]] = {
+    "goals": ("my exam is in 30 days, remind me every day", "I started a project that ends in 6 months, ask me daily "
+              "what I did", "ask me every evening whether I studied", "how many days are left until my exam",
+              "what did we do today in the project", "show my goals", "make the project report", "pause my exam goal"),
     "dictate": ("enable speech to text mode", "turn on speech to text", "voice typing on", "type with my voice",
                 "write down what I speak", "start voice input", "let me speak instead of typing",
                 "convert my speech into text in this box", "turn off speech to text", "stop voice typing",
@@ -552,7 +555,9 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
              "stop writing", "essay status", "essay", "article", "story", "report", "write a",
              "लेख", "निबंध"),
     "schedule": ("remind me", "reminder", "reminders", "schedule", "scheduled", "every day at", "every morning",
-                 "every weekday", "alarm", "yaad dila", "yaad dilana", "सम्झाइदेउ", "याद दिला"),
+                 "every weekday", "alarm", "yaad dila", "yaad dilana", "सम्झाइदेउ", "याद दिला",
+                 "my exam", "goal", "goals", "long task", "long term", "long-term", "days left", "check-in", "check in",
+                 "ask me every day", "ask me daily", "project report"),
 }
 # Descriptions offered to the fast classifier when no rule matched.
 TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
@@ -596,7 +601,8 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
     "usage": "LLM token usage, budget and API cost; daily digest of the day's activity",
     "browser": "open a website or URL in the browser",
     "jobs": "long writing jobs (essays, articles, reports) and background job status/cancel/resume",
-    "schedule": "reminders and scheduled commands at a time or repeating; list or cancel them",
+    "schedule": "reminders and scheduled commands at a time or repeating; list or cancel them; long goals (exam "
+                "countdown, project check-ins, progress, report)",
     "image": "generate a picture or drawing from a description",
     "study": "study notes by subject, lecture recorder (record a class, transcript, summary), class timetable "
              "(today, tomorrow, next class, reminders), quiz from my notes with spaced repetition",
@@ -660,6 +666,7 @@ NOTIFY_TELEGRAM_PER_MIN = 20  # Telegram rate limit (Bot API allows ~30/s; we st
 # What reaches the phone on its own: every warning/error, plus info only from these sources (your reminders, the
 # process/log watches you set, the daily digest). Everything else stays on the laptop (desktop + UI);
 # things asked FROM Telegram are always answered there.
+TELEGRAM_ALL = os.getenv("KURAMA_TELEGRAM_ALL", "1").lower() not in ("0", "false", "no", "off")  # every alert to the phone too
 TELEGRAM_INFO_SOURCES = tuple(os.getenv("KURAMA_TELEGRAM_INFO", "scheduler,process_watch,daily_digest").split(","))
 ALERT_ANNOUNCE_MAX_AGE_S = 3600.0  # older unannounced alerts are not spoken
 ALERT_ANNOUNCE_CHECK_S = 5.0  # the voice loop looks for new alerts at most this often
@@ -708,6 +715,13 @@ NUDGE_HOURS = (10, 21)  # only between these hours
 TASK_OVERDUE_S = float(os.getenv("KURAMA_TASK_OVERDUE_S", str(60 * 60)))  # due to-do still open this long after -> 'not done yet'
 SELECTION_MEMORY_S = float(os.getenv("KURAMA_SELECTION_MEMORY_S", "600"))  # a highlight outside KURAMA counts this long
 READ_LATER_FILE = os.getenv("KURAMA_READ_LATER", "~/Documents/KURAMA/read_later.xlsx")  # reading list (Excel)
+GOALS_FILE = os.getenv("KURAMA_GOALS", "~/Documents/KURAMA/goals.xlsx")  # long goals (tabs Goals + Log)
+GOALS_DIR = os.getenv("KURAMA_GOALS_DIR", "~/Documents/KURAMA/goals")  # one folder per project goal (log, daily, report)
+GOAL_HOURS = (5, 22)  # goal messages only from 05:00 to 22:00 (owner's KURAMA working hours)
+GOAL_LATE_S = 3600.0  # a goal message missed by more than this (laptop off) is skipped
+GOAL_ASK_AGAIN_S = float(os.getenv("KURAMA_GOAL_ASK_AGAIN_S", "3600"))  # no answer this long -> asked once more
+GOAL_ANSWER_S = 3 * 3600.0  # a plain 'today I did X' within this time after a check-in = its answer
+GOAL_WEEKLY_AT = "21:30"  # Sunday: the weekly summary of each project goal
 CONTACTS_FILE = os.getenv("KURAMA_CONTACTS", "~/Documents/KURAMA/contacts.xlsx")  # name/phone sheet (Excel)
 DICTATION_PAUSE_MS = 900  # a pause this long ends a dictated phrase (then it is typed)
 DICTATION_DEVANAGARI_LANG = os.getenv("JARVIS_DICTATION_DEVANAGARI", "ne")  # auto mode: Nepali/Hindi speech -> this
@@ -752,8 +766,8 @@ MUTE_KINDS: dict[str, tuple[str, ...]] = {
     "resource": ("resource_guard",), "location": ("location",), "jobs": ("jobs",), "downloads": ("downloads",),
     "watchdog": ("watchdog",), "web": ("webwatch",), "commands": ("cmdalerts", "process_watch"),
     "digest": ("daily_digest",), "backup": ("backup",), "kaggle": ("kaggle",), "internet": ("netdoctor",),
-    "guard": ("guard",), "reminders": ("scheduler", "timer"), "todo": ("todo",)}
-MUTE_ALL_KEEPS = ("scheduler", "timer", "guard")
+    "guard": ("guard",), "reminders": ("scheduler", "timer"), "todo": ("todo",), "goals": ("goals",)}
+MUTE_ALL_KEEPS = ("scheduler", "timer", "guard", "goals")
 MUTE_DEFAULT_MIN = 30.0  # 'mute alerts' without a time (owner: never mute for life)
 MUTE_MAX_MIN = 24 * 60.0  # no mute lasts longer than a day
 # Telegram remote control (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID from .env; skipped when empty)

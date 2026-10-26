@@ -125,7 +125,10 @@ def _duplicate(title: str, text: str) -> bool:
 
 
 def wants_phone(level: str, source: str) -> bool:
-    """Does this alert deserve the user's phone? Warnings/errors yes; info only from TELEGRAM_INFO_SOURCES."""
+    """Does this alert go to the phone too? Yes for every alert (owner: laptop AND Telegram, always) unless
+    KURAMA_TELEGRAM_ALL=0, which keeps the old rule: warnings/errors, info only from TELEGRAM_INFO_SOURCES."""
+    if config.TELEGRAM_ALL:
+        return True
     return level in ("warning", "error") or source in config.TELEGRAM_INFO_SOURCES
 
 

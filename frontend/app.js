@@ -1166,6 +1166,7 @@ async function loadDash() {
 function renderDash() {
   if (!dash) return;
   renderCoding(dash.coding || {});
+  renderWork(dash.work || {});
   renderNow(dash.now || [], dash.today || []);
   renderSwitches(dash.switches || {});
   const k = dash.kurama || {};
@@ -1175,6 +1176,44 @@ function renderDash() {
   $("k-workers").innerHTML = Array.from({ length: tot }, (_, i) => `<i class="${i < run ? "" : "off"}"></i>`).join("");
   $("k-workers").title = `${run} of ${tot} background workers running`;
   renderSuggest();
+}
+// Work card: long goals (countdown / project day N of M) + my list, above the coding block
+const hm12 = (hm) => { const [h, m] = (hm || "0:0").split(":").map(Number); return `${h % 12 || 12}${m ? ":" + String(m).padStart(2, "0") : ""} ${h < 12 ? "AM" : "PM"}`; };
+function goalRight(g) {
+  if (g.kind === "project" && g.total) return `day ${Math.min(g.day, g.total)}/${g.total}`;
+  if (g.left == null) return `day ${g.day}`;
+  return g.left > 1 ? `${g.left} days` : g.left === 1 ? "tomorrow" : g.left === 0 ? "today" : "ended";
+}
+function goalSub(g, full) {
+  const bits = [];
+  if (g.status === "paused") bits.push("paused");
+  if (g.today.length) bits.push(`<span class="ok">✓ today:</span> ${esc(g.today.join(" · "))}`);
+  else if (g.ask) bits.push(`check-in ${hm12(g.ask_at)}`);
+  if (full || !g.today.length) {
+    if (g.end_nice) bits.push(`ends ${esc(g.end_nice)}`);
+    if (full && g.remind) bits.push(`reminders ${g.remind.split(",").map((x) => hm12(x.trim())).join(", ")}`);
+    if (full && g.notes) bits.push(`${g.notes} notes`);
+  }
+  return bits.join(" · ");
+}
+const goalHtml = (g, full = false) => `<div class="goal${g.status === "paused" ? " paused" : ""}"><div class="gh"><b title="${esc(g.name)}">${g.kind === "project" ? "📂" : "📅"} ${esc(g.name)}</b>
+  <span class="${g.kind !== "project" && g.left != null && g.left <= 7 ? "soon" : ""}">${goalRight(g)}</span></div>
+  ${g.progress != null ? `<div class="gbar"><i style="width:${Math.max(2, Math.round(g.progress * 100))}%"></i></div>` : ""}
+  <div class="gs">${goalSub(g, full)}</div></div>`;
+function renderWork(w) {
+  const gs = w.goals || [], l = w.list || {};
+  $("goal-body").innerHTML = gs.slice(0, 3).map((g) => goalHtml(g)).join("") + (gs.length > 3 ? `<div class="gs">+${gs.length - 3} more</div>` : "");
+  const parts = [l.todo && `<b>${l.todo}</b> to-do`, l.reminders && `<b>${l.reminders}</b> reminder${l.reminders > 1 ? "s" : ""}`, l.read && `<b>${l.read}</b> to read`].filter(Boolean);
+  const nx = l.next ? ` · next: ${esc(l.next.title)} ${esc(fmtDue(l.next.due))}` : "";
+  $("list-line").innerHTML = parts.length ? parts.join(" · ") + nx : (gs.length ? "" : 'No goals yet: say “my exam is in 30 days, remind me every day”.');
+  $("work-pill").textContent = gs.length ? `${gs.length} goal${gs.length > 1 ? "s" : ""}` : "";
+}
+function fmtDue(due) { // '2026-10-27 17:00' -> 'tomorrow 5 PM'
+  if (!due) return "";
+  const [d, t] = due.split(" "), today = new Date(), tm = new Date(today.getTime() + 864e5);
+  const iso = (x) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`;
+  const day = d === iso(today) ? "today" : d === iso(tm) ? "tomorrow" : new Date(d + "T12:00").toLocaleDateString([], { month: "short", day: "numeric" });
+  return t ? `${day} ${hm12(t)}` : day;
 }
 function renderCoding(c) {
   const box = $("code-body");
@@ -1250,7 +1289,7 @@ document.addEventListener("click", (e) => {
 }, true);
 
 // click a card -> a big sheet with everything about it
-const SHEETS = { modes: "KURAMA modes", weather: "Weather", apps: "Memory & processes", coding: "Coding", laptop: "This laptop", system: "System", now: "Now & today" };
+const SHEETS = { modes: "KURAMA modes", weather: "Weather", apps: "Memory & processes", coding: "Coding", work: "Work · goals, to-do & coding", laptop: "This laptop", system: "System", now: "Now & today" };
 function cardOpen(card) { if (card?.dataset.sheet) openSheet(card.dataset.sheet); }
 for (const c of document.querySelectorAll("[data-sheet]")) {
   c.addEventListener("click", (e) => { if (!e.target.closest("button, a, input")) cardOpen(c); });
@@ -1286,6 +1325,34 @@ document.addEventListener("click", async (e) => {
   if (e.target.id === "res-free") { try { await api.freeModel(); toast("Model memory freed."); } catch { /* ignore */ } openSheet("system"); }
   if (e.target.id === "res-settings") { $("sheet").close(); openSettings(); }
 });
+function codingHtml(d) {
+    if (!d.project) return '<p class="empty">No project yet. Say “protect my project”.</p>';
+    const files = d.files.length ? tbl(d.files.slice(0, 14).map((f) => [`<button type="button" class="link" data-act="open_vscode" data-path="${esc(d.path + "/" + f.file)}">${esc(f.file)}</button>`,
+      f.ins === "new" ? '<span class="ok">new</span>' : `<span class="ok">+${esc(f.ins)}</span> <span class="bad">−${esc(f.dels)}</span>`])) : '<p class="empty">No uncommitted changes.</p>';
+    const errs = d.errors.length ? tbl(d.errors.map((e) => [`<code>${esc(e.error)}</code><small>${esc(e.where || "")} · ${esc(e.ago)} ago</small>`, e.fix ? `fixed: ${esc(e.fix)}` : `${e.count}×`])) : '<p class="empty">No recent errors.</p>';
+    return `<div class="sgrid">${tile(`Changes · ${d.project}${d.branch ? " (" + d.branch + ")" : ""}`, files + `<div class="btns"><button type="button" class="act" data-act="open_vscode" data-path="${esc(d.path)}">Open in VS Code</button><button type="button" class="act ghost" data-act="show_folder" data-path="${esc(d.path)}">Folder</button><button type="button" class="act ghost" data-ask="what did I change in the last hour">What changed</button><button type="button" class="act ghost" data-ask="commit my changes">Commit…</button></div>`, "span2")}
+      ${tile("Where you left off", '<p>Ask me and I\'ll sum it up from git, your errors and your snapshots.</p><div class="btns"><button type="button" class="act" data-ask="where was I">Where was I?</button></div>')}
+      ${tile("Snapshots", d.snapshots.length ? `<pre class="plain">${esc(d.snapshots.join("\n"))}</pre>` : '<p class="empty">None yet.</p>')}
+      ${tile("Recent errors", errs, "span2")}
+      ${tile("Projects", tbl(d.projects.slice(0, 10).map((x) => [esc(x.name), `<button type="button" class="act ghost" data-act="open_vscode" data-path="${esc(x.path)}">VS Code</button>`])), "span3")}</div>`;
+  }
+function workHtml(d) {
+  const ask = (q, label, cls = "ghost") => `<button type="button" class="act ${cls}" data-ask="${esc(q)}">${esc(label)}</button>`;
+  const goals = (d.goals || []).map((g) => goalHtml(g, true).replace(/<\/div>$/, `<div class="btns">${ask(`what did we do today in ${g.name}`, "Today", "")}
+    ${ask(`what did we do this week on ${g.name}`, "This week")}${ask(`how is ${g.name} going`, "Progress")}
+    ${g.kind === "project" ? ask(`make the ${g.name} report`, "Report") : ""}
+    ${g.folder ? `<button type="button" class="act ghost" data-act="show_folder" data-path="${esc(g.folder)}">Folder</button>` : ""}
+    ${ask(`${g.status === "paused" ? "resume" : "pause"} the ${g.name} goal`, g.status === "paused" ? "Resume" : "Pause")}</div></div>`)).join("");
+  const help = '<p class="tiny">Say: “my exam is in 30 days, remind me 3 times a day” · “I started a project that ends in 6 months, ask me every day” · “Thesis update: wrote chapter 2” · “move my exam to December 2” · “the exam is over”. Stored in ~/Documents/KURAMA/goals.xlsx.</p>';
+  const ic = { reminder: "⏰", todo: "✅", read: "📖" };
+  const items = (d.items || []).length ? tbl(d.items.map((r, i) => [`${i + 1}. ${ic[r.type] || "•"} ${r.link ? `<a href="${esc(r.link)}" target="_blank" rel="noopener">${esc(r.title)}</a>` : esc(r.title)}${r.tag ? ` <small>#${esc(r.tag)}</small>` : ""}`,
+    `${esc(fmtDue(r.due))} <button type="button" class="act ghost" data-ask="done ${i + 1}">Done</button>`])) : '<p class="empty">Your list is empty.</p>';
+  const c = d.coding || {};
+  const code = c.project ? codingHtml(c).replace(/^<div class="sgrid">|<\/div>$/g, "") : tile("Coding", '<p class="empty">No project yet. Say “protect my project”.</p>', "span3");
+  return `<div class="sgrid">${tile("Goals & long tasks", (goals || '<p class="empty">No goals yet.</p>') + help, "span3 gtile")}
+    ${tile("My list · reminders, to-do, read later", items + `<div class="btns">${ask("show my list", "Show in chat")}</div>`, "span3")}
+    ${code}</div>`;
+}
 async function sheetHtml(panel) {
   if (panel === "modes") return modesHtml();
   if (panel === "weather") {
@@ -1312,17 +1379,8 @@ async function sheetHtml(panel) {
       ${tile("Doctor says", `<p>${d.findings.map(esc).join("<br>")}</p><div class="btns"><button type="button" class="act" data-ask="why is my laptop slow">Full check</button>${d.kernels.length ? '<button type="button" class="act ghost" data-ask="free some RAM">Free idle kernels</button>' : ""}</div>`)}
       ${tile("Ports in use", d.ports.length ? tbl(d.ports.map((x) => [`:${x.port}`, `${esc(x.name)} ${x.pid ? `<button type="button" class="act ghost" data-ask="stop what is on port ${x.port}">Stop</button>` : ""}`])) : '<p class="empty">No open ports.</p>', "span3")}</div>`;
   }
-  if (panel === "coding") {
-    if (!d.project) return '<p class="empty">No project yet. Say “protect my project”.</p>';
-    const files = d.files.length ? tbl(d.files.slice(0, 14).map((f) => [`<button type="button" class="link" data-act="open_vscode" data-path="${esc(d.path + "/" + f.file)}">${esc(f.file)}</button>`,
-      f.ins === "new" ? '<span class="ok">new</span>' : `<span class="ok">+${esc(f.ins)}</span> <span class="bad">−${esc(f.dels)}</span>`])) : '<p class="empty">No uncommitted changes.</p>';
-    const errs = d.errors.length ? tbl(d.errors.map((e) => [`<code>${esc(e.error)}</code><small>${esc(e.where || "")} · ${esc(e.ago)} ago</small>`, e.fix ? `fixed: ${esc(e.fix)}` : `${e.count}×`])) : '<p class="empty">No recent errors.</p>';
-    return `<div class="sgrid">${tile(`Changes · ${d.project}${d.branch ? " (" + d.branch + ")" : ""}`, files + `<div class="btns"><button type="button" class="act" data-act="open_vscode" data-path="${esc(d.path)}">Open in VS Code</button><button type="button" class="act ghost" data-act="show_folder" data-path="${esc(d.path)}">Folder</button><button type="button" class="act ghost" data-ask="what did I change in the last hour">What changed</button><button type="button" class="act ghost" data-ask="commit my changes">Commit…</button></div>`, "span2")}
-      ${tile("Where you left off", '<p>Ask me and I\'ll sum it up from git, your errors and your snapshots.</p><div class="btns"><button type="button" class="act" data-ask="where was I">Where was I?</button></div>')}
-      ${tile("Snapshots", d.snapshots.length ? `<pre class="plain">${esc(d.snapshots.join("\n"))}</pre>` : '<p class="empty">None yet.</p>')}
-      ${tile("Recent errors", errs, "span2")}
-      ${tile("Projects", tbl(d.projects.slice(0, 10).map((x) => [esc(x.name), `<button type="button" class="act ghost" data-act="open_vscode" data-path="${esc(x.path)}">VS Code</button>`])), "span3")}</div>`;
-  }
+  if (panel === "coding") return codingHtml(d);
+  if (panel === "work") return workHtml(d);
   if (panel === "laptop") {
     const w = d.wifi, v = d.volume, b = d.battery, sw = d.switches || {};
     const sws = Object.entries({ wifi: "Wi-Fi", bluetooth: "Bluetooth", dnd: "Do not disturb", night: "Night light", saver: "Battery saver", guard: "Laptop guard" })

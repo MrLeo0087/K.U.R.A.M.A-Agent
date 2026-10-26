@@ -37,6 +37,12 @@ class Scheduler(Worker):
         except Exception as e:
             self.log.warning("list nudge failed: %s", e)
         try:
+            from jarvis.core import goals
+            for what in goals.tick():
+                self.log.info("goal message %s", what)
+        except Exception as e:
+            self.log.warning("goals check failed: %s", e)
+        try:
             from jarvis.core import study
             for subject in study.check_reminders():
                 self.log.info("class heads-up: %s", subject)

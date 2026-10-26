@@ -1770,6 +1770,141 @@ def copy_history_intent(t: str) -> Intent | None:
     return Intent("clip", "clipboard", "clipboard", args)
 
 
+# --- goals: long tasks (weeks-months): countdowns, daily check-ins, progress, report (0 tokens) ---
+_G_NOUN = (r"exams?|tests?|finals|interview|deadline|submission|presentation|competition|trip|wedding|project|thesis|"
+           r"course|semester|hackathon|internship|dissertation|goal|long[\s-]?(?:term\s+)?task|countdown")
+_G_STOP = r"(?!(?:is|are|was|my|the|an?|our|will|and|to|in|on|of|that|which|for|it|i|starts?|ends?|after|within)\b)"
+_G_PROGRESS = re.compile(
+    r"(?:today\s*,?\s*|so\s+far\s*,?\s*)?(?:i|we)\s+(?:have\s+|had\s+|just\s+|only\s+)?(?:did|done|worked|finished|completed|"
+    r"made|wrote|written|studied|learn(?:ed|t)|fixed|built|added|read|practi[cs]ed|started|spent|revised|solved|designed|"
+    r"tested|deployed|coded|implemented|watched|attended|prepared|covered|reviewed|cleaned|planned|researched)\b"
+    r"|(?:nothing|not\s+much|no\s+progress|didn'?t\s+do|i\s+didn'?t|i\s+could\s*n[o']t)\b", I)
+_G_DEFAULT_Q = re.compile(r"(?:what|how)\b.*\b(?:do|doing|did|done|progress|going|work(?:ing|ed)?)\b", I)
+
+
+def _goal(name: str):
+    from jarvis.core import goals
+    name = re.sub(r"\s+(?:goal|long\s+task|countdown|tracking)$", "", (name or "").strip(" ,.?!'"), flags=I)
+    try:
+        return goals.find(name) if name and len(name) <= 50 else None
+    except Exception:
+        return None
+
+
+def _goal_name(low: str, raw: str) -> str:
+    m = re.search(r"(?:called|named|titled|(?:goal|long\s+task|project)\s*[:\-])\s*[\"']?(?P<n>[\w .'+#-]{2,40}?)[\"']?"
+                  r"(?=\s*(?:,|\.|$|\s+(?:which|that|and|it|ends?|starts?|for|in|by|until|till|is|will)\b))", raw, I)
+    if m:
+        return m.group("n").strip()
+    m = re.search(r"\b(?:my|an?|the|our)\s+(?P<n>(?:" + _G_STOP + r"[\w+#-]+\s+){0,3}?(?:" + _G_NOUN + r"))\b", low, I)
+    n = m.group("n") if m else (re.search(r"\b(?:" + _G_NOUN + r")\b", low, I) or [""])[0]
+    n = re.sub(r"^(?:new|big|long|long-term|upcoming|coming|next|own)\s+", "", n, flags=I)
+    n = re.sub(r"\bexams\b", "exam", n, flags=I)
+    return re.sub(r"\s*long[\s-]?(?:term\s+)?task$", "", n, flags=I) or "Goal"
+
+
+def goal_intent(t: str) -> Intent | None:
+    """Long goals. 'my exam starts in 30 days, remind me every day', 'I started a project that ends in 6 months, ask
+    me every day what I did', 'show my goals', 'how many days until my exam', 'what did we do today in the project',
+    'Thesis update: wrote chapter 2', a plain 'today I fixed the login' right after a check-in question, 'move my
+    exam to December 2', 'remind me about the exam twice a day', 'stop asking about the project', 'pause the X goal',
+    'the exam is over', 'make the project report', 'link the project to this repo'."""
+    from jarvis.core import goals
+    low = t.strip(" .!?").lower()
+    G = lambda a, **k: Intent("goals", "goals", "schedule", {"action": a, **k})  # noqa: E731
+    # an answer to the open check-in question
+    if _G_PROGRESS.match(low) and len(low.split()) <= 80 and (w := goals.waiting()):
+        return G("log", goal=w["id"], text=t.strip())
+    # an explicit progress note: 'Thesis update: ...', 'update for the project: ...', 'today on KURAMA app, I ...'
+    for rx in (r"(?P<g>[\w .'+#-]{2,40}?)\s+(?:update|progress|log)\s*[:\-–]\s*(?P<x>.+)",
+               r"(?:progress\s+)?(?:update|log|note)\s+(?:for|on|to)\s+(?:the\s+|my\s+)?(?P<g>[\w .'+#-]{2,40}?)\s*[:\-–]\s*(?P<x>.+)",
+               r"today\s+(?:in|on|for)\s+(?:the\s+|my\s+)?(?P<g>[\w .'+#-]{2,40}?)\s*,?\s+(?P<x>(?:i|we)\s+.+)"):
+        if (m := re.fullmatch(rx, t.strip(), I)) and (g := _goal(m.group("g"))):
+            return G("log", goal=g["id"], text=m.group("x").strip())
+    if re.fullmatch(r"(?:please\s+)?(?:show|list|see|open|check|tell\s+me|what\s+are|what'?s|give\s+me)?\s*(?:me\s+)?(?:all\s+)?"
+                    r"(?:my\s+|the\s+)?(?:goals?|long[\s-]?(?:term\s+)?tasks?|countdowns?)(?:\s+list)?", low, I):
+        return G("list")
+    if m := re.fullmatch(r"how\s+many\s+(?:more\s+)?days\s+(?:are\s+|is\s+)?(?:left\s+|remaining\s+)?(?:until|till|to|before|for|in)\s+"
+                         r"(?:my\s+|the\s+)?(?P<g>.+?)(?:\s+(?:left|remaining|now))?|when\s+is\s+(?:my\s+|the\s+)?(?P<g2>.+)", low, I):
+        if g := _goal(m.group("g") or m.group("g2")):
+            return G("status", goal=g["id"])
+    if m := re.fullmatch(r"what\s+(?:did|have|has)\s+(?:we|i)\s+(?:do|done|did|work(?:ed)?\s+on|achieved?|finish(?:ed)?)\s+(?:today\s+|this\s+week\s+)?"
+                         r"(?:in|on|for|with)\s+(?:the\s+|my\s+|this\s+|our\s+)?(?P<g>.+?)(?:\s+(?:today|so\s+far|till\s+now|until\s+now|"
+                         r"this\s+week|yet))*|(?P<k>today'?s|daily|weekly|this\s+week'?s)\s+(?:summary|progress|update|report)\s+(?:of|for|on)\s+"
+                         r"(?:the\s+|my\s+)?(?P<g2>.+)", low, I):
+        if g := _goal(m.group("g") or m.group("g2")):
+            return G("week" if re.search(r"week", low) else "today", goal=g["id"])
+    if m := re.fullmatch(r"how\s+(?:is|are)\s+(?:my\s+|the\s+|our\s+)?(?P<g>.+?)\s+going|(?:my\s+|the\s+)?(?P<g2>.+?)\s+progress|"
+                         r"(?:show\s+(?:me\s+)?)?(?:the\s+)?progress\s+(?:of|on|for)\s+(?:my\s+|the\s+)?(?P<g3>.+)", low, I):
+        if g := _goal(m.group("g") or m.group("g2") or m.group("g3")):
+            return G("status", goal=g["id"])
+    if m := re.fullmatch(r"(?:please\s+)?(?:make|write|create|generate|prepare|give\s+me)\s+(?:the\s+|a\s+|my\s+)?(?:(?P<g>.+?)\s+)?"
+                         r"(?:full\s+|final\s+|formatted\s+)?(?:report|documentation|document)(?:\s+(?:for|of|on)\s+(?:the\s+|my\s+)?(?P<g2>.+))?", low, I):
+        n = m.group("g2") or m.group("g") or ""
+        if n and (g := _goal(n)) and g["kind"] == "project":
+            return G("report", goal=g["id"])
+    if m := re.fullmatch(r"link\s+(?:the\s+|my\s+)?(?P<g>.+?)\s+(?:goal\s+)?(?:to|with)\s+(?:this\s+|my\s+|the\s+)?(?:git\s+)?"
+                         r"(?:repo(?:sitory)?|git|code|coding\s+project|project\s+folder)", low, I):
+        if g := _goal(m.group("g")):
+            return G("link", goal=g["id"])
+    # changes to an existing goal
+    if m := re.fullmatch(r"(?:please\s+)?(?:move|change|shift|push|postpone|set)\s+(?:the\s+|my\s+)?(?P<g>.+?)(?:'s)?\s+(?:date\s+|deadline\s+|"
+                         r"end\s+date\s+)?to\s+(?P<d>.+)|(?:my\s+|the\s+)?(?P<g2>.+?)\s+(?:is\s+now|has\s+moved\s+to|moved\s+to|is\s+moved\s+to|"
+                         r"date\s+is\s+now)\s+(?:on\s+)?(?P<d2>.+)", low, I):
+        d = m.group("d") or m.group("d2")
+        if goals.end_in(d) and (g := _goal(m.group("g") or m.group("g2"))):
+            return G("edit", goal=g["id"], end=d)
+    if m := re.fullmatch(r"(?:please\s+)?remind\s+me\s+(?:about|of|for)\s+(?:the\s+|my\s+)?(?P<g>.+?)\s+(?P<r>(?:only\s+)?(?:once|twice|thrice|"
+                         r"\w+\s+times?|at\s+).*)", low, I):
+        if goals.times_in(m.group("r")) and (g := _goal(m.group("g"))):
+            return G("edit", goal=g["id"], remind=m.group("r"))
+    if m := re.fullmatch(r"(?:please\s+)?(?:stop|turn\s+off|disable|no\s+more|cancel)\s+(?:the\s+|my\s+|all\s+)?(?P<g>.+?)\s+(?:reminders?|messages?|"
+                         r"countdown)(?:\s+(?:please|now))?", low, I):
+        if g := _goal(m.group("g")):
+            return G("edit", goal=g["id"], remind="off")
+    if m := re.fullmatch(r"(?:please\s+)?(?:stop|don'?t|do\s+not|no\s+need\s+to)\s+ask(?:ing)?\s+(?:me\s+)?(?:about\s+)?(?:the\s+|my\s+)?(?P<g>.+?)"
+                         r"(?:\s+(?:any\s*more|every\s*day|daily))*", low, I):
+        if g := _goal(m.group("g")):
+            return G("edit", goal=g["id"], ask="off")
+    if (m := re.fullmatch(r"(?:please\s+)?ask\s+me\s+about\s+(?:the\s+|my\s+)?(?P<g>.+?)\s+(?:every\s*day\s+|daily\s+)?(?P<r>at\s+.+)", low, I)) \
+            and not goals.end_in(low) and goals.times_in(m.group("r")) and (g := _goal(m.group("g"))):
+        return G("edit", goal=g["id"], ask_at=m.group("r"))
+    if m := re.fullmatch(r"(?:please\s+)?(?P<a>pause|resume|restart|unpause|continue|delete|remove|finish|complete|end|stop)\s+(?:the\s+|my\s+)?"
+                         r"(?P<g>.+?)\s+(?:goal|long\s+task|countdown|tracking)|(?:my\s+|the\s+)?(?P<g2>.+?)\s+(?:is|are)\s+(?:done|finished|over|"
+                         r"complete(?:d)?|cancel(?:led|ed))(?:\s+now)?", low, I):
+        if g := _goal(m.group("g") or m.group("g2")):
+            a = (m.group("a") or "done").lower()
+            a = {"pause": "pause", "resume": "resume", "restart": "resume", "unpause": "resume", "continue": "resume",
+                 "delete": "delete", "remove": "delete"}.get(a, "done")
+            return G(a, goal=g["id"])
+    # a new goal: a long-task word + an end date ('in 30 days', 'for 6 months', 'on November 28')
+    if not re.search(r"\b(?:" + _G_NOUN + r")\b", low, I) and not re.search(
+            r"\b(?:ask|remind)\s+me\s+(?:every\s*day|daily)\b.*\bdays?\s+(?:left|remaining)\b", low, I):
+        return None
+    end = goals.end_in(low)
+    if not end or re.match(r"(?:how|when|what|which|is|are|do|does)\b", low) or t.strip().endswith("?"):
+        return None
+    if not re.search(r"\b(?:remind|ask|track|countdown|count\s+down|goal|notify|message|tell\s+me|keep|report|document|"
+                     r"start|create|add|new|set\s+up|follow)", low, I):
+        return None  # 'I have an interview in 2 weeks' is just talk
+    if re.search(r"\bremind\s+me\s+to\b", low, I) and not re.search(r"\bevery\s*day|daily|each\s+day|countdown|days?\s+left\b", low, I):
+        return None  # 'remind me to submit the project in 3 days' = one reminder
+    if m := re.search(r"\bask\s+me\s+(?:every\s*day|daily|each\s+day|every\s+evening|every\s+night)?\s*(?:,\s*)?(?P<q>.*?)(?=[,.;]|\s+and\s+(?:remind|make|send|write)|$)", low, I):
+        q = m.group("q").strip()
+        if q and not _G_DEFAULT_Q.search(q) and not re.fullmatch(r"(?:about\s+(?:it|this|the\s+progress)|at\s+.+)", q, I):
+            return None  # a custom question: the AI words it (goals tool via the router)
+    args: dict = {"name": _goal_name(low, t), "end": end.isoformat()}
+    ask = re.search(r"\bask\s+me\b|\bcheck\s+(?:in|on)\s+(?:with\s+)?me\b|\breport\b|\bdocument", low, I)
+    if ask:
+        args["ask"] = "yes"
+    for clause in re.split(r"[,.;]|\s+and\s+(?=(?:also\s+)?(?:ask|remind|make|write|send|keep|check)\b)", low):
+        if re.search(r"\bask\b|\bcheck\s+in\b", clause) and (tt := goals.times_in(clause)):
+            args["ask_at"] = tt[0]
+        elif re.search(r"\bremind|\bmessage|\bnotif|\btimes?\s+a\s+day|\bonce\b|\btwice\b", clause) and goals.times_in(clause):
+            args["remind"] = clause
+    return G("add", **args)
+
+
 _RL_CUE = r"(?:read(?:ing)?\s*later|reading\s+list|for\s+later|to\s+read\s+later)"
 _TODO = r"(?:to[\s-]?do|todo)(?:\s*list)?"
 _LIST_ANY = r"(?:" + _RL_LIST + r"|(?:to[\s-]?do|todo)\s*list|my\s+list|task\s+list)"
@@ -1971,6 +2106,8 @@ def match(text: str) -> Intent | None:
         return si
     if pi := plan_answer_intent(t):
         return pi
+    if gi := goal_intent(t):
+        return gi
     if rl := read_later_intent(t):
         return rl
     if ch := copy_history_intent(t):

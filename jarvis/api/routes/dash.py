@@ -163,6 +163,17 @@ def _switches() -> dict:
             "guard": guard.armed(), "saver": mode == "power-saver", "power_mode": mode or "unknown"}
 
 
+def _work() -> dict:
+    """Goals + my list (to-dos, reminders, read later) for the Work card; cheap: two small Excel reads."""
+    from jarvis.core import goals, readlater
+    rows = readlater.ordered()
+    nxt = next((r for r in rows if r["due"]), None)
+    return {"goals": goals.cards(),
+            "list": {"todo": sum(r["type"] == "todo" for r in rows), "read": sum(r["type"] == "read" for r in rows),
+                     "reminders": sum(r["type"] == "reminder" for r in rows),
+                     "next": {"title": nxt["title"][:60], "due": nxt["due"], "type": nxt["type"]} if nxt else None}}
+
+
 def summary() -> dict:
     def safe(fn, default):
         try:
@@ -170,7 +181,7 @@ def summary() -> dict:
         except Exception as e:
             return {**(default if isinstance(default, dict) else {}), "error": type(e).__name__} \
                 if isinstance(default, dict) else default
-    return {"apps": safe(_apps, {}), "coding": safe(_coding, {}), "now": safe(_now, []), "today": safe(_today_chips, []),
+    return {"apps": safe(_apps, {}), "coding": safe(_coding, {}), "work": _cached("work", 20, lambda: safe(_work, {})), "now": safe(_now, []), "today": safe(_today_chips, []),
             "kurama": safe(_kurama, {}), "switches": _cached("switches", 15, lambda: safe(_switches, {}))}
 
 
@@ -189,6 +200,15 @@ def detail(panel: str) -> dict:
                 "findings": r.findings, "facts": r.facts,
                 "ports": [{"port": p, "pid": pid, "name": n} for p, pid, n in doctor.listeners()[:12]],
                 "kernels": [{"pid": k[0], "mb": round(k[1])} for k in doctor.idle_kernels()]}
+    if panel == "work":  # the Work sheet: goals + my list + coding
+        from jarvis.core import readlater
+        w = _work()
+        w["items"] = [{k: r.get(k, "") for k in ("type", "title", "link", "tag", "due")} for r in readlater.ordered()[:30]]
+        try:
+            w["coding"] = detail("coding")
+        except Exception as e:
+            w["coding"] = {"error": type(e).__name__}
+        return w
     if panel == "coding":
         from jarvis.core import timemachine as tm
         c = _coding()

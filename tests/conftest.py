@@ -27,6 +27,8 @@ def tmp_store(tmp_path, monkeypatch):
     def no_real_system(argv, *a, **k):
         raise AssertionError(f"real system command in a test: {argv}")
     monkeypatch.setattr(_sys, "_exec", no_real_system)  # never touch volume/brightness/lock/clipboard
+    monkeypatch.setattr(config, "GOALS_FILE", str(tmp_path / "goals.xlsx"))  # never the real goals sheet
+    monkeypatch.setattr(config, "GOALS_DIR", str(tmp_path / "goals"))
     monkeypatch.setattr(config, "SKILLS_DIR", tmp_path / "skills")  # P7c: never the real saved skills
     monkeypatch.setattr(config, "SANDBOX_DIR", tmp_path / "sandbox")
     from jarvis.core import toolsmith

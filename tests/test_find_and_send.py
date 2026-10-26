@@ -122,6 +122,8 @@ def test_list_folder_numbers_files_for_picking(monkeypatch, tmp_path):
 
 def test_phone_gets_only_what_matters(monkeypatch):
     from jarvis.core import notify
+    assert notify.wants_phone("info", "jobs")  # default: every alert reaches the phone too (owner)
+    monkeypatch.setattr(config, "TELEGRAM_ALL", False)
     assert notify.wants_phone("warning", "resource_guard") and notify.wants_phone("info", "scheduler")
     assert not notify.wants_phone("info", "jobs") and not notify.wants_phone("info", "focus")
 
