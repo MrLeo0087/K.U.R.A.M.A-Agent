@@ -51,6 +51,7 @@ You are continuing work on **KURAMA**, my personal always-on voice + text assist
 - **Fast-path long answers:** an answer over 700 chars, or with code or paths, goes to the workspace in full; the chat gets 2–3 speakable sentences. Voice speaks at most about 420 chars, then says "the rest is on the screen".
 
 ## UI facts
+- **Screen performance (2026-10-26):** WebKit GPU compositing is OFF by default (`KURAMA_WP_GPU=0`; ON made the page spin at 100% CPU). The default 'Lean screen' is the minimal theme: no animations/blur/shadows, a still ring for KURAMA, 5 s status. A watchdog restarts a frozen page; `data/wp_probe.js` runs a read-only JS check inside the live page (answer in `data/wp_probe.out`).
 - **Dashboard (full KURAMA):**
   - Cards: clock and weather, System (click for details; it includes "KURAMA resources" per part, real PSS memory and whole-laptop CPU), Workspace (Delete one item / Clear all, both to the trash), chat with text / mic / talk modes.
   - The speaker button mutes and frees the mic instantly.

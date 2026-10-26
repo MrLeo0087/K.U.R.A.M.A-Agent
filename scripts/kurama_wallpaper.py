@@ -299,8 +299,11 @@ class Wallpaper:
         v.set_background_color(Gdk.RGBA(0.024, 0.027, 0.043, 1))
         if getattr(self, "settings", None) is None:
             s = self.settings = v.get_settings()
-            try:  # GPU compositing keeps the orb and bars smooth with little CPU (KURAMA_WP_GPU=0 to disable)
-                policy = "NEVER" if os.getenv("KURAMA_WP_GPU", "1") == "0" else "ALWAYS"
+            # GPU compositing OFF by default: measured on this laptop, ALWAYS kept the page's main thread at 100% CPU
+            # even with nothing moving (the screen lagged / looked frozen); NEVER: ~0% paused, ~5% active.
+            # KURAMA_WP_GPU=1 turns it back on.
+            try:
+                policy = "ALWAYS" if os.getenv("KURAMA_WP_GPU", "0") == "1" else "NEVER"
                 s.set_hardware_acceleration_policy(getattr(WebKit2.HardwareAccelerationPolicy, policy))
             except Exception:
                 pass
