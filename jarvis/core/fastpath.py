@@ -1400,7 +1400,8 @@ def assist_intent(t: str) -> Intent | None:
         return Intent("assist", "text_assist", "clipboard", {"action": "improve", "request": t})
     if _A_CODEFIX.search(t) and len(t.split()) <= 25 and not re.search(r"\b(?:file|project|repo)\b", t, I):
         return Intent("assist", "text_assist", "clipboard", {"action": "improve", "request": t})
-    if _A_WRITE.match(t) and len(t.split()) <= 40 and not re.search(r"\b(?:essay|story|poem|article|report|email|letter)\b", t, I):
+    if _A_WRITE.match(t) and len(t.split()) <= 40 and not re.search(r"\b(?:essay|story|poem|article|report|email|letter|"
+                                                                    r"qr|barcode)\b", t, I):
         return Intent("assist", "text_assist", "clipboard", {"action": "write", "request": t})
     return None
 
@@ -1604,6 +1605,32 @@ _OCR_SCREEN = re.compile(r"^(?:please\s+)?(?:" + _OCR_VERB + r"\s+(?:all\s+)?(?:
 _OCR_FILE = re.compile(r"\b(?:" + _OCR_VERB + r"|what\s+(?:does|is)|what's)\b.{0,40}\b" + _OCR_PIC + r"\b", I)
 
 
+_QR = r"(?:qr(?:\s+code)?|q\.?\s?r\.?(?:\s+code)?|barcode|bar\s+code|scanner\s+code|cure\s+code|queue\s+are\s+code)"
+
+
+def qr_intent(t: str) -> Intent | None:
+    """'scan the qr code on my screen', 'read this qr', 'scan the qr and open it', 'scan the wifi qr and connect',
+    'scan the qr in this photo', 'scan the qr in this area' -> scan_qr (0 tokens)."""
+    if not re.search(r"\b" + _QR + r"\b", t, I) or not re.search(r"\b(?:scan|read|open|decode|what(?:'s|\s+is)|check|"
+                                                                r"connect|join|get)\b", t, I) or len(t.split()) > 18:
+        return None
+    if re.search(r"\b(?:make|create|generate|share|show\s+(?:my|the)\s+wifi)\b", t, I):
+        return None  # making a QR (share_wifi / wifi_share) is not scanning one
+    args: dict = {"source": "screen"}
+    if re.search(r"\b(?:area|region|part|box)\b", t, I):
+        args["source"] = "area"
+    elif re.search(r"\b(?:copied|clipboard)\b", t, I):
+        args["source"] = "clipboard"
+    elif re.search(r"\b(?:photo|picture|pic|image|img|screenshot)\b", t, I):
+        f = re.search(r"([\w.~/-]+\.(?:png|jpe?g|webp|bmp|gif))\b", t, I)
+        args.update(source="file", path=f.group(1) if f else "this")
+    if re.search(r"\b(?:and|then)\s+open\b|\bopen\s+(?:the|this|that)\s+" + _QR, t, I):
+        args["open_link"] = True
+    if re.search(r"\b(?:connect|join)\b", t, I):
+        args["connect"] = True
+    return Intent("qr", "scan_qr", "screen", args)
+
+
 def ocr_intent(t: str) -> Intent | None:
     """'read this area', 'what does this photo say', 'copy the text from this screenshot', 'read the copied image',
     'read handwriting from photo.jpg' -> read_text (Tesseract, 0 tokens)."""
@@ -1642,6 +1669,8 @@ def match(text: str) -> Intent | None:
         return si
     if pi := plan_answer_intent(t):
         return pi
+    if qi := qr_intent(t):
+        return qi
     if oi := ocr_intent(t):
         return oi
     if ui := _ui_intent(t):
