@@ -8,7 +8,7 @@ from jarvis.core.registry import tool
 
 @tool(group="schedule", safety="safe", description="Long goals (weeks-months, Excel): exam countdown reminders, project "
       "daily check-in question + progress log, today's/week's summary, progress, edit, pause, done, formatted report.")
-def goals(action: Literal["add", "list", "status", "today", "week", "log", "edit", "pause", "resume", "done", "delete",
+def goals(action: Literal["add", "list", "overview", "status", "today", "week", "log", "edit", "pause", "resume", "done", "delete",
                           "report", "link"] = "list", goal: str = "", name: str = "", end: str = "", remind: str = "",
           ask: str = "", ask_at: str = "", text: str = "", status: str = "", repo: str = "") -> str:
     """Long goals.

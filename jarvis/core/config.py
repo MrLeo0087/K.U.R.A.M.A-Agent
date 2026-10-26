@@ -557,7 +557,7 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
     "schedule": ("remind me", "reminder", "reminders", "schedule", "scheduled", "every day at", "every morning",
                  "every weekday", "alarm", "yaad dila", "yaad dilana", "सम्झाइदेउ", "याद दिला",
                  "my exam", "goal", "goals", "long task", "long term", "long-term", "days left", "check-in", "check in",
-                 "ask me every day", "ask me daily", "project report"),
+                 "ask me every day", "ask me daily", "project report", "postponed", "postpone"),
 }
 # Descriptions offered to the fast classifier when no rule matched.
 TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {

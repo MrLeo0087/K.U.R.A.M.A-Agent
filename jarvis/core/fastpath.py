@@ -1791,6 +1791,12 @@ def _goal(name: str):
         return None
 
 
+def _last_span(low: str) -> str:
+    """'it's not 40 days, it's actually 30 days' -> 'in 30 days' (the LAST length/date said is the right one)."""
+    spans = re.findall(r"\b\d{1,3}[\s-]*(?:days?|weeks?|months?|years?)\b", low)
+    return f"in {spans[-1]}" if spans else low
+
+
 def _goal_name(low: str, raw: str) -> str:
     m = re.search(r"(?:called|named|titled|(?:goal|long\s+task|project)\s*[:\-])\s*[\"']?(?P<n>[\w .'+#-]{2,40}?)[\"']?"
                   r"(?=\s*(?:,|\.|$|\s+(?:which|that|and|it|ends?|starts?|for|in|by|until|till|is|will)\b))", raw, I)
@@ -1824,6 +1830,13 @@ def goal_intent(t: str) -> Intent | None:
     if re.fullmatch(r"(?:please\s+)?(?:show|list|see|open|check|tell\s+me|what\s+are|what'?s|give\s+me)?\s*(?:me\s+)?(?:all\s+)?"
                     r"(?:my\s+|the\s+)?(?:goals?|long[\s-]?(?:term\s+)?tasks?|countdowns?)(?:\s+list)?", low, I):
         return G("list")
+    # the whole Work card: 'what is in my working list right now? what project?', 'what am I working on'
+    if len(low.split()) <= 22 and re.search(r"\b(?:what|show|tell|list|give|which|see|check)\b", low) and re.search(
+            r"\b(?:work(?:ing)?\s+(?:list|card|section|board|plan)|my\s+work\b|working\s+on|on\s+my\s+plate|my\s+projects?|"
+            r"what\s+projects?|which\s+projects?|my\s+goals?\s+and|everything\s+i\s+(?:have|need)\s+to\s+do)", low) \
+            and not re.search(r"\b(?:about|explain|code|repo|function|files?|folders?|errors?|bug|git|commit|branch|ask\s+me|"
+                              r"remind|was|were|last|yesterday|left\s+off)\b", low) and not goals.end_in(low):  # 'working on a project for 6 months, ask me' = new goal
+        return G("overview")
     if m := re.fullmatch(r"how\s+many\s+(?:more\s+)?days\s+(?:are\s+|is\s+)?(?:left\s+|remaining\s+)?(?:until|till|to|before|for|in)\s+"
                          r"(?:my\s+|the\s+)?(?P<g>.+?)(?:\s+(?:left|remaining|now))?|when\s+is\s+(?:my\s+|the\s+)?(?P<g2>.+)", low, I):
         if g := _goal(m.group("g") or m.group("g2")):
@@ -1847,6 +1860,24 @@ def goal_intent(t: str) -> Intent | None:
                          r"(?:repo(?:sitory)?|git|code|coding\s+project|project\s+folder)", low, I):
         if g := _goal(m.group("g")):
             return G("link", goal=g["id"])
+    # remove / delete / cancel a goal named anywhere in the sentence ('can we remove that 30 day exam routing')
+    _FILEISH = r"\b(?:files?|folders?|photos?|pictures?|images?|pdfs?|docs?|documents?|trash|downloads?|screenshots?|videos?|songs?)\b|\.\w{2,4}\b"
+    if re.search(r"\b(?:remove|delete|cancel|drop|clear|forget|erase|discard|get\s+rid\s+of|don'?t\s+need|no\s+longer\s+need)\b", low) \
+            and not re.search(_FILEISH, low) and len(low.split()) <= 25:
+        g = goals.named_in(low) or (goals.last_touched() if re.search(r"\b(?:that|this|the)\s+(?:goal|countdown|long\s+task|"
+                                                                        r"routine|tracking)\b", low) else None)
+        if g:
+            return G("delete", goal=g["id"])
+    # postponed / moved: a new date -> change it, no date -> ask for it
+    if re.search(r"\b(?:postponed?|delayed|pushed\s+back|rescheduled|shifted|moved|changed)\b", low) \
+            and not re.search(_FILEISH, low) and (g := goals.named_in(low)):
+        return G("edit", goal=g["id"], end=low) if goals.end_in(low) else G("postponed", goal=g["id"])
+    # a correction right after adding/changing a goal: 'no, it's actually 30 days', 'make it 2 months'
+    if len(low.split()) <= 25 and re.search(r"\b(?:not|actually|sorry|no|wrong|mistake|instead|make\s+it|change\s+it|set\s+it|"
+                                            r"it'?s|it\s+is)\b", low) and goals.end_in(low) and (g := goals.last_touched()):
+        other = goals.named_in(low)
+        if not (re.search(r"\b(?:" + _G_NOUN + r")\b", low, I) and (not other or other["id"] != g["id"])):
+            return G("edit", goal=g["id"], end=_last_span(low))  # (a different goal named = a new goal, not a fix)
     # changes to an existing goal
     if m := re.fullmatch(r"(?:please\s+)?(?:move|change|shift|push|postpone|set)\s+(?:the\s+|my\s+)?(?P<g>.+?)(?:'s)?\s+(?:date\s+|deadline\s+|"
                          r"end\s+date\s+)?to\s+(?P<d>.+)|(?:my\s+|the\s+)?(?P<g2>.+?)\s+(?:is\s+now|has\s+moved\s+to|moved\s+to|is\s+moved\s+to|"

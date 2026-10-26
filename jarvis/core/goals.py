@@ -249,6 +249,7 @@ def add(name: str, end: str = "", remind: str = "", ask: str = "", ask_at: str =
             g["folder"] = str(_folder(g))
         goals.append(g)
         _save(goals, logs)
+    touch(g["id"])
     return _added_text(g, today)
 
 
@@ -336,7 +337,40 @@ def edit(goal: str, name: str = "", end: str = "", remind: str = "", ask: str = 
         if not said:
             return f"What should I change about '{g['name']}'? (date, reminder times, check-in question, pause, done)"
         _save(goals, logs)
+    touch(g["id"])
     return f"{g['name']}: " + ", ".join(said) + "."
+
+
+LAST_KEY = "goals_last"  # the goal the user just added/changed: 'no, it's actually 30 days' corrects it
+
+
+def touch(gid: str) -> None:
+    store.kv_set(LAST_KEY, json.dumps({"id": str(gid), "ts": time.time()}))
+
+
+def last_touched(within_s: float = 900.0) -> dict | None:
+    try:
+        d = json.loads(store.kv_get(LAST_KEY) or "{}")
+    except ValueError:
+        return None
+    if not d or time.time() - float(d.get("ts", 0)) > within_s:
+        return None
+    return find(str(d.get("id", "")))
+
+
+def named_in(text: str) -> dict | None:
+    """The goal whose name (or a main word of it, 4+ letters) appears in free text; the longest match wins."""
+    low = (text or "").lower()
+    best, score = None, 0
+    for g in all_goals():
+        if g["status"] == "done":
+            continue
+        n = g["name"].lower()
+        s = len(n) + 100 if re.search(rf"\b{re.escape(n)}\b", low) else max(
+            [len(w) for w in re.findall(r"\w{4,}", n) if re.search(rf"\b{re.escape(w)}s?\b", low)] + [0])
+        if s > score:
+            best, score = g, s
+    return best
 
 
 def _match(goals: list[dict], goal: str) -> dict | None:
@@ -476,6 +510,23 @@ def show() -> str:
     if not gs:
         return "No goals yet. Say e.g. 'my exam is in 30 days, remind me every day' or 'I started a project that ends in 6 months, ask me every day'."
     return "🎯 Your goals:\n" + "\n".join(f"{i}. {status_text(g)}" for i, g in enumerate(gs, 1))
+
+
+def overview() -> str:
+    """Everything on the Work card in words: goals, my list (reminders / to-do / read later), the coding project."""
+    parts = [show()]
+    try:
+        from jarvis.core import readlater
+        rows = readlater.ordered()
+        parts.append(readlater.show() if rows else "Your list (reminders, to-do, read later) is empty.")
+    except Exception as e:
+        log.debug("list for overview failed: %s", e)
+    try:
+        from jarvis.core import timemachine as tm
+        parts.append(f"Coding project: {tm.resolve('').name}.")
+    except Exception:
+        pass
+    return "\n\n".join(parts)
 
 
 def cards(today: date | None = None) -> list[dict]:
@@ -737,6 +788,12 @@ def run(action: str = "list", goal: str = "", name: str = "", end: str = "", rem
         return log_entry(g["id"], text) if g else _not_found(goal, all_goals())
     if action == "report":
         return report(goal or name)
+    if action == "overview":
+        return overview()
+    if action == "postponed":
+        g = find(goal or name)
+        return (f"Okay. When is {g['name']} now? Say 'move {g['name']} to December 10', or 'delete the {g['name']} goal'."
+                if g else _not_found(goal, all_goals()))
     g = find(goal or name)
     if not g:
         return _not_found(goal or name, all_goals())

@@ -150,3 +150,38 @@ def test_dashboard_work_card(sent):
     from jarvis.api.routes import dash
     w = dash._work()
     assert w["goals"][0]["name"] == "Exam" and w["goals"][0]["left"] == 10 and "todo" in w["list"]
+
+
+def test_owner_log_remove_and_correct(sent):
+    """Owner's 8:56 PM log: the 30-day fix cost 5k tokens and 'remove that exam' went to delete_to_trash."""
+    a = args("Actually, my exam are in the 40 days, so I want to track my study and I want you to remind me every day. Can you do this?")
+    goals.run(**a)
+    a = args("Actually, the thing is, it's not 40 days, it's actually 30 days.")
+    assert a == {"action": "edit", "goal": "1", "end": "in 30 days"}
+    assert goals.run(**a).startswith("Exam: ends")
+    assert goals.find("exam")["end"] == (date.today() + timedelta(days=30)).isoformat()
+    assert args("Okay, I think the exam is postponed") == {"action": "postponed", "goal": "1"}
+    assert "When is Exam now?" in goals.run(**args("the exam is postponed"))
+    assert args("the exam got postponed to December 10")["action"] == "edit"
+    for q in ("Okay, I think the exam is postponed, so can we remove that 30 day exam routing.",
+              "delete my exam goal", "cancel the exam countdown", "I don't need the exam reminder anymore"):
+        assert args(q) == {"action": "delete", "goal": "1"}, q
+    assert fastpath.match("delete exam.pdf") is None or fastpath.match("delete exam.pdf").tool != "goals"
+    assert goals.run(**args("remove the exam")).startswith("Deleted the goal 'Exam'") and goals.show().startswith("No goals")
+
+
+def test_correction_never_hits_another_goal(sent):
+    goals.add("Exam", "in 40 days")
+    a = args("actually my project ends in 6 months, ask me every day")
+    assert a["action"] == "add" and a["name"] == "project"
+
+
+def test_work_overview(sent, monkeypatch):
+    goals.add("Exam", "in 30 days")
+    for q in ("Can you tell me what is in my working list right now? What project?", "what am I working on",
+              "show my work list", "which projects do I have"):
+        assert args(q) == {"action": "overview"}, q
+    out = goals.run("overview")
+    assert "Exam: 30 days left" in out and "list" in out.lower()
+    assert fastpath.match("what is my project about") is None or fastpath.match("what is my project about").tool != "goals"
+    assert fastpath.match("what was I working on").tool == "where_was_i"
