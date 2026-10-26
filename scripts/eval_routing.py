@@ -102,9 +102,9 @@ HARD: list[tuple[str, str]] = [
 FREE: list[tuple[str, str]] = [
     ("can you activate the stt mode", "dictate"), ("i will speak, you write it", "dictate"),
     ("start writing whatever i say", "dictate"), ("i'm tired of typing, let me talk", "dictate"),
-    ("disable the voice writing", "dictate"), ("correct this for me", "rewrite_text"),
-    ("make my selected email sound nicer", "rewrite_text"), ("polish the text i highlighted", "rewrite_text"),
-    ("put this into simple english", "rewrite_text"), ("there are mistakes in what i selected, fix them", "rewrite_text"),
+    ("disable the voice writing", "dictate"), ("correct this for me", "text_assist"),
+    ("make my selected email sound nicer", "text_assist"), ("polish the text i highlighted", "text_assist"),
+    ("put this into simple english", "text_assist"), ("there are mistakes in what i selected, fix them", "text_assist"),
     ("nobody should open my college folder", "folder_lock"), ("make my diary folder secret", "folder_lock"),
     ("i want to see my locked exam folder again", "folder_lock"), ("my cousin wants to use the internet", "share_wifi"),
     ("show me the network password", "share_wifi"), ("my laptop is too weak to train this, use kaggle", "kaggle_train"),

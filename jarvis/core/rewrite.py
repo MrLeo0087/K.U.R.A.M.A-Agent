@@ -91,11 +91,16 @@ def _window_name(wid: int) -> str:
         return "that window"
 
 
-def rewrite(instruction: str, text: str = "") -> str:
+class Grab:
+    """The highlighted text, copied from the app the user works in, and where it came from."""
+
+    def __init__(self, text: str, wid: int | None, in_front: bool, term: bool, title: str):
+        self.text, self.wid, self.in_front, self.term, self.title = text, wid, in_front, term, title
+
+
+def grab() -> Grab | str:
     """Copy the selection FROM the app the user is working in (Ctrl+C there, not the X PRIMARY buffer, which also
-    changes when text is selected inside KURAMA), rewrite it, paste it back over the selection."""
-    if text.strip():
-        return transform(text[:MAX_CHARS], instruction) or "error: the rewrite came back empty"
+    changes when text is selected inside KURAMA). Returns a Grab, or a message for the user."""
     from jarvis.core import uiagent
     wid, in_front = target_window()
     if wid is None:
@@ -111,20 +116,50 @@ def rewrite(instruction: str, text: str = "") -> str:
     sel = _xclip(["-selection", "clipboard"])
     if not sel.strip() or sel == sentinel:
         sel = selection() if in_front else ""  # some apps only set PRIMARY
+    title = _window_name(wid)
     if not sel.strip() or sel == sentinel:
         _xclip(["-selection", "clipboard"], "")
-        return (f"I couldn't see any highlighted text in '{_window_name(wid)}'. Highlight the words there (they must "
-                "be in a box you can type in, to be replaced), then ask again.")
+        return f"I couldn't see any highlighted text in '{title}'. Highlight it there, then ask again."
     if len(sel) > MAX_CHARS:
         return f"That selection is too long ({len(sel)} characters, max {MAX_CHARS}). Select a smaller part."
-    new = transform(sel, instruction)
+    return Grab(sel, wid, in_front, term, title)
+
+
+def grab_cursor() -> Grab | str:
+    """The window to type into at the cursor (no selection needed): the front app, or the one below KURAMA."""
+    from jarvis.core import uiagent
+    wid, in_front = target_window()
+    if wid is None:
+        return "I couldn't find the editor window. Click where the code should go, then ask again."
+    if not in_front:
+        _activate(wid)
+        time.sleep(0.35)
+    term = uiagent.family(uiagent.active_class()) == "terminal"
+    return Grab("", wid, in_front, term, _window_name(wid))
+
+
+def put(g: Grab, new: str) -> None:
+    """Paste `new` over the (still highlighted) selection / at the cursor of the grabbed window; it also stays on
+    the clipboard."""
+    from jarvis.core import uiagent
+    _xclip(["-selection", "clipboard"], new)
+    if not g.in_front and g.wid is not None:
+        _activate(g.wid)  # the LLM call took a moment: make sure the document is still in front
+        time.sleep(0.2)
+    uiagent.key("ctrl+shift+v" if g.term else "ctrl+v")
+    time.sleep(0.3)
+
+
+def rewrite(instruction: str, text: str = "") -> str:
+    """Rewrite the highlighted text and paste the new version over it."""
+    if text.strip():
+        return transform(text[:MAX_CHARS], instruction) or "error: the rewrite came back empty"
+    g = grab()
+    if isinstance(g, str):
+        return g
+    new = transform(g.text, instruction)
     if not new:
         return "error: the rewrite came back empty; nothing was changed"
-    _xclip(["-selection", "clipboard"], new)
-    if not in_front:
-        _activate(wid)  # the LLM call took a moment: make sure the document is still in front
-        time.sleep(0.2)
-    uiagent.key("ctrl+shift+v" if term else "ctrl+v")
-    time.sleep(0.3)
-    return (f"Replaced the highlighted text in '{_window_name(wid)}' ({len(new.split())} words). If it couldn't be "
+    put(g, new)
+    return (f"Replaced the highlighted text in '{g.title}' ({len(new.split())} words). If it couldn't be "
             f"replaced there (read-only text), it is on your clipboard: press Ctrl+V where you want it.\n\n{new}")

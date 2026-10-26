@@ -238,7 +238,10 @@ TOOL_EXAMPLES: dict[str, tuple[str, ...]] = {
                 "write down what I speak", "start voice input", "let me speak instead of typing",
                 "convert my speech into text in this box", "turn off speech to text", "stop voice typing",
                 "speech to text", "transcribe what I say into the document"),
-    "rewrite_text": ("fix this text", "correct the selected sentence", "make the highlighted text professional",
+    "text_assist": ("what does this mean", "explain the highlighted sentence", "what is the meaning of this word in "
+                    "nepali", "translate the selected paragraph into nepali", "explain this function",
+                    "optimize the selected code", "write a calculator function here in vs code", "explain this file",
+                    "fix this text", "correct the selected sentence", "make the highlighted text professional",
                      "improve my writing", "rephrase what I selected", "make this paragraph sound better",
                      "translate the selected text", "correct my english", "make my message polite",
                      "write this better", "fix the spelling mistakes in this"),

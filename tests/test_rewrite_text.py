@@ -59,5 +59,5 @@ def test_kurama_window_detection_and_intents():
     assert rewrite._is_kurama("anything", ("kurama_wallpaper.py",))
     assert not rewrite._is_kurama("KURAMA", ("org.gnome.Nautilus",))
     for t in ("Can you fix this sentence?", "Can you fix the format this sentence more good?", "proofread my email"):
-        assert fastpath.match(t).tool == "rewrite_text", t
+        assert fastpath.match(t).tool == "text_assist", t
     assert fastpath.match("fix this error").tool == "fix_error"
