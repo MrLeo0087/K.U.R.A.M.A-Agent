@@ -26,11 +26,12 @@ RESEND = re.compile(r"^\s*(?:send|resend|re-send|share|forward|give)(?:\s+(?:me|
 CLIP = re.compile(r"^\s*(?:/clip|(?:send|what(?:'s| is))(?: me)?(?: my| the)? (?:laptop(?:'s)? )?clipboard"
                   r"(?: from (?:my |the )?laptop)?)\s*[.!?]*$", re.I)
 # a photo from the laptop's camera ("find my laptop")
-CAMERA = re.compile(r"^\s*(?:/camera|/photo|(?:send|take|show|snap)(?: me)?(?: a)? (?:photo|picture|pic|selfie|snap(?:shot)?)"
-                    r"(?: from| of| on| using| with)?(?: my| the)?(?: laptop| webcam| camera)+(?: now)?)\s*[.!?]*$", re.I)
+CAMERA = re.compile(r"^\s*(?:/camera|/photo|(?:send|take|show|snap|click|capture)(?: me)?(?: a| one)?(?: (?:laptop|webcam|camera))? "
+                    r"(?:photo|picture|pic|selfie|snap(?:shot)?)(?:(?: from| of| on| using| with)?(?: my| the)?(?: laptop| webcam| camera)+)?(?: now)?"
+                    r"|(?:open|show)(?: me)? (?:the )?(?:laptop )?(?:camera|webcam)|(?:laptop |webcam |camera )(?:photo|picture|pic))\s*[.!?]*$", re.I)
 # a short video from the laptop's camera; an optional number of seconds ("/video 8")
-VIDEO = re.compile(r"^\s*(?:/video|/vid|/rec(?:ord)?|(?:record|take|send|capture)(?: me)?(?: a)? (?:\d+\s*(?:s|sec|seconds?)\s+)?"
-                   r"video(?: clip)?(?: from| of| on)?(?: my| the)?(?: laptop| webcam| camera)+)(?:\s+(?P<sec>\d{1,2})\s*(?:s|sec|seconds?)?)?\s*[.!?]*$", re.I)
+VIDEO = re.compile(r"^\s*(?:/video|/vid|/rec(?:ord)?|(?:record|take|send|capture)(?: me)?(?: a)?(?: short)? (?:\d+\s*(?:s|sec|seconds?)\s+)?"
+                   r"(?:(?:camera|webcam) )?video(?: clip)?(?:(?: from| of| on)?(?: my| the)?(?: laptop| webcam| camera)+)?)(?:\s+(?P<sec>\d{1,2})\s*(?:s|sec|seconds?)?)?\s*[.!?]*$", re.I)
 # label the current Wi-Fi as a known place ("/here Home", "this is home")
 HERE = re.compile(r"^\s*(?:/here|(?:remember |save )?(?:this (?:is|spot is|place is)|the laptop is(?: at| in)?))\s+(?P<label>.{1,40}?)\s*[.!?]*$", re.I)
 WHERE = re.compile(

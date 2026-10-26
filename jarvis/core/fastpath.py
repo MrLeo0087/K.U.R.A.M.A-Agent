@@ -342,6 +342,8 @@ def sendfile_intent(t: str) -> Intent | None:
         loc = ""
     if not tgt or len(tgt.split()) > 6 or re.fullmatch(r"(?:a message|message|hi|hello)", tgt, I):
         return None
+    if re.fullmatch(r"(?:a\s+|the\s+)?(?:camera|webcam|laptop\s+camera)", tgt, I):  # 'send me a camera photo' = the webcam
+        return None
     if re.fullmatch(r"(?:it|that|this|them|the)", tgt, I):  # anaphora target -> the folder we're talking about
         return _focus_intent()
     path = f"{tgt} in {loc}" if loc else tgt
@@ -482,7 +484,7 @@ SWITCHES = [  # (intent name, tool, group, args, patterns); first full match win
         r"(?:enable|use|activate) (?:the )?dark (?:mode|theme)(?: now)?", r"dark (?:mode|theme)(?: on| please| now)?",
         r"(?:make it|make the (?:screen|laptop|desktop)) dark", r"night mode(?: on)?")),
     ("lock", "lock_screen", "power", {}, _rx(
-        r"lock (?:the |my |this )?(?:screen|computer|pc|laptop|desktop|system|machine)(?: now)?",
+        r"lock (?:the |my |this )?(?:laptop(?:'s)? |computer(?:'s)? )?(?:screen|computer|pc|laptop|desktop|system|machine)(?: now)?",
         r"(?:screen|computer|laptop|स्क्रीन|स्क्रिन|कम्प्युटर|कंप्यूटर) (?:lock|लॉक|लक) " + _DO_HI)),
 ]
 
@@ -658,9 +660,16 @@ def mute_intent(t: str) -> Intent | None:
     """0-token alert mute / unmute / status; the time is required unless an alert word is named."""
     low = t.lower().strip(" .!?")
     if re.fullmatch(r"(?:please\s+)?(?:which|what)\s+(?:alerts?|notifications?|warnings?)\s+(?:are|is)\s+(?:muted|"
-                    r"paused|off|silenced)|(?:show\s+)?muted\s+(?:alerts?|notifications?)|(?:show\s+(?:me\s+)?)?(?:my\s+)?"
-                    r"(?:notifications?|alerts?|warnings?)\s+status", low):
+                    r"paused|off|silenced|on|allowed|active)|(?:show\s+)?muted\s+(?:alerts?|notifications?)|(?:(?:show|check|tell|give)(?:\s+me)?\s+|"
+                    r"what(?:'s|\s+is|\s+are)\s+)?(?:my\s+|the\s+|all\s+)?(?:notifications?|alerts?|warnings?)(?:\s+(?:status|settings))?", low) \
+            and not re.fullmatch(r"(?:notifications?|alerts?|warnings?)", low):
         return Intent("mute", "mute_alerts", "telegram", {"action": "status"})
+    if m := re.fullmatch(r"(?:please\s+)?unmute(?:\s+(?:the\s+|my\s+)?(?P<k>all|everything|ram|memory|resources?|location|jobs?|"
+                         r"downloads?|todo|reminders?|guard|internet|backup))?(?:\s+(?:now|please))?", low):
+        k = (m.group("k") or "all").lower()
+        kind = next((n for n, rx in _MUTE_KIND if re.fullmatch(rx, k)), "all") if k not in ("everything", "todo") else \
+            ("all" if k == "everything" else "todo")
+        return Intent("mute", "mute_alerts", "telegram", {"action": "off", "what": kind})
     if m := (re.fullmatch(r"(?:please\s+)?(?:unmute|resume|turn\s+(?:back\s+)?on|enable|allow|bring\s+back)\s+(?:the\s+|my\s+)?"
                           r"(?P<k>\w+\s+)?" + _MUTE_NOUN + r"(?:\s+again|\s+back(?:\s+on)?)?(?:\s+please)?", low)
              or re.fullmatch(r"(?:please\s+)?turn\s+(?:the\s+|my\s+)?(?P<k>\w+\s+)?" + _MUTE_NOUN
@@ -676,6 +685,9 @@ def mute_intent(t: str) -> Intent | None:
     if not noun and re.search(r"\b(?:send|sending|show|give|tell|ping)\b", low) and (
             "location" in kinds or ("last" in kinds and mins)):
         noun = True  # "don't send (me) the location for 2 hours", "do not send this for 1 hour"
+    if not noun and mins and [k for k in kinds if k not in ("last", "all")] and re.match(
+            r"(?:please\s+)?(?:mute|silence|snooze|pause|quiet)\b", low):
+        noun = True  # "mute ram for 20 min"
     if not noun or (mins is None and not kinds) or len(low.split()) > 16:
         return None  # "turn off notifications" = Do Not Disturb; "stop" alone = audio
     if re.search(r"\b(?:wifi|bluetooth|music|song|video|timer|alarm)\b", low) and "alert" not in low and mins is None:
@@ -1526,7 +1538,7 @@ def everyday_intent(t: str) -> Intent | None:
     if m := re.fullmatch(r"(?:please\s+)?(?P<a>lock|unlock|encrypt|decrypt|password\s+protect)\s+(?:the\s+|my\s+)?(?P<p>.+?)"
                          r"(?:\s+(?:folder|file|directory))?(?:\s+with\s+(?:a\s+)?password)?[\s.!]*", t, I):
         p = m.group("p").strip()
-        if not re.fullmatch(r"(?:the\s+)?(?:screen|laptop|computer|pc|kurama|phone|door|it\s+now)", p, I):
+        if not re.fullmatch(r"(?:the\s+)?(?:(?:laptop|computer)(?:'s)?\s+)?(?:screen|laptop|computer|pc|kurama|phone|door|it\s+now)", p, I):
             act = "unlock" if m.group("a").lower() in ("unlock", "decrypt") else "lock"
             return Intent("lock", "folder_lock", "filesearch", {"action": act, "path": p}, p)
     if re.fullmatch(r"(?:nepali\s*ma|नेपालीमा|नेपाली\s*मा)\s+(?:type|lekha|lekh|लेख|लेखन|टाइप)\s*(?:gara|garnu|गर|गर्नु)?\w*[\s.!]*", t, I):

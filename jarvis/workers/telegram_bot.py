@@ -67,6 +67,39 @@ MENU = (("list", "all commands"), ("status", "what the laptop is doing"), ("batt
         ("guard", "anti-theft on/off"), ("track", "lost mode on/off"), ("clip", "laptop clipboard"),
         ("jobs", "background jobs"), ("control", "remote desktop"), ("lock", "block risky actions"),
         ("stop", "stop a stuck task"), ("clearchat", "clear this chat"))
+# the same commands in plain words (0 tokens): "what is my notification status" = /notifications ...
+_W = r"^\s*(?:please\s+|kurama\W+|can\s+you\s+|hey\s+)*"
+NATURAL = tuple((re.compile(_W + rx + r"(?:\s+(?:please|now))?\s*[.!?]*\s*$", re.I), cmd) for rx, cmd in (
+    (r"(?:show|give|send|tell)(?:\s+me)?(?:\s+all)?(?:\s+the|\s+my)?\s+(?:commands?|command\s+list)(?:\s+list)?|"
+     r"(?:all\s+)?commands?(?:\s+list)?|command\s+list|what\s+commands?\s+(?:are\s+there|do\s+you\s+have)", "/list"),
+    (r"(?:what(?:'s|\s+is)\s+)?(?:my\s+|the\s+)?(?:laptop(?:'s)?\s+)?status|what(?:'s|\s+is)\s+(?:my\s+)?laptop\s+doing|"
+     r"how(?:'s|\s+is)\s+(?:my\s+)?laptop(?:\s+doing)?|what(?:'s|\s+is)\s+running(?:\s+on\s+(?:my\s+)?laptop)?", "/status"),
+    (r"(?:how\s+much\s+)?(?:ram|memory|cpu)(?:\s+(?:usage|use|used|is\s+used|left|free|status))?|"
+     r"(?:check|show)(?:\s+me)?\s+(?:the\s+|my\s+)?(?:ram|memory|cpu|resources?)(?:\s+usage)?|resources?(?:\s+(?:usage|status))?|"
+     r"(?:how\s+much\s+)?disk\s+space(?:\s+left)?", "/ram"),
+    (r"(?:show|list|what)(?:\s+are)?(?:\s+my|\s+the)?(?:\s+background)?\s+jobs(?:\s+(?:running|status|now))?|"
+     r"what\s+jobs\s+are\s+running|(?:background\s+)?jobs(?:\s+status)?", "/jobs"),
+    (r"(?:what(?:'s|\s+is)\s+)?(?:on\s+)?(?:my\s+|the\s+)?laptop(?:'s)?\s+clipboard|(?:send|give|show)(?:\s+me)?\s+(?:the\s+|my\s+)?"
+     r"(?:laptop(?:'s)?\s+)?clipboard", "/clip"),
+    (r"(?:turn|switch)\s+on\s+(?:the\s+)?(?:laptop\s+|anti[\s-]?theft\s+)?guard|(?:enable|arm|start)\s+(?:the\s+)?(?:laptop\s+|anti[\s-]?theft\s+)?guard|"
+     r"guard\s+on|watch\s+(?:my\s+)?laptop", "/guard on"),
+    (r"(?:turn|switch)\s+off\s+(?:the\s+)?(?:laptop\s+|anti[\s-]?theft\s+)?guard|(?:disable|disarm|stop)\s+(?:the\s+)?(?:laptop\s+|anti[\s-]?theft\s+)?guard|"
+     r"guard\s+off", "/guard off"),
+    (r"(?:what(?:'s|\s+is)\s+(?:the\s+)?)?guard(?:\s+status)?|is\s+(?:the\s+)?guard\s+on", "/guard"),
+    (r"(?:start|turn\s+on|enable)\s+(?:the\s+)?(?:lost\s+mode|tracking(?:\s+(?:my|the)\s+laptop)?)|lost\s+mode(?:\s+on)?|"
+     r"my\s+laptop\s+(?:is\s+)?(?:lost|stolen)", "/track on"),
+    (r"(?:stop|end|cancel|abort)\s+(?:the\s+|this\s+|that\s+|current\s+)?(?:task|job|everything)|abort", "/stop"),
+    (r"(?:clear|reset|delete)\s+(?:this\s+|the\s+|our\s+)?(?:chat|conversation)(?:\s+history)?", "/clearchat"),
+))
+
+
+def natural_command(text: str) -> str | None:
+    """Plain words for a slash command ('what is my laptop doing' -> /status); None = not one."""
+    if len(text.split()) > 10:
+        return None
+    return next((cmd for rx, cmd in NATURAL if rx.match(text)), None)
+
+
 # a short reply to one of KURAMA's alerts that means "stop sending this kind" (0 tokens)
 REPLY_MUTE = re.compile(r"^\s*(?:please\s+|ok(?:ay)?\W*\s*)?(?:mute|stop|disable|silence|snooze|pause|quiet|off|turn\s+(?:it\s+|this\s+)?off|"
                         r"enough|no\s+more|not\s+now|band\s+gara|बन्द\s*गर|रोक|बंद\s*करो|"
@@ -268,7 +301,8 @@ class TelegramBot(Worker):
         if telesec.looks_like_pin(text) and telesec.verify_pin(text.strip().lstrip("/")):
             self.send(f"PIN accepted — risky actions unlocked for {int(config.TELEGRAM_PIN_WINDOW_S // 60)} min.")
             return
-        if (gated := telesec.gate(text)) is not None:
+        if (gated := telesec.gate(text)) is not None or (
+                (nat := natural_command(text)) and (gated := telesec.gate(nat)) is not None):  # plain words: same PIN
             self._pending_risky = text  # the next PIN runs it
             self.send(gated)
             return
@@ -313,6 +347,8 @@ class TelegramBot(Worker):
         from jarvis.core import guard, phone, remotedesk
         if remotedesk.wants_password(text):  # only reached after the PIN (telesec.gate): a fresh password each time
             return remotedesk.status_text(remotedesk.start())
+        if not text.startswith("/") and (cmd := natural_command(text)):
+            text = cmd  # the same 0-token command as its slash form
         if text.startswith("/"):
             cmd = text.split()[0].split("@")[0].lower()
             arg = text.split()[1].lower() if len(text.split()) > 1 else ""
@@ -394,6 +430,10 @@ class TelegramBot(Worker):
             return phone.screenshot_to_phone()
         # "send this folder" / "send X folder in Y" / "send it" (after we discussed a folder) -> send that, reliably
         # (0 tokens, before the resend/LLM path) so it never asks for a chat id or sends a random file
+        if phone.CAMERA.match(text):
+            return guard.send_photo()
+        if m := phone.VIDEO.match(text):
+            return guard.send_clip(int(m.group("sec")) if m.group("sec") else 5)
         from jarvis.core import fastpath
         if config.FASTPATH:
             if si := fastpath.sendfile_intent(fastpath.normalize(text)):

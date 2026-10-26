@@ -437,3 +437,23 @@ def test_telegram_ignores_stale_backlog(tg):
     fresh = upd(2, "hi")["message"]
     assert bot._own_message({"message": old}) is None
     assert bot._own_message({"message": fresh}) is not None
+
+
+def test_telegram_plain_words_work_like_slash_commands(tg, monkeypatch):
+    n = telegram_bot.natural_command
+    assert n("what is my laptop doing") == "/status" and n("how much ram is used") == "/ram"
+    assert n("what jobs are running") == "/jobs" and n("what is on the laptop clipboard") == "/clip"
+    assert n("turn off the guard") == "/guard off" and n("start lost mode") == "/track on"
+    assert n("show all commands") == "/list" and n("stop the task") == "/stop"
+    assert n("open youtube") is None and n("stop it") is None  # not commands
+    from jarvis.core import fastpath, phone
+    assert fastpath.match("what is my notification status").args == {"action": "status"}
+    assert fastpath.match("unmute all").args == {"action": "off", "what": "all"}
+    assert fastpath.match("mute ram for 20 min").args == {"action": "on", "what": "resource", "minutes": 20.0}
+    assert fastpath.match("lock the laptop screen").tool == "lock_screen"
+    assert phone.CAMERA.match("send me a camera photo") and phone.CAMERA.match("take a photo")
+    assert phone.VIDEO.match("record a video")
+    monkeypatch.setattr(resource_guard, "snapshot", lambda cpu_avg=None: dict(SNAP))
+    bot = telegram_bot.TelegramBot()
+    assert bot.answer("ram usage") == resource_guard.summary(dict(SNAP))  # same answer as /ram, 0 tokens
+    assert bot.answer("show all commands") == telegram_bot.HELP
