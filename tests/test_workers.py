@@ -143,6 +143,32 @@ def test_notify_desktop_and_telegram_rate_limit(tg, monkeypatch):
     assert notify.notify("C", "3") == ["desktop", "store"]  # third Telegram message in a minute dropped
 
 
+def test_notify_mute_by_kind_and_all(tg, monkeypatch):
+    from jarvis.tools.general.mute_alerts import mute_alerts
+    monkeypatch.setattr(config, "NOTIFY_DESKTOP", False)
+    assert "no RAM / resource warnings for 20 min" in mute_alerts("on", "resource", 20)
+    assert notify.notify("Resource alert: ram", "91%", "warning", source="resource_guard") == ["store"]
+    assert store.alerts_recent()[0]["channels"] == "muted" and not tg["sent"]
+    assert notify.notify("Backup failed", "x", "warning", source="backup") == ["telegram", "store"]  # others still come
+    assert "RAM / resource warnings until" in mute_alerts("status")
+    assert mute_alerts("off", "resource") == "Unmuted RAM / resource warnings."
+    assert notify.notify("Resource alert: ram", "92%", "warning", source="resource_guard") == ["telegram", "store"]
+    mute_alerts("on", "all", 30)  # 'all' never silences reminders or the anti-theft guard
+    assert notify.notify("Reminder", "call mom", "warning", source="scheduler") == ["telegram", "store"]
+    assert notify.notify("Job done", "y", "warning", source="jobs") == ["store"]
+    mute_alerts("on", "last", 10)  # 'this one' = the newest alert's kind (jobs)
+    assert "job-done messages" in mute_alerts("status")
+    notify.unmute("all")
+    assert mute_alerts("status").startswith("Nothing is muted")
+
+
+def test_telegram_mute_command(monkeypatch):
+    bot = telegram_bot.TelegramBot()
+    assert "RAM / resource warnings for 20 min" in bot.answer("/mute ram 20")
+    assert "until" in bot.answer("/muted")
+    assert bot.answer("/unmute ram") == "Unmuted RAM / resource warnings."
+
+
 def test_telegram_errors_never_leak_token(monkeypatch):
     monkeypatch.setattr(config, "TELEGRAM_BOT_TOKEN", "123:SECRET")
 
@@ -263,11 +289,22 @@ def test_resource_guard_hysteresis(monkeypatch):
     assert g.evaluate(snap(ram_pct=96), now=60) == []  # still high: no spam
     assert g.evaluate(snap(ram_pct=88), now=120) == []  # below 90 but within hysteresis: not recovered
     assert g.evaluate(snap(ram_pct=95), now=180) == []
-    assert g.evaluate(snap(ram_pct=95), now=1800) == ["ram"]  # 30 min later: remind
+    assert g.evaluate(snap(ram_pct=95), now=1800) == []  # still within the 2 h cooldown
     assert g.evaluate(snap(ram_pct=70), now=1900) == []  # recovered
-    assert g.evaluate(snap(ram_pct=91), now=1910) == ["ram"]  # crossed again after recovery
-    assert g.evaluate(snap(jarvis_core_mb=650, disk={"/": 97.0}), now=2000) == ["jarvis_core", "disk /"]
-    assert g.evaluate(snap(cpu_pct=99, cpu_pct_partial=True), now=2100) == []  # 5-min window not full
+    assert g.evaluate(snap(ram_pct=91), now=1910) == []  # back up soon after: still quiet (was the 15-min spam)
+    assert g.evaluate(snap(ram_pct=91), now=7300) == ["ram"]  # 2 h later: tell again
+    assert g.evaluate(snap(jarvis_core_mb=650, disk={"/": 97.0}), now=7400) == ["jarvis_core", "disk /"]
+    assert g.evaluate(snap(cpu_pct=99, cpu_pct_partial=True), now=7500) == []  # 5-min window not full
+
+
+def test_resource_guard_trims_itself_before_alerting(monkeypatch):
+    sizes = iter([560, 300])  # high -> after the clean-up
+    monkeypatch.setattr(resource_guard, "snapshot", lambda cpu_avg=None: {**SNAP, "jarvis_core_mb": next(sizes)})
+    trims = []
+    monkeypatch.setattr(resource_guard, "trim_memory", lambda: trims.append(1))
+    g = resource_guard.ResourceGuard()
+    g.tick()
+    assert trims == [1] and g.last["jarvis_core_mb"] == 300 and "jarvis_core" not in g.sent
 
 
 def test_resource_status_tool(monkeypatch):

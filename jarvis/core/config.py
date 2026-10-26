@@ -258,6 +258,9 @@ TOOL_EXAMPLES: dict[str, tuple[str, ...]] = {
                 "write down what I speak", "start voice input", "let me speak instead of typing",
                 "convert my speech into text in this box", "turn off speech to text", "stop voice typing",
                 "speech to text", "transcribe what I say into the document"),
+    "mute_alerts": ("don't send RAM warnings for 20 minutes", "mute all alerts for an hour", "pause the location "
+                    "messages for 2 hours", "do not send this notification for 30 minutes", "unmute alerts",
+                    "which alerts are muted", "stop the resource warnings for today"),
     "text_assist": ("what does this mean", "explain the highlighted sentence", "what is the meaning of this word in "
                     "nepali", "translate the selected paragraph into nepali", "explain this function",
                     "optimize the selected code", "write a calculator function here in vs code", "explain this file",
@@ -557,7 +560,7 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
     "weather": "current weather and up to 3-day forecast for any place",
     "files": "create folders, write files, move/copy, move to trash",
     "filesearch": "find files by name or by text content; open a folder by name",
-    "telegram": "send a file (by path or name) or a message to the user's Telegram (phone)",
+    "telegram": "send a file (by path or name) or a message to the user's Telegram (phone); mute alerts",
     "toolsmith": "no tool fits a real task: offer to build a small new tool; saved tools list/run/delete",
     "skills": "small tools KURAMA built earlier (saved skills)",
     "system": "laptop doctor (why it is slow: RAM, CPU, heat, disk; free RAM, ports, stop a process), internet "
@@ -736,6 +739,18 @@ JARVIS_CORE_MAX_MB = 600.0  # CLAUDE.md caps
 JARVIS_TOTAL_MAX_MB = 1500.0
 RESOURCE_HYSTERESIS_PCT = 5.0  # must fall this far below a threshold to count as recovered
 RESOURCE_REALERT_S = 1800.0  # still high: alert again after 30 min
+RESOURCE_COOLDOWN_S = 2 * 3600.0  # after an alert, the SAME metric stays quiet this long even if it dips and comes back
+RESOURCE_TRIM_AT = 0.75  # KURAMA core above this share of JARVIS_CORE_MAX_MB -> gc + malloc_trim (no process stopped)
+RESOURCE_TRIM_EVERY_S = 300.0
+# Alert mute ("don't send RAM warnings for 20 minutes"): word -> notify sources. 'all' never mutes reminders,
+# timers or the anti-theft guard (things the user set up on purpose).
+MUTE_KINDS: dict[str, tuple[str, ...]] = {
+    "resource": ("resource_guard",), "location": ("location",), "jobs": ("jobs",), "downloads": ("downloads",),
+    "watchdog": ("watchdog",), "web": ("webwatch",), "commands": ("cmdalerts", "process_watch"),
+    "digest": ("daily_digest",), "backup": ("backup",), "kaggle": ("kaggle",), "internet": ("netdoctor",),
+    "guard": ("guard",), "reminders": ("scheduler", "timer")}
+MUTE_ALL_KEEPS = ("scheduler", "timer", "guard")
+MUTE_DEFAULT_MIN = 60.0  # 'mute alerts' without a time
 # Telegram remote control (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID from .env; skipped when empty)
 TELEGRAM_POLL_TIMEOUT_S = 6  # long-poll seconds (short so Ctrl+C stops the workers quickly)
 TELEGRAM_CONFIRM_TIMEOUT_S = 60.0  # "Reply yes/no": no answer in time means no
@@ -881,6 +896,7 @@ LOCATION_HISTORY = os.getenv("KURAMA_LOCATION_HISTORY", "1").lower() not in ("0"
 LOCATION_TICK_S = 300.0  # the worker's heartbeat (cheap: usually just checks the clock)
 LOCATION_LOG_INTERVAL_S = float(os.getenv("KURAMA_LOCATION_INTERVAL_S", str(30 * 60)))  # normal logging cadence
 LOCATION_LOST_INTERVAL_S = 120.0  # while "lost mode" is on, log this often
+LOCATION_LOST_MAX_H = float(os.getenv("KURAMA_LOST_MAX_H", "6"))  # lost mode switches itself off after this
 LOCATION_MIN_MOVE_M = 120.0  # a fix closer than this to the last one is treated as the same spot (no new point)
 LOCATION_KEEP_DAYS = 60.0  # older points are pruned, so the table stays tiny
 FOCUS_CLOSE: tuple[str, ...] = ()  # apps focus_mode closes at start, e.g. ("discord", "telegram")

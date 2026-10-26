@@ -129,15 +129,81 @@ def wants_phone(level: str, source: str) -> bool:
     return level in ("warning", "error") or source in config.TELEGRAM_INFO_SOURCES
 
 
+# --- mute ("don't send RAM warnings for 20 minutes"): kv MUTE_KEY = {source: until_ts} ---
+MUTE_KEY = "notify_mute"
+
+
+def _mutes() -> dict[str, float]:
+    import json
+    try:
+        d = json.loads(store.kv_get(MUTE_KEY, "{}") or "{}")
+    except (ValueError, TypeError):
+        return {}
+    now = time.time()
+    return {k: float(v) for k, v in d.items() if float(v) > now}
+
+
+def _save_mutes(d: dict[str, float]) -> None:
+    import json
+    store.kv_set(MUTE_KEY, json.dumps(d))
+
+
+def mute_sources(kind: str) -> tuple[str, ...]:
+    """'resource' -> ('resource_guard',); 'all' -> '*'; unknown -> the source itself."""
+    kind = (kind or "").strip().lower()
+    if kind in ("all", "*", "everything"):
+        return ("*",)
+    return config.MUTE_KINDS.get(kind, (kind,) if kind else ())
+
+
+def mute(kind: str, minutes: float) -> float:
+    """Silence one kind of alert (or 'all') for `minutes`. Returns the until timestamp."""
+    until = time.time() + max(1.0, minutes) * 60
+    d = _mutes()
+    for src in mute_sources(kind):
+        d[src] = until
+    _save_mutes(d)
+    return until
+
+
+def unmute(kind: str = "all") -> list[str]:
+    """Lift a mute ('all' lifts every mute). Returns the sources unmuted."""
+    d = _mutes()
+    gone = list(d) if (kind or "all").lower() in ("all", "*", "everything") else \
+        [s for s in mute_sources(kind) if s in d]
+    for s in gone:
+        d.pop(s, None)
+    _save_mutes(d)
+    return gone
+
+
+def muted(source: str) -> float:
+    """Until when `source` is muted (0 = not muted). 'all' never covers MUTE_ALL_KEEPS."""
+    d = _mutes()
+    own = d.get(source, 0.0)
+    every = d.get("*", 0.0) if source not in config.MUTE_ALL_KEEPS else 0.0
+    return max(own, every)
+
+
+def active_mutes() -> dict[str, float]:
+    return _mutes()
+
+
 def notify(title: str, text: str = "", level: str = "info", source: str = "", desktop: bool = True,
            telegram: bool | None = None, save: bool = True) -> list[str]:
-    """Fan out one alert. telegram=None decides by wants_phone(). Returns the channels it reached."""
+    """Fan out one alert. telegram=None decides by wants_phone(). Returns the channels it reached.
+    A muted source (mute()) is only saved (channel 'muted'), never shown or sent."""
     level = level if level in LEVELS else "info"
     telegram = wants_phone(level, source) if telegram is None else telegram
     title, text = (title or "KURAMA").strip()[:120], (text or "").strip()[:3000]
     if _duplicate(title, text):
         log.info("dedupe: %s", title)
         return []
+    try:
+        if source and muted(source):
+            desktop = telegram = False
+    except Exception as e:  # a broken kv must never block alerts
+        log.warning("mute check failed: %s", e)
     sent: list[str] = []
     if desktop and desktop_send(title, text, level):
         sent.append("desktop")
@@ -145,7 +211,7 @@ def notify(title: str, text: str = "", level: str = "info", source: str = "", de
         sent.append("telegram")
     if save:
         try:
-            store.alert_add(title, text, level, source, ",".join(sent))
+            store.alert_add(title, text, level, source, ",".join(sent) or ("muted" if source and muted(source) else ""))
             sent.append("store")
         except Exception as e:  # alerts must never crash a worker
             log.warning("could not save alert: %s", e)

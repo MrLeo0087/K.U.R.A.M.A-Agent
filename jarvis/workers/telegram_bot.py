@@ -30,7 +30,10 @@ HELP = (
     "/here <name> — label the current Wi-Fi (e.g. /here Home) so /where names it\n"
     "/guard on | off — watch the laptop; a photo + location if someone uses it\n"
     "/history [phone|laptop] — where it's been (share your live location with me to build the phone's trail)\n"
-    "/track on | off — log the laptop often and message you on each move (lost mode)\n"
+    "/track on | off — log the laptop often and message you on each move (lost mode, ends by itself after 6 h)\n"
+    "\n🔕 Alerts\n"
+    "/mute [ram|location|jobs|all] [minutes] — pause those alerts (e.g. /mute ram 20; plain /mute = the last one, 60 min)\n"
+    "/unmute [what] — turn them back on; /muted — what is paused. Or just say 'no RAM warnings for 20 minutes'\n"
     "\n📋 Clipboard & files\n"
     "copy: <text> — put text on the laptop's clipboard\n"
     "/clip — get the laptop's clipboard\n"
@@ -282,6 +285,16 @@ class TelegramBot(Worker):
                 dev = "laptop" if arg.startswith("laptop") else "phone"
                 hrs = next((int(w) for w in text.split()[1:] if w.isdigit()), 24)
                 return locationlog.summary(dev, hrs)
+            if cmd in ("/mute", "/unmute", "/muted"):
+                from jarvis.tools.general.mute_alerts import mute_alerts
+                words = text.split()[1:]
+                mins = next((float(w) for w in words if w.replace(".", "", 1).isdigit()), 0)
+                what = next((w.lower() for w in words if not w.replace(".", "", 1).isdigit()), "")
+                what = {"ram": "resource", "memory": "resource", "cpu": "resource"}.get(what, what)
+                if cmd == "/muted":
+                    return mute_alerts("status")
+                return mute_alerts("off" if cmd == "/unmute" else "on",
+                                   what or ("all" if cmd == "/unmute" else "last"), mins)
             if cmd == "/track":  # lost mode for the laptop (the phone uses Find My Device / live-location sharing)
                 from jarvis.core import locationlog
                 return locationlog.set_lost("laptop", arg != "off")

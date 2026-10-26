@@ -29,16 +29,39 @@ def _lost_key(device: str) -> str:
 
 
 def lost_mode(device: str = "laptop") -> bool:
-    return store.kv_get(_lost_key(device), "0") == "1"
+    """On = the kv holds the time it was switched on. It switches itself off after LOCATION_LOST_MAX_H (a
+    forgotten /track sent the owner's location every 15 min for a day); an old '1' (no time) counts as expired."""
+    v = store.kv_get(_lost_key(device), "0") or "0"
+    if v == "0":
+        return False
+    try:
+        since = float(v) if v != "1" else 0.0
+    except ValueError:
+        since = 0.0
+    if time.time() - since < config.LOCATION_LOST_MAX_H * 3600:
+        return True
+    store.kv_set(_lost_key(device), "0")
+    log.info("lost mode for the %s ended by itself", device)
+    if since and config.TELEGRAM_BOT_TOKEN:
+        try:
+            from jarvis.core import notify
+            notify.notify(f"📍 Lost mode ended ({device})", f"It switched itself off after "
+                          f"{config.LOCATION_LOST_MAX_H:g} h. Send /track to start it again.",
+                          level="info", source="location", telegram=True, desktop=False)
+        except Exception as e:
+            log.warning("lost-mode end notify failed: %s", e)
+    return False
 
 
 def set_lost(device: str, on: bool) -> str:
-    store.kv_set(_lost_key(device), "1" if on else "0")
+    was = lost_mode(device)
+    store.kv_set(_lost_key(device), str(time.time()) if on else "0")
     if on:
         record_laptop(force=True) if device == "laptop" else None
-        return (f"Lost mode on for the {device}: I'll log its location often and message your phone on each new "
-                f"fix. Turn it off with 'stop tracking the {device}'.")
-    return f"Lost mode off for the {device}. Normal history logging continues."
+        return (f"Lost mode on for the {device}: I'll message your phone its location on each new fix for the next "
+                f"{config.LOCATION_LOST_MAX_H:g} h. Stop it with 'stop tracking the {device}' or /track off.")
+    return (f"Lost mode off for the {device}: no more location messages." if was
+            else f"Lost mode was already off for the {device}.")
 
 
 def _haversine_m(a: tuple[float, float], b: tuple[float, float]) -> float:

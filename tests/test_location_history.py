@@ -86,3 +86,30 @@ def test_location_history_tool_opens_map(monkeypatch, tmp_path):
     locationlog.record("laptop", 28.05, 81.61, 20, "ip", "Home", ts=time.time() - 100)
     out = lh.location_history(device="laptop", hours=24)
     assert "Laptop history" in out and opened and opened[0].endswith(".html")
+
+
+def test_lost_mode_ends_by_itself(monkeypatch):
+    from jarvis.core import store
+    sent = []
+    monkeypatch.setattr(config, "TELEGRAM_BOT_TOKEN", "x")
+    monkeypatch.setattr("jarvis.core.notify.notify", lambda *a, **k: sent.append(a) or [])
+    store.kv_set(locationlog._lost_key("laptop"), "1")  # old style (no time): a forgotten /track
+    assert not locationlog.lost_mode("laptop") and not sent
+    store.kv_set(locationlog._lost_key("laptop"), str(__import__("time").time() - 7 * 3600))
+    assert not locationlog.lost_mode("laptop") and "Lost mode ended" in sent[-1][0]
+    assert locationlog.set_lost("laptop", False) == "Lost mode was already off for the laptop."
+
+
+def test_stop_tracking_and_mute_phrases_route_at_zero_tokens():
+    from jarvis.core import fastpath
+    m = fastpath.match
+    assert m("stop tracking my laptop").args == {"action": "track_off"}
+    assert m("stop sending me laptop location").args == {"action": "track_off"}
+    assert m("Please disable the resource allot RAM for 20 minutes.").args == \
+        {"action": "on", "what": "resource", "minutes": 20.0}
+    assert m("don't send me the location for two hours").args["minutes"] == 120.0
+    assert m("do not send this for 1 hour").args == {"action": "on", "what": "last", "minutes": 60.0}
+    assert m("mute all alerts for half an hour").args == {"action": "on", "what": "all", "minutes": 30.0}
+    assert m("unmute alerts").args == {"action": "off", "what": "all"}
+    assert m("which alerts are muted").args == {"action": "status"}
+    assert m("turn off notifications") is None  # Do Not Disturb, not a KURAMA mute

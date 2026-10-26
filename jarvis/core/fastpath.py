@@ -623,7 +623,78 @@ def power_mode_intent(t: str) -> Intent | None:
     return None
 
 
+# --- alert mute: "don't send RAM warnings for 20 minutes", "mute all alerts for an hour", "unmute alerts" ---
+_MUTE_KIND = (("resource", r"ram|memory|resource|cpu|swap|disk"), ("location", r"location|gps|tracking"),
+              ("jobs", r"jobs?|tasks?"), ("downloads", r"downloads?"), ("digest", r"(?:daily\s+)?(?:summary|digest)"),
+              ("reminders", r"reminders?|timers?"), ("guard", r"guard|theft"), ("internet", r"internet|wi-?fi|network"),
+              ("all", r"all|every|any|other"), ("last", r"this|that|these|those|it|the same|such"))
+_MUTE_NOUN = r"(?:alerts?|allots?|alarts?|warnings?|notifications?|notifs?|messages?|pings?|updates?|reports?)"
+_MUTE_VERB = (r"(?:mute|silence|pause|snooze|stop|disable|turn\s+off|block|hold|hide|quiet|"
+              r"(?:do\s*n[o']?t|dont|never)\s+(?:send|show|give|tell|ping|notify|bother|disturb)(?:\s+me)?(?:\s+with)?|"
+              r"no\s+more|stop\s+(?:sending|showing|giving)(?:\s+me)?)")
+_NUMW = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "ten": 10, "fifteen": 15,
+         "twenty": 20, "thirty": 30, "forty": 40, "forty five": 45, "fifty": 50, "sixty": 60, "few": 5, "couple of": 2}
+_MUTE_FOR = re.compile(r"\b(?:for|till|until)\s+(?:the\s+next\s+|next\s+)?(?P<half>half\s+an?\s+)?(?P<n>\d+(?:\.\d+)?|"
+                       + "|".join(sorted(_NUMW, key=len, reverse=True)) + r")?\s*(?P<u>min(?:ute)?s?|m|hours?|hrs?|h|"
+                       r"days?|today|tonight|the\s+day)\b", I)
+
+
+def _mute_minutes(t: str) -> float | None:
+    m = _MUTE_FOR.search(t) or re.search(r"\b(?P<u>today|tonight)\b(?P<half>)(?P<n>)", t, I)
+    if not m:
+        return None
+    u = m.group("u").lower()
+    if m.group("half"):
+        return 30.0
+    if u in ("today", "tonight", "the day"):
+        end = time.localtime()
+        return max(30.0, (23 - end.tm_hour) * 60 + (60 - end.tm_min))
+    n = m.group("n")
+    n = float(n) if n and n[0].isdigit() else float(_NUMW.get((n or "one").lower(), 1))
+    return n * (1440 if u.startswith("d") else 60 if u.startswith("h") else 1)
+
+
+def mute_intent(t: str) -> Intent | None:
+    """0-token alert mute / unmute / status; the time is required unless an alert word is named."""
+    low = t.lower().strip(" .!?")
+    if re.fullmatch(r"(?:please\s+)?(?:which|what)\s+(?:alerts?|notifications?|warnings?)\s+(?:are|is)\s+(?:muted|"
+                    r"paused|off|silenced)|(?:show\s+)?muted\s+(?:alerts?|notifications?)", low):
+        return Intent("mute", "mute_alerts", "telegram", {"action": "status"})
+    if m := (re.fullmatch(r"(?:please\s+)?(?:unmute|resume|turn\s+(?:back\s+)?on|enable|allow|bring\s+back)\s+(?:the\s+|my\s+)?"
+                          r"(?P<k>\w+\s+)?" + _MUTE_NOUN + r"(?:\s+again|\s+back(?:\s+on)?)?(?:\s+please)?", low)
+             or re.fullmatch(r"(?:please\s+)?turn\s+(?:the\s+|my\s+)?(?P<k>\w+\s+)?" + _MUTE_NOUN
+                             + r"\s+(?:back\s+on|on\s+again)(?:\s+please)?", low)):
+        k = (m.group("k") or "").strip()
+        kind = next((n for n, rx in _MUTE_KIND if k and re.fullmatch(rx, k)), "all")
+        return Intent("mute", "mute_alerts", "telegram", {"action": "off", "what": "all" if kind == "last" else kind})
+    if not re.search(r"^(?:please\s+|kurama\W+|can\s+you\s+|i\s+want\s+you\s+to\s+)*" + _MUTE_VERB + r"\b", low):
+        return None
+    mins = _mute_minutes(low)
+    noun = re.search(r"\b" + _MUTE_NOUN + r"\b", low)
+    kinds = [n for n, rx in _MUTE_KIND if re.search(r"\b(?:" + rx + r")\b", low)]
+    if not noun and re.search(r"\b(?:send|sending|show|give|tell|ping)\b", low) and (
+            "location" in kinds or ("last" in kinds and mins)):
+        noun = True  # "don't send (me) the location for 2 hours", "do not send this for 1 hour"
+    if not noun or (mins is None and not kinds) or len(low.split()) > 16:
+        return None  # "turn off notifications" = Do Not Disturb; "stop" alone = audio
+    if re.search(r"\b(?:wifi|bluetooth|music|song|video|timer|alarm)\b", low) and "alert" not in low and mins is None:
+        return None
+    kind = next((k for k in kinds if k != "last"), "last" if "last" in kinds else "all")
+    if kind == "all" and "last" in kinds and not re.search(r"\b(?:all|every|any)\b", low):
+        kind = "last"
+    return Intent("mute", "mute_alerts", "telegram", {"action": "on", "what": kind, "minutes": mins or 0})
+
+
+_STOP_TRACK = re.compile(r"^(?:please\s+|kurama\W+)*(?:stop|end|turn\s+off|disable|cancel)\s+(?:the\s+)?(?:tracking|lost\s+mode|"
+                         r"(?:sending(?:\s+me)?\s+)?(?:the\s+|my\s+)?(?:laptop(?:'s)?\s+)?location(?:\s+(?:messages?|updates?|alerts?))?)"
+                         r"(?:\s+(?:for\s+)?(?:my|the|of\s+my|of\s+the)?\s*laptop)?(?:\s+(?:please|now))?\s*[.!]*$", I)
+
+
 def _p7_intent(t: str) -> Intent | None:
+    if _STOP_TRACK.match(t) and not _mute_minutes(t):  # lost mode is what sends location: switch it off
+        return Intent("guard", "laptop_guard", "power", {"action": "track_off"})
+    if mu := mute_intent(t):
+        return mu
     if pm := power_mode_intent(t):
         return pm
     if m := _full(DIGEST, t):

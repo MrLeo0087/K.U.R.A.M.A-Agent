@@ -1,13 +1,18 @@
 """Resource guard (worker "resource_guard") and the snapshot behind the resource_status tool.
 
 Checks RAM, swap, CPU (5-minute average of samples), disk ("/" and the home filesystem) and KURAMA's
-own RSS against the CLAUDE.md caps (core < 600 MB, everything < 1.5 GB). An alert names the top 3
-memory hogs. Hysteresis: a metric alerts once when it crosses its threshold, then again only after
-it has recovered (fallen RESOURCE_HYSTERESIS_PCT below) or RESOURCE_REALERT_S (30 min) later.
+own memory (PSS: shared libraries split fairly) against the CLAUDE.md caps (core < 600 MB, everything
+< 1.5 GB). An alert names the top 3 memory hogs. A metric alerts once, then stays quiet for
+RESOURCE_COOLDOWN_S (2 h) even if it dips and comes back (RAM hovering at 89-91% used to alert every
+15 min). When KURAMA's own memory grows past RESOURCE_TRIM_AT of its cap, it first cleans itself
+(gc + malloc_trim: returns freed memory to the OS, nothing is stopped) and only alerts if still high.
+Muted alerts ("no RAM warnings for 20 minutes") are handled by notify.
 """
 from __future__ import annotations
 
 import collections
+import ctypes
+import gc
 import os
 import time
 from pathlib import Path
@@ -30,8 +35,25 @@ def top_memory(n: int = 3) -> list[tuple[str, int, float]]:
     return sorted(procs, key=lambda x: -x[2])[:n]
 
 
+def _pss(p, rss: int) -> int:
+    """Proportional set size (Linux smaps_rollup); RSS when it can't be read."""
+    try:
+        return p.memory_full_info().pss
+    except (psutil.Error, AttributeError, OSError):
+        return rss
+
+
+def trim_memory() -> None:
+    """Give KURAMA's freed memory back to the OS (this process: the server runs the workers inside)."""
+    gc.collect()
+    try:
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except (OSError, AttributeError):
+        pass
+
+
 def jarvis_rss() -> tuple[float, float]:
-    """(core MB, total MB): RSS of `python -m jarvis…` processes; core excludes the workers."""
+    """(core MB, total MB): PSS of `python -m jarvis…` processes; core excludes the workers."""
     core = total = 0.0
     for p in psutil.process_iter(["pid", "cmdline", "memory_info"]):
         cmd = p.info.get("cmdline") or []
@@ -42,7 +64,7 @@ def jarvis_rss() -> tuple[float, float]:
         mod = cmd[i + 1] if i + 1 < len(cmd) else ""
         if mod != "jarvis" and not mod.startswith("jarvis."):
             continue
-        rss = mi.rss / MB
+        rss = _pss(p, mi.rss) / MB
         total += rss
         if not mod.startswith("jarvis.workers"):
             core += rss
@@ -106,7 +128,10 @@ class ResourceGuard(Worker):
         n = max(2, int(300 / self.interval_s))
         self.cpu_samples: collections.deque[float] = collections.deque(maxlen=n)
         self.alerting: dict[str, float] = {}  # metric -> last alert time (present = above threshold)
+        self.sent: dict[str, float] = {}  # metric -> last alert time (kept after recovery: cooldown)
         self.last: dict = {}
+        self.last_trim = 0.0
+        self.trims = 0
 
     def setup(self) -> None:
         psutil.cpu_percent(interval=None)  # prime: the first call always returns 0
@@ -118,6 +143,14 @@ class ResourceGuard(Worker):
         self.cpu_samples.append(psutil.cpu_percent(interval=None))
         avg = sum(self.cpu_samples) / len(self.cpu_samples)
         snap = snapshot(cpu_avg=avg)
+        now = time.time()
+        if (snap["jarvis_core_mb"] >= config.JARVIS_CORE_MAX_MB * config.RESOURCE_TRIM_AT
+                and now - self.last_trim >= config.RESOURCE_TRIM_EVERY_S):
+            self.last_trim, before = now, snap["jarvis_core_mb"]
+            trim_memory()
+            self.trims += 1
+            snap = snapshot(cpu_avg=avg)
+            self.log.info("trimmed KURAMA memory: %s -> %s MB", before, snap["jarvis_core_mb"])
         if len(self.cpu_samples) < self.cpu_samples.maxlen:
             snap["cpu_pct_partial"] = True
         self.last = snap
@@ -132,9 +165,9 @@ class ResourceGuard(Worker):
                 continue  # wait for a full 5-minute window
             margin = config.RESOURCE_HYSTERESIS_PCT if unit == "%" else limit * config.RESOURCE_HYSTERESIS_PCT / 100
             if value >= limit:
-                last = self.alerting.get(metric)
-                if last is None or now - last >= config.RESOURCE_REALERT_S:
-                    self.alerting[metric] = now
+                last = self.sent.get(metric)
+                if last is None or now - last >= config.RESOURCE_COOLDOWN_S:
+                    self.alerting[metric] = self.sent[metric] = now
                     fired.append(metric)
             elif metric in self.alerting and value < limit - margin:
                 del self.alerting[metric]
