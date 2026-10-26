@@ -62,7 +62,7 @@ def pactl(monkeypatch, tmp_path):
 def test_device_sound_off_routes_everything_through_the_canceller(pactl):
     st = devaudio.set_hear(False)
     assert st["cancelling"] and not st["hear"]
-    assert pactl.default == {"sink": devaudio.EC_SINK, "source": devaudio.EC_SOURCE}
+    assert pactl.default == {"sink": devaudio.EC_SINK, "source": HW_SRC}  # other apps keep the real mic
     args = next(iter(pactl.mods.values()))
     assert f"sink_master={HW_SINK}" in args and f"source_master={HW_SRC}" in args
     assert devaudio.raw_source() == HW_SRC  # the sleeping wake listener reads the cheap raw mic
@@ -162,4 +162,4 @@ def test_mic_off_unloads_the_canceller_and_on_brings_it_back(pactl):
     assert not devaudio.cancelling() and pactl.default == {"sink": HW_SINK, "source": HW_SRC}
     store.kv_set("mic_off", "")
     devaudio.apply()
-    assert devaudio.cancelling() and pactl.default["source"] == devaudio.EC_SOURCE
+    assert devaudio.cancelling() and pactl.default["source"] == HW_SRC

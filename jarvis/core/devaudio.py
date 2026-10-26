@@ -1,8 +1,9 @@
 """Device sound and the mic ("Hear device sound" in settings).
 
 OFF (default): the laptop's own sound (videos, music, KURAMA's own voice) is removed from what KURAMA hears.
-PipeWire's echo canceller (module-echo-cancel, webrtc) gets a sink that every app plays through and a mic source
-with that sound subtracted; both become the defaults, so it covers all apps. Measured here: the speaker's echo drops
+PipeWire's echo canceller (module-echo-cancel, webrtc) gets a sink that every app plays through (the default speaker)
+and a mic source with that sound subtracted, which only KURAMA's page records from (picked by name; the system's
+default mic stays the real one, so other apps never lose their mic when the canceller is loaded or removed). Measured here: the speaker's echo drops
 by ~20 dB after 2-3 s. Cost: ~9% of a core, but only while something records that mic (KURAMA awake and listening);
 playback through it costs nothing extra, and the sleeping wake listener reads the raw mic (raw_source()).
 The canceller sends sound to the real speaker of the moment: headphones plugged in or Bluetooth connected -> it
@@ -139,7 +140,11 @@ def cancel_on(sink: str | None = None) -> None:
                 break
             time.sleep(0.1)
         _pactl("set-default-sink", EC_SINK)
-        _pactl("set-default-source", EC_SOURCE)
+        # the system's default MIC stays the real one: other apps (Brave / WhatsApp / Meet) never record through our
+        # virtual mic, so loading/unloading the canceller can't pull a mic away from them ('Microphone not found');
+        # KURAMA's page picks the cleaned mic by its name ('KURAMA')
+        if _pactl("get-default-source").strip() != source:
+            _pactl("set-default-source", source)
 
 
 def cancel_off() -> None:
