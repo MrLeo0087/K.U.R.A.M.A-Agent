@@ -855,7 +855,7 @@ async function loadWeather() {
   let it = null;
   try { it = (await api.fetchWeather()).items?.[0] || null; } catch { it = null; }
   const ok = !!it && !it.error && it.temp_c != null;
-  $("wx-place").textContent = (it?.place || "Nepalgunj").toUpperCase();
+  $("wx-place").textContent = (it?.place || "Nepalgunj");
   if (ok) tweenTo("wx-temp", it.temp_c, 0); else $("wx-temp").textContent = "--";
   $("wx-desc").textContent = ok ? it.desc || "" : "unavailable";
   $("wx-sub").textContent = ok ? `Feels ${Math.round(it.feels_c)}° · ${Math.round(it.humidity)}% · ${Math.round(it.wind_kmh)} km/h` : "";
@@ -1238,7 +1238,7 @@ function renderWork(w) {
   $("todo-items").innerHTML = (w.items || []).map((r) => `<li><span class="ell" title="${esc(r.title)}">${ic[r.type] || "•"} ${esc(r.title)}</span>
     <small>${esc(fmtDue(r.due))}</small><button type="button" class="tb ok" data-todo="done" data-title="${esc(r.title)}" data-type="${r.type}" title="Done" aria-label="Done">✓</button>
     <button type="button" class="tb" data-todo="remove" data-title="${esc(r.title)}" data-type="${r.type}" title="Delete" aria-label="Delete">✕</button></li>`).join("");
-  $("work-pill").textContent = gs.length ? `${gs.length} goal${gs.length > 1 ? "s" : ""}` : "";
+  $("work-pill").textContent = gs.length ? `${gs.length} long task${gs.length > 1 ? "s" : ""}` : "";
 }
 document.addEventListener("click", async (e) => { // Work card: ✓ done / ✕ delete one to-do or reminder (no chat, 0 tokens)
   const b = e.target.closest("[data-todo]");
@@ -1382,14 +1382,14 @@ function workHtml(d) {
     ${ask(`what did we do this week on ${g.name}`, "This week")}${ask(`how is ${g.name} going`, "Progress")}
     ${g.kind === "project" ? ask(`make the ${g.name} report`, "Report") : ""}
     ${g.folder ? `<button type="button" class="act ghost" data-act="show_folder" data-path="${esc(g.folder)}">Folder</button>` : ""}
-    ${ask(`${g.status === "paused" ? "resume" : "pause"} the ${g.name} goal`, g.status === "paused" ? "Resume" : "Pause")}</div></div>`)).join("");
+    ${ask(`${g.status === "paused" ? "resume" : "pause"} the ${g.name} long task`, g.status === "paused" ? "Resume" : "Pause")}</div></div>`)).join("");
   const help = '<p class="tiny">Say: “my exam is in 30 days, remind me 3 times a day” · “I started a project that ends in 6 months, ask me every day” · “Thesis update: wrote chapter 2” · “move my exam to December 2” · “the exam is over”. Stored in ~/Documents/KURAMA/goals.xlsx.</p>';
   const ic = { reminder: "⏰", todo: "✅", read: "📖" };
   const items = (d.items || []).length ? tbl(d.items.map((r, i) => [`${i + 1}. ${ic[r.type] || "•"} ${r.link ? `<a href="${esc(r.link)}" target="_blank" rel="noopener">${esc(r.title)}</a>` : esc(r.title)}${r.tag ? ` <small>#${esc(r.tag)}</small>` : ""}`,
     `${esc(fmtDue(r.due))} <button type="button" class="act ghost" data-ask="done ${i + 1}">Done</button>`])) : '<p class="empty">Your list is empty.</p>';
   const c = d.coding || {};
   const code = c.project ? codingHtml(c).replace(/^<div class="sgrid">|<\/div>$/g, "") : tile("Coding", '<p class="empty">No project yet. Say “protect my project”.</p>', "span3");
-  return `<div class="sgrid">${tile("Goals & long tasks", (goals || '<p class="empty">No goals yet.</p>') + help, "span3 gtile")}
+  return `<div class="sgrid">${tile("Long tasks", (goals || '<p class="empty">No long tasks yet.</p>') + help, "span3 gtile")}
     ${tile("My list · reminders, to-do, read later", items + `<div class="btns">${ask("show my list", "Show in chat")}</div>`, "span3")}
     ${code}</div>`;
 }

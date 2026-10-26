@@ -1064,13 +1064,37 @@ body:not(.mini)[data-state="speaking"] .kmark .k3 { fill: #ffe08a; }
 body:not(.mini)[data-state="thinking"] .kmark .k3 { fill: #ffd27a; }
 body:not(.mini)[data-state="error"] .kmark .k3 { fill: #ff6b6b; }
 
-/* layout (owner): Now & today on the left, a compact weather, Work up, and the rest of the right column = the workspace */
-body:not(.mini) .col.right .wx-head { height: auto; margin-bottom: 0; }
-body:not(.mini) .col.right .wx-big { font-size: clamp(34px, 3.2vw, 56px); }
-body:not(.mini) .col.right .wx-head .wx-hours { display: none; }
-body:not(.mini) .col.right .code-card { flex: none; }
-body:not(.mini) .col.right .code-card .code-body .cfiles { display: none; }
-body:not(.mini) .col.right .ws-card { flex: 1 1 0; min-height: 320px; }
+/* ===== polish (owner: better looking, readable, organized; 2026-10-27) ===== */
+/* layout: room at the top for the mode pill + power button; Now & today left; the workspace fills the right */
+body:not(.mini) .layout { padding-top: 52px; }
+body:not(.mini) .col.left { overflow: visible; }
 body:not(.mini) .col.right { overflow: hidden; }
-body:not(.mini) .col.left .today-card { flex: none; }
-body:not(.mini) .col.left { overflow-y: auto; scrollbar-width: none; }
+body:not(.mini) .col.left .today-card, body:not(.mini) .col.right .code-card { flex: none; }
+body:not(.mini) .col.right .code-card .code-body .cfiles { display: none; }
+body:not(.mini) .col.right .ws-card { flex: 1 1 0; min-height: 300px; }
+
+/* card titles: plain readable headings (no 01/02 badges, no rule line) */
+body:not(.mini) .col .card .card-title::before, body:not(.mini) .col .card .card-title::after { content: none; display: none; }
+body:not(.mini) .card-title { font-size: 13px; letter-spacing: 0.04em; text-transform: none; color: var(--text); font-weight: 500; margin-bottom: 12px; }
+body:not(.mini) .card-title .pill { margin-left: auto; }
+body:not(.mini) .label, body:not(.mini) .tri3 .label, body:not(.mini) .trio span { letter-spacing: 0.1em; }
+
+/* clock: a little smaller so "AM" never gets cut, seconds dimmer */
+body:not(.mini) .clock { font-size: clamp(54px, 5.4vw, 104px); }
+body:not(.mini) .clock-block { height: auto; margin-bottom: 6px; }
+body:not(.mini) .clock-side .sec { color: var(--dim); }
+
+/* weather: one tidy card at the top right: place + sky on the left, the big temperature on the right */
+body:not(.mini) .col.right .wx-head { height: auto; margin: 0; text-align: left; display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "line big" "row big"; align-items: center; column-gap: 12px; row-gap: 4px;
+  background: var(--card); border: 1px solid var(--card-border); border-radius: 14px; padding: 14px 18px; }
+body:not(.mini) .col.right .wx-head .wx-big { grid-area: big; font-size: 46px; justify-content: flex-end; align-items: center; }
+body:not(.mini) .col.right .wx-head .wx-big .deg { font-size: 15px; margin-top: 0; align-self: flex-start; }
+body:not(.mini) .col.right .wx-head .wx-icon { width: 28px; height: 28px; margin-right: 8px; }
+body:not(.mini) .col.right .wx-head .wx-line { grid-area: line; margin: 0; font-size: 14px; letter-spacing: 0.02em; text-transform: none; color: var(--text); }
+body:not(.mini) .col.right .wx-head .wx-line::after { display: none; }
+body:not(.mini) .col.right .wx-head .wx-row { grid-area: row; display: block; margin: 0; }
+body:not(.mini) .col.right .wx-head .wx-row small { font-size: 12px; color: var(--muted); }
+body:not(.mini) .col.right .wx-head .wx-hours { display: none; }
+body:not(.mini) .col .card::before { content: none; display: none; } /* no HUD corner marks */
+body:not(.mini) #wx-desc { display: inline-block; } body:not(.mini) #wx-desc::first-letter { text-transform: uppercase; }
