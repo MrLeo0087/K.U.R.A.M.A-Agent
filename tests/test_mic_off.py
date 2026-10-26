@@ -11,6 +11,9 @@ def api(make, monkeypatch):  # noqa: F811
     started = []
     monkeypatch.setattr(wake.SERVICE, "start", lambda: started.append(1))
     monkeypatch.setattr(wake.SERVICE, "stop", lambda: started.clear())
+    from jarvis.core import devaudio
+    applied = []
+    monkeypatch.setattr(devaudio, "apply", lambda: applied.append(devaudio.mic_off()))  # never the real pactl
     return make(), started
 
 

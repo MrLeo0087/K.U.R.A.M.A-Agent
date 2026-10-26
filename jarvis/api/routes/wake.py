@@ -82,9 +82,14 @@ class MicIn(BaseModel):
 @router.post("/mic", summary="Mic off (mute / text mode): stop every KURAMA listener and refuse new ones; on = allowed again")
 async def wake_mic(body: MicIn):
     from jarvis.core import store
+    changed = mic_off() != body.off
     store.kv_set(MIC_OFF_KEY, "1" if body.off else "")
     if body.off:
         SERVICE.stop()
+    if changed:  # the echo canceller keeps the real mic RUNNING: unload it while off, load it back after
+        from fastapi.concurrency import run_in_threadpool
+        from jarvis.core import devaudio
+        await run_in_threadpool(devaudio.apply)
     return {"mic_off": body.off}
 
 

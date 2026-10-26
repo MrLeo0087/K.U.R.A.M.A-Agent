@@ -80,6 +80,16 @@ def hear() -> bool:
     return store.kv_get(KEY, "1") == "1"
 
 
+def mic_off() -> bool:
+    """The user muted the mic / chose text mode: the canceller must not hold the real mic (it keeps it RUNNING)."""
+    from jarvis.core import store
+    return store.kv_get("mic_off") == "1"
+
+
+def wanted() -> bool:
+    return not hear() and not mic_off()
+
+
 def cancelling() -> bool:
     try:
         return bool(_ours())
@@ -150,7 +160,7 @@ def apply() -> dict:
     if not available():
         return {**status(), "error": "pactl not found"}
     try:
-        if hear():
+        if not wanted():  # 'hear device sound' on, or the mic is off: no canceller, real speaker + mic
             cancel_off()
         else:
             cancel_on()
@@ -169,7 +179,7 @@ def set_hear(on: bool) -> dict:
 
 def _follow() -> None:
     """A speaker came or went: aim the canceller at the newest real one (headphones, Bluetooth, HDMI)."""
-    if hear() or not cancelling():
+    if not wanted() or not cancelling():
         return
     saved, sinks = _load_saved(), _names("sinks")
     real = [s for s in sinks if _real(s)]
@@ -195,14 +205,14 @@ def watch() -> None:
     def run() -> None:
         while True:
             try:
-                if not hear() and not cancelling():  # the audio server restarted: set it up again
+                if wanted() and not cancelling():  # the audio server restarted: set it up again
                     cancel_on()
                 p = subprocess.Popen(["pactl", "subscribe"], stdout=subprocess.PIPE, text=True)
                 for line in p.stdout:  # "Event 'new' on sink #123", "Event 'change' on server #45"
                     if "'change' on server" in line:  # the user picked another speaker in Settings
                         try:
                             cur = _pactl("get-default-sink").strip()
-                            if _real(cur) and not hear() and cancelling():
+                            if _real(cur) and wanted() and cancelling():
                                 cancel_on(cur)
                         except Exception as e:
                             log.warning("device sound: %s", e)
