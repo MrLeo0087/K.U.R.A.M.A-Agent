@@ -5,7 +5,8 @@ from jarvis.core.registry import tool
 
 
 @tool(group="schedule", safety="safe",
-      description="Set a reminder at a time (once or repeating); alerts on desktop, Telegram and by voice.")
+      description="Remind the user of a task / work / to-do at a time ('schedule reading the book at 11:45 pm'), once or "
+      "repeating; alerts on desktop, Telegram and by voice.")
 def add_reminder(text: str, when: str) -> str:
     """Set a reminder.
 

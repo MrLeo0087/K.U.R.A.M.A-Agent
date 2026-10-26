@@ -212,7 +212,7 @@ def add(name: str, end: str = "", remind: str = "", ask: str = "", ask_at: str =
     today = today or date.today()
     name = " ".join((name or "").split()).strip(" .,:")[:60]
     if not name:
-        return "What should I call this goal? For example: 'my physics exam is in 30 days'."
+        return "What should I call this long task? For example: 'my physics exam is in 30 days'."
     name = name[0].upper() + name[1:]
     end_d = _d(end) or end_in(end, today) if end else None
     if end and not end_d:
@@ -266,7 +266,7 @@ def _folder(g: dict) -> Path:
 
 def _added_text(g: dict, today: date) -> str:
     end = _d(g["end"])
-    parts = [f"Added the goal '{g['name']}'" + (f", ends {_nice(end)} ({(end - today).days} days)" if end else "") + "."]
+    parts = [f"Added the long task '{g['name']}'" + (f", ends {_nice(end)} ({(end - today).days} days)" if end else "") + "."]
     if g["remind"]:
         parts.append(f"I'll remind you at {_times_words(g['remind'])} every day.")
     if g["ask"]:
@@ -330,7 +330,7 @@ def edit(goal: str, name: str = "", end: str = "", remind: str = "", ask: str = 
             if st in ("delete", "remove"):
                 goals.remove(g)
                 _save(goals, logs)
-                return f"Deleted the goal '{g['name']}' (its log and folder are kept)."
+                return f"Deleted the long task '{g['name']}' (its log and folder are kept)."
             if st in ("active", "paused", "done"):
                 g["status"] = st
                 said.append({"active": "running again", "paused": "paused (no messages)", "done": "marked done, messages stopped"}[st])
@@ -380,8 +380,8 @@ def _match(goals: list[dict], goal: str) -> dict | None:
 def _not_found(goal: str, goals: list[dict]) -> str:
     live = [g["name"] for g in goals if g["status"] != "done"]
     if not live:
-        return "You don't have any goals yet. Say e.g. 'my exam is in 30 days, remind me every day'."
-    return f"I couldn't find a goal called '{goal}'. Your goals: " + ", ".join(live) + "."
+        return "You don't have any long tasks yet. Say e.g. 'my exam is in 30 days, remind me every day'."
+    return f"I couldn't find a long task called '{goal}'. Your long tasks: " + ", ".join(live) + "."
 
 
 # --- the log ---------------------------------------------------------------------------------------------------------
@@ -508,19 +508,13 @@ def _count_words(left: int, end: date) -> str:
 def show() -> str:
     gs = [g for g in all_goals() if g["status"] != "done"]
     if not gs:
-        return "No goals yet. Say e.g. 'my exam is in 30 days, remind me every day' or 'I started a project that ends in 6 months, ask me every day'."
-    return "🎯 Your goals:\n" + "\n".join(f"{i}. {status_text(g)}" for i, g in enumerate(gs, 1))
+        return "No long tasks yet. Say e.g. 'my exam is in 30 days, remind me every day' or 'I started a project that ends in 6 months, ask me every day'."
+    return "🎯 Your long tasks:\n" + "\n".join(f"{i}. {status_text(g)}" for i, g in enumerate(gs, 1))
 
 
 def overview() -> str:
-    """Everything on the Work card in words: goals, my list (reminders / to-do / read later), the coding project."""
-    parts = [show()]
-    try:
-        from jarvis.core import readlater
-        rows = readlater.ordered()
-        parts.append(readlater.show() if rows else "Your list (reminders, to-do, read later) is empty.")
-    except Exception as e:
-        log.debug("list for overview failed: %s", e)
+    """'What am I working on': the running long tasks + the coding project."""
+    parts = [show()]  # what I'm working on = the long tasks + the code (the to-do list has its own question)
     try:
         from jarvis.core import timemachine as tm
         parts.append(f"Coding project: {tm.resolve('').name}.")

@@ -167,7 +167,7 @@ def test_owner_log_remove_and_correct(sent):
               "delete my exam goal", "cancel the exam countdown", "I don't need the exam reminder anymore"):
         assert args(q) == {"action": "delete", "goal": "1"}, q
     assert fastpath.match("delete exam.pdf") is None or fastpath.match("delete exam.pdf").tool != "goals"
-    assert goals.run(**args("remove the exam")).startswith("Deleted the goal 'Exam'") and goals.show().startswith("No goals")
+    assert goals.run(**args("remove the exam")).startswith("Deleted the long task 'Exam'") and goals.show().startswith("No long tasks")
 
 
 def test_correction_never_hits_another_goal(sent):
@@ -182,6 +182,26 @@ def test_work_overview(sent, monkeypatch):
               "show my work list", "which projects do I have"):
         assert args(q) == {"action": "overview"}, q
     out = goals.run("overview")
-    assert "Exam: 30 days left" in out and "list" in out.lower()
+    assert "Exam: 30 days left" in out and "Your long tasks" in out
     assert fastpath.match("what is my project about") is None or fastpath.match("what is my project about").tool != "goals"
     assert fastpath.match("what was I working on").tool == "where_was_i"
+
+
+def test_todo_vs_long_tasks_vs_code(sent):
+    """Owner's 11:33 PM log: to-do questions went to knowledge/web, 'schedule a work for 11:41 pm' became a computer
+    command waiting for yes ('Stopped.'), and Whisper's 'tax' meant 'task'."""
+    todo = {"action": "list", "text": "todo"}
+    for q in ("Is there anything in my ToDo?", "Is there any tax for me today?", "what is my reminder today",
+              "what is the current work I have to do", "Show today's reminders and the current work I have to do",
+              "what are my tasks for today", "what do I have to do today"):
+        i = fastpath.match(q)
+        assert i and i.tool == "read_later" and i.args == todo, (q, i)
+    i = fastpath.match("Okay, schedule a work for 11.41pm for reading the book.")
+    assert i.tool == "read_later" and i.args == {"action": "todo", "text": "reading the book", "when": "11.41pm"}
+    assert fastpath.match("Schedule 2-2 tax for 11.41 pm for reading book.").args["text"] == "reading book"
+    i = fastpath.match("schedule a shutdown at 10 pm")
+    assert i is None or i.tool != "read_later"  # a computer action stays schedule_command
+    for q in ("What is the thing that I have to do for my month?", "show my long tasks"):
+        assert args(q) == {"action": "list"}, q
+    assert args("what am I working on") == {"action": "overview"}
+    assert fastpath.normalize("I need to pay income tax") == "I need to pay income tax"

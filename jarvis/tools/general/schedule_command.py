@@ -5,7 +5,8 @@ from jarvis.core.registry import tool
 
 
 @tool(group="schedule", safety="confirm",
-      description="Schedule a KURAMA command to run later or repeatedly (e.g. 'weather in Kathmandu' every day at 8).")
+      description="Make KURAMA RUN an action later or repeatedly (e.g. 'weather in Kathmandu' every day at 8, shut down at 11). "
+      "NOT for tasks/work the user will do (reading, studying, calls): use add_reminder.")
 def schedule_command(command: str, when: str) -> str:
     """Schedule a command.
 

@@ -247,13 +247,17 @@ def _item(i: int, r: dict) -> str:
 
 def show(limit: int = 20, tag: str = "", kind: str = "") -> str:
     rows = ordered(tag)
+    want = ("reminder", "todo") if kind == "todo" else (kind,) if kind else ()  # 'to-do' = reminders + tasks
+    if want and rows and not any(r["type"] in want for r in rows):
+        return ("Nothing on your to-do list: no tasks or reminders." if kind == "todo" else "Nothing there.") + \
+            " Say 'schedule reading the book at 11:45 pm' or 'add buy milk to my to-do list'."
     if not rows:
         return ("Your list is empty." + (f" Nothing tagged #{tag}." if tag else "")
                 + " Say 'add <task> to my to-do list', 'remind me to ... at 5 pm' or select a link and say 'read this later'.")
     lines, n = [f"📋 Your list ({len(rows)})" + (f" #{tag.lstrip('#')}" if tag else "")], 0
     for label, typ in (("⏰ Reminders", "reminder"), ("✅ To-do", "todo"), ("📖 Read later", "read")):
         part = [r for r in rows if r["type"] == typ]
-        if kind and kind != typ:
+        if want and typ not in want:
             n += len(part)
             continue
         if part:

@@ -1826,6 +1826,46 @@ def links_intent(t: str) -> Intent | None:
     return None
 
 
+# --- the to-do list = short tasks for today / soon (reminders + to-dos); long tasks are goals; the code is the project ---
+_TD_CMD = re.compile(r"\b(?:shut\s*down|restart|reboot|run|command|script|backup|open|launch|start|turn\s+(?:on|off)|lock|suspend|"
+                     r"sleep|kill|close|install|download|send|message|email|every|daily|weekly|hourly)\b", I)
+
+
+def todo_now_intent(t: str) -> Intent | None:
+    """'schedule a work for 11:41 pm for reading the book', 'schedule reading the book at 11:45 am' -> a to-do with a
+    time (heads-up 10 min before + at the time; NOT schedule_command, which runs computer commands and asks first).
+    'is there anything in my to-do', 'what is my reminder today', 'what is the current work I have to do',
+    'any task for me today' -> the to-do list (reminders + tasks)."""
+    low = t.strip(" .!?").lower()
+    if re.fullmatch(r"(?:okay\W+|ok\W+|so\W+|please\W+|kurama\W+|can\s+you\s+|could\s+you\s+)*(?:"
+                    r"(?:is|are)\s+there\s+(?:anything|something|any\s+(?:tasks?|work|to[\s-]?dos?|reminders?))\s+(?:in|on|for)\s+(?:me\s+)?(?:my\s+|the\s+)?"
+                    r"(?:to[\s-]?do(?:\s*list)?|list|today|now)(?:\s+(?:for\s+)?today)?"
+                    r"|(?:is|are)\s+there\s+any\s+(?:tasks?|work|to[\s-]?dos?|reminders?)(?:\s+for\s+me)?(?:\s+(?:today|now|left))?"
+                    r"|what(?:'s|\s+is|\s+are)?\s+(?:in|on)\s+my\s+to[\s-]?do(?:\s*list)?(?:\s+today)?"
+                    r"|what(?:'s|\s+is|\s+are)?\s+(?:my|the|today'?s)\s+(?:reminders?|tasks?|to[\s-]?dos?)(?:\s+(?:for\s+)?today)?"
+                    r"|what(?:'s|\s+is|\s+are)?\s+(?:the\s+)?(?:current\s+|next\s+)?(?:work|tasks?|things?)\s+(?:that\s+)?i\s+(?:have|need|got)\s+to\s+do(?:\s+(?:today|now|next))?"
+                    r"|what\s+do\s+i\s+(?:have|need)\s+to\s+do(?:\s+(?:today|now|next))?"
+                    r"|(?:show|tell|give)\s+(?:me\s+)?(?:my\s+|the\s+|today'?s\s+)?(?:reminders?|tasks?|to[\s-]?dos?)(?:\s+(?:and|&)\s+(?:the\s+)?"
+                    r"(?:current\s+)?(?:work|tasks?)(?:\s+i\s+have\s+to\s+do)?)?(?:\s+(?:for\s+)?today)?"
+                    r"|(?:my\s+)?(?:tasks?|to[\s-]?dos?|reminders?)\s+(?:for\s+)?today)", low, I):
+        return Intent("todo", "read_later", "browser", {"action": "list", "text": "todo"})
+    m = re.fullmatch(r"(?:okay\W+|ok\W+|so\W+|please\W+|kurama\W+|can\s+you\s+|could\s+you\s+)*(?:schedule|plan)\s+(?P<x>.+)", low, I)
+    if not m or _TD_CMD.search(m.group("x")) or re.search(r"\b(?:timer|alarm|meeting\s+with\s+kurama)\b", low):
+        return None
+    extra, rest = _extras(m.group("x"))
+    if not extra.get("when"):
+        return None
+    task = re.sub(r"^(?:a|an|the|my|one)?\s*(?:new\s+)?(?:work|task|to[\s-]?do|job|thing|reminder)?\s*(?:for|to|of|:)?\s*", "", rest, flags=I)
+    task = re.sub(r"\s+(?:for|to)\s*$", "", task, flags=I)
+    task = re.sub(r"^(?:for|to)\s+", "", task.strip(" ,.-"), flags=I).strip(" ,.-")
+    task = re.sub(r"\b(for|to)\s+\1\b", r"\1", task, flags=I)  # STT doubles: 'for for reading'
+    task = re.sub(r"^\d+(?:-\d+)?\s+(?:tasks?|works?|things?)\s+(?:for|to)\s+", "", task, flags=I)  # '2-2 task for reading'
+    task = re.sub(r"^(?:tasks?|works?)\s+(?:for|to)\s+", "", task, flags=I)
+    if len(task) < 2:
+        return None
+    return Intent("todo", "read_later", "browser", {"action": "todo", "text": task, **extra})
+
+
 # --- goals: long tasks (weeks-months): countdowns, daily check-ins, progress, report (0 tokens) ---
 _G_NOUN = (r"exams?|tests?|finals|interview|deadline|submission|presentation|competition|trip|wedding|project|thesis|"
            r"course|semester|hackathon|internship|dissertation|goal|long[\s-]?(?:term\s+)?task|countdown")
@@ -1885,6 +1925,10 @@ def goal_intent(t: str) -> Intent | None:
             return G("log", goal=g["id"], text=m.group("x").strip())
     if re.fullmatch(r"(?:please\s+)?(?:show|list|see|open|check|tell\s+me|what\s+are|what'?s|give\s+me)?\s*(?:me\s+)?(?:all\s+)?"
                     r"(?:my\s+|the\s+)?(?:goals?|long[\s-]?(?:term\s+)?tasks?|countdowns?)(?:\s+list)?", low, I):
+        return G("list")
+    if re.search(r"\b(?:this|my|the|for\s+(?:the|my|this))\s+month\b|\bmonthly\s+(?:tasks?|work|goals?)\b|\blong[\s-]?(?:term\s+)?(?:tasks?|work)\b", low) \
+            and re.search(r"\b(?:what|which|show|list|tell|any|have\s+to|need\s+to|running)\b", low) and len(low.split()) <= 18 \
+            and not goals.end_in(low):
         return G("list")
     # the whole Work card: 'what is in my working list right now? what project?', 'what am I working on'
     if len(low.split()) <= 22 and re.search(r"\b(?:what|show|tell|list|give|which|see|check)\b", low) and re.search(
@@ -2195,6 +2239,8 @@ def match(text: str) -> Intent | None:
         return pi
     if li := links_intent(t):
         return li
+    if tn := todo_now_intent(t):
+        return tn
     if gi := goal_intent(t):
         return gi
     if rl := read_later_intent(t):

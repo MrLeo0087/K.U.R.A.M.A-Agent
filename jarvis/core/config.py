@@ -92,6 +92,10 @@ STT_FIXES: dict[str, str] = {
     r"\b(this|the|my|better|python|selected|selective|that|whole|most|mouse|simple|clean|detail|detailed|good|new|"
     r"improved)\s+coat\b": r"\1 code",
     r"\bselective\b": "selected",
+    # Whisper hears 'task' as 'tax' / 'tags' (owner): only real tax words stay tax
+    r"(?<!income )(?<!sales )(?<!road )(?<!vat )(?<!pay )(?<!property )\btaxes\b(?!\s+(?:return|rate|refund|office|bill))": "tasks",
+    r"(?<!income )(?<!sales )(?<!road )(?<!vat )(?<!pay )(?<!property )\btax\b(?!\s+(?:return|rate|refund|office|bill|free))": "task",
+    r"\b(my|recent|todo|to-do|long|daily|today'?s|current|the)\s+tags\b": r"\1 tasks",
     r"\b(?:q\.?\s?mar|qmar|key\s?mark|q\.?\s?are|queue\s+are|cue\s+are|kyu\s?ar|q\.?\s?r\.?)\s+(?:code|word|cord|coat)s?\b": "QR code",
     r"\b(this|the|that|a|selected|highlighted)\s+(?:o\.?\s?auth|oauth|wordt|ward)\b": r"\1 word",  # "this word" misheard
     r"\bselect(?:ed)?\s+output\b": "selected word",
