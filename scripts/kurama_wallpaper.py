@@ -175,9 +175,42 @@ class DesktopBackground:
         self.snap_uri = SNAP.as_uri()
         self.gs.connect("changed::picture-uri", lambda *_: GLib.idle_add(self.claim))
 
+    holding_real = False  # minimized: the desktop shows the user's own plain wallpaper, not a dashboard photo
+
+    def show_real(self) -> None:
+        """Mini mode: put the user's real wallpaper back (a still, simple picture) instead of the dashboard
+        snapshot, which could even show whatever dialog was open when it was taken."""
+        if self.gs is None:
+            return
+        self.holding_real = True
+        try:
+            real = json.loads(REAL_WALLPAPER.read_text())
+        except (OSError, ValueError):
+            real = {}
+        uri = real.get("picture-uri", "")
+        if not uri or uri == self.snap_uri:
+            self.gs.set_string("picture-options", "none")  # no picture known: a plain dark desktop
+            Gio.Settings.new("org.gnome.desktop.background").set_string("primary-color", "#0b0c14")
+            return
+        dark = real.get("picture-uri-dark") or uri
+        for k, v in (("picture-uri", uri), ("picture-uri-dark", uri if dark == self.snap_uri else dark)):
+            self.gs.set_string(k, v)
+        self.gs.set_string("picture-options", real.get("picture-options") or "zoom")
+
+    def show_snapshot(self) -> None:
+        """Full KURAMA again: the desktop shows the dashboard snapshot."""
+        self.holding_real = False
+        self.claim()
+
     def claim(self) -> bool:
         """A new wallpaper was set: remember it as the real one, then show our snapshot again."""
         if self.gs is None or not SNAP.is_file():
+            return False
+        if self.holding_real:  # our own show_real() changed it (or the user set one while minimized): keep it
+            cur = {k: self.gs.get_string(k) for k in self.KEYS}
+            if cur["picture-uri"] != self.snap_uri:
+                with contextlib.suppress(OSError):
+                    REAL_WALLPAPER.write_text(json.dumps({**cur, "picture-options": self.gs.get_string("picture-options")}))
             return False
         cur = {k: self.gs.get_string(k) for k in self.KEYS}
         if cur["picture-uri"] != self.snap_uri:
@@ -326,7 +359,18 @@ class Wallpaper:
                 self.bg.claim()
             except Exception as e:
                 print(f"snapshot failed: {e}", file=sys.stderr)
-        self.view.get_snapshot(WebKit2.SnapshotRegion.VISIBLE, WebKit2.SnapshotOptions.NONE, None, done)
+        def checked(view, res):  # never photograph an open picture/dialog: it would become the desktop
+            try:
+                busy = view.evaluate_javascript_finish(res).to_boolean()
+            except Exception:
+                busy = False
+            if not busy:
+                view.get_snapshot(WebKit2.SnapshotRegion.VISIBLE, WebKit2.SnapshotOptions.NONE, None, done)
+        try:
+            self.view.evaluate_javascript("!!document.querySelector('dialog[open]') || document.body.classList.contains("
+                                          "'minimized')", -1, None, None, None, checked)
+        except Exception:
+            self.view.get_snapshot(WebKit2.SnapshotRegion.VISIBLE, WebKit2.SnapshotOptions.NONE, None, done)
         return True  # keep repeating every SNAP_EVERY_S
 
     def on_permission(self, view, req):
@@ -376,6 +420,8 @@ class Wallpaper:
         self.asleep_page = True
         self.view.load_uri("about:blank")  # frees the dashboard's DOM, JS, orb and timers
         self.win.hide()
+        if self.bg is not None:
+            self.bg.show_real()  # the desktop: your own still wallpaper, not a photo of the dashboard
         if self.wake is None:
             u = urlsplit(self.url)
             self.wake = WakeBridge(f"{u.scheme}://{u.netloc}", lambda cmd: self.mini and self.mini.wake(cmd))
@@ -390,6 +436,8 @@ class Wallpaper:
             self.mini = None
         self.state["minimized"] = False
         save_state(self.state)
+        if self.bg is not None:
+            self.bg.show_snapshot()
         if getattr(self, "asleep_page", False):
             self.asleep_page = False
             self.loaded = False
