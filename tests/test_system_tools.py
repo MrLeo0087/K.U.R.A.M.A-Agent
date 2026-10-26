@@ -284,16 +284,17 @@ def test_clipboard_read_write_history(desk):
     assert out.startswith("clipboard (2000 chars (first 500 shown)): ") and len(out) < 560
     assert write_clipboard("hello world") == "copied 11 characters to the clipboard" and desk.clip == "hello world"
     write_clipboard("second")
-    assert clipboard_history() == "clipboard history: 1) second; 2) hello world"
-    assert clipboard_history(restore=2).startswith("copied item 2") and desk.clip == "hello world"
-    assert clipboard_history(restore=9).startswith("error")
-    assert len(store.clip_recent(10)) == 3  # restoring re-adds it on top
+    out = clipboard_history()
+    assert out.startswith("Copied:\n1. second (just now)\n2. hello world (just now)")
+    assert clipboard_history(restore=2).startswith("Copied it back") and desk.clip == "hello world"
+    assert clipboard_history(restore=9).startswith("There's no item 9")
+    assert len(store.clip_recent(10)) == 2  # the copy watcher (not the tool) records the restored copy
 
 
 def test_clipboard_history_only_jarvis_text(desk):
     desk.clip = "user copied this"
-    read_clipboard()
-    assert clipboard_history().startswith("no clipboard history")
+    read_clipboard()  # reading is not copying
+    assert clipboard_history().startswith("Nothing copied yet")
 
 
 # --- greeting ---

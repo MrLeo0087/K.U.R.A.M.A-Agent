@@ -20,6 +20,7 @@ from jarvis.core import config
 WORKERS = {  # name -> (label, what it does); order = how the UI lists them
     "scheduler": ("Reminders & alarms", "fires reminders, alarms, timers and scheduled commands"),
     "telegram_bot": ("Telegram", "control KURAMA from your phone"),
+    "clipboard_watch": ("Copy history", "remembers what you copy for 24 h (only on this laptop)"),
     "process_watch": ("Training watch", "watches training runs and long commands, alerts when done"),
     "resource_guard": ("RAM / disk alerts", "warns when RAM, CPU or disk get too full"),
     "crash_watchdog": ("Server watchdog", "restarts the dev servers you asked it to keep alive"),
@@ -30,7 +31,7 @@ WORKERS = {  # name -> (label, what it does); order = how the UI lists them
     "location_tracker": ("Location history", "records where the laptop is"),
 }
 ALL = tuple(WORKERS)
-ESSENTIAL = ("scheduler", "telegram_bot", "process_watch", "resource_guard", "crash_watchdog", "guard")
+ESSENTIAL = ("scheduler", "telegram_bot", "clipboard_watch", "process_watch", "resource_guard", "crash_watchdog", "guard")
 
 PRESETS: dict[str, dict] = {
     "full": {"name": "Full power", "desc": "Everything on and always ready: fastest answers, most RAM.",

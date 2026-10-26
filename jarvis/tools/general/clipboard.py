@@ -13,9 +13,10 @@ from jarvis.tools.general.write_clipboard import write_clipboard
 
 
 @tool(group="clipboard", safety="safe",
-      description="Clipboard: read what is on it, copy text to it, or list recent copies / restore item N.")
-def clipboard(action: Literal["read", "write", "history"] = "read", text: str = "", max_chars: int = 0,
-              limit: int = 5, restore: int = 0) -> str:
+      description="Clipboard: read what is on it, copy text to it, or the copy history of the last 24 h (search by "
+                  "words or 'N minutes ago', copy item N back, clear).")
+def clipboard(action: Literal["read", "write", "history", "clear_history"] = "read", text: str = "", max_chars: int = 0,
+              limit: int = 5, restore: int = 0, query: str = "", minutes_ago: float = 0) -> str:
     """Use the clipboard.
 
     Args:
@@ -24,11 +25,15 @@ def clipboard(action: Literal["read", "write", "history"] = "read", text: str = 
         max_chars: Read at most this many characters (0 = default).
         limit: How many history items to list.
         restore: Copy history item N back to the clipboard (action=history).
+        query: History: only copies containing these words.
+        minutes_ago: History: what was copied about this many minutes ago.
     """
     if action == "write":
         return write_clipboard(text)
     if action == "history":
-        return clipboard_history(limit, restore)
+        return clipboard_history(limit, restore, query, minutes_ago)
+    if action == "clear_history":
+        return clipboard_history(clear=True)
     return read_clipboard(max_chars)
 
 

@@ -396,7 +396,9 @@ SNAP_PANEL_OFFSET = 32  # GNOME top bar height, used when wmctrl reports no usab
 SCREENSHOT_DIR = Path(os.getenv("JARVIS_SCREENSHOT_DIR", str(Path.home() / "Pictures" / "Screenshots")))
 SCREENSHOT_TOOLS = ("scrot", "gnome-screenshot")  # first one found (and working) is used; scrot ~0.1 s, gnome ~0.9 s
 CLIPBOARD_READ_MAX = 500  # chars of clipboard text returned to the LLM
-CLIPBOARD_HISTORY_MAX = 50  # rows kept of text KURAMA itself copied
+CLIPBOARD_HISTORY_MAX = 200  # copy history rows kept (what the user copies + what KURAMA copied)
+CLIPBOARD_KEEP_H = float(os.getenv("KURAMA_CLIPBOARD_KEEP_H", "24"))  # copy history: forgotten after this long
+CLIPBOARD_MAX_CHARS = 20000  # longer copies (whole files) are not kept
 READ_ALOUD_MAX_CHARS = 3000
 GREETING = os.getenv("JARVIS_GREETING", "1").lower() not in ("0", "false", "no", "off")
 GREETING_WEATHER = True  # include a weather one-liner for HOME_PLACE (network, in a thread)
@@ -633,7 +635,7 @@ SHELL_ALLOWLIST = ("ls", "cat", "head", "tail", "wc", "grep", "rg", "fdfind", "f
 WORKERS_ENABLED: tuple[str, ...] = tuple(
     w.strip() for w in os.getenv("JARVIS_WORKERS", "process_watch,resource_guard,crash_watchdog,"
                                  "telegram_bot,daily_digest,auto_theme,scheduler,timemachine,guard,"
-                                 "location_tracker").split(",") if w.strip())
+                                 "location_tracker,clipboard_watch").split(",") if w.strip())
 # run them inside the server process (one Python instead of two, ~55 MB less); 0 = the separate supervisor process
 WORKERS_IN_SERVER = os.getenv("JARVIS_WORKERS_IN_SERVER", "1").lower() not in ("0", "false", "no", "off")
 WORKER_MIN_INTERVAL_S = 5.0  # no daemon polls faster than this

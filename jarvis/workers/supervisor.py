@@ -38,6 +38,7 @@ WORKERS: dict[str, str] = {
     "timemachine": "jarvis.workers.timemachine:TimeMachine",
     "guard": "jarvis.workers.guard:Guard",
     "location_tracker": "jarvis.workers.location_tracker:LocationTracker",
+    "clipboard_watch": "jarvis.workers.clipboard_watch:ClipboardWatch",
 }
 HEARTBEAT_S = 10.0
 

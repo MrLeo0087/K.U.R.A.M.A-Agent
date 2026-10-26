@@ -343,7 +343,7 @@ def notes_clear() -> int:
         return int(_conn.execute("DELETE FROM notes").rowcount)  # type: ignore[union-attr]
 
 
-# --- clipboard history (only text KURAMA itself copied) ---
+# --- clipboard history (what the user copies: the clipboard_watch worker, plus KURAMA's own copies) ---
 def clip_add(text: str, keep: int | None = None) -> int:
     keep = int(keep or config.CLIPBOARD_HISTORY_MAX)
     with _lock:
@@ -352,7 +352,29 @@ def clip_add(text: str, keep: int | None = None) -> int:
         cur = _conn.execute("INSERT INTO clipboard(text,created) VALUES (?,?)", (text, time.time()))  # type: ignore[union-attr]
         _conn.execute("DELETE FROM clipboard WHERE id NOT IN "  # type: ignore[union-attr]
                       "(SELECT id FROM clipboard ORDER BY id DESC LIMIT ?)", (keep,))
+        _conn.execute("DELETE FROM clipboard WHERE created < ?",  # type: ignore[union-attr]
+                      (time.time() - config.CLIPBOARD_KEEP_H * 3600,))
         return int(cur.lastrowid)
+
+
+def clip_search(query: str = "", minutes_ago: float = 0, limit: int = 5) -> list[dict]:
+    """Copies containing all the words of `query` (newest first), or the ones nearest to `minutes_ago`."""
+    since = time.time() - config.CLIPBOARD_KEEP_H * 3600
+    rows = [dict(r) for r in _exec("SELECT * FROM clipboard WHERE created >= ? ORDER BY id DESC LIMIT 500", (since,))]
+    words = [w for w in (query or "").lower().split() if w]
+    if words:
+        rows = [r for r in rows if all(w in r["text"].lower() for w in words)]
+    if minutes_ago:
+        at = time.time() - minutes_ago * 60
+        rows.sort(key=lambda r: abs(r["created"] - at))
+    return rows[:limit]
+
+
+def clip_clear() -> int:
+    with _lock:
+        if _conn is None:
+            init(_path)
+        return int(_conn.execute("DELETE FROM clipboard").rowcount)  # type: ignore[union-attr]
 
 
 def clip_recent(limit: int = 5) -> list[dict]:

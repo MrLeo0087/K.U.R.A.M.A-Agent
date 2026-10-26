@@ -1621,6 +1621,34 @@ def _nth(t: str) -> int:
     return _NUM[m.group(1).lower()] if m else 1
 
 
+_WORDNUM = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "ten": 10, "fifteen": 15, "twenty": 20, "thirty": 30,
+            "half an": 0.5, "an": 1, "a": 1}
+
+
+def copy_history_intent(t: str) -> Intent | None:
+    """'what did I copy 10 minutes ago', 'show my clipboard history', 'find the link I copied',
+    'copy back number 2', 'clear my copy history' -> clipboard history (0 tokens)."""
+    hist = r"(?:clipboard|copy|copied)\s+history|(?:what|which)\s+(?:did|have)\s+i\s+(?:copy|copied)|things\s+i\s+copied|my\s+copies"
+    if re.fullmatch(r"(?:please\s+)?(?:clear|delete|forget|erase)\s+(?:my\s+|the\s+)?(?:clipboard|copy|copied)\s+history[\s.!]*", t, I):
+        return Intent("clip", "clipboard", "clipboard", {"action": "clear_history"})
+    if m := re.fullmatch(r"(?:please\s+)?(?:copy|put|bring)\s+(?:back\s+)?(?:the\s+)?(?:number|item|no\.?)?\s*(\d{1,2}|" +
+                         "|".join(_NUM) + r")(?:\s+(?:one|item))?(?:\s+(?:back|again))?(?:\s+(?:to|on)\s+(?:the\s+)?clipboard)?[\s.!]*", t, I):
+        if re.search(r"\b(?:back|again|number|item|no)\b", t, I):
+            return Intent("clip", "clipboard", "clipboard", {"action": "history", "restore": _nth(m.group(0))})
+    if m := re.search(r"\b(?:the\s+)?(?P<q>[\w.-]+(?:\s+[\w.-]+)?)\s+(?:that\s+)?i\s+copied\b", t, I):
+        if re.match(r"(?:please\s+)?(?:find|show|get|what\s+(?:was|is)|give\s+me|copy\s+back|where\s+is)\b", t, I):
+            q = re.sub(r"^(?:the|a|that)\s+", "", m.group("q"), flags=I)
+            if q.lower() not in ("what", "thing", "things", "text", "stuff", "something"):
+                return Intent("clip", "clipboard", "clipboard", {"action": "history", "query": q, "limit": 5})
+    if not re.search(hist, t, I) or len(t.split()) > 14:
+        return None
+    args: dict = {"action": "history", "limit": 8}
+    if m := re.search(r"\b(\d{1,3}|" + "|".join(_WORDNUM) + r")\s+(min(?:ute)?s?|hours?|hrs?)\s+ago\b", t, I):
+        n = int(m.group(1)) if m.group(1).isdigit() else _WORDNUM[m.group(1).lower()]
+        args["minutes_ago"] = n * (60 if m.group(2).lower().startswith("h") else 1)
+    return Intent("clip", "clipboard", "clipboard", args)
+
+
 def read_later_intent(t: str) -> Intent | None:
     """'read this later', 'I will read this later', 'save this link for later', 'add this to my reading list',
     'what's on my reading list', 'open the first article from my reading list', 'mark 2 as read'."""
@@ -1705,6 +1733,8 @@ def match(text: str) -> Intent | None:
         return pi
     if rl := read_later_intent(t):
         return rl
+    if ch := copy_history_intent(t):
+        return ch
     if qi := qr_intent(t):
         return qi
     if oi := ocr_intent(t):
