@@ -23,8 +23,8 @@ KINDS = ("reminder", "command", "alarm", "timer", "task")  # task = a due item f
 
 
 def _task(text: str) -> tuple[str, str, str]:
-    """'read: Title\nlink' / 'todo: Buy milk' -> (kind, title, link)."""
-    head, _, link = (text or "").partition("\n")
+    """'read: Title\nlink' / 'todo: Buy milk' (maybe after 'overdue: ') -> (kind, title, link)."""
+    head, _, link = (text or "").removeprefix("overdue: ").partition("\n")
     kind, _, title = head.partition(": ")
     return (kind, title, link.strip()) if kind in ("read", "todo") else ("todo", head, link.strip())
 
@@ -140,13 +140,25 @@ def fire(row: dict) -> list[str]:
         sound.play("timer", 3)
         return notify.notify("⏱️ Time's up", row["text"], level="info", source="timer",
                              telegram=True if row.get("note") == "phone" else None)
-    if kind == "task":  # from my list: a link to read now, or a to-do to do now
-        sound.play("reminder", 2)
+    if kind == "task":  # from my list: a link to read now, or a to-do to do now; later 'not done yet' once
+        from jarvis.core import readlater
         k, title, link = _task(row["text"])
-        if k == "read":
-            return notify.notify("📖 Read it now", f"{title}\n{link}\nYou said you'd read this now.",
+        n = readlater.is_open(k, title, link)
+        if row["text"].startswith(readlater.OVERDUE):
+            if not n:
+                return []  # finished meanwhile: say nothing
+            what = "You haven't read this yet" if k == "read" else "You haven't finished this yet"
+            return notify.notify(f"⏳ Not done yet", f"{title}\n{link + chr(10) if link else ''}{what} (it was due "
+                                 f"{_hm(row['next_run'] - config.TASK_OVERDUE_S)}). Say 'done {n}' when it's finished.",
                                  level="info", source="scheduler")
-        return notify.notify("✅ Do it now", f"{title}\nIt's time (from your to-do list).", level="info",
+        sound.play("reminder", 2)
+        if n and config.TASK_OVERDUE_S > 0:  # check back later: still open -> 'not done yet'
+            store.schedule_add(readlater.OVERDUE + row["text"], "task", row["next_run"] + config.TASK_OVERDUE_S, "none")
+        tail = f"\nSay 'done {n}' when it's finished." if n else ""
+        if k == "read":
+            return notify.notify("📖 Read it now", f"{title}\n{link}\nYou said you'd read this now.{tail}",
+                                 level="info", source="scheduler")
+        return notify.notify("✅ Do it now", f"{title}\nIt's time (from your to-do list).{tail}", level="info",
                              source="scheduler")
     sound.play("reminder", 2)
     return notify.notify(f"⏰ Reminder ({_hm(row['next_run'])})", f"{row['text']}\nIt's time, go do it now.",
@@ -162,7 +174,8 @@ def heads_up(now: float | None = None) -> list[int]:
         return sent
     for r in store.schedules_list(enabled_only=True, limit=50):
         due = r.get("next_run") or 0
-        if r.get("kind") not in ("reminder", "task") or not (now < due <= now + lead):  # alarms/timers ring alone
+        if r.get("kind") not in ("reminder", "task") or not (now < due <= now + lead) or \
+                r["text"].startswith("overdue: "):  # alarms/timers ring alone; a follow-up needs no heads-up
             continue
         mark = f"lead:{int(due)}"
         if r.get("note") == mark or due - (r.get("created") or 0) < lead + 60:

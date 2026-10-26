@@ -1,4 +1,5 @@
-"""My list = to-dos + read later, in one real Excel sheet (~/Documents/KURAMA/read_later.xlsx), 0 tokens.
+"""My list = reminders + to-dos + read later in ONE list, 0 tokens. To-dos and links live in a real Excel sheet
+(~/Documents/KURAMA/read_later.xlsx); reminders stay in the scheduler table and are shown (and finished) here too.
 
 Each row is a to-do ("add buy milk to my to-do list #shopping tomorrow 5 pm") or a link to read ("read this later
 at 2 pm"). Optional tag and due time: a due item becomes a scheduler reminder (kind 'task': heads-up 10 min before,
@@ -29,6 +30,7 @@ HEAD = ["Type", "Title", "Link", "Tag", "Due", "Saved", "Note", "Reminder"]
 WIDTHS = (7, 50, 55, 14, 18, 17, 40, 9)
 SHEET = "My list"
 NUDGE_KEY = "todo_nudge"
+OVERDUE = "overdue: "  # a follow-up schedule row: 'you haven't done this yet' (fired once, after the due time)
 URL = re.compile(r"https?://[^\s<>\"')\]]+", re.I)
 _BROWSERS = {  # window-title suffix -> history files (Chromium family: History; Firefox: places.sqlite)
     "Brave": ["~/.config/BraveSoftware/Brave-Browser/*/History"],
@@ -198,14 +200,35 @@ def add_todo(text: str, tag: str = "", when_text: str = "") -> str:
     return _put("todo", text[:1].upper() + text[1:], "", tag, when_text)
 
 
+def _reminders() -> list[dict]:
+    """Reminders set with 'remind me to ...' (scheduler), as list rows."""
+    out = []
+    for r in store.schedules_list(enabled_only=True, limit=50):
+        if r.get("kind") != "reminder":
+            continue
+        rep = (r.get("repeat") or "none")
+        out.append({"type": "reminder", "title": r["text"], "link": "", "tag": "", "saved": "", "note": "",
+                    "due": datetime.fromtimestamp(r["next_run"]).strftime("%Y-%m-%d %H:%M"),
+                    "reminder": str(r["id"]), "repeat": "" if rep == "none" else rep})
+    return out
+
+
 def ordered(tag: str = "") -> list[dict]:
-    """The numbering everyone uses: to-dos first, then reading; due ones soonest first, then newest."""
+    """The numbering everyone uses: reminders, then to-dos, then reading; due ones soonest first, then newest."""
     tag = tag.strip().lstrip("#").lower()
     rows = [r for r in _rows() if not tag or r["tag"] == tag]
     key = lambda r: (r["due"] or "9999", "")  # noqa: E731
     todo = sorted([r for r in rows if r["type"] != "read"], key=key)
     read = sorted([r for r in rows if r["type"] == "read"], key=key)
-    return todo + read
+    return ([] if tag else _reminders()) + todo + read
+
+
+def is_open(kind: str, title: str, link: str = "") -> int:
+    """Its number in the list if that to-do / link is still there (not done), else 0."""
+    for i, r in enumerate(ordered(), 1):
+        if r["type"] == kind and (r["link"] == link if kind == "read" and link else r["title"] == title):
+            return i
+    return 0
 
 
 def unread() -> list[dict]:
@@ -214,6 +237,8 @@ def unread() -> list[dict]:
 
 def _item(i: int, r: dict) -> str:
     extra = (f"  #{r['tag']}" if r["tag"] else "") + (f"  ⏰ {_due_words(r['due'])}" if r["due"] else "")
+    if r["type"] == "reminder":
+        return f"{i}. {r['title'][:90]}  ⏰ {_due_words(r['due'])}" + (f" (repeats {r['repeat']})" if r.get("repeat") else "")
     if r["type"] == "read":
         site = f" ({r['link'].split('/')[2].removeprefix('www.')})" if r["link"].count("/") >= 2 else ""
         return f"{i}. {r['title'][:80]}{site}{extra}\n    {r['link']}"
@@ -224,10 +249,10 @@ def show(limit: int = 20, tag: str = "", kind: str = "") -> str:
     rows = ordered(tag)
     if not rows:
         return ("Your list is empty." + (f" Nothing tagged #{tag}." if tag else "")
-                + " Say 'add <task> to my to-do list' or select a link and say 'read this later'.")
+                + " Say 'add <task> to my to-do list', 'remind me to ... at 5 pm' or select a link and say 'read this later'.")
     lines, n = [f"📋 Your list ({len(rows)})" + (f" #{tag.lstrip('#')}" if tag else "")], 0
-    for label, typ in (("✅ To-do", "todo"), ("📖 Read later", "read")):
-        part = [r for r in rows if (r["type"] == "read") == (typ == "read")]
+    for label, typ in (("⏰ Reminders", "reminder"), ("✅ To-do", "todo"), ("📖 Read later", "read")):
+        part = [r for r in rows if r["type"] == typ]
         if kind and kind != typ:
             n += len(part)
             continue
@@ -253,6 +278,11 @@ def _pick(n: int, kind: str = "") -> dict | None:
 
 
 def _cancel(r: dict) -> None:
+    """Stop its reminder (and any 'not done yet' follow-up)."""
+    body = f"read: {r['title']}\n{r['link']}" if r["type"] == "read" else f"todo: {r['title']}"
+    for s in store.schedules_list(enabled_only=True, limit=100):
+        if s.get("kind") == "task" and s["text"] == OVERDUE + body:
+            store.schedule_update(s["id"], enabled=0)
     if (r.get("reminder") or "").isdigit():
         try:
             store.schedule_update(int(r["reminder"]), enabled=0)
@@ -261,9 +291,17 @@ def _cancel(r: dict) -> None:
 
 
 def _drop(r: dict) -> None:
+    if r["type"] == "reminder":
+        _cancel_id(r)
+        return
     with sheets.locked(path()):
         _save([x for x in _rows() if not _same(x, r)])
     _cancel(r)
+
+
+def _cancel_id(r: dict) -> None:
+    if (r.get("reminder") or "").isdigit():
+        store.schedule_update(int(r["reminder"]), enabled=0)
 
 
 def open_item(n: int = 1) -> str:
@@ -281,8 +319,9 @@ def done(n: int) -> str:
     if r is None:
         return f"There's no item {n} in your list."
     _drop(r)
-    left = len(_rows())
-    return f"✔ Done: {r['title']} (removed). {left} left." if left else f"✔ Done: {r['title']}. Your list is empty now 🎉"
+    left = len(ordered())
+    what = "reminder cancelled" if r["type"] == "reminder" else "removed"
+    return f"✔ Done: {r['title']} ({what}). {left} left." if left else f"✔ Done: {r['title']}. Your list is empty now 🎉"
 
 
 mark_read = done
@@ -419,4 +458,4 @@ def run(action: str = "add", url: str = "", n: int = 0, text: str = "", tag: str
         return done(n or 1)
     if action == "remove":
         return remove(n or 1)
-    return show(tag=tag, kind={"todo": "todo", "read": "read"}.get(text, ""))
+    return show(tag=tag, kind={"todo": "todo", "read": "read", "reminder": "reminder"}.get(text, ""))

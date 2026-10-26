@@ -179,3 +179,31 @@ def test_todo_routing():
     assert a("show my list #work") == {"action": "list", "tag": "work"}
     assert a("done 2") == {"action": "done", "n": 2} and a("mark 3 as complete") == {"action": "done", "n": 3}
     assert fastpath.match("what to do") is None and fastpath.match("done") is None
+
+
+def test_one_list_has_reminders_and_follows_up_on_unfinished_tasks(rl, monkeypatch):
+    import time as _t
+    from jarvis.core import notify, reminders, store
+    sent = []
+    monkeypatch.setattr(notify, "notify", lambda title, text="", **k: sent.append((title, text)) or [])
+    monkeypatch.setattr("jarvis.core.sound.play", lambda *a, **k: None)
+    reminders.add("call mom", "in 3 hours", use_llm=False)
+    readlater.add_todo("submit the form", when_text="in 1 hour")
+    readlater.add("https://e.com/a")
+    out = readlater.show()
+    assert "⏰ Reminders\n1. call mom  ⏰" in out and "✅ To-do\n2. Submit the form" in out and "📖 Read later\n3." in out
+    # the to-do's time comes: 'do it now', then an hour later 'not done yet' (only if still open)
+    task = next(r for r in store.schedules_list() if r["kind"] == "task")
+    reminders.fire(task)
+    assert sent[-1][0] == "✅ Do it now" and "done 2" in sent[-1][1]
+    follow = next(r for r in store.schedules_list() if r["text"].startswith(readlater.OVERDUE))
+    assert follow["next_run"] == task["next_run"] + config.TASK_OVERDUE_S
+    reminders.fire(follow)
+    assert sent[-1][0] == "⏳ Not done yet" and "You haven't finished this yet" in sent[-1][1]
+    # finishing it cancels the follow-up; a finished one is never nagged about
+    assert readlater.run("done", n=2).startswith("✔ Done: Submit the form (removed)")
+    assert not any(r["text"].startswith(readlater.OVERDUE) for r in store.schedules_list())
+    assert reminders.fire({**follow, "id": 999}) == []
+    # 'done 1' on a reminder cancels it
+    assert readlater.run("done", n=1).startswith("✔ Done: call mom (reminder cancelled)")
+    assert not [r for r in store.schedules_list() if r["kind"] == "reminder"]
