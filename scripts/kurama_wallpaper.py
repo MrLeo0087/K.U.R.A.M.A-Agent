@@ -223,6 +223,8 @@ class DesktopBackground:
 
 
 def run_js(view, code: str) -> None:
+    if view is None:  # the dashboard's view is gone while minimized
+        return
     if hasattr(view, "evaluate_javascript"):  # WebKitGTK >= 2.40
         view.evaluate_javascript(code, -1, None, None, None, None, None)
     else:
@@ -230,6 +232,30 @@ def run_js(view, code: str) -> None:
 
 
 class Wallpaper:
+    def _make_view(self):
+        v = WebKit2.WebView(web_context=self.ctx, user_content_manager=self.ucm)
+        v.set_background_color(Gdk.RGBA(0.024, 0.027, 0.043, 1))
+        if getattr(self, "settings", None) is None:
+            s = self.settings = v.get_settings()
+            try:  # GPU compositing keeps the orb and bars smooth with little CPU (KURAMA_WP_GPU=0 to disable)
+                policy = "NEVER" if os.getenv("KURAMA_WP_GPU", "1") == "0" else "ALWAYS"
+                s.set_hardware_acceleration_policy(getattr(WebKit2.HardwareAccelerationPolicy, policy))
+            except Exception:
+                pass
+            # one local page: no caches, no WebGL; keep WebAudio + mic for voice chat
+            self.ctx.set_cache_model(WebKit2.CacheModel.DOCUMENT_VIEWER)
+            s.set_enable_webgl(False)
+            s.set_enable_page_cache(False)
+            configure_media(s)
+            s.set_javascript_can_open_windows_automatically(False)
+        else:
+            v.set_settings(self.settings)
+        v.connect("permission-request", self.on_permission)
+        v.connect("load-failed", self.on_failed)
+        v.connect("load-changed", self.on_load)
+        v.connect("decide-policy", self.on_policy)
+        return v
+
     def __init__(self, url: str, as_window: bool) -> None:
         self.url = url
         self.paused: bool | None = None
@@ -242,30 +268,14 @@ class Wallpaper:
         self.ucm = WebKit2.UserContentManager()
         self.ucm.register_script_message_handler("kurama")
         self.ucm.connect("script-message-received::kurama", self.on_message)
-        self.view = WebKit2.WebView(web_context=lean_context(), user_content_manager=self.ucm)
-        self.view.set_background_color(Gdk.RGBA(0.024, 0.027, 0.043, 1))
-        s = self.view.get_settings()
-        try:  # GPU compositing keeps the orb and bars smooth with little CPU (KURAMA_WP_GPU=0 to disable)
-            policy = "NEVER" if os.getenv("KURAMA_WP_GPU", "1") == "0" else "ALWAYS"
-            s.set_hardware_acceleration_policy(getattr(WebKit2.HardwareAccelerationPolicy, policy))
-        except Exception:
-            pass
-        # one local page: no caches, no WebGL; keep WebAudio + mic for voice chat
-        self.view.get_context().set_cache_model(WebKit2.CacheModel.DOCUMENT_VIEWER)
-        s.set_enable_webgl(False)
-        s.set_enable_page_cache(False)
-        configure_media(s)
-        s.set_javascript_can_open_windows_automatically(False)
-        self.view.connect("permission-request", self.on_permission)
-        self.view.connect("load-failed", self.on_failed)
-        self.view.connect("load-changed", self.on_load)
-        self.view.connect("decide-policy", self.on_policy)
+        self.ctx = lean_context()  # one context for every KURAMA view (dashboard, mini panel, workspace)
+        self.view = self._make_view()
         self.view.load_uri(url)
         self.loaded = False  # the live page is up (else the snapshot cover stays)
         self.failed = False  # the current load attempt failed
         self.cover = None
         self.bg = None
-        root = Gtk.Overlay()
+        root = self.root = Gtk.Overlay()
         root.add(self.view)
         if not as_window and SNAP.is_file():  # last look of the dashboard until the live page is ready
             with contextlib.suppress(Exception):
@@ -306,7 +316,7 @@ class Wallpaper:
     # The API may start after us at login: keep retrying until the page loads
     def on_failed(self, *_):
         self.failed = True
-        GLib.timeout_add(1000, lambda: self.view.load_uri(self.url) and False)
+        GLib.timeout_add(1000, lambda: self.view is not None and self.view.load_uri(self.url) and False)
         return False
 
     def on_load(self, _view, event):
@@ -346,7 +356,7 @@ class Wallpaper:
         """Save how the dashboard looks now (one render + PNG every 10 min; skipped in window mode)."""
         if self.bg is None:
             return False
-        if self.asleep_page:
+        if self.asleep_page or self.view is None:
             return True  # minimized: there is no dashboard to photograph (keep the timer for later)
 
         def done(view, res):
@@ -418,8 +428,14 @@ class Wallpaper:
         if not self.state.get("minimized"):
             return False
         self.asleep_page = True
-        self.view.load_uri("about:blank")  # frees the dashboard's DOM, JS, orb and timers
         self.win.hide()
+        if self.cover is not None:  # the full-screen snapshot picture shown while loading
+            self.cover.destroy()
+            self.cover = None
+        if self.view is not None:  # destroy the dashboard's view: its web process exits, its memory is freed
+            self.root.remove(self.view)
+            self.view.destroy()
+            self.view = None
         if self.bg is not None:
             self.bg.show_real()  # the desktop: your own still wallpaper, not a photo of the dashboard
         if self.wake is None:
@@ -441,6 +457,9 @@ class Wallpaper:
         if getattr(self, "asleep_page", False):
             self.asleep_page = False
             self.loaded = False
+            if self.view is None:
+                self.view = self._make_view()
+                self.root.add(self.view)
             self.win.show_all()
             self.view.load_uri(self.url)  # back to the full dashboard
         else:
@@ -713,8 +732,8 @@ class Mini:
         p.stick()
         p.set_default_size(PANEL_W, min(PANEL_H, workarea().height - 40))
         p.connect("delete-event", lambda *_: self.hide_panel() or True)
-        v = self.view = WebKit2.WebView(related_view=self.wp.view, user_content_manager=self.wp.ucm)
-        v.set_settings(self.wp.view.get_settings())
+        v = self.view = WebKit2.WebView(web_context=self.wp.ctx, user_content_manager=self.wp.ucm)
+        v.set_settings(self.wp.settings)
         v.set_background_color(Gdk.RGBA(0.024, 0.027, 0.043, 1))
         v.connect("permission-request", self.wp.on_permission)
         v.connect("decide-policy", self.wp.on_policy)
@@ -794,8 +813,8 @@ class Mini:
         w.set_skip_pager_hint(True)
         with contextlib.suppress(Exception):
             w.set_icon_name("folder-documents")
-        v = self.ws_view = WebKit2.WebView(related_view=self.wp.view, user_content_manager=self.wp.ucm)
-        v.set_settings(self.wp.view.get_settings())
+        v = self.ws_view = WebKit2.WebView(web_context=self.wp.ctx, user_content_manager=self.wp.ucm)
+        v.set_settings(self.wp.settings)
         v.set_background_color(Gdk.RGBA(0.043, 0.047, 0.078, 1))
         v.connect("decide-policy", self.wp.on_policy)
         u = urlsplit(self.wp.url)
