@@ -96,7 +96,8 @@ You are continuing work on **KURAMA**, my personal always-on voice + text assist
 - **Media:** video_download (yt-dlp, any quality, MP3), youtube, media_control, generate_image (background; shows in the workspace).
 - **Apps:** open / close / kill_app, install_app (apt / snap / flatpak through a pkexec popup), launch_workspace.
 - **Dev:** fix_error, run_tests, python_env, review_code, git tools, time_machine, where_was_i, kaggle_train (free Kaggle GPU; the CLI is in `data/kaggle_venv`; **needs `~/.kaggle/kaggle.json` from me**), training watch, Colab.
-- **Others:** contacts (Excel `~/Documents/KURAMA/contacts.xlsx`), reminders, alarms, timers, weather, time, notes, quiz, lecture, laptop_doctor, internet_doctor, battery, brightness, volume, theme, DND, focus_mode, backup, downloads, status_now, token_usage, daily_digest.
+- **Others:** contacts (Excel `~/Documents/KURAMA/contacts.xlsx`), reminders, alarms, timers, weather, time, **date** (`get_date`: full date + weekday + week of year; Bikram Sambat with the weekday by default, English only if I ask "in AD"; `jarvis/core/nepdate.py` over `nepali-datetime`), notes, quiz, lecture, laptop_doctor, internet_doctor, battery, brightness, volume, theme, DND, focus_mode, backup, downloads, status_now, token_usage, daily_digest.
+- **Sleep vs suspend:** in talk mode "sleep now" / "good night" puts **KURAMA** to sleep (frontend `wantsSleep`), never the laptop. Suspending the machine needs an explicit device word ("suspend the laptop").
 - **0-token small talk:** hi, thanks, how are you; plus TYPO_FIXES and STT_FIXES in config.
 - The messages / notification watcher was built and then **removed** at my request. Don't re-add it.
 
@@ -110,4 +111,4 @@ You are continuing work on **KURAMA**, my personal always-on voice + text assist
 - **My own actions still open:** `kaggle.json`, optionally `sudo apt install libreoffice-writer`, "enable screen control" plus restarting Brave / VS Code (for AT-SPI clicks).
 
 ## Where we stopped
-The last commit is "Code edits wait for yes ... STT fixes": all tests pass and KURAMA is restarted. Next, I'll tell you what to work on.
+Last commit: "Date tool with Bikram Sambat (weekday + week); 'sleep now' sleeps KURAMA in talk mode, not the laptop" (`d70da9e`). Routing eval 110/110 + 32/32 + 27/27, tool tests pass, KURAMA restarted. Recent work before that: talk mode now listens immediately when I click the talk button; read-later / OCR / copy-history / clipboard fixes; Telegram PIN + /lock; RustDesk remote desktop; power modes with in-process workers. Next, I'll tell you what to work on.
