@@ -225,6 +225,7 @@ def _call_or_background(reg: registry.Registry, name: str, clean: Any, ctx: dict
     args_txt = ", ".join(str(v)[:30] for v in (clean.values() if isinstance(clean, dict) else [clean]) if v)
     job = jobs.get_manager().submit(f"{name.replace('_', ' ')}{': ' + args_txt if args_txt else ''}"[:80],
                                     "tool", follow, request=ctx.get("user_text", ""), lang=ctx.get("lang") or "en")
-    ctx["jobs"].append(job.id)
+    if job.id not in ctx["jobs"]:  # JobManager.submit may have listed it already
+        ctx["jobs"].append(job.id)
     log.info("tool %s still running after %.0f s: continues as job #%d", name, wait, job.id)
     return ToolResult(True, BACKGROUND_NOTE.format(s=wait, id=job.id))
