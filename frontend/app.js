@@ -21,8 +21,8 @@ let minimized = false; // the dashboard is minimized to the floating button (win
 let miniGhost = false; // mini panel closed while in talk mode: it keeps listening, replies show beside the button
 
 // ---------- orb ----------
-// the canvas orb is hidden (the KURAMA mark replaced it): kept static, so it never runs a loop
-const orb = new Orb($("orb-canvas"), { halo: document.querySelector("#orb .halo"), lowPower: true, reducedMotion });
+// the big animated orb (owner: "like the previous circle"); its own capped loop, 10 fps idle / 30 active
+const orb = new Orb($("orb-canvas"), { halo: document.querySelector("#orb .halo"), lowPower: false, reducedMotion });
 document.body.classList.toggle("low-power", lowPowerOn());
 const dust = new Dust($("bg-dust"), { orbEl: $("orb"), lowPower: lowPowerOn() });
 // no background dust field (static wallpaper instead) // one loop drives the orb and the background field (?dust=0: off)
@@ -137,7 +137,7 @@ function markLoop(now) {
   }
   markRaf = requestAnimationFrame(markLoop);
 }
-function markKick() { if (!markRaf && MARK_HUE[document.body.dataset.state]) markRaf = requestAnimationFrame(markLoop); }
+function markKick() { /* the orb itself reacts to the voice now; the small mark loop is off */ }
 
 function flashError() {
   errUntil = performance.now() + 1400;

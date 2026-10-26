@@ -977,7 +977,6 @@ body:not(.mini) { --card: rgba(12, 13, 18, 0.86); --card-border: rgba(255, 255, 
   --text: #edeae5; --muted: #9b968f; --dim: #6c6863; }
 body:not(.mini) *, body:not(.mini) *::before, body:not(.mini) *::after { animation: none !important; transition: none !important; }
 body:not(.mini) .bg-grid, body:not(.mini) .bg-glow, body:not(.mini) .bg-dust,
-body:not(.mini) .orb canvas, body:not(.mini) .orb .halo, body:not(.mini) .orb-static,
 body:not(.mini) .card::after, body:not(.mini) .col .card::after { display: none !important; }
 body:not(.mini) .wall { opacity: 0; }
 body:not(.mini) .wall.on { opacity: 0.62; }
@@ -1017,10 +1016,9 @@ body:not(.mini) .perf .spark.short { height: 22px; margin-top: 6px; opacity: 0.8
 
 /* centre: the KURAMA mark */
 body:not(.mini) .core { justify-content: center; padding-bottom: 6px; }
-body:not(.mini) .orb { width: clamp(84px, 7vw, 120px); --lv: 0; --kh: 28; }
+body:not(.mini) .orb { width: min(300px, 20vw, 32vh); }
 .kmark { position: absolute; inset: 16%; width: 68%; height: 68%; display: none; }
 .kring { position: absolute; inset: 0; border-radius: 50%; display: none; }
-body:not(.mini) .kmark, body:not(.mini) .kring { display: block; }
 .kmark path { stroke: none; }
 .kmark .k1 { fill: hsl(var(--kh) 92% 56%); }
 .kmark .k2 { fill: hsl(var(--kh) 85% 32%); }
