@@ -20,7 +20,7 @@ def safe_roots(tmp_path, monkeypatch):
 
 def test_registered_group_and_safety():
     tools = {t.name: t for t in registry.schemas_for(["devutils"])}
-    assert set(tools) == {"notebook_to_script", "generate_requirements", "config_diff"}
+    assert set(tools) == {"notebook_to_script", "generate_requirements", "config_diff", "decode_text"}
     assert all(registry.safety_of(t) == "safe" for t in tools.values())
 
 

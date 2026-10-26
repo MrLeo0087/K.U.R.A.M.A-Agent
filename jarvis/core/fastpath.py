@@ -1274,6 +1274,34 @@ _TIDY_FILE = r"(?P<f>(?:this|my|the)\s+(?:whole\s+|entire\s+|full\s+|python\s+)?
              r"[\w./~-]+\.(?:py|pyi|json))"
 
 
+_DEC_KIND = {"json": "json", "jwt": "jwt", "token": "jwt", "base64": "base64", "base 64": "base64", "url": "url",
+             "link": "url", "timestamp": "timestamp", "time stamp": "timestamp", "epoch": "timestamp", "html": "html",
+             "unicode": "unicode", "xml": "xml", "hex": "hex"}
+_DEC_K = "|".join(sorted(map(re.escape, _DEC_KIND), key=len, reverse=True))
+
+
+def decode_intent(t: str) -> Intent | None:
+    """'decode this', 'decode this base64', 'prettify this json', 'what time is this timestamp',
+    'encode this to base64', 'url encode this' -> decode_text (0 tokens)."""
+    sel = r"(?:this|that|it|the\s+selected(?:\s+text)?|the\s+selection|selected\s+text)"
+    if m := re.fullmatch(r"(?:please\s+)?(?:(?P<k1>base\s?64|url)\s+encode\s+" + sel + r"|encode\s+" + sel +
+                         r"\s+(?:to|in|into|as)\s+(?P<k2>base\s?64|url(?:\s+encoding)?))[\s.!]*", t, I):
+        k = (m.group("k1") or m.group("k2") or "").lower()
+        return Intent("decode", "decode_text", "devutils", {"mode": "encode_url" if k.startswith("url") else "encode_base64"})
+    if m := re.fullmatch(r"(?:please\s+|can\s+you\s+)*(?:decode|unescape|parse|prettify|pretty[\s-]?print|beautify|format|"
+                         r"convert|read)\s+" + sel + r"(?:\s+(?P<k>" + _DEC_K + r"))?(?:\s+(?:string|text|code|data|value|token))?"
+                         r"(?:\s+(?:to|into)\s+(?:a\s+)?(?:date|time|readable(?:\s+\w+)?|text|json))?[\s.!?]*", t, I):
+        k = (m.group("k") or "").lower()
+        if not k and not re.match(r"(?:please\s+|can\s+you\s+)*(?:decode|unescape|parse|pretty)", t, I):
+            return None  # "format this" / "convert this" alone: other tools
+        return Intent("decode", "decode_text", "devutils", {"mode": _DEC_KIND.get(k, "auto")})
+    if re.fullmatch(r"(?:what\s+(?:time|date)\s+is\s+(?:this|that)(?:\s+(?:timestamp|epoch|unix\s+time))?|"
+                    r"(?:url|base\s?64|jwt)\s+decode\s+" + sel + r")[\s.?!]*", t, I):
+        k = "timestamp" if re.match(r"what", t, I) else re.match(r"(url|base\s?64|jwt)", t, I).group(1).lower().replace(" ", "")
+        return Intent("decode", "decode_text", "devutils", {"mode": k})
+    return None
+
+
 def code_tidy_intent(t: str) -> Intent | None:
     """'format my code / this file / main.py', 'check this file', 'lint my code', 'any errors in this file',
     'fix the problems' -> code_tidy (ruff, 0 tokens)."""
@@ -1329,6 +1357,8 @@ def assist_intent(t: str) -> Intent | None:
     if re.search(r"\b(?:explain|explanation|summari[sz]e|what\s+(?:does|is))\b", t, I) and WHOLE_CODE.search(t) \
             and len(t.split()) <= 16:  # "explain my whole code" = the file open in VS Code
         return Intent("assist", "text_assist", "clipboard", {"action": "explain_file", "path": "this", "lang": lang})
+    if dc := decode_intent(t):  # decode / prettify the selection, 0 tokens
+        return dc
     if ct := code_tidy_intent(t):  # format / check / fix with ruff, 0 tokens
         return ct
     if re.search(r"\b(?:fix|clean\s+up|refactor|improve|optimi[sz]e|correct)\b", t, I) \
