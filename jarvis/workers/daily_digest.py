@@ -19,7 +19,7 @@ def digest_time() -> dtime:
         hh, mm = (int(x) for x in config.DIGEST_TIME.split(":")[:2])
         return dtime(hh, mm)
     except (ValueError, AttributeError):
-        return dtime(21, 0)
+        return dtime(22, 0)
 
 
 class DailyDigest(Worker):

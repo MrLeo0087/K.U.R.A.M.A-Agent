@@ -99,3 +99,22 @@ def test_stores_never_mix_up(desk, monkeypatch):
         i = fastpath.match(text)
         assert i and i.tool == tool, (text, i and i.tool)
     assert store  # (fixtures keep everything in temp files)
+
+
+def test_open_website_looks_in_the_link_store(desk):
+    from jarvis.tools.general import open_url
+    desk["page"] = ("https://leo.dev/portfolio", "My portfolio")
+    run("save this link as portfolio")
+    desk["page"] = ("https://www.facebook.com/groups/kurama", "KURAMA group")
+    run("save this link as facebook")
+    assert open_url.resolve("portfolio") == "https://leo.dev/portfolio"  # unknown to the built-in list
+    assert open_url.resolve("my portfolio website") == "https://leo.dev/portfolio"
+    assert open_url.resolve("facebook") == "https://www.facebook.com/groups/kurama"  # the user's own link wins
+    assert open_url.resolve("youtube") == "https://www.youtube.com"
+    i = fastpath.match("open portfolio")
+    assert i.tool == "open_url" and i.args == {"target": "portfolio"}
+
+
+def test_digest_at_10_pm():
+    from jarvis.workers import daily_digest
+    assert daily_digest.digest_time().hour == 22

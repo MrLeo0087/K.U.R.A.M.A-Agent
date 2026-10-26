@@ -31,18 +31,36 @@ def resolve(target: str) -> str | None:
     t = target.strip().strip("\"'").rstrip("/.")
     key = re.sub(r"^(?:open\s+)?(?:the\s+)?", "", t.lower()).strip()
     key = re.sub(r"\s+(?:website|site|web\s*site|\.com)$", "", key)
-    if key in SITES:
-        return SITES[key]
     if re.match(r"^https?://\S+$", t, re.I):
         return t
+    if saved := _saved(key, exact=True):  # the user's own saved links win ('open my portfolio')
+        return saved
+    if key in SITES:
+        return SITES[key]
     if re.match(r"^(?:www\.)?[\w-]+(?:\.[\w-]+)+(?:/\S*)?$", t):
         return "https://" + t
     if re.sub(r"[\s-]+", "", key) in SITES:  # "sofa score", "you tube"
         return SITES[re.sub(r"[\s-]+", "", key)]
+    if saved := _saved(key, exact=False):  # a saved link whose name / site contains it
+        return saved
     import difflib
     if close := difflib.get_close_matches(re.sub(r"[\s-]+", "", key), list(SITES), n=1, cutoff=0.82):
         return SITES[close[0]]  # "sofiscore" -> sofascore, "facebok" -> facebook
     return None
+
+
+def _saved(key: str, exact: bool) -> str | None:
+    """A link from the user's link store (jarvis.core.links) for this name; exact = same name only."""
+    try:
+        from jarvis.core import links
+        key = re.sub(r"^(?:my|our)\s+", "", key)
+        if exact:
+            k = links._key(links.clean_name(key))
+            return next((r["link"] for r in links._rows() if links._key(r["name"]) == k), None) if links.path().exists() else None
+        r = links.lookup(key)
+        return r["link"] if r else None
+    except Exception:  # a broken sheet never stops 'open youtube'
+        return None
 
 
 def find_site(target: str) -> str | None:

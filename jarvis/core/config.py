@@ -858,7 +858,7 @@ FASTPATH_TOKENS_SAVED_EST = 300  # avg prompt+completion tokens an LLM round wou
 # "whisper-large-v3-turbo": {"audio_hour": 0.04}}. Empty = we do not guess.
 MODEL_PRICES: dict[str, dict[str, float]] = {}
 # Daily digest (worker daily_digest + tool daily_digest)
-DIGEST_TIME = os.getenv("JARVIS_DIGEST_TIME", "21:00")
+DIGEST_TIME = os.getenv("JARVIS_DIGEST_TIME", "22:00")  # owner: the day summary at 10 PM
 DIGEST_USE_LLM = False  # True: one fast-tier call to polish the template
 DIGEST_INTERVAL_S = 60.0
 
