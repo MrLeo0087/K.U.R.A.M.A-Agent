@@ -875,3 +875,17 @@ body[data-mode="conv"] .mute-btn { display: grid; }
 .btn.danger { color: #ffb1a8; border-color: rgba(255, 90, 70, 0.35); background: rgba(255, 70, 50, 0.08); }
 .btn.danger:hover { color: #fff; background: rgba(255, 70, 50, 0.22); border-color: rgba(255, 90, 70, 0.6); }
 .set-group small.note { display: block; margin-top: 8px; }
+
+/* ---------- mini KURAMA: a small workspace sheet over the chat (plans, pictures, documents); hidden by default ---------- */
+.mws { display: none; }
+body.mini .chat { position: relative; }
+body.mini .mws:not([hidden]) { display: flex; flex-direction: column; position: absolute; left: 0; right: 0; top: 46px; bottom: 0;
+  background: #0b0c14; border-top: 1px solid rgba(255, 122, 26, 0.28); z-index: 5; }
+.mws-head { display: flex; align-items: center; gap: 4px; padding: 6px 8px; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+.mws-title { flex: 1; font-size: 12px; opacity: 0.8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
+.mws-body { flex: 1; overflow: auto; padding: 10px 14px; font-size: 13px; line-height: 1.5; }
+.mws-body pre { white-space: pre-wrap; word-break: break-word; margin: 0; font: inherit; }
+.mws-body h4 { margin: 12px 0 4px; font-size: 13px; color: #ff9a4d; }
+.mws-body img { max-width: 100%; border-radius: 8px; display: block; margin: 0 auto; }
+#m-ws { position: relative; }
+#m-ws .dot { position: absolute; top: 5px; right: 5px; width: 7px; height: 7px; border-radius: 50%; background: #ff7a1a; }

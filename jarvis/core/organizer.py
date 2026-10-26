@@ -283,3 +283,154 @@ def undo_last() -> str:
                 pass
     logs[-1].unlink()
     return f"Put {back} of {len(pairs)} files back where they were."
+
+
+# --- background planning + a pending plan the user approves, edits or lets expire ---
+PENDING = "organize_pending"
+
+
+def _pending() -> dict | None:
+    from jarvis.core import store
+    try:
+        d = json.loads(store.kv_get(PENDING) or "null")
+    except (ValueError, TypeError):
+        return None
+    if not d or time.time() > d.get("expires", 0):
+        return None
+    return d
+
+
+def pending_active() -> bool:
+    return _pending() is not None
+
+
+def _save_pending(folder: Path, moves: list[tuple[Path, Path]]) -> None:
+    from jarvis.core import store
+    store.kv_set(PENDING, json.dumps({"folder": str(folder), "moves": [[str(a), str(b)] for a, b in moves],
+                                      "expires": time.time() + config.ORGANIZE_PLAN_TTL_S}))
+
+
+def clear_pending() -> None:
+    from jarvis.core import store
+    store.kv_delete(PENDING)
+
+
+def summary(moves: list[tuple[Path, Path]], folder: Path) -> str:
+    """One line for the chat: '30 files -> Documents 5, Images 14, Videos 2 ...; 3 renamed'."""
+    from collections import Counter
+    tops = Counter(b.relative_to(folder).parts[0] for _, b in moves)
+    renamed = sum(1 for a, b in moves if a.stem != b.stem and b.parent.name != "Duplicates")
+    parts = ", ".join(f"{k} {v}" for k, v in tops.most_common())
+    return f"{len(moves)} files -> {parts}" + (f"; {renamed} get clearer names" if renamed else "")
+
+
+def readable(moves: list[tuple[Path, Path]], folder: Path) -> str:
+    """The plan grouped by destination folder, renames shown, for the workspace."""
+    groups: dict[str, list[str]] = {}
+    for a, b in moves:
+        rel = str(b.parent.relative_to(folder))
+        line = a.name if a.name == b.name else f"{a.name}  ->  {b.name}"
+        groups.setdefault(rel, []).append(line)
+    mins = int(config.ORGANIZE_PLAN_TTL_S // 60)
+    out = [f"Plan for {folder.name}: {summary(moves, folder)}",
+           f"Say \"yes\" to apply, \"no\" to cancel, or tell me what to change (e.g. \"keep the pictures where they "
+           f"are\", \"put the movie posters in Images/Movies\"). It expires in {mins} min.", ""]
+    for rel in sorted(groups, key=lambda r: (-len(groups[r]), r)):
+        out.append(f"## {rel}  ({len(groups[rel])})")
+        out += [f"- {ln}" for ln in sorted(groups[rel], key=str.lower)]
+        out.append("")
+    return "\n".join(out)
+
+
+def _publish(moves: list[tuple[Path, Path]], folder: Path) -> Path:
+    d = Path(config.OUTPUTS_DIR) / "plans"
+    d.mkdir(parents=True, exist_ok=True)
+    p = d / f"organize-{folder.name.lower()}-{time.strftime('%H%M%S')}.md"
+    p.write_text(readable(moves, folder), encoding="utf-8")
+    return p
+
+
+def start(folder: Path, rename: bool = True) -> str:
+    """Make the plan as a background job (the chat stays free); the plan goes to the workspace."""
+    from jarvis.core import jobs, safety
+
+    def run(ctx) -> str | None:
+        ctx.progress("looking at the files")
+        moves = plan(folder, rename)
+        ctx.check()
+        if not moves:
+            ctx.progress(f"» {folder.name} already looks organized.")
+            return None
+        _save_pending(folder, moves)
+        mins = int(config.ORGANIZE_PLAN_TTL_S // 60)
+        ctx.progress(f"» Plan ready: {summary(moves, folder)}. It's in the workspace. Say yes to apply, no to "
+                     f"cancel, or tell me what to change ({mins} min).")
+        return str(_publish(moves, folder))
+    job = jobs.get_manager().submit(f"Organize plan for {folder.name}", "organize", run)
+    with __import__("contextlib").suppress(Exception):
+        safety.context().get("jobs", []).append(job.id)  # the UI watches it and announces the plan
+    return (f"I'm making a plan for {folder.name} in the background. Keep talking; I'll tell you when it's ready "
+            f"and show it in the workspace.")
+
+
+def apply_pending() -> str:
+    d = _pending()
+    if not d:
+        return "There's no plan waiting (plans expire after a few minutes). Say 'organize my downloads' to make one."
+    moves = [(Path(a), Path(b)) for a, b in d["moves"] if Path(a).exists()]
+    clear_pending()
+    if not moves:
+        return "Those files were already moved or deleted; nothing to do."
+    apply(moves)
+    from jarvis.core import focus
+    focus.set_path(d["folder"])
+    return f"Organized {len(moves)} files in {Path(d['folder']).name}. Say 'undo organize' to put them back."
+
+
+def cancel_pending() -> str:
+    had = pending_active()
+    clear_pending()
+    return "Okay, I won't move anything." if had else "There was no plan waiting."
+
+
+class Change(BaseModel):
+    i: int
+    dest: str = Field(description="new destination folder relative to the organized folder, or 'KEEP' to leave the "
+                                  "file where it is")
+
+
+class Changes(BaseModel):
+    changes: list[Change] = Field(default_factory=list)
+
+
+def edit_pending(instruction: str) -> str:
+    """Change the waiting plan the way the user says ("keep the pictures", "movies into Videos/Movies")."""
+    d = _pending()
+    if not d:
+        return "There's no plan waiting to change. Say 'organize my downloads' to make one."
+    folder = Path(d["folder"])
+    moves = [(Path(a), Path(b)) for a, b in d["moves"]]
+    rows = [{"i": i, "file": a.name, "to": str(b.parent.relative_to(folder))} for i, (a, b) in enumerate(moves)]
+    from jarvis.core import llm
+    got = llm.structured([{"role": "system", "content": "Change a file-organizing plan as the user asks. Return only "
+                                                        "the files whose destination changes ('KEEP' = don't move)."},
+                          {"role": "user", "content": f"Instruction: {instruction}\nPlan: {json.dumps(rows)}"}],
+                         Changes, tier="fast", purpose="organize_edit", max_tokens=1500)
+    keep: set[int] = set()
+    n = 0
+    for c in got.changes:
+        if not 0 <= c.i < len(moves):
+            continue
+        a, b = moves[c.i]
+        if c.dest.strip().upper() == "KEEP":
+            keep.add(c.i)
+        else:
+            rel = _clean(c.dest.replace("\\", "/")).strip("/") or "."
+            moves[c.i] = (a, folder / rel / b.name)
+        n += 1
+    moves = [m for i, m in enumerate(moves) if i not in keep]
+    if not n:
+        return "I couldn't tell which files to change. Try e.g. 'keep the pictures where they are'."
+    _save_pending(folder, moves)  # also restarts the timer
+    _publish(moves, folder)
+    return f"Changed {n} files. Now: {summary(moves, folder)}. The new plan is in the workspace; say yes to apply."

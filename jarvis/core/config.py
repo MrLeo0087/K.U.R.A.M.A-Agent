@@ -678,6 +678,7 @@ DICTATION_PAUSE_MS = 900  # a pause this long ends a dictated phrase (then it is
 DICTATION_DEVANAGARI_LANG = os.getenv("JARVIS_DICTATION_DEVANAGARI", "ne")  # auto mode: Nepali/Hindi speech -> this
 DICTATION_IDLE_S = 180  # dictation stops after 3 min of silence
 DICTATION_MAX_S = 3600  # ...or after 1 hour in total
+ORGANIZE_PLAN_TTL_S = float(os.getenv("KURAMA_PLAN_TTL_S", "120"))  # a waiting plan expires (= no)
 ORGANIZE_MAX_FILES = 80  # files looked at per organize run (newest first)
 ORGANIZE_MAX_IMAGES = 8  # pictures captioned by the vision model per run (~600 tokens each)
 VIDEO_DIR = os.getenv("KURAMA_VIDEO_DIR", "~/Videos/KURAMA")  # video/audio downloads (yt-dlp)

@@ -23,7 +23,29 @@ def convert_file(path: str = "", to: str = "", src_ext: str = "") -> str:
     src = resolve_target(path, src_ext)
     if isinstance(src, str):
         return src
+    if _slow(src, to):  # big video/audio, a whole folder, office/OCR work: don't hold the chat for minutes
+        from jarvis.core import jobs, safety
+
+        def run(ctx) -> None:
+            ctx.progress("converting")
+            res = convert.convert(src, to, src_ext)
+            if res.startswith("Converted to "):
+                focus.set_path(res.removeprefix("Converted to ").strip())
+            ctx.progress("» " + res)
+        job = jobs.get_manager().submit(f"Convert {src.name} to {to}", "convert", run)
+        safety.context().get("jobs", []).append(job.id)
+        return f"Converting {src.name} to {to} in the background; keep talking, I'll tell you when it's done."
     out = convert.convert(src, to, src_ext)
     if out.startswith("Converted to "):
         focus.set_path(out.removeprefix("Converted to ").strip())
     return out
+
+
+def _slow(src, to: str) -> bool:
+    from jarvis.core import convert
+    if src.is_dir():
+        return True
+    size = src.stat().st_size if src.exists() else 0
+    se, to = convert.ext_of(src.suffix), convert.ext_of(to)
+    return size > 40 * 1024 * 1024 or (se in convert.MEDIA and size > 5 * 1024 * 1024) or se in convert.OFFICE \
+        or to in convert.OFFICE or (se == "pdf" and size > 3 * 1024 * 1024)

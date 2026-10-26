@@ -689,6 +689,8 @@ class Agent:
                 self.last.setdefault("tools", []).append(entry)
             if res.workspace:
                 self.last.setdefault("workspace", []).extend(res.workspace)
+            if res.jobs:
+                self.last.setdefault("jobs", []).extend(res.jobs)  # the UI watches and announces them
         return res
 
     # --- public API ---

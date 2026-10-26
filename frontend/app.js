@@ -1467,6 +1467,46 @@ window.kuramaMinimized = (on) => { // dashboard: hide the panels, keep the orb (
   if (minimized && !asleep) setMode("text"); // one mic user at a time; the wake word (asleep) keeps listening
   applyActivity();
 };
+// ---------- mini KURAMA's workspace: a sheet over the chat, hidden until a job has something to show ----------
+const mws = { items: [], cur: 0 };
+async function mwsOpen(show = true) {
+  if (!MINI) return;
+  try { mws.items = ((await api.outputs(15)).items || []).filter((x) => !(String(x.name).startsWith("results/") && x.size < 4000)); }
+  catch { return; }
+  if (!mws.items.length) return;
+  $("m-ws").hidden = false;
+  mws.cur = 0; // newest first
+  if (show) { $("mws").hidden = false; $("m-ws").querySelector(".dot").hidden = true; mwsShow(); }
+  else $("m-ws").querySelector(".dot").hidden = false;
+}
+async function mwsShow() {
+  const x = mws.items[mws.cur];
+  if (!x) return;
+  $("mws-title").textContent = `${wsTitle(x.name)}  (${mws.cur + 1}/${mws.items.length})`;
+  const body = $("mws-body");
+  body.textContent = "";
+  if (x.kind === "image" || /\.(png|jpe?g|webp|gif)$/i.test(x.name)) {
+    const img = document.createElement("img");
+    img.src = api.outputUrl(x.name);
+    img.alt = x.name;
+    body.append(img);
+    return;
+  }
+  let txt = "";
+  try { txt = await (await fetch(api.outputUrl(x.name))).text(); } catch { txt = "(couldn't load it)"; }
+  for (const block of txt.slice(0, 40000).split(/\n(?=## )/)) { // "## Folder (n)" headings of a plan
+    const m = block.match(/^## (.*)\n?([\s\S]*)$/);
+    if (m) { const h = document.createElement("h4"); h.textContent = m[1]; body.append(h); }
+    const pre = document.createElement("pre");
+    pre.textContent = (m ? m[2] : block).replace(/^# .*\n+/, "");
+    body.append(pre);
+  }
+}
+$("m-ws").onclick = () => { if ($("mws").hidden) mwsOpen(true); else $("mws").hidden = true; };
+$("mws-close").onclick = () => { $("mws").hidden = true; };
+$("mws-prev").onclick = () => { if (mws.cur < mws.items.length - 1) { mws.cur++; mwsShow(); } };
+$("mws-next").onclick = () => { if (mws.cur > 0) { mws.cur--; mwsShow(); } };
+
 window.kuramaMiniWake = (rest = "") => { // minimized: the host heard "KURAMA / wake up" -> talk in this panel
   if (!MINI) return;
   wakeUp(rest || "");
@@ -1539,8 +1579,10 @@ async function pollJobs() {
 function announceJob(r) {
   const ok = r.status === "done";
   const title = r.title || "your task";
-  const msg = ok ? `Done: ${title}.${r.output_path ? (MINI ? " It's in the workspace on your desktop." : " It's in your workspace.") : ""}`
-    : `Sorry, ${title} failed${r.error ? `: ${r.error.slice(0, 120)}` : "."}`;
+  const own = ok && String(r.progress || "").startsWith("» ") ? r.progress.slice(2) : ""; // the job wrote its own reply
+  const msg = own || (ok ? `Done: ${title}.${r.output_path ? " It's in your workspace." : ""}`
+    : `Sorry, ${title} failed${r.error ? `: ${r.error.slice(0, 120)}` : "."}`);
+  if (ok && r.output_path && MINI) mwsOpen(); // mini panel: the result opens in its small workspace
   const b = new BotBubble();
   b.append(msg);
   b.finish();

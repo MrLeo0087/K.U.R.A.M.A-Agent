@@ -41,6 +41,7 @@ class FastResult:
     ok: bool
     latency_ms: int
     workspace: list[str] = field(default_factory=list)  # results saved for the dashboard's Workspace card
+    jobs: list[int] = field(default_factory=list)  # background jobs the tool started (the UI watches them)
 
 
 # --- normalisation ---
@@ -1248,13 +1249,14 @@ def everyday_intent(t: str) -> Intent | None:
             return Intent("dictate", "dictate", "windows", {"action": "stop"})
         lang = {"english": "en", "nepali": "ne", "hindi": "hi"}.get((m.group("lang") or "").lower(), "auto")
         return Intent("dictate", "dictate", "windows", {"action": "start", "lang": lang})
-    if m := re.fullmatch(r"(?:please\s+)?(?:(?P<undo>undo)\s+(?:the\s+)?(?:organi[sz]e|organi[sz]ing|sorting)|"
-                         r"(?P<prev>preview|plan)?\s*(?:smart\s+)?(?:organi[sz]e|clean\s+up|sort\s+out|rename\s+and\s+sort)\s+"
-                         r"(?:the\s+|my\s+)?(?P<f>[\w .-]{2,40}?)(?:\s+(?:folder|files))?)[\s.!]*", t, I):
-        if m.group("undo"):
-            return Intent("organize", "organize_files", "daily", {"action": "undo"})
-        return Intent("organize", "organize_files", "daily", {"action": "preview" if m.group("prev") else "organize",
-                                                              "folder": m.group("f").strip()})
+    if re.search(r"\bundo\s+(?:the\s+)?(?:organi[sz]e|organi[sz]ing|sorting)\b", t, I):
+        return Intent("organize", "organize_files", "daily", {"action": "undo"})
+    if (m := re.search(r"\b(?:organi[sz]e|clean\s+up|sort\s+out|tidy\s+up|arrange|rename\s+and\s+sort)\s+(?:the\s+|my\s+|this\s+)?"
+                       r"(?P<f>[\w .-]{2,40}?)(?:\s+(?:folder|files|directory))?(?:[,.!]|\s+(?:it\s+is|this\s+is|which|because|please)\b|$)",
+                       t, I)) and not re.search(r"\b(?:tabs?|windows?|desktop\s+icons?|code|imports?|paragraphs?|sentences?|text|thoughts?|ideas?|notes?|essay|points?|this\s+(?:list|email|message))\b", m.group("f"), I):
+        f = m.group("f").strip()
+        return Intent("organize", "organize_files", "daily", {"action": "organize",
+                                                              "folder": "this" if f.lower() in ("this", "it", "here", "folder", "files", "directory") else f})
     if m := re.fullmatch(r"(?:please\s+)?(?:(?:run|train|start)\s+(?:the\s+|my\s+)?(?P<p>.+?)\s+(?:on|in|using|with)\s+"
                          r"(?:a\s+|the\s+)?(?:free\s+)?(?:kaggle(?:'s)?(?:\s+(?:free\s+)?gpu)?|gpu|cloud\s+gpu)|(?:train|run)\s+(?:it|this)\s+on\s+gpu)"
                          r"[\s.!]*", t, I):
@@ -1332,6 +1334,30 @@ def video_dl_intent(t: str) -> Intent | None:
                                                       "playlist": bool(m.group("pl")) or kind == "playlist"})
 
 
+_YES_PLAN = re.compile(r"^(?:ok(?:ay)?\s+|yes\s+|yeah\s+)*(?:yes|yeah|yep|yup|sure|ok(?:ay)?|go\s+ahead|do\s+it|apply(?:\s+it|\s+the\s+plan)?|"
+                       r"looks\s+good|perfect|fine|good|great|haan|ho|हो|हुन्छ|गर)(?:[\s,.!]+(?:yes|good|do\s+it|go\s+ahead|"
+                       r"please|apply\s+it|organi[sz]e(?:\s+it)?|thanks?))*[\s.!]*$", I)
+_NO_PLAN = re.compile(r"^(?:no|nope|nah|cancel(?:\s+it|\s+the\s+plan)?|don'?t|do\s+not|stop|leave\s+it|forget\s+it|hoina|होइन|"
+                      r"नगर)(?:[\s,.!]+(?:thanks?|please|don'?t\s+do\s+it))*[\s.!]*$", I)
+_EDIT_PLAN = re.compile(r"\b(?:change|keep|don'?t\s+move|do\s+not\s+move|leave|put|move|skip|instead|exclude|except|rename|"
+                        r"separate|together|into|folder)\b", I)
+
+
+def plan_answer_intent(t: str) -> Intent | None:
+    """While an organize plan is waiting: 'yes good' applies it, 'no' cancels it, anything that sounds like a
+    change ('keep the pictures where they are') edits it. Costs one kv read when no plan waits."""
+    from jarvis.core import organizer
+    if not organizer.pending_active():
+        return None
+    if _YES_PLAN.match(t):
+        return Intent("organize", "organize_files", "daily", {"action": "apply"})
+    if _NO_PLAN.match(t):
+        return Intent("organize", "organize_files", "daily", {"action": "cancel"})
+    if _EDIT_PLAN.search(t) and len(t.split()) <= 30:
+        return Intent("organize", "organize_files", "daily", {"action": "edit", "change": t})
+    return None
+
+
 def _ui_intent(t: str) -> Intent | None:
     """In-app control at 0 tokens: tab/page shortcuts, 'press ctrl t', 'type hello', 'click Wi-Fi'."""
     from jarvis.core import uiagent as ui
@@ -1365,6 +1391,8 @@ def match(text: str) -> Intent | None:
         return None
     if si := _self_intent(t):
         return si
+    if pi := plan_answer_intent(t):
+        return pi
     if ui := _ui_intent(t):
         return ui
     if cv := convert_intent(t):
@@ -1693,12 +1721,14 @@ def try_answer(text: str, lang: str | None = None, confirm=None, mode: str = "te
     if lang is None:
         from jarvis.core.planner import detect_lang
         lang = detect_lang(text)
+    started: list[int] = []  # background jobs the tool started
     if intent.tool.startswith("_"):
         ok, output = _internal(intent)
     else:
         shelf: list[str] = []  # files the tool put in the Workspace
         res = safety.execute(intent.tool, {k: v for k, v in intent.args.items() if not k.startswith("_")},
-                              confirm=confirm, ctx={**(ctx or {}), "user_text": text, "published": shelf})
+                              confirm=confirm, ctx={**(ctx or {}), "user_text": text, "published": shelf,
+                                                    "jobs": started})
         ok, output = res.ok, res.output
         if shelf:
             intent.args.setdefault("_published", shelf[-1])
@@ -1713,7 +1743,7 @@ def try_answer(text: str, lang: str | None = None, confirm=None, mode: str = "te
         store.log_routing(text, [intent.group], "fastpath", ms)
     except Exception as e:
         log.warning("could not log routing: %s", e)
-    return FastResult(answer, intent, ok, ms, published)
+    return FastResult(answer, intent, ok, ms, published, started)
 
 
 # --- P9b --- reminders: "remind me to X at/in ...", "remind me at ... to X", list, cancel
