@@ -44,6 +44,12 @@ def lang_of(text: str) -> str:
     return ""
 
 
+def _short(title: str) -> str:
+    """'● test.py - KURAMA - Claude-1 - Visual Studio Code' -> 'test.py' (something a voice can say)."""
+    first = re.sub(r"^[●•\s]+", "", (title or "").split(" - ")[0]).strip()
+    return first or "that window"
+
+
 def is_code(text: str) -> bool:
     lines = [ln for ln in text.splitlines() if ln.strip()]
     hits = len(_CODE_HINT.findall(text))
@@ -147,8 +153,8 @@ def write_code(request: str) -> str:
         return g + "\n\n" + code
     rewrite.put(g, code + "\n")
     lines = code.count("\n") + 1
-    return (f"Wrote {lines} lines of {lang_name or 'code'} at your cursor in '{g.title}'. It's also on your clipboard; "
-            f"Ctrl+Z in the editor undoes it.")
+    return (f"Wrote {lines} lines of {lang_name or 'code'} at your cursor in {_short(g.title)}. Control Z in the "
+            f"editor undoes it.")
 
 
 def explain_file(path: Path, lang: str = "") -> str:
@@ -194,8 +200,8 @@ def run(action: str, request: str = "", lang: str = "", replace: bool = False, p
         if not new:
             return "error: nothing came back; the selection was not changed"
         rewrite.put(g, new)
-        return (f"Replaced the highlighted {'code' if is_code(sel) else 'text'} in '{g.title}'. Ctrl+Z there undoes "
-                f"it; the new version is also on your clipboard.")
+        return (f"Done, I replaced the highlighted {'code' if is_code(sel) else 'text'} in {_short(g.title)}. "
+                f"Control Z there undoes it.")
     if action == "translate":
         out = translate(sel, lang or "ne")
         if replace:

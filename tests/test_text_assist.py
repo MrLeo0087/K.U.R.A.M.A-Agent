@@ -34,7 +34,7 @@ def test_read_actions_leave_the_selection(desk):
 def test_write_actions(desk):
     st, calls = desk
     st["sel"] = "    def add(a,b):\n        return a+b"
-    assert "Replaced the highlighted code" in assist.run("improve", "optimize this code")
+    assert "replaced the highlighted code" in assist.run("improve", "optimize this code")
     assert st["pasted"].startswith("    def add")  # indentation kept
     assert ("assist_code_fix", True) in calls  # code uses the smart model
     assert "Wrote" in assist.run("write", "write a calculator function here")
@@ -56,3 +56,21 @@ def test_routing():
     assert a("explain main.py") == ("text_assist", "explain_file")
     assert fastpath.match("explain quantum physics") is None and fastpath.match("what is the meaning of life") is None
     assert a("explain this error") == ("fix_error", "explain")
+
+
+def test_more_free_phrasings():
+    def a(t):
+        i = fastpath.match(t)
+        return i and (i.tool, i.args.get("action"), i.args.get("text", ""))
+    assert a("Can you tell me the meaning of this sentence or paragraph?") == ("text_assist", "explain", "")
+    assert a("What is the meaning of this whole paragraph?") == ("text_assist", "explain", "")
+    assert a("Translate this whole paragraph in Nepali.") == ("text_assist", "translate", "")  # the selection
+    assert a("Can you modify this much line of the code and make it more better and detailed?")[1] == "improve"
+
+
+def test_long_answers_go_to_the_workspace():
+    long = "This function adds numbers. It loops over the list. " + "Then it returns.\n    total = a + b;\n" * 40
+    assert fastpath._needs_workspace(long)
+    head = fastpath._speakable_head(long, "en")
+    assert head.startswith("This function adds numbers.") and "workspace" in head and "total =" not in head
+    assert assist._short("● test.py - KURAMA - Claude-1 - Visual Studio Code") == "test.py"

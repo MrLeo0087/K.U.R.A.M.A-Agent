@@ -1210,7 +1210,10 @@ _REWRITE = re.compile(r"^(?:please\s+)?(?:make\s+" + _SEL + r"\s+(?:more\s+)?(?:
                       r"(?:\s+.{1,40})?|translate\s+" + _SEL + r"\s+(?:in)?to\s+\w+(?:\s+\w+)?)[\s.!]*$", I)
 
 
-_SELREF = r"(?:this|it|that|these|the\s+selected(?:\s+\w+)?|the\s+highlighted(?:\s+\w+)?|selected\s+\w+|highlighted\s+\w+|the\s+selection|what\s+i\s+(?:selected|highlighted))"
+_SELREF = (r"(?:(?:this|that|these|the)\s+(?:whole\s+|entire\s+|full\s+|complete\s+)?(?:selected\s+|highlighted\s+)?"
+           r"(?:word|words|sentence|sentences|paragraph|paragraphs|text|line|lines|part|passage|question|phrase|section|"
+           r"code|function|thing|para)|this|it|that|these|the\s+selected(?:\s+\w+)?|the\s+highlighted(?:\s+\w+)?|"
+           r"selected\s+\w+|highlighted\s+\w+|the\s+selection|what\s+i\s+(?:selected|highlighted))")
 _LANGW = r"(?:in|into|to)\s+(?:nepali|hindi|english|नेपाली|हिन्दी)"
 _A_EXPLAIN = re.compile(r"^(?:please\s+|kurama\W+|can\s+you\s+|could\s+you\s+)*(?:explain(?:\s+me)?|what\s+(?:does|do|is)\s+"
                         + _SELREF + r"\s+(?:mean|meaning|saying|say|talking\s+about|about|doing|do)|what\s+is\s+(?:the\s+)?meaning\s+of\s+"
@@ -1221,7 +1224,8 @@ _A_MEANING = re.compile(r"^(?:please\s+|kurama\W+|can\s+you\s+)*(?:(?:what(?:'s|
                         r"(?:what\s+does\s+)?(?P<z>[\w'-]{2,30})\s+(?:mean|means))(?:\s+" + _LANGW + r")?\s*\??$", I)
 _A_TRANSLATE = re.compile(r"^(?:please\s+|kurama\W+|can\s+you\s+)*translate\s+(?P<x>.+?)\s+(?:in|into|to)\s+(?P<l>nepali|hindi|english|"
                           r"नेपाली|हिन्दी)(?P<r>\s+and\s+replace(?:\s+it)?|\s+(?:in\s+place|here))?\s*[.!]*$", I)
-_A_CODEFIX = re.compile(r"\b(?:improve|optimi[sz]e|fix|refactor|format|clean\s+up|add\s+(?:comments|docstrings|type\s+hints)\s+to|"
+_A_CODEFIX = re.compile(r"\b(?:improve|optimi[sz]e|fix|refactor|format|clean\s+up|modify|change|update|edit|enhance|expand|rewrite|"
+                        r"correct|add\s+(?:comments|docstrings|type\s+hints)\s+to|"
                         r"simplify|speed\s+up|debug|make\s+(?:it|this)\s+(?:faster|cleaner|better))\b.*\b(?:code|function|class|"
                         r"method|script|loop|query|component)\b", I)
 _A_WRITE = re.compile(r"^(?:please\s+|kurama\W+|can\s+you\s+|now\s+)*(?:write|create|generate|add|make|implement|code)\s+(?:me\s+)?"
@@ -1245,6 +1249,10 @@ def assist_intent(t: str) -> Intent | None:
         sel = bool(re.fullmatch(_SELREF + r"(?:\s+(?:word|sentence|paragraph|text|line|part))?", x, I))
         return Intent("assist", "text_assist", "clipboard", {"action": "translate", "lang": l, "replace": bool(m.group("r")),
                                                              "text": "" if sel else x.strip("'\"")})
+    if re.search(r"\b(?:meaning|artha|matlab|explain|explanation)\b", t, I) and re.search(
+            r"\b(?:this|that|the)\s+(?:whole\s+|entire\s+|full\s+)?(?:sentence|sentences|paragraph|paragraphs|passage|"
+            r"question|line|lines|para|text|section)\b", t, I) and len(t.split()) <= 20:
+        return Intent("assist", "text_assist", "clipboard", {"action": "explain", "lang": lang})
     if m := _A_MEANING.match(t):
         x = (m.group("x") or m.group("y") or m.group("z") or "").strip(" '\"")
         if m.group("z") and x.lower() in ("this", "that", "it", "these"):  # "what does this mean" = explain it
@@ -1649,6 +1657,28 @@ def _say(key: str, lang: str, x: str) -> str:
     return (random.choice(v) if isinstance(v, tuple) else v).format(x=x)  # a few wordings: less robotic
 
 
+def _needs_workspace(text: str) -> bool:
+    """Too long to listen to, or full of code / paths: the chat (and the voice) get a short version."""
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    codey = sum(1 for ln in lines if re.search(r"[{};=]\s*$|^\s{4,}\S|^\s*(?:def|class|import|return|for|if)\b", ln))
+    return len(text) > 700 or "```" in text or codey >= 3
+
+
+def _speakable_head(text: str, lang: str) -> str:
+    """The first 2-3 plain sentences (no code, no paths) + where the rest is."""
+    plain = re.sub(r"```.*?```", " ", text, flags=re.S)
+    plain = " ".join(ln.strip(" -*•") for ln in plain.splitlines()
+                     if ln.strip() and not re.search(r"[{};=]\s*$|^\s{4,}\S|/[\w.-]+/", ln))
+    sents = re.split(r"(?<=[.!?।])\s+", plain)
+    head = ""
+    for sn in sents:
+        if len(head) + len(sn) > 320 and head:
+            break
+        head += (" " if head else "") + sn
+    tail = {"ne": "पूरा उत्तर workspace मा छ।", "hi": "पूरा जवाब workspace में है।"}.get(lang, "The full answer is in the workspace.")
+    return (head.strip() or "Done.") + " " + tail
+
+
 def render(intent: Intent, ok: bool, output: str, lang: str) -> str:
     if intent.name == "say":
         return intent.args.get(lang) or intent.args["en"]
@@ -1803,6 +1833,12 @@ def try_answer(text: str, lang: str | None = None, confirm=None, mode: str = "te
         return None  # unknown place: let the LLM path try (it can fix spelling)
     answer = render(intent, ok, output, lang or "en")
     published = [intent.args.pop("_published")] if "_published" in intent.args else []
+    if ok and _needs_workspace(answer) and not published and not intent.tool.startswith("_") \
+            and intent.group not in ("self", "usage"):  # private / status answers stay in the chat
+        from jarvis.core import workspace
+        if (path := workspace.publish(intent.label or intent.name or "Result", answer)) is not None:
+            published = [str(path)]
+            answer = _speakable_head(answer, lang or "en")
     if mode == "voice" and intent.name in _VOICE_FIRST_LINE:
         answer = answer.split("\n", 1)[0]
     ms = int((time.monotonic() - t0) * 1000)

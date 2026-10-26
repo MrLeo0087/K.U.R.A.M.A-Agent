@@ -128,7 +128,7 @@ function flashError() {
 
 function maybeResume() {
   if (mode !== "conv" || !conv.on || player.active || sttBusy) return;
-  if (busy && !pendingConfirm) return;
+  if (busy && !pendingConfirm && !S.mute) return; // voice off: you can talk again while the answer is still coming
   if (conv.state === "listening" || conv.state === "capturing") return;
   conv.listen();
 }
@@ -269,7 +269,12 @@ async function handleUtterance(blob) {
 const log = $("log");
 const MAX_MSGS = 60; // keeps the DOM small on an all-day page
 const nearBottom = () => log.scrollHeight - log.scrollTop - log.clientHeight < 90;
-const scrollDown = (force) => { if (force || nearBottom()) log.scrollTop = log.scrollHeight; };
+let stick = true; // follow new messages until the user scrolls up to read something older
+log.addEventListener("scroll", () => { stick = nearBottom(); }, { passive: true });
+const scrollDown = (force) => {
+  if (force) stick = true;
+  if (stick || nearBottom()) { log.style.scrollBehavior = "auto"; log.scrollTop = log.scrollHeight; log.style.scrollBehavior = ""; }
+};
 const hhmm = () => new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
 function esc(s) {
@@ -406,6 +411,20 @@ async function answerConfirm(id, yes) {
 let lastBotAt = 0; // talk mode: speech long after KURAMA last spoke is probably room talk (sent as "ambient")
 const FOLLOWUP_MS = 45000;
 
+// a long answer is not read out in full: the first ~3 sentences, then "the rest is on the screen"
+const SPEAK_MAX = 420;
+const spoken = { chars: 0, cut: false };
+function speakPart(sentence, lang, gen) {
+  if (S.mute || spoken.cut || gen !== player.gen) return;
+  if (spoken.chars + sentence.length > SPEAK_MAX && spoken.chars > 0) {
+    spoken.cut = true;
+    player.enqueue(lang === "ne" ? "बाँकी स्क्रिनमा छ।" : lang === "hi" ? "बाकी स्क्रीन पर है।" : "The rest is on the screen.", lang, gen);
+    return;
+  }
+  spoken.chars += sentence.length;
+  player.enqueue(sentence, lang, gen);
+}
+
 async function sendChat(text, { voice = false, lang = null, speak = false, ambient = false } = {}) {
   text = (text || "").trim();
   if (!text) return;
@@ -421,6 +440,7 @@ async function sendChat(text, { voice = false, lang = null, speak = false, ambie
   const ctrl = new AbortController();
   chatCtrl = ctrl;
   if (speak) player.stop(); // a new turn replaces anything still being said
+  spoken.chars = 0; spoken.cut = false;
   const gen = player.gen;
   const split = speak ? new SentenceSplitter() : null;
   const hint = lang && lang !== "auto" ? lang : S.lang !== "auto" ? S.lang : null;
@@ -431,7 +451,7 @@ async function sendChat(text, { voice = false, lang = null, speak = false, ambie
         case "delta":
           bot.append(ev.text);
           if (miniGhost) miniCaptionSoon(() => bot.text);
-          if (split) split.feed(ev.text).forEach((s) => player.enqueue(s, hint, gen));
+          if (split) split.feed(ev.text).forEach((s) => speakPart(s, hint, gen));
           break;
         case "tool": bot.tool(ev); break;
         case "confirm":
@@ -452,7 +472,7 @@ async function sendChat(text, { voice = false, lang = null, speak = false, ambie
           openConfirm = null;
           if (ev.ignored) { bot.root.remove(); userBubble?.remove(); maybeResume(); break; } // room talk, not for KURAMA
           lastBotAt = Date.now();
-          if (split) { const rest = split.flush(); if (rest) player.enqueue(rest, hint || ev.lang, gen); }
+          if (split) { const rest = split.flush(); if (rest) speakPart(rest, hint || ev.lang, gen); }
           bot.done(ev);
           miniCaption("bot", bot.text || ev.text || "Done.", true);
           wsFromReply(text, bot.text);
@@ -1440,8 +1460,10 @@ function renderMute() {
 $("btn-voice").onclick = () => {
   S.mute = !S.mute;
   saveSettings(S);
-  if (S.mute) player.stop();
+  if (S.mute) { player.stop(); spoken.cut = true; } // voice off = nothing more is spoken, and the mic is free at once
   renderMute();
+  updateState();
+  maybeResume();
   toast(S.mute ? "Voice off: KURAMA will reply in text only." : "Voice on.");
 };
 renderMute();
