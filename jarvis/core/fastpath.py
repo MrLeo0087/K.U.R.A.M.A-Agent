@@ -104,18 +104,23 @@ TIME_PLACE = _rx(
 )
 
 # --- date (separate from time: full date + weekday, Bikram Sambat by default) ---
-_CAL = (r"(?:(?: in| according to| as per)? (?:a\.?d\.?|b\.?s\.?|english|gregorian|international|"
-        r"nepali|bikram ?sambat|angreji|अंग्रेजी|अङ्ग्रेजी|विक्रम ?सम्वत|ईस्वी))?")
+# calendar tail, incl. common STT mishearings: "bikram samad/sambad", "vikram samvat", bare "sambat"
+_CAL = (r"(?:(?: in| according to| as per| on)? (?:a\.?d\.?|b\.?s\.?|english|gregorian|international|"
+        r"nepali|nepalese|hindu|(?:bikram|vikram) ?sam\w*|sam(?:bat|bad|vat|aad|ad)|angreji|"
+        r"अंग्रेजी|अङ्ग्रेजी|(?:विक्रम|बिक्रम) ?सम्वत|ईस्वी|नेपाली))?")
+_D = r"(?:date|day|weekday|din|gate|miti|tithi|baar)"
 DATE_LOCAL = _rx(
-    _TQ + r"what(?:'s| is| was)?(?: the| today'?s)? date(?: (?:today|now|of today|is it|is today))?" + _CAL,
-    _TQ + r"(?:what(?:'s| is)?|which) (?:day|weekday)(?: of the week)?(?: is it| is today| today| is this)?" + _CAL,
-    _TQ + r"(?:tell me |say )?(?:the |what(?:'s| is) the )?(?:today'?s )?date" + _CAL,
-    _TQ + r"(?:what|which) (?:week|day of the week)(?: is (?:it|this|today))?",
+    # "what is (the) date/day (today/of today/right now/is it) ...", "tell me the date", "say today's date"
+    _TQ + r"(?:(?:can you |could you )?(?:tell|say|give)(?: me)? )?(?:what(?:'s| is| was| are)?|which)?\s*"
+          r"(?:the |today'?s |todays |me the )*" + _D +
+          r"(?:\s+(?:today|now|right now|of today|is it|is today|of the day|is this|of the week|is it today))?" + _CAL,
+    # "which week is this", "what day of the week"
+    _TQ + r"(?:what|which) (?:week|day of the week)(?: is (?:it|this|today|it today))?",
     r"(?:today'?s date|date today|what day today)" + _CAL,
     # Nepali / Hindi romanized + script
-    r"(?:aaja?|आज)(?: ko| ka)? (?:kati gate|kun din|kun baar|kaun din|kya (?:din|tarikh|taarikh))(?: ho| hai| hun)?",
-    r"(?:aajako|आजको) (?:miti|miti k ho|din)",
-    r"आज (?:कति गते|कुन दिन|कुन बार|कौन सा दिन|क्या (?:दिन|तारीख))(?: हो| है)?",
+    r"(?:aaja?|आज)(?: ko| ka)? (?:kati gate|kun din|kun baar|kaun din|kya (?:din|tarikh|taarikh))(?: ho| hai| hun)?" + _CAL,
+    r"(?:aajako|आजको) (?:miti|miti k ho|din)" + _CAL,
+    r"आज (?:कति गते|कुन दिन|कुन बार|कौन सा दिन|क्या (?:दिन|तारीख))(?: हो| है)?" + _CAL,
     r"आजको मिति(?: के हो)?", r"मिति (?:कति|के हो)",
 )
 
