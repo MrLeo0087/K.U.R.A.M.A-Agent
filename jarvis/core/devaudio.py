@@ -1,9 +1,8 @@
 """Device sound and the mic ("Hear device sound" in settings).
 
 OFF (default): the laptop's own sound (videos, music, KURAMA's own voice) is removed from what KURAMA hears.
-PipeWire's echo canceller (module-echo-cancel, webrtc) gets a sink that every app plays through (the default speaker)
-and a mic source with that sound subtracted, which only KURAMA's page records from (picked by name; the system's
-default mic stays the real one, so other apps never lose their mic when the canceller is loaded or removed). Measured here: the speaker's echo drops
+PipeWire's echo canceller (module-echo-cancel, webrtc) gets a sink that every app plays through and a mic source
+with that sound subtracted; both become the defaults, so it covers all apps. Measured here: the speaker's echo drops
 by ~20 dB after 2-3 s. Cost: ~9% of a core, but only while something records that mic (KURAMA awake and listening);
 playback through it costs nothing extra, and the sleeping wake listener reads the raw mic (raw_source()).
 The canceller sends sound to the real speaker of the moment: headphones plugged in or Bluetooth connected -> it
@@ -81,16 +80,6 @@ def hear() -> bool:
     return store.kv_get(KEY, "1") == "1"
 
 
-def mic_off() -> bool:
-    """The user muted the mic / chose text mode: the canceller must not hold the real mic (it keeps it RUNNING)."""
-    from jarvis.core import store
-    return store.kv_get("mic_off") == "1"
-
-
-def wanted() -> bool:
-    return not hear() and not mic_off()
-
-
 def cancelling() -> bool:
     try:
         return bool(_ours())
@@ -140,11 +129,7 @@ def cancel_on(sink: str | None = None) -> None:
                 break
             time.sleep(0.1)
         _pactl("set-default-sink", EC_SINK)
-        # the system's default MIC stays the real one: other apps (Brave / WhatsApp / Meet) never record through our
-        # virtual mic, so loading/unloading the canceller can't pull a mic away from them ('Microphone not found');
-        # KURAMA's page picks the cleaned mic by its name ('KURAMA')
-        if _pactl("get-default-source").strip() != source:
-            _pactl("set-default-source", source)
+        _pactl("set-default-source", EC_SOURCE)
 
 
 def cancel_off() -> None:
@@ -165,7 +150,7 @@ def apply() -> dict:
     if not available():
         return {**status(), "error": "pactl not found"}
     try:
-        if not wanted():  # 'hear device sound' on, or the mic is off: no canceller, real speaker + mic
+        if hear():
             cancel_off()
         else:
             cancel_on()
@@ -184,7 +169,7 @@ def set_hear(on: bool) -> dict:
 
 def _follow() -> None:
     """A speaker came or went: aim the canceller at the newest real one (headphones, Bluetooth, HDMI)."""
-    if not wanted() or not cancelling():
+    if hear() or not cancelling():
         return
     saved, sinks = _load_saved(), _names("sinks")
     real = [s for s in sinks if _real(s)]
@@ -210,14 +195,14 @@ def watch() -> None:
     def run() -> None:
         while True:
             try:
-                if wanted() and not cancelling():  # the audio server restarted: set it up again
+                if not hear() and not cancelling():  # the audio server restarted: set it up again
                     cancel_on()
                 p = subprocess.Popen(["pactl", "subscribe"], stdout=subprocess.PIPE, text=True)
                 for line in p.stdout:  # "Event 'new' on sink #123", "Event 'change' on server #45"
                     if "'change' on server" in line:  # the user picked another speaker in Settings
                         try:
                             cur = _pactl("get-default-sink").strip()
-                            if _real(cur) and wanted() and cancelling():
+                            if _real(cur) and not hear() and cancelling():
                                 cancel_on(cur)
                         except Exception as e:
                             log.warning("device sound: %s", e)

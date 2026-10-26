@@ -13,10 +13,9 @@ export const DEFAULTS = Object.freeze({
   apiBase: API_BASE,
   token: "",
   mute: true, // the speaker button: true = KURAMA never speaks in this UI (replies stay as text)
-  textOnly: false, // the user chose text mode: KURAMA holds no mic at all (no wake word) until talk/mic is chosen
   micMuted: false, // talk mode: the user muted the mic (kept until unmuted)
   wakeListen: true, // talk mode on at start, asleep until "wake up KURAMA"; "sleep now" puts it back to sleep
-  lowPower: true, // lean screen (owner: speed first): no animations / blur / shadows, static orb, 5 s status
+  lowPower: null, // null = follow prefers-reduced-motion
   lang: "auto", // auto | en | ne | hi
   // Settings -> Voice (the best general values; the user tunes them for their mic/room)
   voice: { sens: 5, pause: 1.0, minMs: 300, ns: true, ec: true, agc: true },
@@ -31,8 +30,11 @@ export function loadSettings() {
     const q = new URLSearchParams(location.search).get("api");
     if (q && /^https?:\/\//i.test(q)) { s.apiBase = q.replace(/\/+$/, ""); saveSettings(s); }
     const lp = new URLSearchParams(location.search).get("lowpower");  // ?lowpower=1 (wallpaper mode)
-    if (lp !== null && saved.lowPower == null) s.lowPower = lp !== "0"; // only a default: the user's choice wins
-    if (!saved.leanV1) { s.lowPower = true; s.leanV1 = true; saveSettings(s); } // once: everyone starts lean
+    if (lp !== null) s.lowPower = lp !== "0";
+    if (!saved.resetV2) { // once: undo what the reverted 2026-10-26 builds saved (mic left muted, lean / text-only)
+      s.micMuted = false; s.lowPower = lp !== null ? lp !== "0" : null; delete s.textOnly; delete s.leanV1; s.resetV2 = true;
+      saveSettings(s);
+    }
   } catch { /* ignore */ }
   return s;
 }

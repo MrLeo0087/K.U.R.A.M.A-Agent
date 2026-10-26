@@ -53,7 +53,7 @@ except (ValueError, ImportError):
     Wnck = None
 
 PORT = os.getenv("JARVIS_API_PORT", "8000")
-DEFAULT_URL = os.getenv("KURAMA_UI_URL", f"http://127.0.0.1:{PORT}/?wallpaper=1")
+DEFAULT_URL = os.getenv("KURAMA_UI_URL", f"http://127.0.0.1:{PORT}/?lowpower=0&wallpaper=1")
 CHECK_MS = 2000
 STATE_FILE = Path(__file__).resolve().parent.parent / "data" / "mini.json"  # minimized? + button position
 BUBBLE = 56  # floating button size (px)

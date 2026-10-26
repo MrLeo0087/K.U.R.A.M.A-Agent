@@ -54,7 +54,6 @@ export class Api {
   voiceSettings() { return this.request("/api/v1/voice/settings"); }
   setVoiceSettings(body) { return this.request("/api/v1/voice/settings", { method: "POST", body }); }
   setDeviceSound(hear) { return this.request("/api/v1/voice/device-sound", { method: "POST", body: { hear } }); }
-  micOff(off) { return this.request("/api/v1/wake/mic", { method: "POST", body: { off: !!off } }); }
   wakeAwake() { return this.request("/api/v1/wake/awake", { method: "POST", body: {} }); }
   wakeEvents() { return new EventSource(this.url("/api/v1/wake/events", true)); }
   powerOff() { return this.request("/api/v1/power/off", { method: "POST", body: {} }); }

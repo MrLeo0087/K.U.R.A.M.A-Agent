@@ -156,23 +156,13 @@ export class Mic {
         ? "Microphone needs a secure page: open http://127.0.0.1:8000 (or https)."
         : "Microphone not available in this window — open http://127.0.0.1:8000 in a browser, or update the wallpaper app.");
     }
-    // KURAMA's echo-cancelled mic ('Microphone (KURAMA, no device sound)') when it exists: it is NOT the system
-    // default (other apps keep the real mic), so it is asked for by name; the sleeping listener uses the plain mic
-    let deviceId;
-    if (!plain) {
-      try {
-        const ins = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "audioinput");
-        deviceId = ins.find((d) => /kurama/i.test(d.label))?.deviceId || undefined;
-      } catch { /* no list: the default mic */ }
-    }
-    // browser echo cancellation only cleans KURAMA's own mic capture (it never touches speaker volume), so keep
-    // it on regardless of the system "hear device sound" setting
-    const audio = { echoCancellation: !plain && this.proc.ec, noiseSuppression: !plain && this.proc.ns,
-                    autoGainControl: !plain && this.proc.agc, channelCount: 1 };
-    let stream;
-    try { stream = await navigator.mediaDevices.getUserMedia({ audio: deviceId ? { ...audio, deviceId: { exact: deviceId } } : audio }); }
-    catch (e) { if (!deviceId) throw e; stream = await navigator.mediaDevices.getUserMedia({ audio }); } // it just went away
-
+    const stream = await navigator.mediaDevices.getUserMedia({
+      // hearDevice: the user wants KURAMA to hear the laptop's sound too, so the page doesn't cancel it either
+      // browser echo cancellation only cleans KURAMA's own mic capture (it never touches speaker volume), so keep
+      // it on regardless of the system "hear device sound" setting
+      audio: { echoCancellation: !plain && this.proc.ec, noiseSuppression: !plain && this.proc.ns,
+               autoGainControl: !plain && this.proc.agc, channelCount: 1 },
+    });
     stream.getAudioTracks().forEach((t) => { t.enabled = !this.muted; });
     const ctx = audioCtx(); // full rate: a 16 kHz context made speech recognition noticeably worse
     this.src = ctx.createMediaStreamSource(stream);

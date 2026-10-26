@@ -15,7 +15,6 @@ import json
 import logging
 import threading
 
-from pydantic import BaseModel
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 
@@ -67,38 +66,9 @@ class WakeService:
 SERVICE = WakeService()
 
 
-MIC_OFF_KEY = "mic_off"  # the user muted the mic or chose text mode: KURAMA holds NO microphone (other apps get it)
-
-
-def mic_off() -> bool:
-    from jarvis.core import store
-    return store.kv_get(MIC_OFF_KEY) == "1"
-
-
-class MicIn(BaseModel):
-    off: bool
-
-
-@router.post("/mic", summary="Mic off (mute / text mode): stop every KURAMA listener and refuse new ones; on = allowed again")
-async def wake_mic(body: MicIn):
-    from jarvis.core import store
-    changed = mic_off() != body.off
-    store.kv_set(MIC_OFF_KEY, "1" if body.off else "")
-    if body.off:
-        SERVICE.stop()
-    if changed:  # the echo canceller keeps the real mic RUNNING: unload it while off, load it back after
-        from fastapi.concurrency import run_in_threadpool
-        from jarvis.core import devaudio
-        await run_in_threadpool(devaudio.apply)
-    return {"mic_off": body.off}
-
-
 @router.post("/sleep", summary="Listen (server-side, cheap) for the wake phrase")
 async def wake_sleep():
     from jarvis.core import modes
-    if mic_off():  # muted / text mode: never open the mic, not even for the wake word
-        SERVICE.stop()
-        return {"listening": False, "reason": "the mic is off (muted or text mode)"}
     if not modes.wake_allowed():  # the power mode turned the wake word off (saves the mic + Whisper calls)
         SERVICE.stop()
         return {"listening": False, "reason": "wake word is off in this mode"}
@@ -114,7 +84,7 @@ async def wake_awake():
 
 @router.get("/status")
 async def wake_status():
-    return {"listening": SERVICE.listening, "mic_off": mic_off()}
+    return {"listening": SERVICE.listening}
 
 
 @router.get("/events", summary="Wake events as Server-Sent Events")

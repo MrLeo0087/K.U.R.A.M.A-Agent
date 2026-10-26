@@ -8,7 +8,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 PORT="${JARVIS_API_PORT:-8000}"
-URL="${KURAMA_UI_URL:-http://127.0.0.1:${PORT}/?wallpaper=1}"
+URL="${KURAMA_UI_URL:-http://127.0.0.1:${PORT}/?lowpower=0&wallpaper=1}"
 PY=/usr/bin/python3
 SCRIPT="scripts/kurama_wallpaper.py"
 

@@ -62,7 +62,7 @@ def pactl(monkeypatch, tmp_path):
 def test_device_sound_off_routes_everything_through_the_canceller(pactl):
     st = devaudio.set_hear(False)
     assert st["cancelling"] and not st["hear"]
-    assert pactl.default == {"sink": devaudio.EC_SINK, "source": HW_SRC}  # other apps keep the real mic
+    assert pactl.default == {"sink": devaudio.EC_SINK, "source": devaudio.EC_SOURCE}
     args = next(iter(pactl.mods.values()))
     assert f"sink_master={HW_SINK}" in args and f"source_master={HW_SRC}" in args
     assert devaudio.raw_source() == HW_SRC  # the sleeping wake listener reads the cheap raw mic
@@ -151,15 +151,3 @@ def test_wallpaper_processes_are_one_name():
     assert doctor.app_name(host) == "KURAMA screen"
     assert doctor.app_name(P("WebKitWebProcess", ["/usr/lib/webkit/WebKitWebProcess", "7"], host)) == "KURAMA screen"
     assert doctor.app_name(P("WebKitWebProcess", ["/usr/lib/webkit/WebKitWebProcess"], P("evolution", ["evolution"]))) == "WebKit"
-
-
-def test_mic_off_unloads_the_canceller_and_on_brings_it_back(pactl):
-    """The canceller keeps the real mic RUNNING; while the mic is off (mute / text mode) other apps need it."""
-    devaudio.set_hear(False)
-    assert devaudio.cancelling()
-    store.kv_set("mic_off", "1")
-    devaudio.apply()
-    assert not devaudio.cancelling() and pactl.default == {"sink": HW_SINK, "source": HW_SRC}
-    store.kv_set("mic_off", "")
-    devaudio.apply()
-    assert devaudio.cancelling() and pactl.default["source"] == HW_SRC

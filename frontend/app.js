@@ -21,10 +21,10 @@ let minimized = false; // the dashboard is minimized to the floating button (win
 let miniGhost = false; // mini panel closed while in talk mode: it keeps listening, replies show beside the button
 
 // ---------- orb ----------
-const orb = new Orb($("orb-canvas"), { halo: document.querySelector("#orb .halo"), lowPower: false, reducedMotion }); // the orb always lives (owner); lean only stills the rest
+const orb = new Orb($("orb-canvas"), { halo: document.querySelector("#orb .halo"), lowPower: lowPowerOn(), reducedMotion });
 document.body.classList.toggle("low-power", lowPowerOn());
 const dust = new Dust($("bg-dust"), { orbEl: $("orb"), lowPower: lowPowerOn() });
-if (params.get("dust") !== "0" && !MINI && !lowPowerOn()) orb.attach(dust); // one loop drives the orb and the background field (?dust=0: off)
+if (params.get("dust") !== "0" && !MINI) orb.attach(dust); // one loop drives the orb and the background field (?dust=0: off)
 if (!MINI) orb.start();
 
 // ---------- voice plumbing ----------
@@ -148,8 +148,6 @@ function setMode(m) {
 
 async function toggleMic() {
   audioCtx();
-  if (S.textOnly) setTextOnly(false);
-  if (conv.muted) { conv.mute(false); S.micMuted = false; saveSettings(S); syncMicOff(); }
   if (mode === "conv") setMode("text");
   if (!recording) {
     try { await mic.start(); } catch (e) { toast(micError(e)); flashError(); return; }
@@ -204,8 +202,6 @@ function dictate(text, lang) {
 
 async function toggleConv() {
   audioCtx();
-  if (S.textOnly) setTextOnly(false);
-  if (conv.muted && !(mode === "conv" && conv.on)) { conv.mute(false); S.micMuted = false; saveSettings(S); syncMicOff(); } // talk = unmuted
   if (mode === "conv" && (conv.on || asleep)) { setMode("text"); return; } // talk button again: leave talk mode
   if (recording) setMode("text");
   // an explicit click on the talk button = "listen to me now", NOT "wait for the wake word" (that passive,
@@ -548,30 +544,15 @@ $("composer").addEventListener("submit", (e) => {
   orb.poke(1);
   sendChat(t, { voice: speak || dictated, lang, speak });
 });
-$("m-text").onclick = () => { setMode("text"); setTextOnly(true); input.focus(); };
-// mic off = KURAMA holds NO microphone: the page's stream is stopped (not just silenced) and the server's wake
-// listener stops and refuses to start (also the mini-mode wake bridge), so the camera / Meet / other apps get it
-function micIsOff() { return !!(S.textOnly || conv.muted); }
-function syncMicOff() { api.micOff(micIsOff()).catch(() => {}); }
-function setTextOnly(on) {
-  if (!!S.textOnly === !!on) { syncMicOff(); return; }
-  S.textOnly = !!on; saveSettings(S);
-  if (on) { if (asleep) { asleep = false; api.wakeAwake().catch(() => {}); } if (conv.on) conv.stop(); mic.stop(); }
-  syncMicOff();
-  if (on) toast("Text mode: the microphone is free for other apps.");
-}
+$("m-text").onclick = () => { setMode("text"); input.focus(); };
 $("m-mic").onclick = () => toggleMic();
 $("m-conv").onclick = () => toggleConv();
 // talk mode: mute / unmute the mic (KURAMA hears nothing, not even the wake word, until unmuted)
-async function setMicMuted(on) {
-  conv.mute(on);
+function setMicMuted(on) {
+  conv.mute(on); // also silences the mic track
   S.micMuted = conv.muted; saveSettings(S);
-  syncMicOff();
-  if (on) { mic.stop(); if (asleep) api.wakeAwake().catch(() => {}); } // really release the device, not just silence it
-  else if (conv.on) {
-    try { await mic.start(asleep ? { plain: true } : {}); conv.mute(false); } catch (e) { toast(micError(e)); }
-  } else if (asleep) sleepListen();
-  toast(on ? "Mic off: KURAMA can't hear you, and other apps can use the microphone." : "Mic on. I'm listening again.");
+  if (asleep && serverWake) (on ? api.wakeAwake() : api.wakeSleep()).catch(() => {});
+  toast(on ? "Mic muted. I can't hear you until you unmute." : "Mic on. I'm listening again.");
   updateState();
 }
 $("m-mute").onclick = () => setMicMuted(!conv.muted);
@@ -814,7 +795,6 @@ async function pollOnce() {
 function startStatus() {
   stopStatus();
   if (document.hidden || paused || MINI || minimized) return;
-  if (lowPowerOn()) { pollOnce(); pollTimer = setInterval(pollOnce, 5000); return; } // lean: every 5 s, not 2
   try {
     es = api.statusStream();
     es.onmessage = (e) => { try { renderStatus(JSON.parse(e.data)); } catch { /* ignore */ } };
@@ -1574,7 +1554,7 @@ function tick() {
   $("clock-m").textContent = mm ?? "";
   $("clock-colon").classList.toggle("off", alive() && now.getSeconds() % 2 === 1);
   $("clock-ap").textContent = parts[1] || "";
-  if (!S.lowPower) $("clock-s").textContent = String(now.getSeconds()).padStart(2, "0"); // lean: no ticking seconds
+  $("clock-s").textContent = String(now.getSeconds()).padStart(2, "0");
   $("date").textContent = now.toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" });
   renderTodayLive();
   clockTimer = setTimeout(tick, 1000 - (Date.now() % 1000) + 5);
@@ -1612,12 +1592,6 @@ function shrinkPage() { // covered for a while: drop what isn't on screen so Web
   if (!$("ws-big").open) $("ws-big-view").innerHTML = "";
   for (const it of ws.items) if (it !== ws.items[ws.cur]) it.text = null; // re-read from disk when shown again
 }
-// the screen app's watchdog asks this every 10 s: if the page stops answering it is restarted, and this last
-// answer is written to the log (what the page was doing just before it froze)
-window.kuramaState = () => [`mode=${mode}`, `asleep=${asleep}`, `busy=${busy}`, `conv=${conv.state}`, `mic=${mic.open}`,
-  `micOff=${micIsOff()}`, `speaking=${player.active}`, `msgs=${log.children.length}`, `sheet=${$("sheet").open}`,
-  `paused=${paused}`, `min=${minimized}`].join(" ");
-window.__k = { orb, dust, mic, player, conv }; // developer probes (data/wp_probe.js) read these; nothing else uses it
 window.kuramaPause = (on) => {
   paused = !!on;
   clearTimeout(shrinkTimer);
@@ -1836,12 +1810,12 @@ let wakeES = null, serverWake = true; // the API listens while asleep (cheap); f
 function wakeEvents() {
   if (wakeES) return;
   wakeES = api.wakeEvents();
-  wakeES.onopen = () => { if (asleep && serverWake && !micIsOff()) api.wakeSleep().catch(() => {}); }; // API restarted: listen again
+  wakeES.onopen = () => { if (asleep && serverWake && !conv.muted) api.wakeSleep().catch(() => {}); }; // API restarted: listen again
   wakeES.onmessage = (e) => {
     let ev = null;
     try { ev = JSON.parse(e.data); } catch { return; }
     if (ev.type === "wake" && asleep && !conv.muted) wakeUp(ev.command && !isEcho(ev.command) ? ev.command : "");
-    if (ev.type === "error" && asleep && !micIsOff()) { serverWake = false; sleepListen(); } // fall back to the page's mic
+    if (ev.type === "error" && asleep) { serverWake = false; sleepListen(); } // fall back to the page's mic
   };
 }
 // Remove KURAMA's own recently-spoken words from the start/end of a transcription (the mic catches the tail of
@@ -1896,7 +1870,6 @@ async function sleepListen() { // asleep: the API's cheap listener, or (fallback
     quiet = player.active || player.playing ? 0 : quiet + 1;
   }
   if (!asleep) return;
-  if (micIsOff()) { updateState(); return; } // muted / text mode: nobody listens, not even for the wake word
   if (serverWake) {
     if (conv.on) { conv.stop(); mic.stop(); }
     mode = "conv"; setMode("conv"); // talk mode stays selected while asleep
@@ -1934,7 +1907,7 @@ async function wakeUp(rest) {
   conv.listen();
 }
 function startListening() { // boot: asleep, waiting for the wake word
-  if (MINI || !S.wakeListen || asleep || conv.on || micIsOff()) return;
+  if (MINI || !S.wakeListen || asleep || conv.on) return;
   asleep = true;
   mode = "conv"; setMode("conv"); // talk mode is the default
   sleepListen();
@@ -2011,10 +1984,9 @@ function setWake(on) { // the wake word on/off (settings checkbox or the power m
 }
 function setLowPower(on) {
   S.lowPower = on;
+  orb.setLowPower(on);
   dust.setLowPower(on);
-  if (on) orb.fx = null; else if (!MINI && params.get("dust") !== "0") orb.attach(dust); // lean: no background field
   document.body.classList.toggle("low-power", on);
-  if (!paused && !minimized && !document.hidden) startStatus(); // 5 s polling (lean) or the 2 s stream
 }
 function applyModeClient(cur, changed) { // the parts of a mode that live in this page: wake word, screen
   powerMode = cur;
@@ -2293,8 +2265,7 @@ async function syncDeviceSound() { // the server owns this setting (it changes t
 }
 async function bootVoice() { // first load after KURAMA starts: say hello, then wait (asleep) for the wake word
   if (MINI || params.get("debug") === "1") return;
-  syncMicOff(); // the server learns the saved mute / text-mode choice (the mini wake bridge obeys it too)
-  if (S.wakeListen && !micIsOff()) { mode = "conv"; setMode("conv"); } // talk mode is the default
+  if (S.wakeListen) { mode = "conv"; setMode("conv"); } // talk mode is the default
   let g = "";
   try { g = (await api.greeting()).text || ""; } catch { /* no greeting */ }
   if (!g) { startListening(); return; }
