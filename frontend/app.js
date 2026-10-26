@@ -1609,6 +1609,11 @@ function shrinkPage() { // covered for a while: drop what isn't on screen so Web
   if (!$("ws-big").open) $("ws-big-view").innerHTML = "";
   for (const it of ws.items) if (it !== ws.items[ws.cur]) it.text = null; // re-read from disk when shown again
 }
+// the screen app's watchdog asks this every 10 s: if the page stops answering it is restarted, and this last
+// answer is written to the log (what the page was doing just before it froze)
+window.kuramaState = () => [`mode=${mode}`, `asleep=${asleep}`, `busy=${busy}`, `conv=${conv.state}`, `mic=${mic.open}`,
+  `micOff=${micIsOff()}`, `speaking=${player.active}`, `msgs=${log.children.length}`, `sheet=${$("sheet").open}`,
+  `paused=${paused}`, `min=${minimized}`].join(" ");
 window.kuramaPause = (on) => {
   paused = !!on;
   clearTimeout(shrinkTimer);

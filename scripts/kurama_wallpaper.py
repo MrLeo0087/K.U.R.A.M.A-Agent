@@ -67,6 +67,8 @@ SNAP_DIR = Path.home() / ".local/share/kurama"  # same paths in jarvis/tools/gen
 SNAP = SNAP_DIR / "desktop.png"
 REAL_WALLPAPER = SNAP_DIR / "real-wallpaper.json"
 SNAP_FIRST_S, SNAP_EVERY_S = 8, 600  # after the page is up (boot animation done), then every 10 min
+HANG_S = float(os.getenv("KURAMA_WP_HANG_S", "25"))  # a page that doesn't answer for this long is frozen: restart it
+PING_S = 10  # how often the watchdog asks the page for a tiny answer
 WEB_MEM_MB = int(os.getenv("KURAMA_WP_MEM_MB", "220"))  # web process memory budget (WebKit's default: 3 GB)
 
 
@@ -231,6 +233,55 @@ def run_js(view, code: str) -> None:
         view.run_javascript(code, None, None, None)
 
 
+def note(msg: str) -> None:
+    print(time.strftime("%Y-%m-%d %H:%M:%S"), msg, file=sys.stderr, flush=True)
+
+
+class Watchdog:
+    """The page's main thread can freeze (an endless loop / stuck WebKit work: 100% CPU, the whole screen stuck while
+    the API is fine). Every PING_S the page is asked a tiny question; no answer for HANG_S -> its web process is
+    killed and the page loads again by itself. The last state the page reported is logged, to find the cause."""
+
+    def __init__(self, name: str, get_view, reload) -> None:
+        self.name, self.get_view, self.reload = name, get_view, reload
+        self.sent = 0.0  # monotonic time of the ping still waiting for an answer (0 = none)
+        self.last = ""  # the page's own state at its last answer (window.kuramaState)
+        self.restarts = 0
+        GLib.timeout_add_seconds(PING_S, self.tick)
+
+    def tick(self) -> bool:
+        v = self.get_view()
+        if v is None:  # no page (minimized / still loading): nothing to watch
+            self.sent = 0.0
+            return True
+        now = time.monotonic()
+        if self.sent:
+            if now - self.sent >= HANG_S:
+                self.restarts += 1
+                note(f"watchdog: the {self.name} page froze (no answer for {now - self.sent:.0f} s; last state: "
+                     f"{self.last or '?'}); restarting it (#{self.restarts})")
+                self.sent = 0.0
+                with contextlib.suppress(Exception):
+                    v.terminate_web_process()
+                GLib.timeout_add(800, lambda: self.reload() and False)
+            return True
+        self.sent = token = now
+
+        def done(view, res):
+            if self.sent == token:
+                self.sent = 0.0
+            with contextlib.suppress(Exception):
+                r = view.evaluate_javascript_finish(res) if hasattr(view, "evaluate_javascript_finish") else \
+                    view.run_javascript_finish(res).get_js_value()
+                self.last = str(r.to_string())[:300] if r is not None else ""
+        code = "window.kuramaState ? window.kuramaState() : 'up'"
+        if hasattr(v, "evaluate_javascript"):
+            v.evaluate_javascript(code, -1, None, None, None, done)
+        else:
+            v.run_javascript(code, None, done)
+        return True
+
+
 class Wallpaper:
     def _make_view(self):
         v = WebKit2.WebView(web_context=self.ctx, user_content_manager=self.ucm)
@@ -254,7 +305,21 @@ class Wallpaper:
         v.connect("load-failed", self.on_failed)
         v.connect("load-changed", self.on_load)
         v.connect("decide-policy", self.on_policy)
+        v.connect("web-process-terminated", self.on_crash)
         return v
+
+    def on_crash(self, view, reason):
+        """The page's web process died (crash / out of memory / the watchdog): load the page again."""
+        if view is not self.view or self.asleep_page:
+            return
+        note(f"page process ended ({getattr(reason, 'value_nick', reason)}); reloading")
+        self.reload_page()
+
+    def reload_page(self) -> None:
+        if self.view is None or self.asleep_page:
+            return
+        self.loaded = False
+        self.view.load_uri(self.url)
 
     def __init__(self, url: str, as_window: bool) -> None:
         self.url = url
@@ -312,6 +377,8 @@ class Wallpaper:
             self.bg.claim()
         if self.state.get("minimized"):
             self.minimize()
+        self.watchdog = Watchdog("dashboard", lambda: self.view if self.loaded and not self.asleep_page else None,
+                                 self.reload_page)
 
     # The API may start after us at login: keep retrying until the page loads
     def on_failed(self, *_):
