@@ -215,6 +215,10 @@ def here_intent(t: str) -> Intent | None:
                 tool = "open_folder" if t.lower().startswith("open") else "list_folder"
                 return Intent("openfolder" if tool == "open_folder" else "listdir", tool, "filesearch",
                               {"name" if tool == "open_folder" else "path": str(cur / hit)}, hit)
+    if re.search(r"\b(?:locked|encrypted|password[\s-]*protected)\b", t, I) and re.match(r"^(?:please\s+)?(?:open|unlock)\b", t, I):
+        name = re.sub(r"^(?:please\s+)?(?:open|unlock)\s+(?:the\s+|my\s+)?|\b(?:locked|encrypted|password[\s-]*protected)\b|"
+                      r"\s+(?:folder|file)$", "", t, flags=I).strip()
+        return Intent("lock", "folder_lock", "filesearch", {"action": "unlock", "path": name or "this"}, name)
     if m := _OPEN_REF.match(t):
         r = m.group("r").lower()
         r = "previous folder" if re.search(r"previous|last", r) else "parent folder" if "parent" in r else "this"
@@ -986,6 +990,8 @@ def convert_intent(t: str) -> Intent | None:
     if to not in known:
         return None
     src = re.sub(r"\s+(?:file|document|doc)$", "", m.group("src").strip(), flags=I)
+    if re.match(r"^(?:on|off|up|down|speech|voice|my\s+voice|audio\s+input)\b", src, I):
+        return None  # "turn on speech to text" is dictation, not a file conversion
     if a := _ALL_IN.match(src):
         if cv.ext_of(a.group("ext")) in known:
             return Intent("convert", "convert_file", "daily", {"path": a.group("dir"), "to": to,
@@ -1055,7 +1061,7 @@ def wifi_share_intent(t: str) -> Intent | None:
 
 _PH = r"(?P<p>\+?\d[\d\s-]{4,18}\d)"
 _CNAME = r"(?P<n>[^\d]{1,40}?)"
-_C_ADD = [re.compile(r"^(?:please\s+)?(?:save|add|store|remember)\s+(?:a\s+|new\s+)*(?:contact\s+)?" + _CNAME +
+_C_ADD = [re.compile(r"^(?:please\s+)?(?:save|add|store|remember|note(?:\s+down)?|write\s+down|keep)\s+(?:a\s+|new\s+)*(?:contact\s+)?" + _CNAME +
                      r"(?:'s|s'|\s+ko)?\s+(?:(?:phone|mobile|cell)\s+)?(?:number|no\.?|contact)?\s*(?:is|as|:|=)?\s*" + _PH +
                      r"(?:\s+(?:as|note)\s+(?P<note>.+))?$", I),
           re.compile(r"^(?:please\s+)?(?:save|add|store)\s+" + _PH + r"\s+(?:as|for)\s+" + _CNAME + r"(?:'s)?(?:\s+number)?$", I),

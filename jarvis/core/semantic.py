@@ -39,6 +39,8 @@ def _docs() -> list[tuple[str, str]]:
         g = registry.group_of(t)
         if g in groups and t.description:
             docs.append((g, t.description.split(". ")[0][:200]))
+        if g in groups:  # many ways people ask for this tool, so free phrasing finds it (0 tokens)
+            docs += [(g, ex) for ex in config.TOOL_EXAMPLES.get(t.name, ())]
     docs += [(CHAT, ex) for ex in config.ROUTER_CHAT_EXAMPLES]
     seen: set[tuple[str, str]] = set()
     return [d for d in docs if not (d in seen or seen.add(d))]

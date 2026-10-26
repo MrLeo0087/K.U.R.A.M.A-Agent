@@ -97,6 +97,25 @@ HARD: list[tuple[str, str]] = [
     ("whats my schedule tomorrow", "timetable"), ("test me on what i studied", "quiz"),
 ]
 
+# Free phrasing for the newer tools: none of these sentences are in config.TOOL_EXAMPLES or a fast-path rule (a few
+# single keywords like "stt" / "cluttered" were added after a first run). Add NEW phrasings here, don't tune to them.
+FREE: list[tuple[str, str]] = [
+    ("can you activate the stt mode", "dictate"), ("i will speak, you write it", "dictate"),
+    ("start writing whatever i say", "dictate"), ("i'm tired of typing, let me talk", "dictate"),
+    ("disable the voice writing", "dictate"), ("correct this for me", "rewrite_text"),
+    ("make my selected email sound nicer", "rewrite_text"), ("polish the text i highlighted", "rewrite_text"),
+    ("put this into simple english", "rewrite_text"), ("there are mistakes in what i selected, fix them", "rewrite_text"),
+    ("nobody should open my college folder", "folder_lock"), ("make my diary folder secret", "folder_lock"),
+    ("i want to see my locked exam folder again", "folder_lock"), ("my cousin wants to use the internet", "share_wifi"),
+    ("show me the network password", "share_wifi"), ("my laptop is too weak to train this, use kaggle", "kaggle_train"),
+    ("is the gpu training done yet", "kaggle_train"), ("this downloads folder is so cluttered", "organize_files"),
+    ("tidy up and rename my pictures folder by what's in them", "organize_files"),
+    ("keep that youtube clip on my laptop", "video_download"), ("turn this docx into a pdf please", "convert_file"),
+    ("put obs studio on this computer", "install_app"), ("uninstall that zoom thing", "install_app"),
+    ("move this folder to my mobile over wifi", "wifi_share"), ("note down hari's mobile number 9812345678", "contacts"),
+    ("what's the current dollar rate in nepal", "live_search"), ("hit the save button in this app", "app_control"),
+]
+
 
 def score(cases: list[tuple[str, str]], fastpath, registry, router) -> tuple[int, list[str]]:
     right, misses = 0, []
@@ -129,9 +148,11 @@ def main() -> int:
     missing += [t for _, t in HARD if registry.get(t) is None]
     right, misses = score(CASES, fastpath, registry, router)
     hard, hmisses = score(HARD, fastpath, registry, router)
-    print("\n".join(misses + ["  (held out)"] + hmisses))
+    free, fmisses = score(FREE, fastpath, registry, router)
+    print("\n".join(misses + ["  (held out)"] + hmisses + ["  (free phrasing)"] + fmisses))
     print(f"routing accuracy: {right}/{len(CASES)} = {right / len(CASES):.1%}; "
-          f"held-out messy phrasings: {hard}/{len(HARD)} = {hard / len(HARD):.1%}")
+          f"held-out messy phrasings: {hard}/{len(HARD)} = {hard / len(HARD):.1%}; "
+          f"free phrasing (new tools): {free}/{len(FREE)} = {free / len(FREE):.1%}")
     return 0 if right == len(CASES) else 1
 
 

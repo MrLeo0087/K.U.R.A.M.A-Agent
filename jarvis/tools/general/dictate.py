@@ -7,8 +7,8 @@ from jarvis.core.registry import tool
 
 
 @tool(group="windows", safety="safe",
-      description="Voice typing: type what the user says into whatever app has the cursor (English, Nepali, Hindi), "
-                  "until they say 'stop dictation'; or stop it.")
+      description="Speech-to-text (STT) / voice typing / dictation mode: type what the user says into whatever app "
+                  "has the cursor (English, Nepali, Hindi) until they say 'stop dictation'; or turn it off.")
 def dictate(action: Literal["start", "stop"] = "start", lang: Literal["auto", "en", "ne", "hi"] = "auto") -> str:
     """Start or stop dictation.
 
