@@ -119,6 +119,30 @@ def translate(text: str, lang: str = "ne") -> str:
                 purpose="assist_translate")
 
 
+REPLY_MAX_CHARS = 2500  # only the end of a long chat is sent: the latest messages matter most (tokens)
+
+
+def reply(chat: str, instruction: str = "", lang: str = "") -> str:
+    """The user's next message in a chat they copied/selected (both sides, the other person spoke last).
+    One call; the fast model unless the chat is in Devanagari."""
+    chat = chat.strip()
+    if len(chat) > REPLY_MAX_CHARS:
+        chat = "…" + chat[-REPLY_MAX_CHARS:]
+    want = f" Write it in {LANGS[lang]}." if lang in LANGS else ""
+    how = re.sub(r"^(?:please\s+|kurama\W+|can\s+you\s+)*(?:what\s+should\s+i\s+(?:reply|say|answer|write)|(?:write\s+)?(?:a\s+|my\s+)?"
+                 r"(?:reply|response|respond|answer))(?:\s+(?:to|for))?(?:\s+(?:this|that|it|him|her|them|the\s+\w+))?"
+                 r"(?:\s+(?:message|chat|conversation|text|email|mail|messages))?[\s,:?.-]*", "", instruction or "",
+                 flags=re.I).strip()
+    sys = ("This is a chat the user copied: messages from both sides, the other person wrote last. Write the user's "
+           "next reply to that last message, using the whole conversation for context. Sound like the user: same "
+           "language and script (English, Nepali, Hindi or romanized Nepali/Hindi as they write it), same tone and "
+           "length as their own messages, natural, no greeting unless they use one." + want +
+           (f" It must answer that last message AND say what the user wants: {how}." if how else "") +
+           " Output ONLY the reply text.")
+    smart = bool(re.search(r"[\u0900-\u097F]", chat)) or lang in ("ne", "hi")
+    return _llm(sys, chat, smart=smart, max_tokens=250, purpose="assist_reply")
+
+
 def explain_code(code: str, lang: str = "", name: str = "") -> str:
     out = LANGS.get(lang or "en", "English")
     return _llm(f"Explain this code to a student, in {out}: first one line on what it does overall, then the "
@@ -385,6 +409,14 @@ def improve_whole_file(request: str) -> str:
     return start_code_improve(g, clean_instruction(request))
 
 
+def _clipboard_text() -> str:
+    from jarvis.tools.general import _sys
+    try:
+        return _sys.clip_get()
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 # --- one entry point the tool calls ---------------------------------------------------------------------------
 def run(action: str, request: str = "", lang: str = "", replace: bool = False, path: str = "",
         text: str = "") -> str:
@@ -411,6 +443,16 @@ def run(action: str, request: str = "", lang: str = "", replace: bool = False, p
         return target if isinstance(target, str) else explain_file(target, lang)
     if action == "improve" and WHOLE_CODE.search(request or ""):  # "format my whole code": the file open in the editor
         return improve_whole_file(request)
+    if action == "reply":  # a chat the user selected, or copied (Ctrl+C) before asking
+        g = rewrite.grab()
+        chat = g.text if isinstance(g, rewrite.Grab) else (text or _clipboard_text())
+        if not chat.strip():
+            return "Select (or copy) the chat messages first, then say 'reply to this'."
+        out = reply(chat, request, lang)
+        if not out:
+            return "error: no reply came back"
+        rewrite._xclip(["-selection", "clipboard"], out)
+        return out + "\n(Copied: paste it in the chat.)"
     g = rewrite.grab()
     if isinstance(g, str):
         import time

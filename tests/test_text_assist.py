@@ -250,3 +250,47 @@ def test_tts_reads_nepali_parts_with_the_nepali_voice():
     assert [v for _, v in parts] == [config.VOICES["en"], config.VOICES["ne"], config.VOICES["en"]]
     assert tts.voice_parts("यो वाक्य हो।", "en") == [("यो वाक्य हो।", config.VOICES["ne"])]
     assert tts.voice_parts("Hello.", "en") == [("Hello.", config.VOICES["en"])]
+
+
+CHAT = """Ram: oi k xa
+Me: thik xa, timi?
+Ram: ma ni thik. bholi football khelna jane?
+Me: kati baje?
+Ram: 4 baje, college ground ma. aauxas?"""
+
+
+def test_reply_uses_the_chat_and_only_its_end(desk, monkeypatch):
+    st, calls = desk
+    seen = {}
+
+    def llm(system, user, smart, max_tokens, purpose):
+        seen.update(system=system, user=user, smart=smart, purpose=purpose)
+        return "aauxu, 4 baje bhetaula!"
+    monkeypatch.setattr(assist, "_llm", llm)
+    st["sel"] = CHAT
+    out = assist.run("reply", "reply to this, say I will be 10 minutes late")
+    assert out.startswith("aauxu, 4 baje bhetaula!") and "Copied" in out
+    assert seen["user"] == CHAT and "I will be 10 minutes late" in seen["system"] and not seen["smart"]
+    st["sel"] = "x" * 6000 + "\nRam: last message"
+    assist.run("reply", "reply to this")
+    assert len(seen["user"]) <= assist.REPLY_MAX_CHARS + 1 and seen["user"].endswith("Ram: last message")
+    assert "say what the user wants" not in seen["system"]
+
+
+def test_reply_falls_back_to_the_copied_chat(desk, monkeypatch):
+    st, calls = desk
+    monkeypatch.setattr(rewrite, "grab", lambda: "I couldn't see any highlighted text")
+    monkeypatch.setattr(assist, "_clipboard_text", lambda: CHAT)
+    assert assist.run("reply", "what should i reply").startswith("[assist_reply]")
+    monkeypatch.setattr(assist, "_clipboard_text", lambda: "")
+    assert "Select (or copy) the chat" in assist.run("reply", "reply to this")
+
+
+def test_reply_routing():
+    def a(t):
+        i = fastpath.match(t)
+        return i and (i.tool, i.args.get("action"), i.args.get("lang"))
+    assert a("reply to this") == ("text_assist", "reply", "")
+    assert a("reply to this in nepali") == ("text_assist", "reply", "ne")
+    assert a("what should i reply")[1] == "reply" and a("answer this email")[1] == "reply"
+    assert (a("answer this question") or (None, None))[1] != "reply"

@@ -1357,6 +1357,11 @@ def assist_intent(t: str) -> Intent | None:
     if re.search(r"\b(?:explain|explanation|summari[sz]e|what\s+(?:does|is))\b", t, I) and WHOLE_CODE.search(t) \
             and len(t.split()) <= 16:  # "explain my whole code" = the file open in VS Code
         return Intent("assist", "text_assist", "clipboard", {"action": "explain_file", "path": "this", "lang": lang})
+    if re.match(r"(?:please\s+|kurama\W+|can\s+you\s+)*(?:write\s+(?:a\s+|my\s+)?(?:reply|response|answer)|reply|respond|answer)"
+                r"(?:\s+(?:to|for))?\s+(?:this|that|it|the\s+(?:selected|copied|last))(?!\s+question)(?:\s+(?:message|chat|conversation|"
+                r"text|email|mail|messages|one))?\b|^(?:what\s+should\s+i\s+(?:reply|say|answer|write)(?:\s+(?:to\s+)?(?:this|that|him|her|them))?)"
+                r"[\s?.!]*$", t, I) and len(t.split()) <= 30:  # 'reply to this, say I'm busy till Friday'
+        return Intent("assist", "text_assist", "clipboard", {"action": "reply", "request": t, "lang": lang})
     if dc := decode_intent(t):  # decode / prettify the selection, 0 tokens
         return dc
     if ct := code_tidy_intent(t):  # format / check / fix with ruff, 0 tokens
