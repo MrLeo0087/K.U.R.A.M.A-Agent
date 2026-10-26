@@ -703,6 +703,8 @@ TIMETABLE_LEAD_MIN = 10  # heads-up this long before each class
 DOWNLOAD_DIR = "~/Downloads"  # download manager default folder
 DOWNLOAD_NIGHT_HOUR = 1  # "tonight" downloads start at this hour
 WIFI_SHARE_IDLE_MIN = 30  # a Wi-Fi share link stops after this many idle minutes
+NUDGE_PER_DAY = int(os.getenv("KURAMA_NUDGE_PER_DAY", "2"))  # random 'still want to do this?' for undated list items
+NUDGE_HOURS = (10, 21)  # only between these hours
 READ_LATER_FILE = os.getenv("KURAMA_READ_LATER", "~/Documents/KURAMA/read_later.xlsx")  # reading list (Excel)
 CONTACTS_FILE = os.getenv("KURAMA_CONTACTS", "~/Documents/KURAMA/contacts.xlsx")  # name/phone sheet (Excel)
 DICTATION_PAUSE_MS = 900  # a pause this long ends a dictated phrase (then it is typed)
@@ -748,7 +750,7 @@ MUTE_KINDS: dict[str, tuple[str, ...]] = {
     "resource": ("resource_guard",), "location": ("location",), "jobs": ("jobs",), "downloads": ("downloads",),
     "watchdog": ("watchdog",), "web": ("webwatch",), "commands": ("cmdalerts", "process_watch"),
     "digest": ("daily_digest",), "backup": ("backup",), "kaggle": ("kaggle",), "internet": ("netdoctor",),
-    "guard": ("guard",), "reminders": ("scheduler", "timer")}
+    "guard": ("guard",), "reminders": ("scheduler", "timer"), "todo": ("todo",)}
 MUTE_ALL_KEEPS = ("scheduler", "timer", "guard")
 MUTE_DEFAULT_MIN = 30.0  # 'mute alerts' without a time (owner: never mute for life)
 MUTE_MAX_MIN = 24 * 60.0  # no mute lasts longer than a day

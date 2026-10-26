@@ -31,6 +31,12 @@ class Scheduler(Worker):
 
     def tick(self) -> None:
         try:
+            from jarvis.core import readlater
+            if readlater.nudge(self._now()):
+                self.log.info("list nudge sent")
+        except Exception as e:
+            self.log.warning("list nudge failed: %s", e)
+        try:
             from jarvis.core import study
             for subject in study.check_reminders():
                 self.log.info("class heads-up: %s", subject)

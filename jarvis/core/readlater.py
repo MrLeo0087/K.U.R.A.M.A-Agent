@@ -1,24 +1,34 @@
-"""Read later: links saved to a real Excel sheet (~/Documents/KURAMA/read_later.xlsx), 0 tokens.
+"""My list = to-dos + read later, in one real Excel sheet (~/Documents/KURAMA/read_later.xlsx), 0 tokens.
+
+Each row is a to-do ("add buy milk to my to-do list #shopping tomorrow 5 pm") or a link to read ("read this later
+at 2 pm"). Optional tag and due time: a due item becomes a scheduler reminder (kind 'task': heads-up 10 min before,
+then "do it now"); items without a time get an occasional random nudge (nudge(), at most NUDGE_PER_DAY a day,
+NUDGE_HOURS only). Marking an item done REMOVES it from the sheet (and cancels its reminder).
 
 "read this later" saves the highlighted link(s); with no link selected and a browser in front, it saves the page
 that is open there (its URL comes from the browser's own history file, no key presses; any highlighted text on the
 page is kept as a note). Titles come from that history too, else from the page's <title> (one small download).
-Columns: Title, Link, Site, Saved, Status (unread/read), Note. The sheet can be edited by hand.
+Columns: Type (todo/read), Title, Link, Tag, Due, Saved, Note, Reminder (schedule id). Editable by hand.
 """
 from __future__ import annotations
 
+import json
+import random
 import re
 import shutil
 import sqlite3
 import tempfile
+import time
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
 
-from jarvis.core import config, sheets
+from jarvis.core import config, sheets, store
 
-HEAD = ["Title", "Link", "Site", "Saved", "Status", "Note"]
-WIDTHS = (50, 60, 22, 18, 10, 40)
+HEAD = ["Type", "Title", "Link", "Tag", "Due", "Saved", "Note", "Reminder"]
+WIDTHS = (7, 50, 55, 14, 18, 17, 40, 9)
+SHEET = "My list"
+NUDGE_KEY = "todo_nudge"
 URL = re.compile(r"https?://[^\s<>\"')\]]+", re.I)
 _BROWSERS = {  # window-title suffix -> history files (Chromium family: History; Firefox: places.sqlite)
     "Brave": ["~/.config/BraveSoftware/Brave-Browser/*/History"],
@@ -109,69 +119,227 @@ def _site(url: str) -> str:
     return urlparse(url).netloc.removeprefix("www.")
 
 
-def add(url: str, title: str = "", note: str = "") -> str:
+def _rows() -> list[dict]:
+    rows = sheets.load(path(), HEAD + ["Status"])  # 'Status' only to drop rows an older version marked read
+    out = []
+    for r in rows:
+        if r.pop("status", "").lower() == "read":
+            continue
+        r["type"] = r["type"] or ("read" if r["link"] else "todo")
+        out.append(r)
+    return out
+
+
+def _save(rows: list[dict]) -> None:
+    sheets.save(path(), HEAD, rows, SHEET, WIDTHS)
+
+
+def _same(a: dict, b: dict) -> bool:
+    return (a["type"], a["title"], a["link"], a["saved"]) == (b["type"], b["title"], b["link"], b["saved"])
+
+
+def _schedule(r: dict, when_text: str) -> tuple[str, str]:
+    """A due time -> a scheduler reminder (kind 'task'). Returns (due shown in the sheet, reminder id) or raises."""
+    from jarvis.core import reminders, when
+    w = when.resolve(when_text, datetime.now(), use_llm=False)
+    if w is None:
+        raise ValueError(f"I couldn't understand the time {when_text!r}")
+    if w.ts <= time.time():
+        raise ValueError(f"{when_text!r} is already past")
+    body = f"read: {r['title']}\n{r['link']}" if r["type"] == "read" else f"todo: {r['title']}"
+    sid = store.schedule_add(body, "task", w.ts, "none")
+    return datetime.fromtimestamp(w.ts).strftime("%Y-%m-%d %H:%M"), str(sid)
+
+
+def _due_words(due: str) -> str:
+    from jarvis.core import when
+    try:
+        return when.describe(datetime.strptime(due, "%Y-%m-%d %H:%M").timestamp())
+    except ValueError:
+        return due
+
+
+def _put(kind: str, title: str, link: str = "", tag: str = "", when_text: str = "", note: str = "") -> str:
+    tag = tag.strip().lstrip("#").lower()
+    with sheets.locked(path()):
+        rows = _rows()
+        if kind == "read" and any(r["link"] == link for r in rows):
+            old = next(r for r in rows if r["link"] == link)
+            if not when_text:
+                return f"Already in your reading list: {old['title']}"
+            rows = [r for r in rows if not _same(r, old)]  # same link with a time now: re-add it with the time
+            _cancel(old)
+        r = {"type": kind, "title": title, "link": link, "tag": tag, "due": "", "saved": f"{datetime.now():%Y-%m-%d %H:%M}",
+             "note": note[:300], "reminder": ""}
+        due = ""
+        if when_text:
+            try:
+                r["due"], r["reminder"] = _schedule(r, when_text)
+            except ValueError as e:
+                return f"Not saved: {e}. Try 'in 2 hours', 'at 2 pm', 'tomorrow 2 pm' or 'November 28 5 pm'."
+            due = f" I'll remind you {_due_words(r['due'])} (and 10 min before)."
+        rows.insert(0, r)
+        _save(rows)
+    tagged = f" #{tag}" if tag else ""
+    if kind == "read":
+        return f"Saved for later: {title}{tagged}.{due}".replace("..", ".") if (due or tag) else f"Saved for later: {title}"
+    return f"Added to your to-do list: {title}{tagged}.{due}"
+
+
+def add(url: str, title: str = "", note: str = "", tag: str = "", when_text: str = "") -> str:
     url = url.strip().rstrip(".,;")
-    with sheets.locked(path()) as p:
-        rows = sheets.load(p, HEAD)
-        if any(r["link"] == url for r in rows):
-            return f"Already in your reading list: {title or url}"
-        title = title or _title_for(url) or url
-        rows.insert(0, {"title": title, "link": url, "site": _site(url), "saved": f"{datetime.now():%Y-%m-%d %H:%M}",
-                        "status": "unread", "note": note[:300]})
-        sheets.save(p, HEAD, rows, "Read later", WIDTHS)
-    return f"Saved for later: {title}"
+    return _put("read", title or _title_for(url) or url, url, tag, when_text, note)
+
+
+def add_todo(text: str, tag: str = "", when_text: str = "") -> str:
+    text = " ".join((text or "").split()).strip(" .,")
+    if not text:
+        return "What should I add to your to-do list?"
+    return _put("todo", text[:1].upper() + text[1:], "", tag, when_text)
+
+
+def ordered(tag: str = "") -> list[dict]:
+    """The numbering everyone uses: to-dos first, then reading; due ones soonest first, then newest."""
+    tag = tag.strip().lstrip("#").lower()
+    rows = [r for r in _rows() if not tag or r["tag"] == tag]
+    key = lambda r: (r["due"] or "9999", "")  # noqa: E731
+    todo = sorted([r for r in rows if r["type"] != "read"], key=key)
+    read = sorted([r for r in rows if r["type"] == "read"], key=key)
+    return todo + read
 
 
 def unread() -> list[dict]:
-    return [r for r in sheets.load(path(), HEAD) if r["status"].lower() != "read"]
+    return [r for r in ordered() if r["type"] == "read"]
 
 
-def show(limit: int = 15) -> str:
-    rows = unread()
+def _item(i: int, r: dict) -> str:
+    extra = (f"  #{r['tag']}" if r["tag"] else "") + (f"  ⏰ {_due_words(r['due'])}" if r["due"] else "")
+    if r["type"] == "read":
+        site = f" ({r['link'].split('/')[2].removeprefix('www.')})" if r["link"].count("/") >= 2 else ""
+        return f"{i}. {r['title'][:80]}{site}{extra}\n    {r['link']}"
+    return f"{i}. {r['title'][:90]}{extra}"
+
+
+def show(limit: int = 20, tag: str = "", kind: str = "") -> str:
+    rows = ordered(tag)
     if not rows:
-        return "Your reading list is empty. Select a link (or open a page) and say 'read this later'."
-    lines = [f"{i}. {r['title'][:90]} ({r['saved'][:10]})\n   {r['link']}" for i, r in enumerate(rows[:limit], 1)]
-    more = f"\n…and {len(rows) - limit} more in {path().name}." if len(rows) > limit else ""
-    return f"Reading list ({len(rows)} unread):\n" + "\n".join(lines) + more
+        return ("Your list is empty." + (f" Nothing tagged #{tag}." if tag else "")
+                + " Say 'add <task> to my to-do list' or select a link and say 'read this later'.")
+    lines, n = [f"📋 Your list ({len(rows)})" + (f" #{tag.lstrip('#')}" if tag else "")], 0
+    for label, typ in (("✅ To-do", "todo"), ("📖 Read later", "read")):
+        part = [r for r in rows if (r["type"] == "read") == (typ == "read")]
+        if kind and kind != typ:
+            n += len(part)
+            continue
+        if part:
+            lines.append(label)
+            for r in part:
+                n += 1
+                if n <= limit:
+                    lines.append(_item(n, r))
+    if len(rows) > limit:
+        lines.append(f"…and {len(rows) - limit} more in {path().name}.")
+    lines.append("Say 'done <number>' when you finish one (it's removed), 'open <number>' for a link.")
+    return "\n".join(lines)
 
 
-def _pick(n: int) -> dict | None:
-    rows = unread()
+def _pick(n: int, kind: str = "") -> dict | None:
+    rows = ordered()
+    if kind == "read":  # 'open 1' with only links in mind: count among the links if the number points at a to-do
+        if 1 <= n <= len(rows) and rows[n - 1]["type"] != "read":
+            reads = unread()
+            return reads[n - 1] if 1 <= n <= len(reads) else None
     return rows[n - 1] if 1 <= n <= len(rows) else None
 
 
-def _set_status(link: str, status: str | None) -> None:
-    with sheets.locked(path()) as p:
-        rows = sheets.load(p, HEAD)
-        rows = [r for r in rows if r["link"] != link] if status is None else \
-            [{**r, "status": status} if r["link"] == link else r for r in rows]
-        sheets.save(p, HEAD, rows, "Read later", WIDTHS)
+def _cancel(r: dict) -> None:
+    if (r.get("reminder") or "").isdigit():
+        try:
+            store.schedule_update(int(r["reminder"]), enabled=0)
+        except Exception:
+            pass
+
+
+def _drop(r: dict) -> None:
+    with sheets.locked(path()):
+        _save([x for x in _rows() if not _same(x, r)])
+    _cancel(r)
 
 
 def open_item(n: int = 1) -> str:
-    r = _pick(n)
-    if r is None:
-        return f"There's no item {n} in your reading list." if unread() else "Your reading list is empty."
+    r = _pick(n, "read")
+    if r is None or r["type"] != "read":
+        return f"There's no link {n} in your list." if _rows() else "Your list is empty."
     from jarvis.tools.general import open_url
     open_url._open(r["link"])
-    _set_status(r["link"], "read")
-    return f"Opened: {r['title']} (marked as read)."
+    _drop(r)
+    return f"Opened: {r['title']} (done, removed from your list)."
 
 
-def mark_read(n: int) -> str:
+def done(n: int) -> str:
     r = _pick(n)
     if r is None:
-        return f"There's no item {n} in your reading list."
-    _set_status(r["link"], "read")
-    return f"Marked as read: {r['title']}"
+        return f"There's no item {n} in your list."
+    _drop(r)
+    left = len(_rows())
+    return f"✔ Done: {r['title']} (removed). {left} left." if left else f"✔ Done: {r['title']}. Your list is empty now 🎉"
+
+
+mark_read = done
 
 
 def remove(n: int) -> str:
     r = _pick(n)
     if r is None:
-        return f"There's no item {n} in your reading list."
-    _set_status(r["link"], None)
+        return f"There's no item {n} in your list."
+    _drop(r)
     return f"Removed: {r['title']}"
+
+
+def nudge(now: float | None = None) -> str | None:
+    """Now and then (random time, at most NUDGE_PER_DAY a day, NUDGE_HOURS only) remind the user of ONE open item
+    that has no due time. Returns the message sent, or None. Cheap: a kv read until it's time."""
+    now = now if now is not None else time.time()
+    lt = time.localtime(now)
+    day = time.strftime("%Y-%m-%d", lt)
+    try:
+        st = json.loads(store.kv_get(NUDGE_KEY, "{}") or "{}")
+    except ValueError:
+        st = {}
+    if st.get("day") != day:
+        st = {"day": day, "count": 0, "next": 0, "last": st.get("last", "")}
+    lo, hi = config.NUDGE_HOURS
+    if st["count"] >= config.NUDGE_PER_DAY or not lo <= lt.tm_hour < hi:
+        return None
+    if not st["next"]:  # pick today's random moment
+        st["next"] = now + random.uniform(20 * 60, 4 * 3600)
+        store.kv_set(NUDGE_KEY, json.dumps(st))
+        return None
+    if now < st["next"]:
+        return None
+    open_ = [r for r in ordered() if not r["due"]]
+    st["next"] = now + random.uniform(3 * 3600, 6 * 3600)
+    if not open_:
+        store.kv_set(NUDGE_KEY, json.dumps(st))
+        return None
+    fresh = [r for r in open_ if r["title"] != st.get("last")] or open_
+    r = random.choice(fresh)
+    st["count"], st["last"] = st["count"] + 1, r["title"]
+    store.kv_set(NUDGE_KEY, json.dumps(st))
+    n = ordered().index(r) + 1
+    try:
+        age = (now - datetime.strptime(r["saved"], "%Y-%m-%d %H:%M").timestamp()) / 86400
+    except ValueError:
+        age = 0
+    since = "today" if age < 1 else "yesterday" if age < 2 else f"{int(age)} days ago"
+    if r["type"] == "read":
+        title, body = "📖 Still want to read this?", f"{r['title']}\n{r['link']}\nYou saved it {since}. Got a few minutes?"
+    else:
+        title, body = "📌 From your to-do list", f"{r['title']}\nYou added it {since}. Can you do it now?"
+    body += f"\n(Say 'done {n}' when it's finished.)"
+    from jarvis.core import notify
+    notify.notify(title, body, level="info", source="todo", telegram=True)
+    return body
 
 
 def selected_links() -> list[tuple[str, str]]:
@@ -196,7 +364,7 @@ def selected_links() -> list[tuple[str, str]]:
     return list(dict.fromkeys(out))[:10]
 
 
-def save_this() -> str:
+def save_this(tag: str = "", when_text: str = "") -> str:
     """'read this later': the highlighted link(s), else the page open in the browser (+ the highlighted text)."""
     from jarvis.core import rewrite
     wid, _ = rewrite.target_window()
@@ -207,12 +375,12 @@ def save_this() -> str:
     if sel and not links:  # a link's words were selected ('Attention Is All You Need'): its address is in the HTML copy
         found = selected_links()
         if found:
-            return "\n".join(add(u, t) for u, t in found)
+            return "\n".join(add(u, t, tag=tag, when_text=when_text) for u, t in found)
     if links:
-        return "\n".join(add(u) for u in links[:10])
+        return "\n".join(add(u, tag=tag, when_text=when_text) for u in links[:10])
     page = current_page(title)
     if page:
-        return add(page[0], page[1], note=sel.strip())
+        return add(page[0], page[1], note=sel.strip(), tag=tag, when_text=when_text)
     if _browser_of(title):
         return "I couldn't find this page's link in the browser history yet. Select the link (or the address bar) and say it again."
     return "Select a link (or open the page in your browser) and say 'read this later' again."
@@ -220,7 +388,7 @@ def save_this() -> str:
 
 def last() -> str:
     """'give me the read later link I gave you': the newest saved item, with its link (also copied)."""
-    rows = sheets.load(path(), HEAD)
+    rows = [r for r in _rows() if r["type"] == "read"]
     if not rows:
         return "Your reading list is empty."
     r = rows[0]
@@ -236,15 +404,19 @@ def _given(url: str) -> bool:
     return bool(url) and (url.rstrip("/") in said or not said)
 
 
-def run(action: str = "add", url: str = "", n: int = 0) -> str:
+def run(action: str = "add", url: str = "", n: int = 0, text: str = "", tag: str = "", when: str = "") -> str:
     if action == "add":
-        return add(url) if url.strip() and _given(url.strip()) else save_this()
+        if url.strip() and _given(url.strip()):
+            return add(url, tag=tag, when_text=when)
+        return save_this(tag, when)
+    if action == "todo":
+        return add_todo(text, tag, when)
     if action == "last":
         return last()
     if action == "open":
         return open_item(n or 1)
-    if action == "read":
-        return mark_read(n or 1)
+    if action in ("done", "read"):
+        return done(n or 1)
     if action == "remove":
         return remove(n or 1)
-    return show()
+    return show(tag=tag, kind={"todo": "todo", "read": "read"}.get(text, ""))

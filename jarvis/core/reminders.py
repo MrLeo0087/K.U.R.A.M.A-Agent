@@ -19,7 +19,14 @@ from jarvis.core import config, notify, store, when
 
 log = logging.getLogger("jarvis.reminders")
 
-KINDS = ("reminder", "command", "alarm", "timer")
+KINDS = ("reminder", "command", "alarm", "timer", "task")  # task = a due item from my list (to-do / read later)
+
+
+def _task(text: str) -> tuple[str, str, str]:
+    """'read: Title\nlink' / 'todo: Buy milk' -> (kind, title, link)."""
+    head, _, link = (text or "").partition("\n")
+    kind, _, title = head.partition(": ")
+    return (kind, title, link.strip()) if kind in ("read", "todo") else ("todo", head, link.strip())
 
 
 def _dt(now: float | None) -> datetime:
@@ -133,6 +140,14 @@ def fire(row: dict) -> list[str]:
         sound.play("timer", 3)
         return notify.notify("⏱️ Time's up", row["text"], level="info", source="timer",
                              telegram=True if row.get("note") == "phone" else None)
+    if kind == "task":  # from my list: a link to read now, or a to-do to do now
+        sound.play("reminder", 2)
+        k, title, link = _task(row["text"])
+        if k == "read":
+            return notify.notify("📖 Read it now", f"{title}\n{link}\nYou said you'd read this now.",
+                                 level="info", source="scheduler")
+        return notify.notify("✅ Do it now", f"{title}\nIt's time (from your to-do list).", level="info",
+                             source="scheduler")
     sound.play("reminder", 2)
     return notify.notify(f"⏰ Reminder ({_hm(row['next_run'])})", f"{row['text']}\nIt's time, go do it now.",
                          level="info", source="scheduler")
@@ -147,15 +162,22 @@ def heads_up(now: float | None = None) -> list[int]:
         return sent
     for r in store.schedules_list(enabled_only=True, limit=50):
         due = r.get("next_run") or 0
-        if r.get("kind") != "reminder" or not (now < due <= now + lead):  # alarms/timers ring on their own
+        if r.get("kind") not in ("reminder", "task") or not (now < due <= now + lead):  # alarms/timers ring alone
             continue
         mark = f"lead:{int(due)}"
         if r.get("note") == mark or due - (r.get("created") or 0) < lead + 60:
             continue
         store.schedule_update(r["id"], note=mark)  # first: never send it twice
         mins = max(1, round((due - now) / 60))
-        notify.notify(f"🔔 In {mins} min ({_hm(due)})", f"{r['text']}\nGet ready: I'll remind you again at {_hm(due)}.",
-                      level="info", source="scheduler")
+        if r.get("kind") == "task":
+            k, title, link = _task(r["text"])
+            what = (f"You saved this to read at {_hm(due)}:\n{title}\n{link}" if k == "read"
+                    else f"On your to-do list for {_hm(due)}:\n{title}")
+            notify.notify(f"🔔 In {mins} min ({_hm(due)})", f"{what}\nGet ready, I'll tell you again at {_hm(due)}.",
+                          level="info", source="scheduler")
+        else:
+            notify.notify(f"🔔 In {mins} min ({_hm(due)})", f"{r['text']}\nGet ready: I'll remind you again at {_hm(due)}.",
+                          level="info", source="scheduler")
         sent.append(r["id"])
     return sent
 

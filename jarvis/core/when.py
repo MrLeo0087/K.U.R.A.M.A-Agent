@@ -149,6 +149,13 @@ _TOMORROW = re.compile(r"\b(?:tomorrow|tmrw|tomorow)\b", re.I)
 _TODAY = re.compile(r"\btoday\b", re.I)
 _TONIGHT = re.compile(r"\btonight\b", re.I)
 _ON_DOW = re.compile(r"\b(?:on\s+|next\s+|this\s+|coming\s+)?" + _DAY_RX + r"\b", re.I)
+_MON = ("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec")
+_MON_RX = (r"(?P<mon>jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|"
+           r"oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)")
+# "November 28", "nov 28th, 2026", "28 November", "the 28th of nov" (a month name is required: '28' alone is not a date)
+_DATE = re.compile(r"\b(?:on\s+)?(?:" + _MON_RX + r"\s+(?P<d>\d{1,2})(?:st|nd|rd|th)?"
+                   r"|(?:the\s+)?(?P<d2>\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?" + _MON_RX.replace("mon>", "mon2>") + r")"
+                   r"(?:,?\s+(?P<y>20\d\d))?\b,?", re.I)
 _PART = re.compile(r"\b(?:in\s+the\s+|at\s+|this\s+)?(?P<p>morning|afternoon|evening|night)\b", re.I)
 _NOON = re.compile(r"\b(?:at\s+)?(?P<w>noon|midday|midnight)\b", re.I)
 _TIME = re.compile(
@@ -217,7 +224,18 @@ def parse(text: str, now: datetime | None = None, strict: bool = False) -> When 
         day_offset, used = 0, used + ["night"]
     elif take(_TODAY):
         day_offset = 0
-    if dow is None and day_offset is None and (m := take(_ON_DOW)):
+    on_date = None
+    if day_offset is None and (m := take(_DATE)):
+        mon = _MON.index((m.group("mon") or m.group("mon2"))[:3].lower()) + 1
+        day, year = int(m.group("d") or m.group("d2")), int(m.group("y") or now.year)
+        try:
+            on_date = datetime(year, mon, day)
+        except ValueError:
+            return None
+        if not m.group("y") and on_date.date() < now.date():
+            on_date = on_date.replace(year=year + 1)  # "January 5" said in October = next year
+        take(_ON_DOW)  # "Saturday, November 28": the weekday word is just decoration
+    if dow is None and day_offset is None and on_date is None and (m := take(_ON_DOW)):
         dow = _dow(m.group("dow"))
 
     hour = minute = None
@@ -239,7 +257,7 @@ def parse(text: str, now: datetime | None = None, strict: bool = False) -> When 
     if part is None and any("night" in u for u in used):
         part = "night"
 
-    if hour is None and day_offset is None and dow is None and repeat == "none":
+    if hour is None and day_offset is None and dow is None and on_date is None and repeat == "none":
         return None
     if strict and not _FILLER.match(t):
         return None
@@ -261,7 +279,13 @@ def parse(text: str, now: datetime | None = None, strict: bool = False) -> When 
     def at(d: datetime, h: int) -> datetime:
         return d.replace(hour=h, minute=minute, second=0)
 
-    if day_offset is not None:
+    if on_date is not None:
+        if not explicit and 1 <= hour <= 6:
+            hour += 12  # "November 28 at 5" -> 5 PM
+        cand = at(on_date, hour)
+        if cand <= now:
+            return None if strict else When(cand.timestamp(), repeat)  # in the past: the caller says so
+    elif day_offset is not None:
         base = now + timedelta(days=day_offset)
         if not explicit and 1 <= hour <= 6 and day_offset > 0:
             hour += 12  # "tomorrow at 5" -> 5 PM

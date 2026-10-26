@@ -1,4 +1,4 @@
-"""read_later: a reading list in an Excel sheet; save the highlighted link or the open page, list, open (safe)."""
+"""read_later: my list = to-dos + links to read later (Excel sheet), with tags and optional due times (safe)."""
 from __future__ import annotations
 
 from typing import Literal
@@ -6,17 +6,21 @@ from typing import Literal
 from jarvis.core.registry import tool
 
 
-@tool(group="browser", safety="safe", description="Reading list (Excel sheet): save the highlighted link or the page "
-      "open in the browser for later, show the list, open item N (marks it read), mark read, remove.")
-def read_later(action: Literal["add", "list", "last", "open", "read", "remove"] = "add", url: str = "", n: int = 0) -> str:
-    """Read later list.
+@tool(group="browser", safety="safe", description="My list (to-dos + read later, Excel): add the highlighted link/open "
+      "page or a to-do, optional tag and time (reminds 10 min before + at the time), list, done N (removes it), open N.")
+def read_later(action: Literal["add", "todo", "list", "last", "open", "done", "remove"] = "add", url: str = "",
+               n: int = 0, text: str = "", tag: str = "", when: str = "") -> str:
+    """My list.
 
     Args:
-        action: add (the highlighted link / the page open in the browser), list, last (the newest saved link),
-            open (item n), read (mark n read), remove (item n).
+        action: add (the highlighted link / the page open in the browser), todo (add the task in text), list,
+            last (the newest saved link), open (link n), done (item n finished: removed), remove (item n).
         url: ONLY a link the user literally gave in their message; never invent one (empty = the open page).
-        n: the item number from the list (1 = newest unread).
+        n: the item number from the list.
+        text: the to-do task (action todo); for list: 'todo' or 'read' shows only that part.
+        tag: optional tag, e.g. work, study, shopping.
+        when: optional time, e.g. 'in 2 hours', 'at 2 pm', 'tomorrow 2 pm', 'November 28 5 pm'.
     """
     from jarvis.core import readlater
 
-    return readlater.run(action, url, n)
+    return readlater.run(action, url, n, text, tag, when)

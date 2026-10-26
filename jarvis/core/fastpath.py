@@ -1759,13 +1759,95 @@ def copy_history_intent(t: str) -> Intent | None:
 
 
 _RL_CUE = r"(?:read(?:ing)?\s*later|reading\s+list|for\s+later|to\s+read\s+later)"
+_TODO = r"(?:to[\s-]?do|todo)(?:\s*list)?"
+_LIST_ANY = r"(?:" + _RL_LIST + r"|(?:to[\s-]?do|todo)\s*list|my\s+list|task\s+list)"
+_MONS = r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*"
+_WHEN_BIT = re.compile(
+    r"\b(?:(?:in|after)\s+(?:\d+(?:\.\d+)?|an?|one|two|three|four|five|six|ten|fifteen|twenty|thirty|half\s+an?)\s*"
+    r"(?:min(?:ute)?s?|hours?|hrs?|days?)\b|day\s+after\s+tomorrow|tomorrow|tonight|today"
+    r"|(?:at|by|around)\s+\d{1,2}(?:[:.]\d\d)?(?:\s*(?:am|pm|a\.m\.|p\.m\.))?|\d{1,2}(?:[:.]\d\d)?\s*(?:am|pm|a\.m\.|p\.m\.)"
+    r"|(?:on\s+)?" + _MONS + r"\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s+20\d\d)?|(?:on\s+)?(?:the\s+)?\d{1,2}(?:st|nd|rd|th)?\s+(?:of\s+)?" + _MONS
+    + r"|(?:on\s+|next\s+|this\s+)?(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)"
+    r"|(?:this|in\s+the)\s+(?:morning|afternoon|evening)|at\s+night)\b", I)
+_TAG = re.compile(r"(?:\s+(?:with\s+(?:the\s+)?)?(?:tag(?:ged)?|label(?:led)?)\s+(?:as\s+|it\s+)?#?(?P<t>[\w-]{2,20})"
+                  r"|\s*#(?P<t2>[a-z][\w-]{1,20}))", I)
+
+
+def _take_tag(t: str) -> tuple[str, str]:
+    m = _TAG.search(t)
+    if not m:
+        return "", t
+    return (m.group("t") or m.group("t2")).lower(), (t[:m.start()] + t[m.end():]).strip()
+
+
+def _take_when(t: str) -> tuple[str, str]:
+    """'... after 2 hours' / 'at 2 pm' / 'tomorrow 2 pm' / 'November 28, 5 PM' -> (when text, the rest)."""
+    hits = list(_WHEN_BIT.finditer(t))
+    if not hits:
+        return "", t
+    a, b = hits[0].start(), hits[-1].end()
+    phrase = t[a:b].strip(" ,")
+    from jarvis.core import when
+    if when.resolve(phrase, use_llm=False) is None:
+        return "", t
+    rest = (t[:a] + " " + t[b:]).strip()
+    rest = re.sub(r"\s+(?:and\s+)?(?:i\s+(?:will|can|'ll|want\s+to|need\s+to)|i'll|remind\s+me\s+to|to)\s+(?:read|do|check)"
+                  r"(?:\s+(?:this|it|that))?(?:\s+(?:link|page|article))?\s*$", "", rest, flags=I)
+    return phrase, " ".join(rest.split()).strip(" ,.")
+
+
+def _extras(t: str) -> tuple[dict, str]:
+    tag, t = _take_tag(t)
+    w, t = _take_when(t)
+    return {k: v for k, v in (("tag", tag), ("when", w)) if v}, t
+
+
+def todo_intent(t: str) -> Intent | None:
+    """To-do list (same sheet as read later): add (with tag/time), show, done N (removes it)."""
+    low = t.strip(" .!?")
+    # done / complete: 'done 2', 'mark 2 as done', 'I finished number 3', 'complete 1 from my list', 'tick 2'
+    if re.fullmatch(r"(?:please\s+)?(?:(?:mark|set)\s+(?:number\s+|item\s+|no\.?\s*)?\d{1,3}\s+(?:as\s+)?(?:done|complete(?:d)?|finished|read)"
+                    r"|(?:done|complete|completed|finished|tick|check\s+off)\s+(?:with\s+)?(?:number\s+|item\s+|no\.?\s*)?\d{1,3}"
+                    r"|i\s+(?:have\s+)?(?:finished|completed|did|done)\s+(?:number\s+|item\s+|no\.?\s*)?\d{1,3}"
+                    r"|(?:number\s+|item\s+)?\d{1,3}\s+is\s+(?:done|complete(?:d)?|finished))"
+                    r"(?:\s+(?:in|on|from)\s+(?:my\s+|the\s+)?" + _LIST_ANY + r")?", low, I):
+        return Intent("todo", "read_later", "browser", {"action": "done", "n": _nth(low)})
+    if re.fullmatch(r"(?:please\s+)?(?:remove|delete)\s+(?:number\s+|item\s+)?\d{1,3}\s+(?:from|in|on)\s+(?:my\s+|the\s+)?" + _LIST_ANY, low, I):
+        return Intent("todo", "read_later", "browser", {"action": "remove", "n": _nth(low)})
+    # show
+    if m := re.fullmatch(r"(?:please\s+|kurama\W+)*(?:show(?:\s+me)?|what(?:'s|\s+is|\s+are)?(?:\s+(?:on|in))?|list|open|see|check|give\s+me|read)?"
+                         r"\s*(?:all\s+)?(?:my\s+|the\s+)?(?P<k>" + _TODO + r"|list|tasks|task\s+list)(?:\s+items?)?(?P<x>(?:\s+(?:for\s+)?today|"
+                         r"\s+(?:tagged|with\s+tag|for)\s+#?[\w-]+|\s*#[\w-]+)?)", low, I):
+        tag = re.search(r"#?([\w-]+)$", m.group("x").strip()).group(1).lower() if m.group("x").strip() and \
+            not m.group("x").strip().endswith("today") else ""
+        k = m.group("k").lower()
+        if (k == "list" or not re.search(r"list|todo|-", k)) and not re.search(r"\bmy\b", low):
+            return None  # 'what to do' is a question, 'my to do' / 'to-do list' is the list
+        args = {"action": "list"} | ({"tag": tag} if tag else {})
+        if re.match(r"(?:to[\s-]?do|todo)", m.group("k"), I):
+            args["text"] = "todo"
+        return Intent("todo", "read_later", "browser", args)
+    # add
+    m = (re.fullmatch(r"(?:please\s+|kurama\W+|can\s+you\s+)*(?:add|put|save|note|write|keep|include)\s+(?:down\s+)?(?P<x>.+?)\s+"
+                      r"(?:to|in|on|into|onto)\s+(?:my\s+|the\s+)?" + _TODO + r"(?P<r>.*)", low, I)
+         or re.fullmatch(r"(?:please\s+|kurama\W+)*(?:add|new|create|make)\s+(?:a\s+)?(?:new\s+)?(?:to[\s-]?do|todo)(?:\s+item)?\s*[:,-]?\s+(?P<x>.+?)(?P<r>)", low, I)
+         or re.fullmatch(r"(?:to[\s-]?do|todo)\s*:\s*(?P<x>.+?)(?P<r>)", low, I))
+    if m:
+        extra, task = _extras(m.group("x") + " " + m.group("r"))
+        task = re.sub(r"^(?:a\s+(?:task|reminder)\s+(?:to\s+)?|to\s+)", "", task, flags=I).strip(" ,.")
+        if task:
+            return Intent("todo", "read_later", "browser", {"action": "todo", "text": task, **extra})
+    return None
 
 
 def read_later_intent(t: str) -> Intent | None:
     """'read this later', 'I will read this later', 'save this link for later', 'add this to my reading list',
     'can you keep this link for read later', 'give me the read later link I gave you', 'what's on my reading list',
-    'open the first article from my reading list', 'mark 2 as read'."""
-    if re.search(_RL_CUE, t, I) and len(t.split()) <= 20:
+    'open the first article from my reading list', 'mark 2 as read'. A time ('save this to read later, I'll read it
+    after 2 hours / at 2 pm / tomorrow 2 pm / November 28 5 pm') and a tag (#work) are passed on."""
+    if td := todo_intent(t):
+        return td
+    if re.search(_RL_CUE, t, I) and len(t.split()) <= 24:
         if re.search(r"\b(?:give|show|tell|send|what(?:'s|\s+is|\s+was)|which|where)\b.{0,40}\b(?:link|links|url|page|article)\b"
                      r"|\b(?:link|links|url)\b.{0,30}\b(?:i\s+(?:gave|give|saved|save|added|kept)|you\s+saved)\b", t, I):
             return Intent("readlater", "read_later", "browser", {"action": "last" if not re.search(
@@ -1773,15 +1855,30 @@ def read_later_intent(t: str) -> Intent | None:
         if re.search(r"\b(?:keep|save|store|add|put|bookmark|remember|note)\b", t, I) and not re.search(
                 r"\b(?:open|show|remove|delete|mark)\b", t, I):
             u = URL_RE.search(t)
-            return Intent("readlater", "read_later", "browser", {"action": "add", "url": u.group(0) if u else ""})
+            extra, _ = _extras(URL_RE.sub(" ", t))
+            return Intent("readlater", "read_later", "browser", {"action": "add", "url": u.group(0) if u else "", **extra})
+    plain = URL_RE.sub(" ", t)
+    extra, rest = _extras(plain)
     if re.fullmatch(r"(?:please\s+|kurama\W+)*(?:i(?:'ll|\s+will)\s+read\s+(?:this|it|that)(?:\s+(?:link|page|article|post|video))?\s+later|"
                     r"read\s+(?:this|it|that)(?:\s+(?:link|page|article|post|video))?\s+later|"
                     r"(?:save|keep|bookmark|add)\s+(?:this|that|it|the|these)?\s*(?:link|links|page|article|tab|post|video)?\s*"
-                    r"(?:for\s+later|to\s+(?:my\s+)?" + _RL_LIST + r"|(?:to\s+)?read\s+later)|read\s+later)[\s.!]*", t, I):
+                    r"(?:for\s+later|to\s+(?:my\s+)?" + _RL_LIST + r"|(?:to\s+)?read\s+later)|read\s+later)[\s.!]*", t, I) or (
+            extra.get("when") and re.fullmatch(
+                r"(?:please\s+|kurama\W+)*(?:(?:i(?:'ll|\s+will|\s+want\s+to)|let\s+me|remind\s+me\s+to)\s+)?read\s+(?:this|it|that)"
+                r"(?:\s+(?:link|page|article|post|video))?(?:\s+later)?[\s.!]*", rest, I)):
         u = URL_RE.search(t)
-        return Intent("readlater", "read_later", "browser", {"action": "add", "url": u.group(0) if u else ""})
+        return Intent("readlater", "read_later", "browser", {"action": "add", "url": u.group(0) if u else "", **extra})
     if not re.search(_RL_LIST, t, I):
         return None
+    if re.search(r"\b(?:open|read|show\s+me\s+the)\b.*\b(?:article|link|item|page|one|number|\d)\b", t, I):
+        return Intent("readlater", "read_later", "browser", {"action": "open", "n": _nth(t)})
+    if re.search(r"\bmark\b.*\bread\b|\b(?:done|finished)\s+(?:with|reading)\b", t, I):
+        return Intent("readlater", "read_later", "browser", {"action": "done", "n": _nth(t)})
+    if re.search(r"\b(?:remove|delete)\b", t, I):
+        return Intent("readlater", "read_later", "browser", {"action": "remove", "n": _nth(t)})
+    if re.search(r"\b(?:show|what|list|open|see|check|my)\b", t, I) and len(t.split()) <= 12:
+        return Intent("readlater", "read_later", "browser", {"action": "list", "text": "read"})
+    return None
     if re.search(r"\b(?:open|read|show\s+me\s+the)\b.*\b(?:article|link|item|page|one|number|\d)\b", t, I):
         return Intent("readlater", "read_later", "browser", {"action": "open", "n": _nth(t)})
     if re.search(r"\bmark\b.*\bread\b|\b(?:done|finished)\s+(?:with|reading)\b", t, I):

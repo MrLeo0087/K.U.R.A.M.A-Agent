@@ -26,7 +26,7 @@ def test_selected_links_are_saved_to_excel(rl):
     assert readlater.run("add") .startswith("Already in your reading list")
     from openpyxl import load_workbook
     ws = load_workbook(readlater.path()).active
-    assert [c.value for c in ws[1]] == readlater.HEAD and ws.cell(2, 2).value == "https://example.com/b"
+    assert [c.value for c in ws[1]] == readlater.HEAD and ws.cell(2, 3).value == "https://example.com/b"
 
 
 def test_open_page_from_browser_history(rl, monkeypatch):
@@ -37,18 +37,18 @@ def test_open_page_from_browser_history(rl, monkeypatch):
                                                                          "Attention Is All You Need")])
     assert readlater.run("add") == "Saved for later: Attention Is All You Need"
     r = readlater.unread()[0]
-    assert r["site"] == "arxiv.org" and r["note"] == "the key idea paragraph" and r["status"] == "unread"
+    assert r["type"] == "read" and r["note"] == "the key idea paragraph"
 
 
 def test_list_open_read_remove(rl):
     st, opened = rl
     for x in ("x1", "x2", "x3"):
         readlater.add(f"https://e.com/{x}")
-    assert readlater.show().startswith("Reading list (3 unread):\n1. Title of x3") and "https://e.com/x3" in readlater.show()
-    assert readlater.run("open", n=1) == "Opened: Title of x3 (marked as read)." and opened == ["https://e.com/x3"]
-    assert readlater.run("read", n=2) == "Marked as read: Title of x1"
+    assert readlater.show().startswith("📋 Your list (3)\n📖 Read later\n1. Title of x3 (e.com)") and "https://e.com/x3" in readlater.show()
+    assert readlater.run("open", n=1) == "Opened: Title of x3 (done, removed from your list)." and opened == ["https://e.com/x3"]
+    assert readlater.run("read", n=2) == "✔ Done: Title of x1 (removed). 1 left."  # done = deleted
     assert readlater.run("remove", n=1) == "Removed: Title of x2"
-    assert readlater.show().startswith("Your reading list is empty")
+    assert readlater.show().startswith("Your list is empty")
 
 
 def test_not_a_browser(rl):
@@ -62,9 +62,9 @@ def test_routing(monkeypatch):
     a = lambda t: fastpath.match(t).args
     assert a("I will read this later") == {"action": "add", "url": ""}
     assert a("add this to my reading list")["action"] == "add"
-    assert a("what is on my reading list") == {"action": "list"}
+    assert a("what is on my reading list") == {"action": "list", "text": "read"}
     assert a("open number 3 from my reading list") == {"action": "open", "n": 3}
-    assert a("mark 2 as read in my reading list") == {"action": "read", "n": 2}
+    assert a("mark 2 as read in my reading list") == {"action": "done", "n": 2}
 
 
 def test_last_link_and_no_invented_links(rl, monkeypatch):
@@ -76,7 +76,7 @@ def test_last_link_and_no_invented_links(rl, monkeypatch):
     assert readlater.run("last").startswith("Title of real\nhttps://e.com/real") and copied == ["https://e.com/real"]
     # real bug: the AI called read_later(url='https://example.com') for 'keep this link for read later'
     monkeypatch.setattr(safety, "context", lambda: {"user_text": "Can you keep this link for read later?"})
-    monkeypatch.setattr(readlater, "save_this", lambda: "saved the open page")
+    monkeypatch.setattr(readlater, "save_this", lambda *a: "saved the open page")
     assert readlater.run("add", "https://example.com") == "saved the open page"
 
 
@@ -115,3 +115,67 @@ def test_comma_sentences_reach_read_later_through_the_agent(monkeypatch):
     assert [n for n, _ in ran] == ["read_later", "read_later"]
     assert planner.is_multi("open youtube and set a timer for 5 minutes")  # real multi-task still splits
     assert not planner.one_tool("open youtube and set a timer for 5 minutes")
+
+
+def test_todo_list_tags_time_and_done(rl, monkeypatch):
+    from jarvis.core import reminders, store
+    readlater.add("https://e.com/paper")
+    assert readlater.run("todo", text="buy milk", tag="#Shopping", when="in 2 hours").startswith(
+        "Added to your to-do list: Buy milk #shopping. I'll remind you")
+    assert readlater.run("todo", text="call Ram") == "Added to your to-do list: Call Ram."
+    out = readlater.show()
+    assert out.splitlines()[:3] == ["📋 Your list (3)", "✅ To-do", "1. Buy milk  #shopping  ⏰ " + out.splitlines()[2].split("⏰ ")[1]]
+    assert "2. Call Ram" in out and "📖 Read later\n3. Title of paper (e.com)" in out
+    assert readlater.show(tag="shopping").count("\n1. ") == 1 and "Call Ram" not in readlater.show(tag="shopping")
+    sid = int(readlater.ordered()[0]["reminder"])
+    row = next(r for r in store.schedules_list(enabled_only=True) if r["id"] == sid)
+    assert row["kind"] == "task" and row["text"] == "todo: Buy milk"
+    assert readlater.run("done", n=1).startswith("✔ Done: Buy milk (removed). 2 left.")
+    assert sid not in [r["id"] for r in store.schedules_list(enabled_only=True)]  # its reminder is cancelled too
+    assert "Not saved" in readlater.run("todo", text="x", when="January 1 2020 3 am")
+
+
+def test_read_later_with_a_time_reminds_before_and_at_the_time(rl, monkeypatch):
+    from jarvis.core import notify, reminders, store
+    sent = []
+    monkeypatch.setattr(notify, "notify", lambda title, text="", **k: sent.append((title, text)) or [])
+    monkeypatch.setattr("jarvis.core.sound.play", lambda *a, **k: None)
+    st, _ = rl
+    st["sel"] = "https://e.com/deep"
+    assert "I'll remind you" in readlater.run("add", when="in 2 hours")
+    row = next(r for r in store.schedules_list(enabled_only=True) if r["kind"] == "task")
+    assert reminders.heads_up(now=row["next_run"] - 9 * 60) == [row["id"]]
+    assert sent[-1][0].startswith("🔔 In 9 min") and "You saved this to read at" in sent[-1][1] and "e.com/deep" in sent[-1][1]
+    reminders.fire(row)
+    assert sent[-1][0] == "📖 Read it now" and "https://e.com/deep" in sent[-1][1]
+
+
+def test_random_nudge_for_items_without_a_time(rl, monkeypatch):
+    import time as _t
+    from jarvis.core import notify, store
+    sent = []
+    monkeypatch.setattr(notify, "notify", lambda title, text="", **k: sent.append((title, text, k)) or [])
+    store.kv_set(readlater.NUDGE_KEY, "{}")
+    readlater.add_todo("clean the room")
+    noon = _t.mktime((2026, 10, 27, 12, 0, 0, 0, 0, -1))
+    assert readlater.nudge(noon) is None  # first: picks a random moment later today
+    nxt = __import__("json").loads(store.kv_get(readlater.NUDGE_KEY))["next"]
+    assert noon < nxt <= noon + 4 * 3600
+    body = readlater.nudge(nxt + 1)
+    assert "Clean the room" in body and "done 1" in body and sent[-1][2]["source"] == "todo"
+    late = _t.mktime((2026, 10, 27, 22, 30, 0, 0, 0, -1))
+    assert readlater.nudge(late) is None  # never at night
+
+
+def test_todo_routing():
+    a = lambda t: fastpath.match(t).args  # noqa: E731
+    assert a("add buy milk to my to-do list #shopping tomorrow 5 pm") == \
+        {"action": "todo", "text": "buy milk", "tag": "shopping", "when": "tomorrow 5 pm"}
+    assert a("save this in the read later and I can read this after 2 hours") == \
+        {"action": "add", "url": "", "when": "after 2 hours"}
+    assert a("keep this link for read later, november 28, 5 pm")["when"] == "november 28, 5 pm"
+    assert a("I will read this at 2 pm") == {"action": "add", "url": "", "when": "at 2 pm"}
+    assert a("show my to-do list") == {"action": "list", "text": "todo"}
+    assert a("show my list #work") == {"action": "list", "tag": "work"}
+    assert a("done 2") == {"action": "done", "n": 2} and a("mark 3 as complete") == {"action": "done", "n": 3}
+    assert fastpath.match("what to do") is None and fastpath.match("done") is None
