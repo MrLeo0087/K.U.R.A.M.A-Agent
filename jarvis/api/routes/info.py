@@ -9,6 +9,7 @@ import asyncio
 import contextlib
 import json
 import time
+from typing import Any
 
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Query, Request
@@ -265,9 +266,11 @@ class ResourceMode(BaseModel):
 
 @router.post("/resources", summary="Choose how the local understanding model runs (always / auto / off)")
 async def resources_set(body: ResourceMode):
-    from jarvis.core import semantic
+    from jarvis.core import modes, semantic
     try:
-        semantic.set_mode(body.semantic_mode)
+        if body.semantic_mode not in semantic.MODES:
+            raise ValueError(f"mode must be one of {semantic.MODES}")
+        modes.set_switch("model", body.semantic_mode)  # part of the power mode
     except ValueError as e:
         return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
     return {"ok": True, "semantic": semantic.status()}
@@ -429,3 +432,31 @@ async def identity_set(request: Request):
     if not new:
         return JSONResponse({"ok": False, "error": "use 2-24 letters, one or two words"}, status_code=400)
     return {"ok": True, "name": new}
+
+
+# ---------- power modes: how much of KURAMA runs (RAM / CPU / tokens) ----------
+class PowerMode(BaseModel):
+    mode: str | None = Field(None, description="a preset: full | smart | balanced | basic | light | laptop | noai")
+    key: str | None = Field(None, description="one switch instead: workers | model | ai | wake | screen")
+    value: Any = Field(None, description="the switch's value (workers: {name: true/false})")
+
+
+@router.get("/modes", summary="KURAMA power modes: the current switches, the presets, the helpers")
+async def modes_get():
+    from jarvis.core import modes
+    return modes.summary()
+
+
+@router.post("/modes", summary="Choose a power mode, or change one switch (the mode becomes custom)")
+async def modes_set(body: PowerMode):
+    from jarvis.core import modes
+    try:
+        if body.mode:
+            await run_in_threadpool(modes.set_mode, body.mode)
+        elif body.key:
+            await run_in_threadpool(modes.set_switch, body.key, body.value)
+        else:
+            raise ValueError("send a mode or a key + value")
+    except ValueError as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
+    return {"ok": True, **modes.summary()}

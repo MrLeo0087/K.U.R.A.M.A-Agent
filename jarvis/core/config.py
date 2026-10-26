@@ -623,6 +623,8 @@ WORKERS_ENABLED: tuple[str, ...] = tuple(
     w.strip() for w in os.getenv("JARVIS_WORKERS", "process_watch,resource_guard,crash_watchdog,"
                                  "telegram_bot,daily_digest,auto_theme,scheduler,timemachine,guard,"
                                  "location_tracker").split(",") if w.strip())
+# run them inside the server process (one Python instead of two, ~55 MB less); 0 = the separate supervisor process
+WORKERS_IN_SERVER = os.getenv("JARVIS_WORKERS_IN_SERVER", "1").lower() not in ("0", "false", "no", "off")
 WORKER_MIN_INTERVAL_S = 5.0  # no daemon polls faster than this
 WORKER_MAX_BACKOFF_S = 300.0  # error backoff cap (interval * 2^errors)
 WORKER_LOG_BYTES = 1_000_000  # rotating log per worker: ~1 MB x 3

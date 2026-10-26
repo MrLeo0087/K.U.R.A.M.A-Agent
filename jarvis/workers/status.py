@@ -24,7 +24,7 @@ def _alive(pid: int) -> bool:
 
         p = psutil.Process(pid)
         return p.is_running() and p.status() != psutil.STATUS_ZOMBIE and \
-            any("jarvis.workers" in a for a in p.cmdline())
+            any(k in a for a in p.cmdline() for k in ("jarvis.workers", "jarvis.server", "jarvis.api"))
     except Exception:
         return False
 

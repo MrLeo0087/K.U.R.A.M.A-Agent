@@ -63,6 +63,9 @@ export class Api {
   resources() { return this.request("/api/v1/resources"); }
   setResources(mode) { return this.request("/api/v1/resources", { method: "POST", body: { semantic_mode: mode } }); }
   freeModel() { return this.request("/api/v1/resources/free", { method: "POST", body: {} }); }
+  modes() { return this.request("/api/v1/modes"); }
+  setPowerMode(mode) { return this.request("/api/v1/modes", { method: "POST", body: { mode } }); }
+  setPowerSwitch(key, value) { return this.request("/api/v1/modes", { method: "POST", body: { key, value } }); }
   deleteOutput(name) { return this.request("/api/v1/outputs/delete", { method: "POST", body: { name } }); }
   clearOutputs() { return this.request("/api/v1/outputs/clear", { method: "POST", body: {} }); }
   outputUrl(name) { return this.url(`/api/v1/outputs/file?name=${encodeURIComponent(name)}`, true); }

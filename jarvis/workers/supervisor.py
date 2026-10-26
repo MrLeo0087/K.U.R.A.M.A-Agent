@@ -73,7 +73,22 @@ class Supervisor:
         self.started = time.time()
 
     def start(self) -> None:
-        for name in self.names:
+        self.sync(self.names)
+
+    def sync(self, names: list[str]) -> None:
+        """Run exactly these workers: stop the ones no longer wanted, start the missing ones (a power-mode
+        change takes effect live; a skipped worker is not retried while it stays wanted)."""
+        self.names = list(names)
+        for name in [n for n in self.workers if n not in names]:
+            w = self.workers.pop(name)
+            w._stop.set()
+            w.stop(timeout=8.0)
+            log.info("%s: stopped (power mode)", name)
+        for name in [n for n in self.skipped if n not in names]:
+            del self.skipped[name]
+        for name in names:
+            if name in self.workers or name in self.skipped:
+                continue
             if name not in WORKERS:
                 self.skipped[name] = "unknown worker"
                 log.warning("%s: unknown worker, skipping", name)
@@ -96,7 +111,8 @@ class Supervisor:
     def snapshot(self) -> dict:
         ws = {n: w.status() for n, w in self.workers.items()}
         ws.update({n: {"state": "skipped", "reason": r} for n, r in self.skipped.items()})
-        return {"pid": os.getpid(), "started": round(self.started, 1), "workers": ws}
+        return {"pid": os.getpid(), "started": round(self.started, 1), "workers": ws,
+                "in_server": getattr(self, "in_server", False)}
 
     def write_status(self) -> None:
         try:
@@ -104,9 +120,14 @@ class Supervisor:
         except OSError as e:
             log.warning("could not write status file: %s", e)
 
-    def run(self) -> None:
-        """Heartbeat until stop_event (signal) is set."""
+    def run(self, follow_mode: bool = False) -> None:
+        """Heartbeat until stop_event (signal) is set; with follow_mode, also follow the power mode's workers."""
         while not self.stop_event.wait(HEARTBEAT_S):
+            if follow_mode:
+                from jarvis.core import modes
+                want = modes.desired_workers()
+                if want != self.names:
+                    self.sync(want)
             self.write_status()
 
     def shutdown(self) -> None:
@@ -137,7 +158,11 @@ def main(argv: list[str] | None = None) -> int:
         running = status.read()
         print(status.summary() if running else "supervisor: not running")
         return 0
-    names = [n.strip() for n in (args.only.split(",") if args.only else config.WORKERS_ENABLED) if n.strip()]
+    if args.only:
+        names = [n.strip() for n in args.only.split(",") if n.strip()]
+    else:
+        from jarvis.core import modes
+        names = modes.desired_workers()  # the power mode's helpers (within config.WORKERS_ENABLED)
     existing = status.read()
     if existing:
         print(f"workers already running (pid {existing.get('pid')}); stop it first", file=sys.stderr)
@@ -154,7 +179,7 @@ def main(argv: list[str] | None = None) -> int:
     log.info("supervisor pid %d starting: %s", os.getpid(), ", ".join(names) or "(none)")
     try:
         sup.start()
-        sup.run()
+        sup.run(follow_mode=not args.only)
     finally:
         sup.shutdown()
     return 0

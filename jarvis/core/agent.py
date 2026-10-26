@@ -34,7 +34,7 @@ from langchain_core.messages import (AIMessage, BaseMessage, HumanMessage, Syste
                                      ToolMessage)
 
 from jarvis.core import (config, fastpath, identity, selfknow, jobs, llm, meta, notify, planner, profile, registry, router,
-                         safety, store, workspace)
+                         modes, safety, store, workspace)
 
 log = logging.getLogger("jarvis.agent")
 
@@ -285,7 +285,7 @@ class Agent:
         if r.groups:
             self._prev_groups = (list(r.groups), time.time())
         tools: list[Any] = registry.schemas_for(r.groups) if r.groups else []
-        tier = "smart" if (len(r.groups) > 1 or r.reasoning) else "fast"
+        tier = "smart" if (len(r.groups) > 1 or r.reasoning or modes.ai_level() == "best") else "fast"
         if tier == "fast" and not tools and state.get("mode") == "voice":
             tier = "voice"  # plain spoken chat: lowest time-to-first-token model
         if not tools and self._meta_ok(state["user_text"]):
@@ -428,7 +428,8 @@ class Agent:
                 groups = meta.pick(args)
                 if groups:
                     tools = registry.schemas_for(groups)
-                    tier = "smart" if len(groups) > 1 or state.get("tier") == "smart" else "fast"
+                    tier = ("smart" if len(groups) > 1 or state.get("tier") == "smart" or modes.ai_level() == "best"
+                            else "fast")
                     update = {"tools": tools, "groups": groups, "tier": tier}
                     content = meta.LOADED.format(groups=", ".join(groups))
                     self._log_meta(state["user_text"], groups)
@@ -709,6 +710,8 @@ class Agent:
         if fast is not None:
             self._remember(user_text, fast.answer)
             return fast.answer
+        if modes.ai_level() == "off":
+            return modes.NO_AI
         try:
             final = self.graph.invoke(self._state(user_text, mode, lang, False), self._config())
             answer = final.get("answer") or NO_ANSWER
@@ -727,6 +730,10 @@ class Agent:
         if fast is not None:
             self._remember(user_text, fast.answer)
             yield fast.answer
+            return
+        if modes.ai_level() == "off":
+            self.last = {"tools": [], "t0": time.monotonic()}
+            yield modes.NO_AI
             return
         state = self._state(user_text, mode, lang, True)
         abort = self._abort = threading.Event()  # per turn: an old turn's late close can't stop this one

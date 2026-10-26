@@ -578,7 +578,31 @@ NAME = _rx(
 _NAME_BAD = re.compile(r"\b(?:not|and|what|is|the|a|an|back|later|tomorrow|when|if|now|again|maybe|soon|please)\b", I)
 
 
+_PM_WORDS = (("full", r"full(?:\s+power)?|max(?:imum)?(?:\s+power)?|all\s+power"), ("smart", r"best\s+ai|smart(?:est)?|best\s+brain"),
+             ("normal", r"normal"), ("basic", r"basic"), ("lowram", r"low\s+ram|less\s+ram|ram\s+saver|lightweight"),
+             ("laptop", r"laptop\s+only|general"), ("noai", r"no\s+ai|zero\s+token|offline|without\s+ai"))
+_PM_ANY = "|".join(f"(?P<{k}>{v})" for k, v in _PM_WORDS)
+POWER_MODE = re.compile(r"^(?:please\s+|kurama\W+|can\s+you\s+)*(?:(?:switch|change|go|put|set|turn|move)(?:\s+(?:kurama|yourself|it))?"
+                        r"(?:\s+(?:on|back))?\s+(?:to|into|in|on)\s+|(?:enable|activate|use|start|turn\s+on)\s+)?(?:the\s+)?"
+                        r"(?:" + _PM_ANY + r")\s+mode(?:\s+(?:on|please|now))?\s*[.!]*$", I)
+POWER_STATUS = re.compile(r"^(?:what|which)\s+(?:power\s+)?mode\s+(?:are\s+you|is\s+kurama|am\s+i|is\s+on|is\s+it)(?:\s+(?:in|on|using))?"
+                          r"(?:\s+now)?\s*\??$|^(?:current|kurama(?:'s)?)\s+(?:power\s+)?mode\s*\??$", I)
+
+
+def power_mode_intent(t: str) -> Intent | None:
+    """'switch to low ram mode', 'full power mode', 'no ai mode', 'what mode are you in' (0 tokens)."""
+    if POWER_STATUS.match(t):
+        return Intent("power_mode", "power_mode", "usage", {"mode": "status"})
+    if m := POWER_MODE.match(t):
+        return Intent("power_mode", "power_mode", "usage", {"mode": next(k for k, v in m.groupdict().items() if v)})
+    if re.fullmatch(r"(?:please\s+)?(?:save|free\s+up|use\s+less)\s+(?:some\s+)?ram(?:\s+(?:please|now))?[.!]*", t, I):
+        return Intent("power_mode", "power_mode", "usage", {"mode": "lowram"})
+    return None
+
+
 def _p7_intent(t: str) -> Intent | None:
+    if pm := power_mode_intent(t):
+        return pm
     if m := _full(DIGEST, t):
         return Intent("digest", "daily_digest", "usage", {"date": (m.groupdict().get("date") or "today").lower()})
     if m := _full(TOKENS, t):

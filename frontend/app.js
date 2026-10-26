@@ -357,6 +357,7 @@ class BotBubble {
     c.title = ev.ok ? "tool ran" : "tool failed or was declined";
     this.chips.append(c);
     scrollDown();
+    if (ev.name === "power_mode" && ev.ok) setTimeout(() => api.modes().then((m) => applyModeClient(m.current, true)).catch(() => {}), 300);
   }
   confirm(ev) {
     const card = el("div", "confirm");
@@ -1235,7 +1236,7 @@ document.addEventListener("click", (e) => {
 }, true);
 
 // click a card -> a big sheet with everything about it
-const SHEETS = { weather: "Weather", apps: "Memory & processes", coding: "Coding", laptop: "This laptop", system: "System", now: "Now & today" };
+const SHEETS = { modes: "KURAMA modes", weather: "Weather", apps: "Memory & processes", coding: "Coding", laptop: "This laptop", system: "System", now: "Now & today" };
 function cardOpen(card) { if (card?.dataset.sheet) openSheet(card.dataset.sheet); }
 for (const c of document.querySelectorAll("[data-sheet]")) {
   c.addEventListener("click", (e) => { if (!e.target.closest("button, a, input")) cardOpen(c); });
@@ -1250,7 +1251,7 @@ async function openSheet(panel) {
   const body = $("sheet-body");
   body.innerHTML = '<p class="empty">Loading…</p>';
   if (!$("sheet").open) $("sheet").showModal();
-  try { body.innerHTML = await sheetHtml(panel); }
+  try { body.innerHTML = await sheetHtml(panel); if (panel === "modes") bindModes(body); }
   catch (e) { body.innerHTML = `<p class="empty">Couldn't load this right now (${esc(e.message || "error")}).</p>`; }
 }
 async function kuramaResources() { // System sheet: what each part of KURAMA uses right now
@@ -1272,6 +1273,7 @@ document.addEventListener("click", async (e) => {
   if (e.target.id === "res-settings") { $("sheet").close(); openSettings(); }
 });
 async function sheetHtml(panel) {
+  if (panel === "modes") return modesHtml();
   if (panel === "weather") {
     const f = wxFull || await api.weatherFull();
     if (!f || f.error) return '<p class="empty">The forecast isn\'t available right now.</p>';
@@ -1848,6 +1850,81 @@ async function bargeCheck(blob) { // something was said while KURAMA was talking
   // else: noise, KURAMA's own echo or a short aside: keep talking
 }
 
+// ---------- power modes: how much of KURAMA runs, so it fits next to big tasks (8 GB laptop) ----------
+let powerMode = null;
+const AI_TXT = { best: "Best AI", normal: "Normal AI", fast: "Small AI", off: "No AI" };
+const SCREEN_TXT = { full: "Full dashboard", calm: "Calm dashboard", mini: "Small button" };
+const segBtns = (key, opts, cur) => `<div class="mseg" data-key="${key}">${Object.entries(opts).map(([v, t]) =>
+  `<button type="button" data-v="${v}" aria-pressed="${String(v) === String(cur)}">${esc(t)}</button>`).join("")}</div>`;
+async function modesHtml() {
+  const [m, r] = await Promise.all([api.modes(), api.resources().catch(() => null)]);
+  const cur = m.current;
+  const now = r ? `KURAMA uses <b>${r.total_mb} MB</b> now (${r.ram_share}% of the laptop's RAM).` : "";
+  const cards = m.presets.map((p) => `<button type="button" class="mcard${p.id === cur.mode ? " on" : ""}" data-mode="${p.id}">
+      <span class="mc-top"><b>${esc(p.name)}</b><small>≈ ${p.est_mb} MB</small></span>
+      <span class="mc-desc">${esc(p.desc)}</span>
+      <span class="mc-tags"><i>${AI_TXT[p.ai]}</i><i>${p.workers.length}/${m.workers.length} helpers</i>${p.model === "off" ? "" : `<i>model ${p.model}</i>`}${p.wake ? "<i>wake word</i>" : ""}<i>${SCREEN_TXT[p.screen]}</i></span></button>`).join("");
+  const helpers = m.workers.map((w) => `<label class="mhelp${w.available ? "" : " off"}"><input type="checkbox" data-worker="${w.id}" ${cur.workers.includes(w.id) ? "checked" : ""} ${w.available ? "" : "disabled"}>
+      <span><b>${esc(w.name)}</b><small>${esc(w.desc)}</small></span></label>`).join("");
+  return `<p class="mnow">Mode: <b>${esc(m.name)}</b> · ≈ ${cur.est_mb} MB. ${now} A lighter mode leaves more RAM for your own work; your files and memory stay the same.</p>
+    <div class="mgrid">${cards}</div>
+    <div class="sgrid mswitch">
+      ${tile("AI answers", segBtns("ai", { best: "Best", normal: "Normal", fast: "Small", off: "Off" }, cur.ai) +
+        '<small class="note">Best = the big model for everything. Small = the quick model only. Off = 0 tokens, built-in commands only. (Tokens, not RAM.)</small>')}
+      ${tile("Understanding model", segBtns("model", { always: "Always", auto: "When needed", off: "Off" }, cur.model) +
+        '<small class="note">Local, ~130 MB while loaded. It understands free phrasing; off = keywords + the AI decide.</small>')}
+      ${tile("Screen", segBtns("screen", { full: "Full", calm: "Calm", mini: "Small" }, cur.screen) +
+        '<small class="note">Small frees the big dashboard (~100 MB): only the floating button stays. Calm stops the animations (CPU).</small>')}
+      ${tile("Wake word", segBtns("wake", { true: "On", false: "Off" }, cur.wake) +
+        '<small class="note">Listens for "KURAMA" / "wake up": the mic stays open and each speech burst is checked online.</small>', "")}
+      ${tile("Background helpers", `<div class="mhelpers">${helpers}</div><small class="note">Helpers run inside KURAMA's server (a few MB each). Grey = not set up.</small>`, "span2")}
+    </div>`;
+}
+function bindModes(body) {
+  const done = (m, msg) => { applyModeClient(m.current, true); toast(msg); openSheet("modes"); };
+  const fail = (e) => toast("Couldn't change it: " + (e.message || e));
+  for (const c of body.querySelectorAll("[data-mode]")) {
+    c.onclick = () => api.setPowerMode(c.dataset.mode).then((m) => done(m, `${m.name} mode on.`)).catch(fail);
+  }
+  for (const g of body.querySelectorAll(".mseg")) {
+    for (const b of g.querySelectorAll("button")) {
+      b.onclick = () => {
+        const v = g.dataset.key === "wake" ? b.dataset.v === "true" : b.dataset.v;
+        api.setPowerSwitch(g.dataset.key, v).then((m) => done(m, `Changed. Mode: ${m.name}.`)).catch(fail);
+      };
+    }
+  }
+  for (const x of body.querySelectorAll("[data-worker]")) {
+    x.onchange = () => api.setPowerSwitch("workers", { [x.dataset.worker]: x.checked })
+      .then((m) => done(m, `${x.closest("label").querySelector("b").textContent} ${x.checked ? "on" : "off"}.`)).catch(fail);
+  }
+}
+function setWake(on) { // the wake word on/off (settings checkbox or the power mode)
+  const was = S.wakeListen;
+  S.wakeListen = on;
+  if (on && !was) setTimeout(startListening, 0);
+  if (!on && was && asleep) { asleep = false; api.wakeAwake().catch(() => {}); if (conv.on) { conv.stop(); mic.stop(); setMode("text"); } updateState(); }
+}
+function setLowPower(on) {
+  S.lowPower = on;
+  orb.setLowPower(on);
+  dust.setLowPower(on);
+  document.body.classList.toggle("low-power", on);
+}
+function applyModeClient(cur, changed) { // the parts of a mode that live in this page: wake word, screen
+  powerMode = cur;
+  const pill = $("btn-mode");
+  if (pill) { $("mode-name").textContent = cur.name || "Mode"; pill.dataset.mode = cur.mode; }
+  if (!cur.wake && S.wakeListen) setWake(false);
+  if (changed && cur.wake && !S.wakeListen) setWake(true);
+  if (cur.screen !== "full" && !lowPowerOn()) setLowPower(true);
+  if (changed && cur.screen === "full" && lowPowerOn()) setLowPower(false);
+  saveSettings(S);
+  if (changed && cur.screen === "mini" && !MINI) setTimeout(() => $("btn-mini").click(), 700); // free the big dashboard
+}
+$("btn-mode").onclick = () => openSheet("modes");
+api.modes().then((m) => applyModeClient(m.current, false)).catch(() => {});
+
 // ---------- power switch: first click arms it (3 s), second click turns every KURAMA process off ----------
 let powerArmed = 0;
 function powerClick(btn) {
@@ -1889,7 +1966,7 @@ async function loadMemory() { // Settings -> Memory: what each part uses, and th
   } catch { $("set-mem").textContent = "Couldn't read memory use."; }
 }
 $("set-sem").onchange = async (e) => {
-  try { await api.setResources(e.target.value); toast("Understanding model: " + e.target.selectedOptions[0].text + "."); }
+  try { const m = await api.setPowerSwitch("model", e.target.value); applyModeClient(m.current, false); toast("Understanding model: " + e.target.selectedOptions[0].text + "."); }
   catch (err) { toast("Couldn't change it: " + err.message); }
   loadMemory();
 };
@@ -1928,11 +2005,9 @@ $("set-form").addEventListener("submit", (e) => {
   if (e.submitter?.value !== "save") return;
   S.apiBase = $("set-api").value.trim().replace(/\/+$/, "");
   S.token = $("set-token").value.trim();
-  const wakeWas = S.wakeListen;
-  S.wakeListen = $("set-wake").checked;
-  if (S.wakeListen && !wakeWas) setTimeout(startListening, 0);
-  if (!S.wakeListen && wakeWas && asleep) { asleep = false; api.wakeAwake().catch(() => {}); if (conv.on) { conv.stop(); mic.stop(); setMode("text"); } updateState(); }
-  S.lowPower = $("set-low").checked;
+  setWake($("set-wake").checked);
+  if ($("set-wake").checked && powerMode && !powerMode.wake) api.setPowerSwitch("wake", true).then((m) => applyModeClient(m.current, false)).catch(() => {});
+  setLowPower($("set-low").checked);
   const hear = $("set-hear").checked;
   if (hear !== mic.hearDevice) {
     mic.hearDevice = hear;
@@ -1946,9 +2021,6 @@ $("set-form").addEventListener("submit", (e) => {
   const nm = $("set-name").value.trim();
   if (nm && nm !== botName) api.setName(nm).then((r) => { setBotName(r.name); toast(`My name is ${r.name} now.`); })
     .catch(() => toast("That name didn't work: use 2-24 letters."));
-  orb.setLowPower(S.lowPower);
-  dust.setLowPower(S.lowPower);
-  document.body.classList.toggle("low-power", S.lowPower);
   syncAmbient();
   online = null;
   startStatus();

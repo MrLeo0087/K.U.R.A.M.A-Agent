@@ -32,6 +32,7 @@ from jarvis.api.security import Guard
 from jarvis.api.settings import Settings
 from jarvis.api.status import StatusCollector
 from jarvis.api.turns import Engine
+from jarvis.core import config
 
 log = logging.getLogger("jarvis.api")
 
@@ -55,7 +56,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             threading.Thread(target=engine.warm, name="jarvis-warm", daemon=True).start()
             from jarvis.core import devaudio  # "hear device sound" off: the echo canceller (system audio)
             threading.Thread(target=devaudio.apply, name="kurama-devaudio-apply", daemon=True).start()
+            if config.WORKERS_IN_SERVER:
+                from jarvis.workers import inproc
+                inproc.start()
         yield
+        if config.WORKERS_IN_SERVER:
+            from jarvis.workers import inproc
+            inproc.stop()
 
     app = FastAPI(title="KURAMA (KURAMA) API", version=info.API_VERSION, lifespan=lifespan,
                   description="Backend for the KURAMA holographic UI. Optional bearer token "

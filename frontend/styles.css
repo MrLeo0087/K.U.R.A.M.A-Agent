@@ -903,3 +903,38 @@ body.wsonly .mws-title { font-size: 13px; }
 
 .sheet .bar { display: inline-block; width: 120px; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.08); vertical-align: middle; }
 .sheet .bar .fill { display: block; height: 100%; border-radius: 3px; background: #ff7a1a; }
+
+/* ---------- power modes (pill next to the power button + the "KURAMA modes" sheet) ---------- */
+.mode-pill { position: fixed; top: 10px; right: 50px; z-index: 5; height: 28px; display: inline-flex; align-items: center; gap: 7px;
+  padding: 0 12px; border-radius: 999px; border: 1px solid var(--card-border); background: rgba(15, 17, 25, 0.6); color: var(--muted);
+  font-size: 11px; letter-spacing: 0.08em; opacity: 0.75; transition: opacity 0.2s, color 0.2s, border-color 0.2s; }
+.mode-pill i { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
+.mode-pill[data-mode="full"] i, .mode-pill[data-mode="smart"] i { background: var(--accent); }
+.mode-pill[data-mode="lowram"] i, .mode-pill[data-mode="laptop"] i { background: var(--cool); }
+.mode-pill[data-mode="noai"] i { background: var(--dim); }
+.mode-pill:hover, .mode-pill:focus-visible { opacity: 1; color: var(--accent-2); border-color: rgba(255, 122, 26, 0.45); outline: none; }
+body.minimized .mode-pill { opacity: 0.35; }
+.mnow { font-size: 13px; color: var(--muted); margin-bottom: 14px; line-height: 1.6; }
+.mnow b { color: var(--text); }
+.mgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.mcard { display: flex; flex-direction: column; gap: 6px; text-align: left; padding: 12px 14px; border-radius: 10px;
+  background: rgba(255, 255, 255, 0.025); border: 1px solid rgba(255, 140, 50, 0.12); transition: border-color 0.2s, background 0.2s; }
+.mcard:hover, .mcard:focus-visible { border-color: rgba(255, 150, 70, 0.4); outline: none; }
+.mcard.on { border-color: var(--accent); background: rgba(255, 122, 26, 0.08); }
+.mc-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.mc-top b { font-size: 14px; color: var(--text); }
+.mc-top small { font-size: 11px; color: var(--accent-2); white-space: nowrap; }
+.mc-desc { font-size: 12px; line-height: 1.5; color: var(--muted); }
+.mc-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.mc-tags i { font-style: normal; font-size: 10px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--dim); }
+.mswitch .note { display: block; margin-top: 8px; font-size: 11.5px; line-height: 1.5; color: var(--dim); }
+.mseg { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.mseg button { padding: 4px 11px; border-radius: 999px; border: 1px solid var(--line); background: transparent; font-size: 12px; color: var(--muted); }
+.mseg button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent-2); background: rgba(255, 122, 26, 0.1); }
+.mhelpers { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px 14px; }
+.mhelp { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; cursor: pointer; }
+.mhelp input { margin-top: 3px; accent-color: var(--accent); }
+.mhelp b { display: block; color: var(--text); font-size: 12.5px; }
+.mhelp small { color: var(--dim); font-size: 11px; line-height: 1.4; }
+.mhelp.off { opacity: 0.45; cursor: default; }
+@media (max-width: 700px) { .mswitch { grid-template-columns: 1fr; } .mswitch .tile.span2 { grid-column: auto; } }

@@ -274,6 +274,12 @@ def _backoff(attempt: int) -> float:
 def _chain(tier: str) -> list[str]:
     if tier not in config.TIER_CHAIN:
         raise ValueError(f"unknown tier {tier!r}; use one of {list(config.TIER_CHAIN)}")
+    from jarvis.core import modes
+    level = modes.ai_level()
+    if level == "off":
+        raise LLMError("AI is off (No AI mode); switch the mode on the dashboard")
+    if level == "fast" and tier == "smart":  # Light / Laptop only: the small model only
+        tier = "fast"
     chain = config.TIER_CHAIN[tier]
     allowed = [m for m in chain if budget.allow(m)]
     if not allowed:  # all self-budgets spent: still try the cheapest; Groq enforces real limits

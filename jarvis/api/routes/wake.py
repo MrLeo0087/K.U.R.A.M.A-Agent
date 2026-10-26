@@ -68,6 +68,10 @@ SERVICE = WakeService()
 
 @router.post("/sleep", summary="Listen (server-side, cheap) for the wake phrase")
 async def wake_sleep():
+    from jarvis.core import modes
+    if not modes.wake_allowed():  # the power mode turned the wake word off (saves the mic + Whisper calls)
+        SERVICE.stop()
+        return {"listening": False, "reason": "wake word is off in this mode"}
     SERVICE.start()
     return {"listening": True}
 
