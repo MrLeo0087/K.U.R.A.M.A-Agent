@@ -104,7 +104,15 @@ def save_incoming(msg: dict) -> str:
         path = folder / f"{Path(name).stem} ({n}){Path(name).suffix}"
         n += 1
     path.write_bytes(data)
+    if OCR_CAPTION.search(caption) and path.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp", ".heic", ".bmp"):
+        from jarvis.core import ocr  # "read this" on a photo: the text comes back as a message
+        r = ocr.read(path)
+        return r.text or "I couldn't find any text in that photo."
     return f"Saved on your laptop: {path} ({len(data) / 1e6:.1f} MB)."
+
+
+OCR_CAPTION = re.compile(r"\b(?:read|ocr|text|what\s+(?:does|is)\s+(?:it|this)\s+(?:say|written)|type\s+(?:it|this)|"
+                         r"copy\s+(?:the\s+)?text)\b|पढ", re.I)
 
 
 def voice_text(msg: dict) -> str:

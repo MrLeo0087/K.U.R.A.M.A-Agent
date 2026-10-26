@@ -1537,6 +1537,36 @@ def _ui_intent(t: str) -> Intent | None:
     return None
 
 
+_OCR_VERB = r"(?:read|ocr|scan|extract|copy|get|grab|pull|type\s+out|transcribe|convert)"
+_OCR_PIC = r"(?:photo|picture|pic|image|img|screenshot|screen\s*shot|handwriting|handwritten\s+\w+|scan|snap)"
+_OCR_AREA = re.compile(r"^(?:please\s+|kurama\W+|can\s+you\s+)*(?:" + _OCR_VERB + r"\s+(?:the\s+)?(?:text\s+(?:from|in|on|of)\s+)?"
+                       r"(?:this|a|an|the|my|that)?\s*(?:screen\s+)?(?:area|region|part(?:\s+of\s+(?:the|my)\s+screen)?|box|"
+                       r"selection\s+of\s+the\s+screen)|ocr(?:\s+(?:this|it|that|the\s+screen))?)[\s.!?]*$", I)
+_OCR_SCREEN = re.compile(r"^(?:please\s+)?(?:" + _OCR_VERB + r"\s+(?:all\s+)?(?:the\s+)?text\s+(?:on|from|in)\s+(?:the\s+|my\s+)?"
+                         r"(?:whole\s+)?screen|what\s+(?:does|is)\s+(?:written\s+on\s+)?(?:my|the)\s+screen\s+(?:say|says))[\s.!?]*$", I)
+_OCR_FILE = re.compile(r"\b(?:" + _OCR_VERB + r"|what\s+(?:does|is)|what's)\b.{0,40}\b" + _OCR_PIC + r"\b", I)
+
+
+def ocr_intent(t: str) -> Intent | None:
+    """'read this area', 'what does this photo say', 'copy the text from this screenshot', 'read the copied image',
+    'read handwriting from photo.jpg' -> read_text (Tesseract, 0 tokens)."""
+    if _OCR_AREA.match(t):
+        return Intent("ocr", "read_text", "screen", {"source": "area"})
+    if _OCR_SCREEN.match(t):
+        return Intent("ocr", "read_text", "screen", {"source": "screen"})
+    if not _OCR_FILE.search(t) or len(t.split()) > 18:
+        return None
+    if re.search(r"\b(?:take|capture)\s+(?:a\s+)?screenshot\b|\b(?:describe|caption|who|where|of\s+what|is\s+this\s+photo\s+of)\b|"
+                 r"\b(?:send|share|delete|open|resize|compress|rename|organi[sz]e|move|set\s+as)\b", t, I):
+        return None  # about the picture itself, not its text
+    if not re.search(r"\b(?:text|say|says|written|write|words?|note|handwriting|handwritten|read|ocr|transcribe|type)\b", t, I):
+        return None  # "convert this image to png" is a file conversion
+    if re.search(r"\b(?:copied|clipboard)\b", t, I):
+        return Intent("ocr", "read_text", "screen", {"source": "clipboard"})
+    f = re.search(r"([\w.~/-]+\.(?:png|jpe?g|webp|bmp|tiff?|gif|heic))\b", t, I)
+    return Intent("ocr", "read_text", "screen", {"source": "file", "path": f.group(1) if f else "this"})
+
+
 def match(text: str) -> Intent | None:
     """The single high-confidence intent for text, or None."""
     from jarvis.core import selfknow
@@ -1555,6 +1585,8 @@ def match(text: str) -> Intent | None:
         return si
     if pi := plan_answer_intent(t):
         return pi
+    if oi := ocr_intent(t):
+        return oi
     if ui := _ui_intent(t):
         return ui
     if cv := convert_intent(t):

@@ -220,6 +220,10 @@ TOOL_OUTPUT_MAX_CHARS = 800  # tool results are truncated to this before going b
 DIRECT_REPLY_TOOLS = {"open_url": "open", "open_app": "open", "audio": "audio", "brightness": "brightness",
                       "media_control": "media", "lock_screen": "lock",
                       "screenshot": "screenshot", "send_message_telegram": None, "get_time": "time"}
+# --- OCR (read_text): Tesseract first (0 tokens); the vision model only for handwriting / hard photos ---
+OCR_LANGS = os.getenv("KURAMA_OCR_LANGS", "eng+nep")
+OCR_MIN_CONF = float(os.getenv("KURAMA_OCR_MIN_CONF", "62"))  # Tesseract's mean word confidence below this = poor
+OCR_VISION = os.getenv("KURAMA_OCR_VISION", "1").lower() not in ("0", "false", "no", "off")
 # a dashboard answer longer than this goes to the workspace in full; the chat gets one short line
 CHAT_MAX_CHARS = int(os.getenv("KURAMA_CHAT_MAX_CHARS", "380"))
 CHAT_MAX_LINES = int(os.getenv("KURAMA_CHAT_MAX_LINES", "3"))
