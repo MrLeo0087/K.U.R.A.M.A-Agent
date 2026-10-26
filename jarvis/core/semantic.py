@@ -52,7 +52,7 @@ def embedder() -> Any:
         from jarvis.core.memory import Embedder
         # kept loaded much longer than the knowledge index's: reloading the model took 3-18 s and made every
         # free-phrased request after a 2-minute pause feel stuck (~120 MB while loaded, in a child process)
-        _embedder = Embedder(idle_s=config.SEMANTIC_EMBED_IDLE_S)
+        _embedder = Embedder(idle_s=_idle_for(mode()))
     return _embedder
 
 
@@ -85,9 +85,69 @@ def _load() -> tuple[list[str], Any]:
     return _index[1], _index[2]
 
 
+# The user's choice in the dashboard (Settings -> Memory): "always" (stay loaded = fastest), "auto" (load when a
+# request needs it, free after SEMANTIC_AUTO_IDLE_S), "off" (never load it: keyword rules + the AI pick tools).
+MODES = ("always", "auto", "off")
+_mode_cache: tuple[float, str] = (0.0, "")
+
+
+def mode() -> str:
+    global _mode_cache
+    import time as _t
+    if _t.monotonic() - _mode_cache[0] < 5:
+        return _mode_cache[1]
+    try:
+        from jarvis.core import store
+        m = store.kv_get("semantic_mode") or config.SEMANTIC_MODE
+    except Exception:  # noqa: BLE001
+        m = config.SEMANTIC_MODE
+    m = m if m in MODES else "auto"
+    _mode_cache = (_t.monotonic(), m)
+    return m
+
+
+def set_mode(m: str) -> str:
+    global _mode_cache
+    from jarvis.core import store
+    if m not in MODES:
+        raise ValueError(f"mode must be one of {MODES}")
+    store.kv_set("semantic_mode", m)
+    _mode_cache = (0.0, "")
+    if _embedder is not None:
+        _embedder.idle_s = _idle_for(m)
+        if m == "off":
+            _embedder.unload()
+        elif _embedder.loaded:
+            _embedder._arm()  # the new idle time counts from now
+    return m
+
+
+def _idle_for(m: str) -> float:
+    return 0.0 if m == "always" else config.SEMANTIC_AUTO_IDLE_S  # 0 = never unload
+
+
+def status() -> dict:
+    e = _embedder
+    loaded = bool(e is not None and e.loaded)
+    mb = 0
+    if loaded:
+        try:
+            import psutil
+            proc = getattr(e._model, "proc", None)
+            mb = round(psutil.Process(proc.pid).memory_info().rss / 1048576) if proc else 0
+        except Exception:  # noqa: BLE001
+            mb = 0
+    return {"mode": mode(), "loaded": loaded, "mb": mb}
+
+
+def free_now() -> None:
+    if _embedder is not None:
+        _embedder.unload()
+
+
 def warm() -> None:
     """Load the model + index now (server start / wake-up), so the first real request is fast."""
-    if config.SEMANTIC_ROUTER:
+    if config.SEMANTIC_ROUTER and mode() == "always":
         try:
             scores("open youtube")
         except Exception as e:  # noqa: BLE001
@@ -96,7 +156,7 @@ def warm() -> None:
 
 def scores(text: str) -> list[tuple[str, float]]:
     """Every group with its best similarity to the request, best first ([] when unavailable)."""
-    if not config.SEMANTIC_ROUTER or not text.strip() or not re.search(r"[A-Za-z]{3}", text):
+    if not config.SEMANTIC_ROUTER or not text.strip() or not re.search(r"[A-Za-z]{3}", text) or mode() == "off":
         return []
     if re.search(r"[ऀ-ॿ]", text):  # Devanagari: the English model would guess
         return []

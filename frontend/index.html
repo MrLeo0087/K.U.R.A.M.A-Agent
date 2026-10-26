@@ -260,6 +260,18 @@
       <label class="check"><input id="set-hear" type="checkbox"><span>Hear device sound <small>on (default): normal speaker sound · off: the laptop's own sound is removed from the mic, but this can make your speakers quieter</small></span></label>
       <label class="check"><input id="set-low" type="checkbox"><span>Low power <small>static orb, CSS glow only</small></span></label>
       <div class="set-group">
+        <span class="label">Memory</span>
+        <label>Understanding model <small>local, 0 tokens: understands free-form requests (~250 MB while loaded)</small>
+          <select id="set-sem">
+            <option value="always">Always ready (fastest)</option>
+            <option value="auto">Load when needed, free after 10 min (recommended)</option>
+            <option value="off">Off (keywords + the AI decide; uses a few more tokens)</option>
+          </select>
+        </label>
+        <div class="row"><small id="set-mem" class="note grow">…</small><button type="button" id="set-free" class="btn">Free now</button></div>
+        <small class="note">Minimize KURAMA to also free the big dashboard. Turn off the wake word above to stop listening for "KURAMA".</small>
+      </div>
+      <div class="set-group">
         <span class="label">Clear &amp; reset</span>
         <div class="reset-btns">
           <button type="button" class="btn" data-reset="chat">Clear chat</button>

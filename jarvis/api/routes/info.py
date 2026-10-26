@@ -200,6 +200,50 @@ async def outputs_clear():
     return {"ok": True, "moved": n}
 
 
+# ---------- memory: what KURAMA's parts use, and the switch for the local understanding model ----------
+def _kurama_parts() -> list[dict]:
+    import psutil
+    parts: dict[str, int] = {}
+    names = (("jarvis.server", "Server (backend)"), ("jarvis.workers", "Background workers"),
+             ("jarvis.core.memory", "Understanding model"), ("kurama_wallpaper", "Screen (dashboard / mini)"),
+             ("WebKitWebProcess", "Screen pages"), ("WebKitNetworkProcess", "Screen pages"))
+    for p in psutil.process_iter(["cmdline", "memory_info"]):
+        cmd = " ".join(p.info.get("cmdline") or [])
+        for key, label in names:
+            if key in cmd:
+                parts[label] = parts.get(label, 0) + round((p.info["memory_info"].rss or 0) / 1048576)
+                break
+    return [{"name": k, "mb": v} for k, v in parts.items()]
+
+
+@router.get("/resources", summary="Memory used by KURAMA's parts + the understanding model's mode")
+async def resources():
+    from jarvis.core import semantic
+    parts = await run_in_threadpool(_kurama_parts)
+    return {"parts": parts, "total_mb": sum(p["mb"] for p in parts), "semantic": semantic.status()}
+
+
+class ResourceMode(BaseModel):
+    semantic_mode: str = Field(..., description="always | auto | off")
+
+
+@router.post("/resources", summary="Choose how the local understanding model runs (always / auto / off)")
+async def resources_set(body: ResourceMode):
+    from jarvis.core import semantic
+    try:
+        semantic.set_mode(body.semantic_mode)
+    except ValueError as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
+    return {"ok": True, "semantic": semantic.status()}
+
+
+@router.post("/resources/free", summary="Free the understanding model's memory now (it reloads when needed)")
+async def resources_free():
+    from jarvis.core import semantic
+    await run_in_threadpool(semantic.free_now)
+    return {"ok": True, "semantic": semantic.status()}
+
+
 class OutputName(BaseModel):
     name: str = Field(..., max_length=300)
 

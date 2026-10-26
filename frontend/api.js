@@ -60,6 +60,9 @@ export class Api {
   wallpaperInfo() { return this.request("/api/v1/wallpaper/info"); }
   wallpaperUrl(v) { return this.url(`/api/v1/wallpaper?v=${encodeURIComponent(v)}`, true); }
   outputs(limit = 12) { return this.request(`/api/v1/outputs?limit=${limit}`); }
+  resources() { return this.request("/api/v1/resources"); }
+  setResources(mode) { return this.request("/api/v1/resources", { method: "POST", body: { semantic_mode: mode } }); }
+  freeModel() { return this.request("/api/v1/resources/free", { method: "POST", body: {} }); }
   deleteOutput(name) { return this.request("/api/v1/outputs/delete", { method: "POST", body: { name } }); }
   clearOutputs() { return this.request("/api/v1/outputs/clear", { method: "POST", body: {} }); }
   outputUrl(name) { return this.url(`/api/v1/outputs/file?name=${encodeURIComponent(name)}`, true); }

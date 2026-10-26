@@ -1823,8 +1823,26 @@ function openSettings(msg) {
   api.deviceSound().then((d) => { $("set-hear").checked = !!d.hear; $("set-hear").disabled = d.available === false; }).catch(() => {});
   $("set-lang").value = S.lang || "auto";
   $("set-msg").textContent = msg || "";
+  loadMemory();
   if (!dlg.open) dlg.showModal();
 }
+async function loadMemory() { // Settings -> Memory: what each part uses, and the model's mode
+  try {
+    const r = await api.resources();
+    $("set-sem").value = r.semantic.mode;
+    const parts = r.parts.map((p) => `${p.name} ${p.mb} MB`).join(" · ");
+    $("set-mem").textContent = `KURAMA now: ${r.total_mb} MB (${parts}). Model: ${r.semantic.loaded ? `loaded, ${r.semantic.mb} MB` : "not loaded"}.`;
+  } catch { $("set-mem").textContent = "Couldn't read memory use."; }
+}
+$("set-sem").onchange = async (e) => {
+  try { await api.setResources(e.target.value); toast("Understanding model: " + e.target.selectedOptions[0].text + "."); }
+  catch (err) { toast("Couldn't change it: " + err.message); }
+  loadMemory();
+};
+$("set-free").onclick = async () => {
+  try { await api.freeModel(); toast("Model memory freed; it loads again when needed."); } catch (err) { toast("Couldn't free it: " + err.message); }
+  setTimeout(loadMemory, 500);
+};
 $("btn-settings").onclick = () => openSettings();
 for (const b of document.querySelectorAll("[data-reset]")) {
   b.onclick = async () => {
