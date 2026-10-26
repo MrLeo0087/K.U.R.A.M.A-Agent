@@ -110,3 +110,12 @@ def test_power_mode_tool():
     out = power_mode(mode="lowram")
     assert out.startswith("Low RAM mode on") and "MB" in out
     assert power_mode(mode="status").startswith("Low RAM mode is on")
+
+
+def test_a_saved_preset_follows_its_current_definition():
+    import json
+    from jarvis.core import store
+    store.kv_set("power_mode", json.dumps({"mode": "normal", "workers": ["scheduler"], "model": "off"}))
+    modes._cache = (0.0, {})
+    st = modes.current()
+    assert st["workers"] == list(modes.ALL) and st["model"] == "auto"  # new helpers join the preset

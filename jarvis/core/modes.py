@@ -81,7 +81,7 @@ def _clean(raw: dict) -> dict:
     base = PRESETS.get(mode, PRESETS[DEFAULT])
     st = {"mode": mode}
     for k in KEYS:
-        st[k] = raw.get(k, base[k]) if mode == "custom" or k in raw else base[k]
+        st[k] = raw.get(k, base[k]) if mode == "custom" else base[k]  # a preset is always its current definition
     st["workers"] = [w for w in st["workers"] if w in WORKERS]
     st["model"] = st["model"] if st["model"] in MODEL_MODES else "auto"
     st["ai"] = st["ai"] if st["ai"] in AI_LEVELS else "normal"
