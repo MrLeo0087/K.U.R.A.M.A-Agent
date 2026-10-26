@@ -1681,7 +1681,8 @@ def read_later_intent(t: str) -> Intent | None:
                 r"\b(?:open|show|remove|delete|mark)\b", t, I):
             u = URL_RE.search(t)
             return Intent("readlater", "read_later", "browser", {"action": "add", "url": u.group(0) if u else ""})
-    if re.fullmatch(r"(?:please\s+|kurama\W+)*(?:i(?:'ll|\s+will)\s+read\s+(?:this|it|that)\s+later|read\s+(?:this|it|that)\s+later|"
+    if re.fullmatch(r"(?:please\s+|kurama\W+)*(?:i(?:'ll|\s+will)\s+read\s+(?:this|it|that)(?:\s+(?:link|page|article|post|video))?\s+later|"
+                    r"read\s+(?:this|it|that)(?:\s+(?:link|page|article|post|video))?\s+later|"
                     r"(?:save|keep|bookmark|add)\s+(?:this|that|it|the|these)?\s*(?:link|links|page|article|tab|post|video)?\s*"
                     r"(?:for\s+later|to\s+(?:my\s+)?" + _RL_LIST + r"|(?:to\s+)?read\s+later)|read\s+later)[\s.!]*", t, I):
         u = URL_RE.search(t)

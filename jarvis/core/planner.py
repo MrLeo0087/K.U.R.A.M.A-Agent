@@ -312,6 +312,21 @@ def is_multi(text: str) -> bool:
     return sum(1 for c in clauses if is_command(c)) >= 2
 
 
+def one_tool(text: str) -> bool:
+    """Commas made it look like several tasks, but every part that means something asks for the SAME tool and the
+    whole sentence matches it: 'keep this link in read later, I will read this link later' is ONE save."""
+    from jarvis.core import fastpath
+    try:
+        whole = fastpath.match(text)
+        if whole is None:
+            return False
+        tools = {i.tool for i in (fastpath.match(c) for c in split_clauses(text))
+                 if i is not None and not i.tool.startswith("_")}  # 'Okay,' / 'thanks' are not tasks
+    except Exception:  # noqa: BLE001 - never break a turn on the check
+        return False
+    return tools <= {whole.tool}
+
+
 def _kind(text: str, llm_kind: str = "quick") -> str:
     if is_long_job(text):
         return "long"

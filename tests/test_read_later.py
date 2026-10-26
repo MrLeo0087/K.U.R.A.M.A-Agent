@@ -97,3 +97,21 @@ def test_selected_link_words_use_the_html_href(rl, monkeypatch):
     monkeypatch.setattr(readlater, "selected_links", lambda: [("https://arxiv.org/abs/1706.03762", "Attention Is All You Need")])
     assert readlater.run("add") == "Saved for later: Attention Is All You Need"
     assert readlater.unread()[0]["link"] == "https://arxiv.org/abs/1706.03762"
+
+
+def test_comma_sentences_reach_read_later_through_the_agent(monkeypatch):
+    """Real failure (3:09 PM): the multi-task splitter saw a comma, skipped the fast path, and the AI asked
+    'give me the link' although the link was selected."""
+    from jarvis.core import agent, llm, planner, safety
+    monkeypatch.setattr(config, "FASTPATH", True)
+    monkeypatch.setattr(llm, "chat", lambda *a, **k: pytest.fail("must not reach the AI"))
+    ran = []
+    monkeypatch.setattr(safety, "execute", lambda name, args, **k: ran.append((name, args)) or
+                        safety.ToolResult(True, "Saved for later: X"))
+    a = agent.Agent()
+    for text in ("Okay, keep this link in read later, I will read this link later.",
+                 "This link, put this link in the read later."):
+        assert a.run(text) == "Saved for later: X", text
+    assert [n for n, _ in ran] == ["read_later", "read_later"]
+    assert planner.is_multi("open youtube and set a timer for 5 minutes")  # real multi-task still splits
+    assert not planner.one_tool("open youtube and set a timer for 5 minutes")
