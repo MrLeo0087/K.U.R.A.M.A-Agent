@@ -1705,7 +1705,8 @@ def ocr_intent(t: str) -> Intent | None:
     if _OCR_AREA.match(t):
         return Intent("ocr", "read_text", "screen", {"source": "area"})
     if _OCR_SCREEN.match(t):
-        return Intent("ocr", "read_text", "screen", {"source": "window"})
+        return Intent("ocr", "read_text", "screen", {"source": "window" if re.search(r"\b(?:whole|entire|full|all)\b", t, I)
+                                                     else "area"})
     reading = re.search(r"\b(?:writ(?:ten|ing|e)|says?|text|read|ocr|transcribe|type\s+out|words?|letters?)\b|लेखिएको|लेखेको", t, I)
     picture = re.search(r"\b(?:" + _OCR_PIC + r"|paper|page|note|notes|board|whiteboard|slide|screen|document|letter)\b", t, I)
     if not (reading and picture) or len(t.split()) > 22:
@@ -1714,15 +1715,15 @@ def ocr_intent(t: str) -> Intent | None:
                  r"(?:photo|picture|image)\s+of)\b|\b(?:send|share|delete|open|resize|compress|rename|organi[sz]e|move|"
                  r"set\s+as|write\s+(?:a|an|the|my)|word\s+document|text\s+file|screen\s+(?:time|brightness|lock))\b", t, I):
         return None  # about the picture itself / a file / writing something new, not reading its text
-    if re.search(r"\b(?:selected|select|area|region|part|portion|section|box|corner|crop)\b", t, I):
-        return Intent("ocr", "read_text", "screen", {"source": "area"})
     if re.search(r"\b(?:copied|clipboard)\b", t, I):
         return Intent("ocr", "read_text", "screen", {"source": "clipboard"})
     if f := re.search(r"([\w.~/-]+\.(?:png|jpe?g|webp|bmp|tiff?|gif|heic))\b", t, I):
         return Intent("ocr", "read_text", "screen", {"source": "file", "path": f.group(1)})
     if re.search(r"\b(?:latest|newest|last|downloaded|recent)\b", t, I):
         return Intent("ocr", "read_text", "screen", {"source": "file", "path": "latest"})
-    return Intent("ocr", "read_text", "screen", {"source": "window"})
+    if re.search(r"\b(?:whole|entire|full|all\s+of)\b|\bwithout\s+select", t, I):
+        return Intent("ocr", "read_text", "screen", {"source": "window"})
+    return Intent("ocr", "read_text", "screen", {"source": "area"})  # the owner wants to drag a box first
 
 
 def match(text: str) -> Intent | None:
@@ -2092,6 +2093,9 @@ def try_answer(text: str, lang: str | None = None, confirm=None, mode: str = "te
             intent.args.setdefault("_published", shelf[-1])
     if intent.name in ("time", "weather") and "couldn't find a place" in (output or ""):
         return None  # unknown place: let the LLM path try (it can fix spelling)
+    if m := re.match(r"Still working after \d+ s, so this keeps running in the background as job #(\d+)", output or ""):
+        answer = safety.BACKGROUND_SAID.format(id=m.group(1))  # that note is for the AI; the user gets a sentence
+        return FastResult(answer, intent, ok, int((time.monotonic() - t0) * 1000), [], started)
     answer = render(intent, ok, output, lang or "en")
     published = [intent.args.pop("_published")] if "_published" in intent.args else []
     if ok and not published and not intent.tool.startswith("_") and (ctx or {}).get("channel") != "telegram":

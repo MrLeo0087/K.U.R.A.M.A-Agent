@@ -62,7 +62,8 @@ def test_slow_tool_continues_as_background_job(tmp_path, monkeypatch):
         if job.status in ("done", "failed"):
             break
         time.sleep(0.1)
-    assert job.status == "done" and "scan finished" in open(job.output_path).read()
+    # a short result comes back as the job's own message (the chat shows it); a long one goes to the workspace
+    assert job.status == "done" and job.progress == "» scan finished: 3 big folders" and not job.output_path
 
 
 def test_quick_tool_and_no_turn_context_stay_inline(monkeypatch):

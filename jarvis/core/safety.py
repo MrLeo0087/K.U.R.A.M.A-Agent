@@ -174,6 +174,7 @@ def execute(name: str, args: Any = None, confirm: ConfirmFn | None = None,
     return done(res, "allowed" if res.ok else "error", level, clean)
 
 
+BACKGROUND_SAID = "That's taking a while, so I'm finishing it in the background (job #{id}). I'll tell you when it's done."
 BACKGROUND_NOTE = ("Still working after {s:.0f} s, so this keeps running in the background as job #{id}. Tell the user "
                    "in one short sentence that you're doing it in the background, they can keep talking to you, and "
                    "you'll tell them when it's done. Don't wait for it and don't make up the result.")
@@ -216,10 +217,14 @@ def _call_or_background(reg: registry.Registry, name: str, clean: Any, ctx: dict
         res = box["res"]
         if not res.ok:
             raise RuntimeError(res.output[:300])
+        lang = ctx.get("lang") or "en"
         shelf = list(ctx.get("published") or [])
         if shelf:  # the tool already put its full result in the workspace
+            jc.progress("» " + workspace.short_line(res.output, lang))
             return str(Path(config.OUTPUTS_DIR) / shelf[-1])
-        path = workspace.publish(f"{name.replace('_', ' ')}: {(ctx.get('user_text') or '')[:60]}", res.output)
+        title = f"{name.replace('_', ' ')}: {(ctx.get('user_text') or '')[:60]}"
+        line, path = workspace.to_workspace(title, res.output, lang)  # the answer itself, not just "done"
+        jc.progress("» " + line)
         return str(path) if path else None
 
     args_txt = ", ".join(str(v)[:30] for v in (clean.values() if isinstance(clean, dict) else [clean]) if v)

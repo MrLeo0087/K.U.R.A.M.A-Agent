@@ -239,7 +239,8 @@ WORKSPACE_SKIP_TOOLS = ("read_webpage", "search_knowledge", "ask_knowledge", "re
 # is told when it's done (0 = off)
 TOOL_BACKGROUND_AFTER_S = float(os.getenv("KURAMA_TOOL_BG_AFTER_S", "6"))
 TOOL_NO_BACKGROUND = ("start_job", "generate_image", "write_document", "jobs", "make_tool",
-                      "focus_mode", "gesture_control", "power_off", "suspend_computer")
+                      "focus_mode", "gesture_control", "power_off", "suspend_computer",
+                      "read_text", "scan_qr")  # these wait for the user to drag a box: never "still working"
 TOOLSMITH_OFFER = True  # a refusal on a real task always offers to build a tool (asks first)
 AGENT_MAX_TOOL_ROUNDS = 4  # llm -> tools loops per request, then the model must answer
 AGENT_MAX_TOKENS = 400

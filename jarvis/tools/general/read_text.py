@@ -9,7 +9,7 @@ from jarvis.core.registry import tool
 @tool(group="screen", safety="safe", description="Read the text in a picture (OCR, handwriting too): what is on the "
       "screen in the window the user looks at, a part they drag a box around, a copied image or an image file. "
       "The text is copied to the clipboard.")
-def read_text(source: Literal["window", "area", "screen", "clipboard", "file"] = "window", path: str = "") -> str:
+def read_text(source: Literal["area", "window", "screen", "clipboard", "file"] = "area", path: str = "") -> str:
     """OCR a picture.
 
     Args:

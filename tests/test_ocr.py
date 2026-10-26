@@ -63,13 +63,14 @@ def test_not_a_picture(tmp_path):
 
 def test_routing(monkeypatch):
     monkeypatch.setattr(config, "FASTPATH", True)
-    cases = {"read this area": ("area", None), "ocr this": ("area", None), "read the text on my screen": ("window", None),
-             "what does this photo say": ("window", None), "read the copied image": ("clipboard", None),
-             "read handwriting from note.jpg": ("file", "note.jpg"), "what is written in this picture": ("window", None),
-             # owner's 2:25 PM log (STT: 'written' -> 'return'):
+    # the owner wants to drag a box first: every 'read this / the screen' starts the box; 'whole screen' doesn't
+    cases = {"read this area": ("area", None), "ocr this": ("area", None), "read the text on my screen": ("area", None),
+             "what does this photo say": ("area", None), "read the copied image": ("clipboard", None),
+             "read handwriting from note.jpg": ("file", "note.jpg"), "what is written in this picture": ("area", None),
              "Can you tell me what is the return in the selected part of this image?": ("area", None),
-             "Can you tell me what is this image written?": ("window", None),
-             "Okay, see my screen and tell me what is writing in this paper.": ("window", None),
+             "Can you tell me what is this image written?": ("area", None),
+             "What is writing on the screen?": ("area", None),
+             "what is written on the whole screen": ("window", None),
              "read my latest downloaded photo": ("file", "latest")}
     for text, (src, path) in cases.items():
         i = fastpath.match(text)
@@ -111,3 +112,15 @@ def test_this_photo_means_the_screen_not_an_old_file(tmp_path, copied, monkeypat
     monkeypatch.setattr(ocr, "latest_image", lambda: pytest.fail("not the newest file in Downloads"))
     monkeypatch.setattr(ocr, "read", lambda p, focus=False: ocr.Result("hello there", "tesseract", 90.0))
     assert ocr.run("file", "this").startswith("hello there")
+
+
+def test_never_backgrounded_and_background_note_is_not_shown(monkeypatch):
+    """Real bug: dragging the box took > 6 s, the tool went to the background and the chat showed the note meant
+    for the AI ('Tell the user in one short sentence...')."""
+    from jarvis.core import safety
+    assert "read_text" in config.TOOL_NO_BACKGROUND and "scan_qr" in config.TOOL_NO_BACKGROUND
+    monkeypatch.setattr(config, "FASTPATH", True)
+    note = safety.BACKGROUND_NOTE.format(s=6, id=45)
+    monkeypatch.setattr(safety, "execute", lambda *a, **k: safety.ToolResult(True, note))
+    res = fastpath.try_answer("convert this pdf into md file")
+    assert res.answer == safety.BACKGROUND_SAID.format(id=45) and "Tell the user" not in res.answer
