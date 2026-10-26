@@ -28,3 +28,18 @@ def test_inline_commands(monkeypatch):
     assert dictation.handle_text("Hello Leo. New line. How are you?")
     assert not dictation.handle_text("That is all, stop dictation.")
     assert ev == [("t", "Hello Leo. "), ("k", "Return"), ("t", "How are you? "), ("t", "That is all "),]
+
+
+def test_spoken_editing_commands(monkeypatch):
+    from jarvis.core import uiagent
+    keys = []
+    monkeypatch.setattr(uiagent, "key", lambda k: keys.append(k))
+    monkeypatch.setattr(uiagent, "type_text", lambda t: keys.append("TYPE " + t))
+    for said in ("Change line.", "Please enter.", "Next line please", "Change the paragraph.", "Give space.",
+                 "Press tab.", "Tab key", "Undo."):
+        assert dictation.handle_text(said)
+    assert keys == ["Return", "Return", "Return", "Return Return", "space", "Tab", "Tab", "ctrl+z"]
+    keys.clear()
+    dictation.handle_text("Thanks a lot. Change line. See you")
+    assert keys == ["TYPE Thanks a lot. ", "Return", "TYPE See you "]
+    assert dictation.command_for("Enter the room now") is None and dictation.command_for("Hello there") is None

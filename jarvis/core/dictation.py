@@ -22,8 +22,41 @@ RATE, FRAME_MS = 16000, 30
 FRAME_BYTES = RATE * 2 * FRAME_MS // 1000
 STOP = re.compile(r"^\W*(?:(?:please\s+)?(?:stop|end|finish|cancel|exit|close)\s+(?:the\s+)?(?:dictation|dictating|typing|voice\s+typing)"
                   r"|dictation\s+(?:off|stop)|stop\s+(?:it|now)|बन्द\s+गर|रोक)\W*$", re.I)
-NEWLINE = re.compile(r"^\W*new\s*line\W*$", re.I)
-NEWPARA = re.compile(r"^\W*new\s*paragraph\W*$", re.I)
+# Spoken editing commands. A whole short phrase is matched (exact, then fuzzy for mishearings like "please enter");
+# the clearly multi-word ones also work inside a longer sentence ("... thanks. new line. see you").
+COMMANDS: dict[str, tuple[str, ...]] = {
+    "Return": ("new line", "next line", "change line", "change the line", "line change", "line break", "break line",
+               "break the line", "enter", "press enter", "hit enter", "go to next line", "go down", "new row"),
+    "Return Return": ("new paragraph", "next paragraph", "change paragraph", "change the paragraph", "paragraph",
+                      "paragraph change", "give a gap", "give gap", "leave a gap", "leave a line", "gap", "blank line",
+                      "empty line", "give a line"),
+    "space": ("space", "press space", "give space", "give a space", "add space", "add a space", "space bar"),
+    "Tab": ("tab", "press tab", "give tab", "give a tab", "indent", "tab key", "press the tab key", "tab button"),
+    "BackSpace": ("backspace", "back space", "press backspace", "delete letter"),
+    "ctrl+BackSpace": ("delete that word", "delete last word", "remove last word", "delete the word"),
+    "ctrl+z": ("undo", "undo that", "press undo"),
+    "ctrl+s": ("save", "save it", "save the file", "press save"),
+}
+_CMD_PHRASE = {ph: k for k, phs in COMMANDS.items() for ph in phs}
+_INLINE = sorted((ph for ph in _CMD_PHRASE if " " in ph and ph not in ("go down", "save it", "undo that")),
+                 key=len, reverse=True)
+# Whisper is told these words exist, so "change line" stops coming back as "align tinge"
+VOCAB = ("Dictation. New line. Next line. Change line. New paragraph. Change the paragraph. Press enter. Press tab. "
+         "Tab key. Give space. Backspace. Undo. Stop dictation.")
+
+
+def command_for(phrase: str) -> str | None:
+    """xdotool key(s) for a phrase that is only a command, else None."""
+    t = re.sub(r"[^\w\s]", " ", phrase.lower())
+    t = re.sub(r"^(?:please|okay|ok|and|now|then)\s+|\s+(?:please|now)$", "", " ".join(t.split())).strip()
+    if not t or len(t.split()) > 5:
+        return None
+    if t in _CMD_PHRASE:
+        return _CMD_PHRASE[t]
+    import difflib
+    best = difflib.get_close_matches(t, list(_CMD_PHRASE), n=1, cutoff=0.78)
+    return _CMD_PHRASE[best[0]] if best else None
+
 
 _state: dict = {"thread": None, "stop": threading.Event(), "lang": None, "typed": 0, "since": 0.0}
 
@@ -43,28 +76,33 @@ def _recorder() -> subprocess.Popen:
     return subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
 
 
-_CMD = re.compile(r"\s*\b(new\s*line|new\s*paragraph|(?:stop|end|finish)\s+(?:the\s+)?(?:dictation|typing))\b[\s,.!]*", re.I)
+_CMD = re.compile(r"\s*\b(" + "|".join(re.escape(p).replace(r"\ ", r"\s+") for p in _INLINE) +
+                  r"|(?:stop|end|finish)\s+(?:the\s+)?(?:dictation|typing))\b[\s,.!]*", re.I)
 
 
 def handle_text(text: str) -> bool:
-    """Type one recognised phrase; 'new line' / 'new paragraph' anywhere in it become line breaks. Returns False
-    when the phrase contains the stop command (anything before it is still typed)."""
+    """Type one recognised phrase. A phrase that is only a command ('new line', 'press enter', 'give space', 'tab',
+    'undo', 'stop dictation') presses keys instead; multi-word commands inside a sentence work too. Returns False
+    when dictation should stop (anything said before the stop command is still typed)."""
     from jarvis.core import uiagent
     t = text.strip()
     if not t:
         return True
     if STOP.match(t):
         return False
+    if keys := command_for(t):
+        uiagent.key(keys)
+        return True
     pos = 0
     for m in _CMD.finditer(t):
         before = t[pos:m.start()].strip().rstrip(",")
         if before:
             uiagent.type_text(before + " ")
             _state["typed"] += len(before.split())
-        cmd = m.group(1).lower()
+        cmd = " ".join(m.group(1).lower().split())
         if cmd.startswith(("stop", "end", "finish")):
             return False
-        uiagent.key("Return Return" if "paragraph" in cmd else "Return")
+        uiagent.key(_CMD_PHRASE.get(cmd, "Return"))
         pos = m.end()
     rest = t[pos:].strip()
     if rest:
@@ -75,6 +113,7 @@ def handle_text(text: str) -> bool:
 
 def _stt_loop(q: "queue.Queue[bytes | None]") -> None:
     from jarvis.core import audio, stt
+    stt.set_thread_prompt(VOCAB)  # this thread only: bias Whisper toward the editing commands
     while True:
         pcm = q.get()
         if pcm is None:

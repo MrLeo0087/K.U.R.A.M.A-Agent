@@ -9,6 +9,7 @@ from __future__ import annotations
 import io
 import logging
 import re
+import threading
 import time
 import wave
 from dataclasses import dataclass
@@ -121,6 +122,13 @@ def is_noise(t: "Transcript") -> bool:
     return t.logprob is None or t.logprob < config.STT_NOISE_MAX_LOGPROB
 
 
+_local = threading.local()  # per-thread vocabulary prompt (dictation biases Whisper toward its commands)
+
+
+def set_thread_prompt(prompt: str | None) -> None:
+    _local.prompt = prompt
+
+
 def _one(wav: bytes, language: str | None, models: list[str]) -> Transcript:
     """One transcription, trying `models` in order (fallback on error)."""
     client = llm.get_client()
@@ -129,8 +137,9 @@ def _one(wav: bytes, language: str | None, models: list[str]) -> Transcript:
         t0 = time.monotonic()
         kwargs = {"model": model, "file": ("speech.wav", wav), "response_format": "verbose_json",
                   "temperature": 0.0}
-        if config.STT_PROMPT:
-            kwargs["prompt"] = config.STT_PROMPT
+        prompt = getattr(_local, "prompt", None) or config.STT_PROMPT
+        if prompt:
+            kwargs["prompt"] = prompt
         if language:
             kwargs["language"] = language
         try:
