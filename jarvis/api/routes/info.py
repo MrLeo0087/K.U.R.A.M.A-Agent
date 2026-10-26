@@ -6,6 +6,7 @@ and the jobs/alerts/workers in its local data/ folder. In a server split these m
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import time
 
@@ -202,25 +203,45 @@ async def outputs_clear():
 
 # ---------- memory: what KURAMA's parts use, and the switch for the local understanding model ----------
 def _kurama_parts() -> list[dict]:
+    """Memory (MB) and CPU (% of one core, measured over 0.4 s) for each part of KURAMA."""
+    import time as _t
     import psutil
-    parts: dict[str, int] = {}
     names = (("jarvis.server", "Server (backend)"), ("jarvis.workers", "Background workers"),
              ("jarvis.core.memory", "Understanding model"), ("kurama_wallpaper", "Screen (dashboard / mini)"),
-             ("WebKitWebProcess", "Screen pages"), ("WebKitNetworkProcess", "Screen pages"))
-    for p in psutil.process_iter(["cmdline", "memory_info"]):
-        cmd = " ".join(p.info.get("cmdline") or [])
+             ("WebKitWebProcess", "Screen pages"), ("WebKitNetworkProcess", "Screen pages"),
+             ("wifi_share_server", "Wi-Fi share"), ("yt_dlp", "Video download"), ("dbus-monitor", "Message watcher"))
+    procs: list[tuple[str, psutil.Process]] = []
+    for p in psutil.process_iter(["cmdline"]):
+        argv = p.info.get("cmdline") or []
+        if not argv or "-c" in argv or argv[0].endswith(("bash", "sh", "zsh")):  # shells / one-off scripts quoting a name
+            continue
+        cmd = " ".join(argv)
         for key, label in names:
             if key in cmd:
-                parts[label] = parts.get(label, 0) + round((p.info["memory_info"].rss or 0) / 1048576)
+                procs.append((label, p))
+                with contextlib.suppress(psutil.Error):
+                    p.cpu_percent(None)  # start the measurement
                 break
-    return [{"name": k, "mb": v} for k, v in parts.items()]
+    _t.sleep(0.4)
+    parts: dict[str, dict] = {}
+    for label, p in procs:
+        with contextlib.suppress(psutil.Error):
+            d = parts.setdefault(label, {"name": label, "mb": 0, "cpu": 0.0, "procs": 0})
+            d["mb"] += round(p.memory_info().rss / 1048576)
+            d["cpu"] = round(d["cpu"] + p.cpu_percent(None), 1)
+            d["procs"] += 1
+    return sorted(parts.values(), key=lambda d: -d["mb"])
 
 
 @router.get("/resources", summary="Memory used by KURAMA's parts + the understanding model's mode")
 async def resources():
     from jarvis.core import semantic
+    import psutil
     parts = await run_in_threadpool(_kurama_parts)
-    return {"parts": parts, "total_mb": sum(p["mb"] for p in parts), "semantic": semantic.status()}
+    total = sum(p["mb"] for p in parts)
+    ram = psutil.virtual_memory().total / 1048576
+    return {"parts": parts, "total_mb": total, "total_cpu": round(sum(p["cpu"] for p in parts), 1),
+            "ram_share": round(100 * total / ram, 1), "semantic": semantic.status()}
 
 
 class ResourceMode(BaseModel):

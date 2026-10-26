@@ -1233,6 +1233,23 @@ async function openSheet(panel) {
   try { body.innerHTML = await sheetHtml(panel); }
   catch (e) { body.innerHTML = `<p class="empty">Couldn't load this right now (${esc(e.message || "error")}).</p>`; }
 }
+async function kuramaResources() { // System sheet: what each part of KURAMA uses right now
+  let r;
+  try { r = await api.resources(); } catch { return '<p class="empty">Couldn\'t read it right now.</p>'; }
+  const max = Math.max(1, ...r.parts.map((p) => p.mb));
+  const rows = r.parts.map((p) => [`${esc(p.name)}<small>${p.procs} process${p.procs > 1 ? "es" : ""}</small>`,
+    `<span class="bar"><i style="width:${Math.round(100 * p.mb / max)}%"></i></span>`, `${p.mb} MB`, `${p.cpu}% CPU`]);
+  const sem = r.semantic;
+  const modes = { always: "always ready", auto: "loads when needed", off: "off" };
+  return tbl(rows) + `<p class="tiny">Total: <b>${r.total_mb} MB</b> (${r.ram_share}% of this laptop's RAM) · ${r.total_cpu}% CPU.
+    Understanding model: ${modes[sem.mode] || sem.mode}, ${sem.loaded ? `loaded (${sem.mb} MB)` : "not loaded"}.</p>
+    <div class="btns">${sem.loaded ? '<button type="button" class="act ghost" id="res-free">Free the model now</button>' : ""}
+    <button type="button" class="act ghost" id="res-settings">Memory settings</button></div>`;
+}
+document.addEventListener("click", async (e) => {
+  if (e.target.id === "res-free") { try { await api.freeModel(); toast("Model memory freed."); } catch { /* ignore */ } openSheet("system"); }
+  if (e.target.id === "res-settings") { $("sheet").close(); openSettings(); }
+});
 async function sheetHtml(panel) {
   if (panel === "weather") {
     const f = wxFull || await api.weatherFull();
@@ -1288,7 +1305,8 @@ async function sheetHtml(panel) {
       ${tile("KURAMA", tbl([["Memory", `${Math.round(s0.jarvis?.rss_mb ?? 0)} MB`], ["Workers", `${k.workers?.[0] ?? 0} / ${k.workers?.[1] ?? 0} running`],
         ["Tokens today", `${fmtK(k.tokens_today)} · ${k.calls_today ?? 0} calls`], ["Free answers", k.free_pct == null ? "–" : `${k.free_pct}% (0 tokens)`]]))}
       ${tile("Disks", disks + `<div class="btns"><button type="button" class="act" data-ask="what is using my disk space">What can I free?</button></div>`, "span2")}
-      ${tile("Trash", `<p>${esc(d.trash)}</p><div class="btns"><button type="button" class="act ghost" data-ask="empty the trash">Empty trash…</button></div>`)}</div>`;
+      ${tile("Trash", `<p>${esc(d.trash)}</p><div class="btns"><button type="button" class="act ghost" data-ask="empty the trash">Empty trash…</button></div>`)}
+      ${tile("KURAMA resources", await kuramaResources(), "span3")}</div>`;
   }
   return '<p class="empty">Nothing more to show.</p>';
 }

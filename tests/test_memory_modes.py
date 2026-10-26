@@ -36,3 +36,10 @@ def test_resources_api():
     from jarvis.api.routes import info
     r = asyncio.run(info.resources())
     assert "total_mb" in r and r["semantic"]["mode"] in semantic.MODES
+
+
+def test_resources_has_cpu_and_share():
+    import asyncio
+    from jarvis.api.routes import info
+    r = asyncio.run(info.resources())
+    assert {"total_cpu", "ram_share", "parts"} <= set(r) and all({"mb", "cpu", "procs"} <= set(p) for p in r["parts"])
