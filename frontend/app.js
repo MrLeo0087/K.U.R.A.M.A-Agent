@@ -1238,10 +1238,11 @@ async function kuramaResources() { // System sheet: what each part of KURAMA use
   try { r = await api.resources(); } catch { return '<p class="empty">Couldn\'t read it right now.</p>'; }
   const max = Math.max(1, ...r.parts.map((p) => p.mb));
   const rows = r.parts.map((p) => [`${esc(p.name)}<small>${p.procs} process${p.procs > 1 ? "es" : ""}</small>`,
-    `<span class="bar"><i style="width:${Math.round(100 * p.mb / max)}%"></i></span>`, `${p.mb} MB`, `${p.cpu}% CPU`]);
+    `<span class="bar"><span class="fill" style="width:${Math.max(3, Math.round(100 * p.mb / max))}%"></span></span>`, `${p.mb} MB`, `${p.cpu}% CPU`]);
   const sem = r.semantic;
   const modes = { always: "always ready", auto: "loads when needed", off: "off" };
-  return tbl(rows) + `<p class="tiny">Total: <b>${r.total_mb} MB</b> (${r.ram_share}% of this laptop's RAM) · ${r.total_cpu}% CPU.
+  return tbl(rows) + `<p class="tiny">Total: <b>${r.total_mb} MB</b> (${r.ram_share}% of this laptop's RAM) · ${r.total_cpu}% of the laptop's CPU (all cores).
+    Memory counts shared libraries once. Opening this sheet makes the screen work for a moment, so the screen's CPU here is higher than usual.
     Understanding model: ${modes[sem.mode] || sem.mode}, ${sem.loaded ? `loaded (${sem.mb} MB)` : "not loaded"}.</p>
     <div class="btns">${sem.loaded ? '<button type="button" class="act ghost" id="res-free">Free the model now</button>' : ""}
     <button type="button" class="act ghost" id="res-settings">Memory settings</button></div>`;
@@ -1488,7 +1489,20 @@ function ambient() {
 }
 function pulseClass(node, cls, ms) { if (!node) return; node.classList.add(cls); setTimeout(() => node.classList.remove(cls), ms); }
 function syncAmbient() { clearTimeout(ambTimer); ambTimer = alive() ? setTimeout(ambient, 3000) : 0; }
-window.kuramaPause = (on) => { paused = !!on; applyActivity(); return paused; };
+let shrinkTimer = 0;
+function shrinkPage() { // covered for a while: drop what isn't on screen so WebKit can give the memory back
+  while (log.children.length > 20) log.firstElementChild.remove();
+  if (!$("sheet").open) $("sheet-body").innerHTML = "";
+  if (!$("ws-big").open) $("ws-big-view").innerHTML = "";
+  for (const it of ws.items) if (it !== ws.items[ws.cur]) it.text = null; // re-read from disk when shown again
+}
+window.kuramaPause = (on) => {
+  paused = !!on;
+  clearTimeout(shrinkTimer);
+  shrinkTimer = paused ? setTimeout(shrinkPage, 60000) : 0;
+  applyActivity();
+  return paused;
+};
 document.addEventListener("visibilitychange", applyActivity);
 
 // ---------- mini KURAMA: the floating button + small chat panel over every app (scripts/kurama_wallpaper.py) ----------

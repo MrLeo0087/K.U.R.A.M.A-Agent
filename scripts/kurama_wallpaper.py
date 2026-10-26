@@ -67,7 +67,7 @@ SNAP_DIR = Path.home() / ".local/share/kurama"  # same paths in jarvis/tools/gen
 SNAP = SNAP_DIR / "desktop.png"
 REAL_WALLPAPER = SNAP_DIR / "real-wallpaper.json"
 SNAP_FIRST_S, SNAP_EVERY_S = 8, 600  # after the page is up (boot animation done), then every 10 min
-WEB_MEM_MB = int(os.getenv("KURAMA_WP_MEM_MB", "320"))  # web process memory budget (WebKit's default: 3 GB)
+WEB_MEM_MB = int(os.getenv("KURAMA_WP_MEM_MB", "220"))  # web process memory budget (WebKit's default: 3 GB)
 
 
 def lean_context():

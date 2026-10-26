@@ -223,14 +223,29 @@ def _kurama_parts() -> list[dict]:
                     p.cpu_percent(None)  # start the measurement
                 break
     _t.sleep(0.4)
+    cores = psutil.cpu_count() or 1
     parts: dict[str, dict] = {}
     for label, p in procs:
         with contextlib.suppress(psutil.Error):
             d = parts.setdefault(label, {"name": label, "mb": 0, "cpu": 0.0, "procs": 0})
-            d["mb"] += round(p.memory_info().rss / 1048576)
-            d["cpu"] = round(d["cpu"] + p.cpu_percent(None), 1)
+            d["mb"] += round(_pss(p) / 1048576)
+            # % of the WHOLE laptop (all cores), not of one core: 117 % of one core = ~10 % of 12 cores
+            d["cpu"] = round(d["cpu"] + p.cpu_percent(None) / cores, 1)
             d["procs"] += 1
     return sorted(parts.values(), key=lambda d: -d["mb"])
+
+
+def _pss(p) -> int:
+    """Proportional memory: shared libraries are split between the processes using them (RSS counts them in
+    full for every process, which made KURAMA look ~30 % bigger than it is)."""
+    try:
+        with open(f"/proc/{p.pid}/smaps_rollup") as f:
+            for line in f:
+                if line.startswith("Pss:"):
+                    return int(line.split()[1]) * 1024
+    except OSError:
+        pass
+    return p.memory_info().rss
 
 
 @router.get("/resources", summary="Memory used by KURAMA's parts + the understanding model's mode")

@@ -902,4 +902,4 @@ body.wsonly .mws-title { font-size: 13px; }
 .act.danger:hover { color: #fff; background: rgba(255, 70, 50, 0.22); }
 
 .sheet .bar { display: inline-block; width: 120px; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.08); vertical-align: middle; }
-.sheet .bar i { display: block; height: 100%; border-radius: 3px; background: var(--accent, #ff7a1a); }
+.sheet .bar .fill { display: block; height: 100%; border-radius: 3px; background: #ff7a1a; }
