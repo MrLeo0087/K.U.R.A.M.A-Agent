@@ -1210,7 +1210,7 @@ _REWRITE = re.compile(r"^(?:please\s+)?(?:make\s+" + _SEL + r"\s+(?:more\s+)?(?:
                       r"(?:\s+.{1,40})?|translate\s+" + _SEL + r"\s+(?:in)?to\s+\w+(?:\s+\w+)?)[\s.!]*$", I)
 
 
-_SELREF = (r"(?:(?:this|that|these|the)\s+(?:whole\s+|entire\s+|full\s+|complete\s+)?(?:selected\s+|highlighted\s+)?"
+_SELREF = (r"(?:(?:this|that|these|the)\s+(?:whole\s+|entire\s+|full\s+|complete\s+)?(?:selected\s+|selective\s+|highlighted\s+)?"
            r"(?:word|words|sentence|sentences|paragraph|paragraphs|text|line|lines|part|passage|question|phrase|section|"
            r"code|function|thing|para)|this|it|that|these|the\s+selected(?:\s+\w+)?|the\s+highlighted(?:\s+\w+)?|"
            r"selected\s+\w+|highlighted\s+\w+|the\s+selection|what\s+i\s+(?:selected|highlighted))")
@@ -1244,6 +1244,18 @@ def assist_intent(t: str) -> Intent | None:
         f = re.sub(r"^file\s+", "", m.group("f"), flags=I)
         return Intent("assist", "text_assist", "clipboard", {"action": "explain_file", "path": "this" if f.lower() ==
                                                              "this file" else f, "lang": lang})
+    if m := re.match(r"^(?:please\s+|kurama\W+|kura\W+|can\s+you\s+)*(?:convert|change|turn|put|write|say|make)\s+(?P<x>.+?)\s+"
+                     r"(?:in|into|to)\s+(?P<l>nepali|hindi|english|नेपाली|हिन्दी)(?:\s+language)?(?P<r>\s+and\s+replace(?:\s+it)?)?\s*[.!?]*$", t, I):
+        x = m.group("x").strip()
+        sel = bool(re.fullmatch(_SELREF + r"(?:\s+(?:word|sentence|paragraph|text|line|part))?", x, I))
+        if sel or not re.search(r"\.\w{2,5}\b|\bfile\b", x, I):  # a language target: translation, not a file
+            return Intent("assist", "text_assist", "clipboard", {"action": "translate", "lang": lang_of(m.group("l")) or "ne",
+                                                                 "replace": bool(m.group("r")), "text": "" if sel else x})
+    if re.search(r"\b(?:code|function|snippet|script|class|method)\b", t, I) and re.search(
+            r"\b(?:meaning|mean|explain|explanation|what\s+(?:does|is)|understand|doing)\b", t, I) and re.search(
+            r"\b(?:this|that|the\s+selected|selected|highlighted|i\s+select)\b", t, I) and len(t.split()) <= 20 \
+            and not _A_CODEFIX.search(t):
+        return Intent("assist", "text_assist", "clipboard", {"action": "code", "lang": lang})
     if m := _A_TRANSLATE.match(t):
         x, l = m.group("x").strip(), lang_of(m.group("l")) or "ne"
         sel = bool(re.fullmatch(_SELREF + r"(?:\s+(?:word|sentence|paragraph|text|line|part))?", x, I))
@@ -1276,6 +1288,10 @@ def assist_intent(t: str) -> Intent | None:
         if rest.strip() and not re.match(r"^\s*(?:" + _SELREF + r"|to\s+me|me|in\s+\w+|simply|please|\W)*\s*$", rest, I):
             return None  # "explain quantum physics" is a normal question for the AI, not about a selection
         return Intent("assist", "text_assist", "clipboard", {"action": "explain", "lang": lang})
+    if re.search(r"\b(?:make|turn)\b.{0,40}\b(?:code|function|class|script)\b.{0,40}\b(?:better|cleaner|faster|detailed|readable|"
+                 r"good|nicer|efficient|professional)\b|\breplace\s+(?:this|the|my|that)\s+(?:\w+\s+)?(?:code|function)\s+with\b", t, I) \
+            and len(t.split()) <= 30:
+        return Intent("assist", "text_assist", "clipboard", {"action": "improve", "request": t})
     if _A_CODEFIX.search(t) and len(t.split()) <= 25 and not re.search(r"\b(?:file|project|repo)\b", t, I):
         return Intent("assist", "text_assist", "clipboard", {"action": "improve", "request": t})
     if _A_WRITE.match(t) and len(t.split()) <= 40 and not re.search(r"\b(?:essay|story|poem|article|report|email|letter)\b", t, I):
@@ -1421,7 +1437,12 @@ _EDIT_PLAN = re.compile(r"\b(?:change|keep|don'?t\s+move|do\s+not\s+move|leave|p
 def plan_answer_intent(t: str) -> Intent | None:
     """While an organize plan is waiting: 'yes good' applies it, 'no' cancels it, anything that sounds like a
     change ('keep the pictures where they are') edits it. Costs one kv read when no plan waits."""
-    from jarvis.core import organizer
+    from jarvis.core import assist, organizer
+    if assist.pending_code_active():  # an improved code is waiting in the workspace
+        if _YES_PLAN.match(t) or re.search(r"\breplace\s+it\b|\bput\s+it\s+in\b", t, I):
+            return Intent("assist", "text_assist", "clipboard", {"action": "apply_code"})
+        if _NO_PLAN.match(t):
+            return Intent("assist", "text_assist", "clipboard", {"action": "cancel_code"})
     if not organizer.pending_active():
         return None
     if _YES_PLAN.match(t):

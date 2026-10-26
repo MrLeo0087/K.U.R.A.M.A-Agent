@@ -288,10 +288,17 @@ def is_command(clause: str) -> bool:
                 or _HI_NE_VERBS.search(clause) or is_long_job(clause))
 
 
+_ONE_EDIT = re.compile(r"\b(?:this|the|my)\s+(?:selected|selective|highlighted|whole\s+)?\s*(?:part\s+of\s+(?:the\s+)?)?"
+                       r"(?:code|function|text|sentence|paragraph|line|lines|word|selection)\b.*\b(?:replace|put)\s+it\b|"
+                       r"\breplace\s+(?:it|this|the\s+\w+)\s+with\b", re.I)
+
+
 def is_multi(text: str) -> bool:
     """Cheap multi-intent flag: a separator plus at least two command-like clauses."""
     if "Traceback (most recent call last)" in text or re.search(r"^\s*File \"[^\"]+\", line \d+", text, re.M):
         return False  # a pasted traceback is one thing to explain, not several tasks
+    if _ONE_EDIT.search(text):
+        return False  # "make this selected code better and replace it" is ONE edit of the selection, not two tasks
     clauses = split_clauses(text)
     if len(clauses) < 2:
         return False

@@ -31,16 +31,37 @@ def test_read_actions_leave_the_selection(desk):
     assert assist.run("meaning", text="serendipity") == "[assist_meaning]"
 
 
-def test_write_actions(desk):
+def test_write_actions(desk, tmp_path, monkeypatch):
     st, calls = desk
-    st["sel"] = "    def add(a,b):\n        return a+b"
-    assert "replaced the highlighted code" in assist.run("improve", "optimize this code")
-    assert st["pasted"].startswith("    def add")  # indentation kept
-    assert ("assist_code_fix", True) in calls  # code uses the smart model
     assert "Wrote" in assist.run("write", "write a calculator function here")
     st["sel"] = "i is happy"
     assist.run("translate", "translate this to english and replace it", "en", replace=True)
     assert st["pasted"] == "[assist_translate]"
+
+
+def test_code_improve_waits_for_yes_then_replaces_only_the_selection(desk, tmp_path, monkeypatch):
+    st, calls = desk
+    monkeypatch.setattr(assist.config, "OUTPUTS_DIR", tmp_path / "out")
+    monkeypatch.setattr(assist.config, "DATA_DIR", str(tmp_path / "data"))
+    f = tmp_path / "calc.py"
+    old = "    def add(a,b):\n        return a+b"
+    f.write_text("class C:\n" + old + "\n\nprint(1)\n")
+    monkeypatch.setattr(assist, "open_file_in_editor", lambda: f)
+    st["sel"] = old
+    msg = assist.run("improve", "make this code better and replace it")
+    assert "in the background" in msg and st["pasted"] is None  # nothing changes yet
+    import time
+    for _ in range(50):
+        if assist.pending_code_active():
+            break
+        time.sleep(0.05)
+    assert assist.pending_code_active()
+    assert fastpath.match("yes replace it").args == {"action": "apply_code"}
+    out = assist.apply_pending_code()
+    assert "replaced the selected code in calc.py" in out
+    text = f.read_text()
+    assert text.startswith("class C:\n    def add(a, b):") and text.endswith("print(1)\n")  # only the selection
+    assert not assist.pending_code_active()
 
 
 def test_routing():

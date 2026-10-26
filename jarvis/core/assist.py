@@ -93,8 +93,9 @@ def meaning(text: str, lang: str = "ne") -> str:
 
 def translate(text: str, lang: str = "ne") -> str:
     out = LANGS.get(lang or "ne", "Nepali (Devanagari script)")
-    return _llm(f"Translate the user's text into {out}. Natural, accurate, same meaning and formatting. Output ONLY "
-                f"the translation.", text[:6000], smart=True, max_tokens=min(3000, len(text) + 400),
+    return _llm(f"Translate the user's text into {out}. Natural, accurate, everyday language as people really speak "
+                f"and write it (for Nepali: Nepal's Nepali, not Hindi words); keep names, code and technical terms "
+                f"as they are; same meaning and formatting. Output ONLY the translation.", text[:6000], smart=True, max_tokens=min(3000, len(text) + 400),
                 purpose="assist_translate")
 
 
@@ -172,6 +173,78 @@ def explain_file(path: Path, lang: str = "") -> str:
     return f"{head}:\n{body}"
 
 
+# --- code edits: improved in the background, shown in the workspace, put in place only after "yes" ---
+_pending: dict = {}
+
+
+def pending_code_active() -> bool:
+    import time
+    return bool(_pending) and time.time() < _pending.get("expires", 0)
+
+
+def start_code_improve(g, instruction: str) -> str:
+    """Improve the highlighted code as a background job; the result goes to the workspace and waits for a yes."""
+    import time
+    from jarvis.core import jobs
+    f = open_file_in_editor()
+    lang_name = _EXT_LANG.get(f.suffix.lower(), "") if f else ""
+    old, name = g.text, (f.name if f else _short(g.title))
+
+    def run(ctx) -> str | None:
+        ctx.progress("improving the code")
+        new = improve_code(old, instruction, lang_name)
+        ctx.check()
+        if not new.strip():
+            ctx.progress("» Sorry, no improved code came back; nothing was changed.")
+            return None
+        out = Path(config.OUTPUTS_DIR) / "code" / f"{Path(name).stem}-improved-{time.strftime('%H%M%S')}{Path(name).suffix or '.txt'}"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(new + "\n", encoding="utf-8")
+        _pending.clear()
+        _pending.update(old=old, new=new, file=str(f) if f else "", wid=g.wid, term=g.term, title=g.title,
+                        expires=time.time() + config.ASSIST_PENDING_TTL_S)
+        a, b = old.count("\n") + 1, new.count("\n") + 1
+        ctx.progress(f"» I improved the selected code in {name} ({a} lines to {b} lines). It's in the workspace. "
+                     f"Should I replace it? Say yes or no.")
+        return str(out)
+    jobs.get_manager().submit(f"Improve code in {name}", "code", run)
+    return (f"I'm improving the selected code in {name} in the background. I'll show it in the workspace and ask "
+            f"before replacing anything.")
+
+
+def apply_pending_code() -> str:
+    """'yes': put the improved code in place of exactly the code that was selected."""
+    if not pending_code_active():
+        _pending.clear()
+        return "There's no code change waiting (it expires after a few minutes)."
+    p = dict(_pending)
+    _pending.clear()
+    f = Path(p["file"]) if p["file"] else None
+    dirty = p["title"].lstrip().startswith(("●", "•"))  # unsaved edits in the editor: don't write the file under it
+    if f and f.is_file() and not dirty:
+        text = f.read_text(errors="replace")
+        if text.count(p["old"]) == 1:  # replace exactly the selected block on disk; the editor reloads the file
+            backup = Path(config.DATA_DIR) / "code_backups" / f"{f.name}.{int(__import__('time').time())}.bak"
+            backup.parent.mkdir(parents=True, exist_ok=True)
+            backup.write_text(text, encoding="utf-8")
+            f.write_text(text.replace(p["old"], p["new"], 1), encoding="utf-8")
+            return f"Done, I replaced the selected code in {f.name}. The old version is saved as a backup."
+    g = rewrite.Grab(p["old"], p["wid"], False, p["term"], p["title"])  # fall back: paste over the selection
+    again = rewrite.grab()
+    if isinstance(again, rewrite.Grab) and again.text.strip() == p["old"].strip():
+        rewrite.put(again, p["new"])
+        return f"Done, I replaced the selected code in {_short(g.title)}. Control Z there undoes it."
+    rewrite._xclip(["-selection", "clipboard"], p["new"])
+    return ("The code isn't selected anymore, so I didn't change the file. The improved code is on your clipboard: "
+            "select the old code and press Control V.")
+
+
+def cancel_pending_code() -> str:
+    had = pending_code_active()
+    _pending.clear()
+    return "Okay, I left your code as it was." if had else "There was no code change waiting."
+
+
 # --- one entry point the tool calls ---------------------------------------------------------------------------
 def run(action: str, request: str = "", lang: str = "", replace: bool = False, path: str = "",
         text: str = "") -> str:
@@ -179,6 +252,10 @@ def run(action: str, request: str = "", lang: str = "", replace: bool = False, p
     if text.strip() and action in ("explain", "meaning", "translate", "code"):  # typed, not highlighted
         return {"meaning": lambda: meaning(text, lang or "ne"), "translate": lambda: translate(text, lang or "ne"),
                 "code": lambda: explain_code(text, lang)}.get(action, lambda: explain(text, lang))()
+    if action == "apply_code":
+        return apply_pending_code()
+    if action == "cancel_code":
+        return cancel_pending_code()
     if action == "write":
         return write_code(request or "the code the user asked for")
     if action == "explain_file":
@@ -192,9 +269,7 @@ def run(action: str, request: str = "", lang: str = "", replace: bool = False, p
     sel = g.text
     if action == "improve":
         if is_code(sel) or "code" in (request or "").lower():
-            f = open_file_in_editor()
-            new = improve_code(sel, request or "fix and improve this code",
-                               _EXT_LANG.get(f.suffix.lower(), "") if f else "")
+            return start_code_improve(g, request or "fix and improve this code")
         else:
             new = rewrite.transform(sel, request or "fix grammar and make it clearer")
         if not new:

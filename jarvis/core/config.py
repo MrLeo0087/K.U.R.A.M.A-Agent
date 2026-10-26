@@ -88,6 +88,8 @@ TYPO_FIXES: dict[str, str] = {
     "foler": "folder", "fodler": "folder", "folde": "folder", "summarise": "summarize",
 }
 STT_FIXES: dict[str, str] = {
+    r"\b(this|the|my|better|python|selected|selective|that|whole|most|mouse|simple|clean)\s+coat\b": r"\1 code",
+    r"\bselective\b": "selected",
     r"\b(?:space|speak|speec|speach|spich)\s+(?:to|2)\s+text\b": "speech to text",
     r"\b(?:b\.?\s?s\.?|be\s?as|versus|vs\.?|v\.\s?s\.)\s+(?:code|cold|cord|court|coat)\b": "VS Code",
     r"\bvisual\s+studio(?:\s+code)?\b": "VS Code",
@@ -681,6 +683,7 @@ DICTATION_PAUSE_MS = 900  # a pause this long ends a dictated phrase (then it is
 DICTATION_DEVANAGARI_LANG = os.getenv("JARVIS_DICTATION_DEVANAGARI", "ne")  # auto mode: Nepali/Hindi speech -> this
 DICTATION_IDLE_S = 180  # dictation stops after 3 min of silence
 DICTATION_MAX_S = 3600  # ...or after 1 hour in total
+ASSIST_PENDING_TTL_S = 300.0  # an improved code waits this long for 'yes' (then counts as no)
 ORGANIZE_PLAN_TTL_S = float(os.getenv("KURAMA_PLAN_TTL_S", "120"))  # a waiting plan expires (= no)
 ORGANIZE_MAX_FILES = 80  # files looked at per organize run (newest first)
 ORGANIZE_MAX_IMAGES = 8  # pictures captioned by the vision model per run (~600 tokens each)

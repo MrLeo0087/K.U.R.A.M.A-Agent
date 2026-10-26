@@ -11,7 +11,8 @@ from jarvis.core.registry import alias, tool
       description="Work on the text/code the user highlighted in any app: explain it, give a word's meaning in "
                   "Nepali, translate (Nepali/Hindi/English), improve/fix/format/optimize it in place, explain code; "
                   "or write new code at the cursor in VS Code; or explain a whole file.")
-def text_assist(action: Literal["explain", "meaning", "translate", "improve", "code", "write", "explain_file"] = "explain",
+def text_assist(action: Literal["explain", "meaning", "translate", "improve", "code", "write", "explain_file",
+                                "apply_code", "cancel_code"] = "explain",
                 request: str = "", lang: Literal["", "en", "ne", "hi"] = "", replace: bool = False, path: str = "",
                 text: str = "") -> str:
     """Help with the selection.
@@ -19,7 +20,8 @@ def text_assist(action: Literal["explain", "meaning", "translate", "improve", "c
     Args:
         action: explain (what it means), meaning (word -> meaning), translate, improve (rewrite/fix in place:
             grammar, formal, shorter, optimize/fix/format code), code (explain highlighted code), write (new code at
-            the cursor; request says what), explain_file (path).
+            the cursor; request says what), explain_file (path), apply_code / cancel_code (the user said yes / no to
+            an improved code waiting in the workspace).
         request: The user's words / instruction (e.g. "make it formal", "optimize this", "a calculator class").
         lang: Answer/translation language: ne (Nepali), hi (Hindi), en (English); empty = from the request.
         replace: translate only: put the translation in place of the selection.
