@@ -41,8 +41,8 @@ def mute_alerts(action: Literal["on", "off", "status"] = "on", what: str = "last
         minutes: how long (default 60).
     """
     what = (what or "last").strip().lower()
-    if what == "last":
-        src = next((a["source"] for a in store.alerts_recent(5) if a.get("source")), "")
+    if what == "last":  # the alert the user replied to on Telegram, else the newest one
+        src = notify.replied_source() or next((a["source"] for a in store.alerts_recent(5) if a.get("source")), "")
         what = _BY_SOURCE.get(src, src or "all")
     label = LABEL.get(what, f"{what} alerts")
     if action == "status":

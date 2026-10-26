@@ -515,6 +515,8 @@ class Agent:
             if self.summary:
                 system += SUMMARY_SUFFIX.format(summary=self.summary)
             recent = self.history[-2 * config.HISTORY_TURNS:]
+        if getattr(self, "reply_to", ""):  # Telegram reply: the user is answering one earlier message
+            system += f' The user is replying to this earlier message of yours: "{self.reply_to}".'
         if self.persist:  # token-gated: nothing unless the turn is personal / refers to the past
             try:
                 line = profile.context_line(user_text)

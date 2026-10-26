@@ -382,6 +382,42 @@ def test_telegram_status_and_help(tg, monkeypatch):
     assert bot.answer("/help") == telegram_bot.HELP and bot.answer("/start@JarvisBot") == telegram_bot.HELP
     assert "/camera" in telegram_bot.HELP and "/where" in telegram_bot.HELP  # the laptop-control list
     assert bot.answer("give me all laptop control commands") == telegram_bot.HELP
+    assert bot.answer("/list") == telegram_bot.HELP  # /list = the main command list
+    for c in ("/mute", "/battery", "/ram", "/camera", "/screen", "/guard", "/track", "/clip", "/control", "/lock"):
+        assert c in telegram_bot.HELP
+    assert {c for c, _ in telegram_bot.MENU} >= {"list", "mute", "camera", "where", "status"}
+
+
+def test_telegram_reply_to_an_alert_mutes_that_kind(tg, monkeypatch):
+    monkeypatch.setattr(config, "NOTIFY_DESKTOP", False)
+    notify.notify("Resource alert: ram", "ram 91% (limit 90).", "warning", source="resource_guard")
+    notify.notify("Backup failed", "disk full", "warning", source="backup")  # a newer, different alert
+    bot = telegram_bot.TelegramBot()
+    quoted = {"text": "⚠️ Resource alert: ram\nram 91% (limit 90)."}
+    assert "no RAM / resource warnings for 20 min" in bot.answer("mute 20 min", quoted)
+    assert notify.muted("resource_guard") and not notify.muted("backup")
+    assert "no backup messages for 1 h" in bot.answer("stop", {"text": "⚠️ Backup failed\ndisk full"})
+    # a longer reply goes on normally; 'this' in it means the replied alert, and the AI sees the quote
+    notify.unmute("all")
+    assert "RAM / resource warnings for 30 min" in bot.answer("do not send this alert for 30 min", quoted)
+    assert notify.replied_source() == ""  # cleared after the turn
+
+
+def test_telegram_reply_gives_the_ai_the_quoted_message(monkeypatch):
+    seen = {}
+
+    class FakeAgent:
+        reply_to = ""
+
+        def run(self, text, mode="text"):
+            seen["text"], seen["reply_to"] = text, self.reply_to
+            return "ok"
+    bot = telegram_bot.TelegramBot()
+    bot._agent = FakeAgent()
+    monkeypatch.setattr(bot, "agent", lambda: bot._agent)
+    assert bot.answer("why so high?", {"text": "Your RAM was 91% at 3 PM, mostly Brave."}) == "ok"
+    assert seen == {"text": "why so high?", "reply_to": "Your RAM was 91% at 3 PM, mostly Brave."}
+    assert bot._agent.reply_to == ""
 
 
 class Resp:

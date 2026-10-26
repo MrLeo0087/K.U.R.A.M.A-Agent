@@ -189,6 +189,35 @@ def active_mutes() -> dict[str, float]:
     return _mutes()
 
 
+# --- Telegram replies: which alert did the user reply to? ---
+_replied = {"text": ""}
+
+
+def source_of(quoted: str) -> str:
+    """The source of a sent alert, found by its first line (the title after the level icon); '' = not an alert."""
+    first = (quoted or "").strip().splitlines()[0] if (quoted or "").strip() else ""
+    title = first
+    for icon in _ICON.values():
+        if icon and title.startswith(icon):
+            title = title[len(icon):]
+    title = title.strip()
+    if not title:
+        return ""
+    for a in store.alerts_recent(300):
+        if (a.get("title") or "").strip() == title and a.get("source"):
+            return a["source"]
+    return ""
+
+
+def set_replied(quoted: str) -> None:
+    _replied["text"] = quoted or ""
+
+
+def replied_source() -> str:
+    """Source of the alert the current Telegram message replies to ('' when none)."""
+    return source_of(_replied["text"]) if _replied["text"] else ""
+
+
 def notify(title: str, text: str = "", level: str = "info", source: str = "", desktop: bool = True,
            telegram: bool | None = None, save: bool = True) -> list[str]:
     """Fan out one alert. telegram=None decides by wants_phone(). Returns the channels it reached.

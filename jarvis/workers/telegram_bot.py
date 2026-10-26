@@ -19,43 +19,61 @@ from jarvis.workers.base import Worker
 
 OFFSET_KEY = "telegram_offset"
 HELP = (
-    "🤖 KURAMA — control your laptop from here\n"
-    "Send any question or command as text or a voice note.\n"
+    "🤖 KURAMA — all commands (/list any time)\n"
+    "Or just write / send a voice note in your own words.\n"
+    "\n💻 Laptop\n"
+    "/status — training, jobs, downloads, what's running\n"
+    "/battery — battery level and time left\n"
+    "/ram — RAM, CPU, disk and KURAMA's memory\n"
+    "/lockscreen — lock the laptop screen\n"
+    "/jobs — background jobs\n"
     "\n📷 Camera & screen\n"
     "/camera — a photo from the laptop camera\n"
-    "/video [secs] — a short camera clip (default 5s, e.g. /video 8)\n"
+    "/video [secs] — a short camera clip (e.g. /video 8)\n"
     "/screen — a screenshot of the laptop\n"
-    "\n📍 Find my laptop\n"
-    "/where (or /locate) — where the laptop is, with a map link\n"
-    "/here <name> — label the current Wi-Fi (e.g. /here Home) so /where names it\n"
-    "/guard on | off — watch the laptop; a photo + location if someone uses it\n"
-    "/history [phone|laptop] — where it's been (share your live location with me to build the phone's trail)\n"
-    "/track on | off — log the laptop often and message you on each move (lost mode, ends by itself after 6 h)\n"
-    "\n🔕 Alerts\n"
-    "/mute [ram|location|jobs|all] [minutes] — pause those alerts (e.g. /mute ram 20; plain /mute = the last one, 60 min)\n"
-    "/unmute [what] — turn them back on; /muted — what is paused. Or just say 'no RAM warnings for 20 minutes'\n"
+    "\n📍 Location & anti-theft\n"
+    "/where — where the laptop is, with a map link\n"
+    "/here <name> — name this Wi-Fi place (e.g. /here Home)\n"
+    "/history [phone|laptop] — where it's been\n"
+    "/guard on | off — photo + location if someone uses the laptop\n"
+    "/track on | off — lost mode: location on every move (ends by itself after 6 h)\n"
+    "\n🔕 Notifications\n"
+    "/mute [ram|location|jobs|all] [min] — pause alerts (e.g. /mute ram 20)\n"
+    "/unmute [what] — turn them back on\n"
+    "/muted — what is paused now\n"
+    "↩️ Reply to an alert with 'stop' or 'mute 20 min' to pause just that kind\n"
     "\n📋 Clipboard & files\n"
     "copy: <text> — put text on the laptop's clipboard\n"
     "/clip — get the laptop's clipboard\n"
     "Send a file/photo — saved on the laptop (caption 'to <folder>' picks the folder)\n"
-    "\n⚙️ Status & work\n"
-    "/status (or 'status') — training epochs/accuracy/ETA, jobs, downloads...\n"
-    "'stop training' / 'stop training now' — stop a run (asks first)\n"
-    "/jobs — background jobs\n"
-    "\n🖥 Remote control\n"
-    "/control (or 'start remote desktop') — turn on RustDesk; the password works for 15 min\n"
-    "/changepass — new remote desktop password (asks your PIN every time)\n"
-    "/control off (or 'stop remote desktop') — kill the password now\n"
+    "\n🖥 Remote desktop\n"
+    "/control — turn on RustDesk (password works 15 min)\n"
+    "/control off — kill the password now\n"
+    "/changepass — a new remote password\n"
     "\n🔒 Security\n"
-    "/lock — block all risky actions (use if your phone is lost)\n"
+    "/lock — block risky actions (phone lost?)\n"
     "/unlock <pin> — unlock after /lock\n"
-    "Risky actions (camera, send files, shutdown, location, remote desktop) ask for your PIN once per 30 min.\n"
-    "\n⚙️ Chat control\n"
-    "/stop — stop a stuck task and reset the chat\n"
-    "/clear — clear this chat + reminders/alarms (keeps what I know about you)\n"
-    "/clearchat — clear just this conversation\n"
-    "/reset — wipe everything and start fresh (keeps your password + settings)\n"
-    "\n/help — this list\nRisky actions ask 'Reply yes/no' first.")
+    "Camera, files, shutdown, location and remote desktop ask your PIN once per 30 min.\n"
+    "\n💬 Chat\n"
+    "↩️ Reply to any of my messages and I'll answer about that message\n"
+    "/stop — stop a stuck task\n"
+    "/clearchat — clear this conversation\n"
+    "/clear — clear chat + reminders/alarms\n"
+    "/reset — wipe everything (keeps password + settings)")
+# the Telegram "/" menu (setMyCommands): the commands you can't remember, one tap away
+MENU = (("list", "all commands"), ("status", "what the laptop is doing"), ("battery", "battery level"),
+        ("ram", "RAM / CPU / disk"), ("screen", "screenshot"), ("camera", "camera photo"), ("where", "laptop location"),
+        ("mute", "pause alerts: /mute ram 20"), ("unmute", "turn alerts back on"), ("muted", "what is paused"),
+        ("guard", "anti-theft on/off"), ("track", "lost mode on/off"), ("clip", "laptop clipboard"),
+        ("jobs", "background jobs"), ("control", "remote desktop"), ("lock", "block risky actions"),
+        ("stop", "stop a stuck task"), ("clearchat", "clear this chat"))
+# a short reply to one of KURAMA's alerts that means "stop sending this kind" (0 tokens)
+REPLY_MUTE = re.compile(r"^\s*(?:please\s+|ok(?:ay)?\W*\s*)?(?:mute|stop|disable|silence|snooze|pause|quiet|off|turn\s+(?:it\s+|this\s+)?off|"
+                        r"enough|no\s+more|not\s+now|band\s+gara|बन्द\s*गर|रोक|बंद\s*करो|"
+                        r"(?:do\s*n[o']?t|dont)\s+(?:send|show|tell)(?:\s+me)?)?(?:\s+(?:this|it|that|these|them|"
+                        r"sending|this\s+one|this\s+alert|this\s+(?:message|notification|warning)))?(?:\s+again)?"
+                        r"(?:\s+(?:for\s+)?(?:\d+|an?|half\s+an?|one|two|ten|twenty|thirty)\s*(?:min(?:ute)?s?|m|hours?|hrs?|h)\b)?"
+                        r"(?:\s+(?:today|please))?\s*[.!]*\s*$", re.I)
 TEXT_ONLY = "Sorry, I can't use that kind of message."
 # a reply to find_and_send's numbered list: "2", "send 2", "number 2", "all", "send all" (0 tokens)
 PICK = re.compile(r"^\s*(?:send\s+)?(?:(?:no\.?|number|file)\s*)?(\d{1,2}|all|both)\s*[.!]?\s*$", re.I)
@@ -88,6 +106,10 @@ class TelegramBot(Worker):
             self.offset = int(store.kv_get(OFFSET_KEY, "0") or 0)
         except ValueError:
             self.offset = 0
+        try:  # the "/" menu in Telegram shows these commands
+            notify.telegram_call("setMyCommands", {"commands": [{"command": c, "description": d} for c, d in MENU]})
+        except RuntimeError as e:
+            self.log.info("setMyCommands skipped: %s", e)
 
     def info(self) -> dict:
         return {"handled": self.handled}
@@ -119,7 +141,7 @@ class TelegramBot(Worker):
             if stop.wait(4):  # Telegram clears "typing…" after ~5 s, so refresh a little sooner
                 break
 
-    def reply_with_typing(self, text: str) -> str:
+    def reply_with_typing(self, text: str, reply: dict | None = None) -> str:
         """Answer `text` while "typing…" shows, but never hang forever: a reply that takes longer than
         config.TELEGRAM_ANSWER_TIMEOUT_S is given up on (so "typing…" can't run for an hour)."""
         stop = threading.Event()
@@ -129,7 +151,7 @@ class TelegramBot(Worker):
 
         def run() -> None:
             try:
-                box["out"] = self.answer(text)
+                box["out"] = self.answer(text, reply) if reply else self.answer(text)
             except Exception as e:
                 box["out"] = f"Sorry, that failed: {type(e).__name__}: {str(e)[:200]}"
 
@@ -250,9 +272,44 @@ class TelegramBot(Worker):
             self._pending_risky = text  # the next PIN runs it
             self.send(gated)
             return
-        self.send(self.reply_with_typing(text))
+        self.send(self.reply_with_typing(text, msg.get("reply_to_message")))
 
-    def answer(self, text: str) -> str:
+    @staticmethod
+    def quoted(reply: dict | None) -> str:
+        """The text of the message the user replied to (Telegram's reply feature)."""
+        if not reply:
+            return ""
+        return (reply.get("text") or reply.get("caption") or "").strip()
+
+    def reply_to_alert(self, text: str, quoted: str) -> str | None:
+        """A reply to one of KURAMA's alerts: 'stop' / 'mute 20 min' pauses that kind (0 tokens)."""
+        source = notify.source_of(quoted)
+        if not source or not text or not REPLY_MUTE.match(text):
+            return None
+        from jarvis.core import fastpath
+        dur = re.search(r"(?:\d+|half\s+an?|an?|one|two|ten|twenty|thirty)\s*(?:min(?:ute)?s?|m|hours?|hrs?|h)\b|\btoday\b",
+                        fastpath.normalize(text), re.I)
+        mins = fastpath._mute_minutes("for " + dur.group(0)) if dur else 0
+        if source == "location" and not mins:  # location only comes from lost mode: switch that off
+            from jarvis.core import locationlog
+            if locationlog.lost_mode("laptop"):
+                return locationlog.set_lost("laptop", False)
+        from jarvis.tools.general.mute_alerts import _BY_SOURCE, mute_alerts
+        return mute_alerts("on", _BY_SOURCE.get(source, source), mins)
+
+    def answer(self, text: str, reply: dict | None = None) -> str:
+        quoted = self.quoted(reply)
+        if quoted:
+            if (done := self.reply_to_alert(text, quoted)) is not None:
+                return done
+            notify.set_replied(quoted)  # 'this' in a mute = the replied alert's kind; the AI sees the quote
+            try:
+                return self._answer(text, quoted)
+            finally:
+                notify.set_replied("")
+        return self._answer(text)
+
+    def _answer(self, text: str, quoted: str = "") -> str:
         from jarvis.core import guard, phone, remotedesk
         if remotedesk.wants_password(text):  # only reached after the PIN (telesec.gate): a fresh password each time
             return remotedesk.status_text(remotedesk.start())
@@ -311,8 +368,17 @@ class TelegramBot(Worker):
             if cmd in ("/reset", "/wipe"):
                 from jarvis.core import reset
                 return reset.reset_all(self._agent)
-            if cmd in ("/help", "/start", "/commands", "/command", "/?", "/menu"):
+            if cmd in ("/list", "/help", "/start", "/commands", "/command", "/?", "/menu", "/all"):
                 return HELP
+            if cmd in ("/battery", "/bat"):
+                from jarvis.tools.general.battery_status import battery_status
+                return battery_status()
+            if cmd in ("/ram", "/memory", "/resources", "/cpu"):
+                from jarvis.workers import resource_guard
+                return resource_guard.summary()
+            if cmd in ("/lockscreen", "/lock_screen"):
+                from jarvis.tools.general.lock_screen import lock_screen
+                return lock_screen()
             # any other "/…" (a file path like /home/leo/x.pdf, a name, a typo) is NOT a command: let the agent handle
             # it instead of dumping the command list
         if m := phone.COPY.match(text):  # 0 tokens: phone -> laptop clipboard
@@ -344,7 +410,12 @@ class TelegramBot(Worker):
         if (m := PICK.match(text)) and (picked := self.pick_found(m.group(1))):
             return picked
         try:
-            return self.agent().run(text, mode="text")
+            agent = self.agent()
+            agent.reply_to = quoted[:600]  # the AI knows which earlier message this answers
+            try:
+                return agent.run(text, mode="text")
+            finally:
+                agent.reply_to = ""
         except Exception as e:
             self.log.exception("agent failed")
             return f"Sorry, that failed: {type(e).__name__}: {str(e)[:200]}"
