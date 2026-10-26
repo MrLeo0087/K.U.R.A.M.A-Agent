@@ -110,9 +110,10 @@
             <button id="mws-prev" class="icon-btn" type="button" aria-label="Older" title="Older">&#8249;</button>
             <span id="mws-title" class="mws-title">Workspace</span>
             <button id="mws-next" class="icon-btn" type="button" aria-label="Newer" title="Newer">&#8250;</button>
-            <button id="mws-clear" class="icon-btn" type="button" aria-label="Clean the workspace" title="Clean workspace (moves everything to the trash)">
+            <button id="mws-del" class="icon-btn" type="button" aria-label="Delete this item" title="Delete this item (to the trash)">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>
             </button>
+            <button id="mws-clear" class="act ghost mws-all" type="button" aria-label="Clean the whole workspace" title="Clean the whole workspace (everything to the trash)">Clear all</button>
             <button id="mws-close" class="icon-btn" type="button" aria-label="Hide workspace" title="Hide">&#215;</button>
           </div>
           <div id="mws-body" class="mws-body"></div>
@@ -172,9 +173,7 @@
 
       <div class="card ws-card" id="ws" aria-label="Workspace">
         <div class="card-title">Workspace <span id="jobs-count" class="pill"></span>
-          <button id="ws-clear" class="icon-btn" type="button" aria-label="Clean the workspace" title="Clean workspace (moves everything to the trash)">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>
-          </button>
+          <button id="ws-clear" class="act ghost ws-all" type="button" aria-label="Clean the whole workspace" title="Clean the whole workspace (everything to the trash)">Clear all</button>
           <button id="ws-expand" class="icon-btn" type="button" aria-label="Open large" title="Open large">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg>
           </button>

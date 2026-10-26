@@ -9,6 +9,7 @@ import asyncio
 import json
 import time
 
+from pydantic import BaseModel, Field
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.concurrency import run_in_threadpool
@@ -172,28 +173,45 @@ async def outputs(limit: int = Query(12, ge=1, le=100)):
     return {"items": await run_in_threadpool(run)}
 
 
+def _trash(p, root) -> None:
+    """Desktop trash (restorable), else data/outputs_trash/<time>/ - never a hard delete."""
+    import shutil
+    import subprocess
+    import time as _t
+    gio = shutil.which("gio")
+    if gio and subprocess.run([gio, "trash", str(p)], capture_output=True, timeout=30).returncode == 0:
+        return
+    dest = root.parent / "outputs_trash" / _t.strftime("%Y%m%d-%H%M%S")
+    dest.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(p), str(dest / p.name))
+
+
 @router.post("/outputs/clear", summary="Clean the workspace: move every output to the trash (restorable)")
 async def outputs_clear():
     def run():
-        import shutil
-        import subprocess
-        import time as _t
         root = _outputs_dir()
         if not root.is_dir():
             return 0
         items = [p for p in root.iterdir() if not p.name.startswith(".")]
-        moved = 0
-        gio = shutil.which("gio")
-        fallback = root.parent / "outputs_trash" / _t.strftime("%Y%m%d-%H%M%S")
         for p in items:
-            ok = gio and subprocess.run([gio, "trash", str(p)], capture_output=True, timeout=30).returncode == 0
-            if not ok:  # no desktop trash: keep it next to the outputs instead of deleting
-                fallback.mkdir(parents=True, exist_ok=True)
-                shutil.move(str(p), str(fallback / p.name))
-            moved += 1
-        return moved
+            _trash(p, root)
+        return len(items)
     n = await run_in_threadpool(run)
     return {"ok": True, "moved": n}
+
+
+class OutputName(BaseModel):
+    name: str = Field(..., max_length=300)
+
+
+@router.post("/outputs/delete", summary="Remove ONE workspace item (to the trash, restorable)")
+async def outputs_delete(body: OutputName):
+    root = _outputs_dir()
+    p = (root / body.name).resolve()
+    if root not in p.parents or not p.is_file():
+        return JSONResponse({"ok": False, "error": "not found"}, status_code=404)
+    await run_in_threadpool(_trash, p, root)
+    return {"ok": True}
 
 
 @router.get("/outputs/file", summary="One output file (text or image); only paths inside data/outputs")

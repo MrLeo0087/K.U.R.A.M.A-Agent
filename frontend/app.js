@@ -1039,7 +1039,17 @@ function wsActs() { // what you can do with the selected result
     + (file && it.type !== "image" ? '<button type="button" class="act" data-ws="open_vscode">VS Code</button>' : "")
     + (file && it.type === "image" ? '<button type="button" class="act" data-ws="open">Open</button>' : "")
     + (it.type !== "image" ? '<button type="button" class="act ghost" data-ws="copy">Copy</button>' : "")
-    + (file ? '<button type="button" class="act ghost" data-ws="send_phone">Phone</button><button type="button" class="act ghost" data-ws="show_folder">Folder</button>' : "");
+    + (file ? '<button type="button" class="act ghost" data-ws="send_phone">Phone</button><button type="button" class="act ghost" data-ws="show_folder">Folder</button>' : "")
+    + (file ? '<button type="button" class="act ghost danger" data-ws="delete" title="Delete this item (to the trash)">Delete</button>' : "");
+}
+async function wsDelete(it) { // dashboard: remove ONE workspace item
+  if (!it?.name || !confirm(`Delete "${it.title}"? It goes to the trash.`)) return;
+  try { await api.deleteOutput(it.name); } catch (e) { toast("Couldn't delete it: " + e.message); return; }
+  const i = ws.items.indexOf(it);
+  ws.items.splice(i, 1);
+  const next = ws.items[Math.min(i, ws.items.length - 1)];
+  if (next) wsShow(next); else wsClearAll();
+  toast("Deleted (it's in the trash).");
 }
 async function wsAction(name) {
   const it = ws.items[ws.cur];
@@ -1048,6 +1058,7 @@ async function wsAction(name) {
     try { await navigator.clipboard.writeText(it.text || ""); toast("Copied."); } catch { toast("Couldn't copy here."); }
     return;
   }
+  if (name === "delete") { wsDelete(it); return; }
   doAction({ name, path: it.name });
 }
 $("ws-acts").addEventListener("click", (e) => { const b = e.target.closest("[data-ws]"); if (b) wsAction(b.dataset.ws); });
@@ -1543,6 +1554,15 @@ async function cleanWorkspace() {
   if (!MINI) wsClearAll();
 }
 $("mws-clear").onclick = cleanWorkspace;
+$("mws-del").onclick = async () => { // mini: remove the item being shown
+  const x = mws.items[mws.cur];
+  if (!x || !confirm(`Delete "${wsTitle(x.name)}"? It goes to the trash.`)) return;
+  try { await api.deleteOutput(x.name); } catch (e) { toast("Couldn't delete it: " + e.message); return; }
+  mws.items.splice(mws.cur, 1);
+  mws.cur = Math.min(mws.cur, Math.max(0, mws.items.length - 1));
+  if (mws.items.length) mwsShow();
+  else { $("mws-body").textContent = "Empty. New pictures, plans and documents will appear here."; $("mws-title").textContent = "Workspace"; }
+};
 $("ws-clear").onclick = cleanWorkspace;
 $("mws-close").onclick = () => { $("mws").hidden = true; };
 $("mws-prev").onclick = () => { if (mws.cur < mws.items.length - 1) { mws.cur++; mwsShow(); } };

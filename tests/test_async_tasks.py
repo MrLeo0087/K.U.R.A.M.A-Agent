@@ -65,3 +65,19 @@ def test_clean_workspace_moves_to_trash(tmp_path, monkeypatch):
     r = asyncio.run(info.outputs_clear())
     assert r["moved"] == 2 and not any(out.iterdir())
     assert len(list((tmp_path / "outputs_trash").rglob("*.png"))) == 1
+
+
+def test_delete_one_workspace_item(tmp_path, monkeypatch):
+    import asyncio
+    import shutil
+    from jarvis.api.routes import info
+    monkeypatch.setattr(shutil, "which", lambda b: None)
+    out = tmp_path / "outputs"
+    out.mkdir()
+    (out / "a.png").write_bytes(b"x")
+    (out / "b.md").write_text("keep")
+    monkeypatch.setattr(info, "_outputs_dir", lambda: out)
+    assert asyncio.run(info.outputs_delete(info.OutputName(name="a.png")))["ok"]
+    assert not (out / "a.png").exists() and (out / "b.md").exists()
+    r = asyncio.run(info.outputs_delete(info.OutputName(name="../../etc/passwd")))
+    assert r.status_code == 404
