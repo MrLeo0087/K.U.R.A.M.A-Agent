@@ -60,6 +60,7 @@ export class Api {
   wallpaperInfo() { return this.request("/api/v1/wallpaper/info"); }
   wallpaperUrl(v) { return this.url(`/api/v1/wallpaper?v=${encodeURIComponent(v)}`, true); }
   outputs(limit = 12) { return this.request(`/api/v1/outputs?limit=${limit}`); }
+  clearOutputs() { return this.request("/api/v1/outputs/clear", { method: "POST", body: {} }); }
   outputUrl(name) { return this.url(`/api/v1/outputs/file?name=${encodeURIComponent(name)}`, true); }
   cancelJob(id) { return this.request(`/api/v1/jobs/${encodeURIComponent(id)}/cancel`, { method: "POST", body: {} }); }
   alerts() { return this.request("/api/v1/alerts?limit=20"); }

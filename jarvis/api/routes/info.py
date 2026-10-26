@@ -172,6 +172,30 @@ async def outputs(limit: int = Query(12, ge=1, le=100)):
     return {"items": await run_in_threadpool(run)}
 
 
+@router.post("/outputs/clear", summary="Clean the workspace: move every output to the trash (restorable)")
+async def outputs_clear():
+    def run():
+        import shutil
+        import subprocess
+        import time as _t
+        root = _outputs_dir()
+        if not root.is_dir():
+            return 0
+        items = [p for p in root.iterdir() if not p.name.startswith(".")]
+        moved = 0
+        gio = shutil.which("gio")
+        fallback = root.parent / "outputs_trash" / _t.strftime("%Y%m%d-%H%M%S")
+        for p in items:
+            ok = gio and subprocess.run([gio, "trash", str(p)], capture_output=True, timeout=30).returncode == 0
+            if not ok:  # no desktop trash: keep it next to the outputs instead of deleting
+                fallback.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(p), str(fallback / p.name))
+            moved += 1
+        return moved
+    n = await run_in_threadpool(run)
+    return {"ok": True, "moved": n}
+
+
 @router.get("/outputs/file", summary="One output file (text or image); only paths inside data/outputs")
 async def output_file(name: str = Query(..., max_length=300)):
     from fastapi.responses import FileResponse

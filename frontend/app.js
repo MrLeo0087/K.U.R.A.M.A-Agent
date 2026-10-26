@@ -961,6 +961,12 @@ function wsAdd(item, show) {
   if (show || ws.cur < 0) wsShow(item); else wsList();
 }
 
+function wsClearAll() { // dashboard: after "clean workspace"
+  ws.items = []; ws.cur = -1; // keep ws.seen: cleaned files never come back from a stale list
+  $("ws-view").innerHTML = '<p class="ws-empty">Pictures, code and writing you ask for appear here.</p>';
+  wsList();
+}
+
 function wsList() {
   const counts = {};
   for (const x of ws.items) counts[x.type] = (counts[x.type] || 0) + 1;
@@ -1512,7 +1518,32 @@ function openWorkspace(focus = true) {
 $("m-ws").onclick = () => { if (host) openWorkspace(true); else if ($("mws").hidden) mwsOpen(true); else $("mws").hidden = true; };
 if (MINI && !WSONLY) $("m-ws").hidden = false; // always reachable from the panel header
 window.kuramaWsRefresh = () => { if (WSONLY) mwsOpen(true); };
-if (WSONLY) { document.title = "KURAMA · Workspace"; mwsOpen(true); }
+// the workspace window refreshes itself while it's visible: a new picture/plan/document shows up on its own
+let mwsNewest = 0;
+async function mwsWatch() {
+  if (WSONLY && !document.hidden) {
+    try {
+      const top = ((await api.outputs(1)).items || [])[0];
+      const m = top ? top.mtime : 0;
+      if (m !== mwsNewest) { mwsNewest = m; mwsOpen(true); }
+    } catch { /* API restarting */ }
+  }
+  setTimeout(mwsWatch, document.hidden ? 15000 : 4000);
+}
+if (WSONLY) { document.title = "KURAMA · Workspace"; mwsWatch(); }
+async function cleanWorkspace() {
+  if (!confirm("Clean the workspace? Everything in it goes to the trash (you can restore it from there).")) return;
+  try {
+    const r = await api.clearOutputs();
+    toast(`Workspace cleaned (${r.moved} item${r.moved === 1 ? "" : "s"} moved to the trash).`);
+  } catch (e) { toast("Couldn't clean the workspace: " + e.message); return; }
+  mws.items = []; mws.cur = 0; mwsNewest = 0;
+  $("mws-body").textContent = "Empty. New pictures, plans and documents will appear here.";
+  $("mws-title").textContent = "Workspace";
+  if (!MINI) wsClearAll();
+}
+$("mws-clear").onclick = cleanWorkspace;
+$("ws-clear").onclick = cleanWorkspace;
 $("mws-close").onclick = () => { $("mws").hidden = true; };
 $("mws-prev").onclick = () => { if (mws.cur < mws.items.length - 1) { mws.cur++; mwsShow(); } };
 $("mws-next").onclick = () => { if (mws.cur > 0) { mws.cur--; mwsShow(); } };

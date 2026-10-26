@@ -126,6 +126,13 @@ class JobManager:
             _send_after[jid] = True  # asked from the phone: the result itself goes back to the phone
         with self._lock:
             self._jobs[jid] = job
+        try:  # the turn that started it lists it, so the UI watches it and announces / shows the result
+            from jarvis.core import safety
+            started = safety.context().get("jobs")
+            if isinstance(started, list) and jid not in started:
+                started.append(jid)
+        except Exception:
+            pass
         job.future = self._pool.submit(self._run, job, fn)
         log.info("started job #%d (%s): %s", jid, kind, title)
         return job

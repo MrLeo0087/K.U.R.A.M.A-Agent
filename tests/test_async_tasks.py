@@ -42,3 +42,26 @@ def test_plan_expires(tmp_path, monkeypatch):
     monkeypatch.setattr(organizer.config, "ORGANIZE_PLAN_TTL_S", -1)
     organizer._save_pending(tmp_path, [(tmp_path / "x", tmp_path / "Docs/x")])
     assert not organizer.pending_active() and "no plan waiting" in organizer.apply_pending()
+
+
+def test_any_tool_job_is_watched(monkeypatch):
+    from jarvis.core import jobs, safety
+    started = []
+    monkeypatch.setattr(safety, "context", lambda: {"jobs": started})
+    j = jobs.get_manager().submit("image: cat", "image", lambda ctx: None)
+    j.future.result(timeout=5)
+    assert started == [j.id]
+
+
+def test_clean_workspace_moves_to_trash(tmp_path, monkeypatch):
+    import asyncio
+    from jarvis.api.routes import info
+    monkeypatch.setattr(info.shutil if hasattr(info, "shutil") else __import__("shutil"), "which", lambda b: None)
+    out = tmp_path / "outputs"
+    (out / "plans").mkdir(parents=True)
+    (out / "a.png").write_bytes(b"x")
+    (out / "plans" / "p.md").write_text("plan")
+    monkeypatch.setattr(info, "_outputs_dir", lambda: out)
+    r = asyncio.run(info.outputs_clear())
+    assert r["moved"] == 2 and not any(out.iterdir())
+    assert len(list((tmp_path / "outputs_trash").rglob("*.png"))) == 1
