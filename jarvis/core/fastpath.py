@@ -1770,6 +1770,62 @@ def copy_history_intent(t: str) -> Intent | None:
     return Intent("clip", "clipboard", "clipboard", args)
 
 
+# --- saved links: 'this is the link for Claude Code, save it', 'give me my Facebook link' (0 tokens) ---
+_L_WORD = r"(?:link|url|page|site|website|address)"
+_L_STORE = r"(?:\s+(?:in|to|into)\s+(?:your\s+|my\s+|the\s+)?(?:memory|links?|link\s+stor(?:e|er)|bookmarks?|saved\s+links))?"
+_L_SAVE = r"(?:save|store|keep|remember|bookmark|add)"
+
+
+def links_intent(t: str) -> Intent | None:
+    from jarvis.core import links
+    low = t.strip(" .!?").lower()
+    L = lambda a, **k: Intent("links", "saved_links", "browser", {"action": a, **k})  # noqa: E731
+    u = links.URL.search(t)
+    url = {"url": u.group(0)} if u and re.search(r"https?://|www\.", u.group(0), I) else {}
+    if links.pending():  # 'What should I call this link?' was asked
+        if re.fullmatch(r"(?:no|cancel|never\s*mind|don'?t\s+save(?:\s+it)?|forget\s+it|leave\s+it)", low):
+            return L("cancel")
+        if m := re.fullmatch(r"(?:call|name|save|label)\s+it\s+(?:as\s+)?(?P<n>.+)|(?:it'?s|it\s+is|this\s+is)\s+(?:my\s+|the\s+)?(?P<n2>.+)", t.strip(" .!"), I):
+            return L("name", name=m.group("n") or m.group("n2"))
+        if len(low.split()) <= 5 and not t.strip().endswith("?"):
+            return L("name", name=t.strip(" .!"))
+    # save with a name
+    for rx in (r"(?:this|that|it)\s+is\s+(?:the\s+|my\s+|a\s+)?" + _L_WORD + r"\s+(?:for|of|to)\s+(?:my\s+|the\s+)?(?P<n>[^,.;]+?)"
+               r"(?:\s*[,.;]?\s*(?:so\s+|please\s+|and\s+|just\s+|can\s+you\s+)*(?:" + _L_SAVE + r")\b.*)?",
+               r"(?:please\s+|can\s+you\s+)*" + _L_SAVE + r"\s+(?:(?:this|that|the|it)\s*" + _L_WORD + r"?|" + _L_WORD + r")\s*(?:of\s+(?:this|it)\s*)?" + _L_STORE
+               + r"\s*(?:,\s*)?(?:as|called|named|under|with\s+(?:the\s+)?name|for)\s+(?:my\s+|the\s+)?(?P<n>.+?)" + _L_STORE,
+               r"(?:please\s+|can\s+you\s+)*" + _L_SAVE + r"\s+(?:(?:this|that|the|it)\s*" + _L_WORD + r"?|" + _L_WORD + r")\s*(?:of\s+(?:this|it)\s*)?" + _L_STORE
+               + r"\s*(?:,\s*)?(?:and\s+)?(?:call|name|say|label|title)\s+it\s+(?:as\s+)?(?P<n>.+)",
+               r"(?:please\s+|can\s+you\s+)*" + _L_SAVE + r"\s+(?:my\s+|the\s+)(?P<n>[\w .+#-]{2,30}?)\s+" + _L_WORD + _L_STORE):
+        if m := re.fullmatch(rx, links.URL.sub(lambda x: x.group(0) if not url else "", t.strip(" .!?")), I):
+            n = links.clean_name(m.group("n"))
+            if n and not re.fullmatch(r"(?:this|that|it)", n, I) and not re.search(r"\blater\b|\breading\b|\bread\b", n, I):
+                return L("save", name=n, **url)
+    # save, no name: KURAMA asks for one
+    if re.fullmatch(r"(?:please\s+|can\s+you\s+)*" + _L_SAVE + r"\s+(?:the\s+)?(?:" + _L_WORD + r"\s+of\s+)?(?:this|that|the|it)\s*(?:"
+                    + _L_WORD + r")?(?:\s+of\s+this)?" + _L_STORE.replace(")?", ")") + r"(?:\s+please)?", low, I) or (
+            re.fullmatch(r"(?:please\s+)?" + _L_SAVE + r"\s+(?:this\s+)?" + _L_WORD, low, I)):
+        return L("save", **url)
+    if re.fullmatch(r"(?:show|list|see|open|what\s+are|give\s+me|tell\s+me)?\s*(?:me\s+)?(?:all\s+)?(?:my\s+|the\s+)?(?:saved\s+links|links|"
+                    r"link\s+stor(?:e|er)|bookmarks)(?:\s+(?:i|you)\s+(?:saved|have|kept))?", low, I) or re.fullmatch(
+            r"what\s+links\s+(?:did\s+i|have\s+i|do\s+i\s+have|did\s+you)\s*(?:save|saved|keep|kept)?", low, I):
+        return L("list")
+    if m := re.fullmatch(r"(?:please\s+)?(?:delete|remove|forget)\s+(?:the\s+|my\s+)?(?P<n>.+?)\s+" + _L_WORD + _L_STORE, low, I):
+        if links.lookup(m.group("n")):
+            return L("delete", name=m.group("n"))
+    if m := re.fullmatch(r"rename\s+(?:the\s+|my\s+)?(?P<n>.+?)\s+" + _L_WORD + r"\s+(?:to|as)\s+(?P<x>.+)", t.strip(" .!?"), I):
+        if links.lookup(m.group("n")):
+            return L("rename", name=m.group("n"), new_name=m.group("x"))
+    # get / open by name; not saved -> None (the AI answers from its own knowledge)
+    m = (re.fullmatch(r"(?:please\s+|can\s+you\s+)*(?P<v>give|send|show|tell|get|copy|share|open|find|what(?:'s|\s+is))\s+(?:me\s+)?(?:the\s+|my\s+)?"
+                      + _L_WORD + r"\s+(?:of|for|to)\s+(?:my\s+|the\s+)?(?P<n>.+?)(?:\s+from\s+.+)?", low, I)
+         or re.fullmatch(r"(?:please\s+|can\s+you\s+)*(?P<v>give|send|show|tell|get|copy|share|open|find|what(?:'s|\s+is))\s+(?:me\s+)?(?:the\s+|my\s+)"
+                         r"(?P<n>[\w .+#-]{2,30}?)(?:'s)?\s+" + _L_WORD + r"(?:\s+from\s+.+)?", low, I))
+    if m and links.lookup(m.group("n")):
+        return L("open" if m.group("v").startswith("open") else "get", name=m.group("n"))
+    return None
+
+
 # --- goals: long tasks (weeks-months): countdowns, daily check-ins, progress, report (0 tokens) ---
 _G_NOUN = (r"exams?|tests?|finals|interview|deadline|submission|presentation|competition|trip|wedding|project|thesis|"
            r"course|semester|hackathon|internship|dissertation|goal|long[\s-]?(?:term\s+)?task|countdown")
@@ -2137,6 +2193,8 @@ def match(text: str) -> Intent | None:
         return si
     if pi := plan_answer_intent(t):
         return pi
+    if li := links_intent(t):
+        return li
     if gi := goal_intent(t):
         return gi
     if rl := read_later_intent(t):

@@ -254,6 +254,8 @@ ROUTER_MAX_GROUPS = 3
 # Free phrasing for tools: paraphrases embedded by the semantic router (0 tokens), so "enable speech to text
 # mode" finds dictate even though no keyword rule says so. Add a few lines here for any tool that gets missed.
 TOOL_EXAMPLES: dict[str, tuple[str, ...]] = {
+    "saved_links": ("save this link as facebook", "this is the link for claude code, save it", "give me the link of my "
+                    "facebook", "what's my grok link", "open my github link", "show my saved links"),
     "goals": ("my exam is in 30 days, remind me every day", "I started a project that ends in 6 months, ask me daily "
               "what I did", "ask me every evening whether I studied", "how many days are left until my exam",
               "what did we do today in the project", "show my goals", "make the project report", "pause my exam goal"),
@@ -715,6 +717,8 @@ NUDGE_HOURS = (10, 21)  # only between these hours
 TASK_OVERDUE_S = float(os.getenv("KURAMA_TASK_OVERDUE_S", str(60 * 60)))  # due to-do still open this long after -> 'not done yet'
 SELECTION_MEMORY_S = float(os.getenv("KURAMA_SELECTION_MEMORY_S", "600"))  # a highlight outside KURAMA counts this long
 READ_LATER_FILE = os.getenv("KURAMA_READ_LATER", "~/Documents/KURAMA/read_later.xlsx")  # reading list (Excel)
+LINKS_FILE = os.getenv("KURAMA_LINKS", "~/Documents/KURAMA/links.xlsx")  # named saved links (Excel)
+LINK_NAME_TTL_S = 300.0  # 'what should I call this link?' waits this long for the name
 GOALS_FILE = os.getenv("KURAMA_GOALS", "~/Documents/KURAMA/goals.xlsx")  # long goals (tabs Goals + Log)
 GOALS_DIR = os.getenv("KURAMA_GOALS_DIR", "~/Documents/KURAMA/goals")  # one folder per project goal (log, daily, report)
 GOAL_HOURS = (5, 22)  # goal messages only from 05:00 to 22:00 (owner's KURAMA working hours)
