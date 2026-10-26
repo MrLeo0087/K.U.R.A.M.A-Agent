@@ -1434,10 +1434,17 @@ _EDIT_PLAN = re.compile(r"\b(?:change|keep|don'?t\s+move|do\s+not\s+move|leave|p
                         r"separate|together|into|folder)\b", I)
 
 
+_SELECTED_NOW = re.compile(r"^(?:(?:ok(?:ay)?|now|yes|kurama|see|look)\W+)*(?:done|ok(?:ay)?|now|try\s+(?:it\s+)?again|"
+                           r"(?:i\s+(?:have\s+|just\s+)?(?:select(?:ed)?|highlight(?:ed)?)|(?:it'?s|it\s+is|the\s+\w+\s+is)\s+"
+                           r"(?:selected|highlighted))(?:\s+(?:it|that|this|the\s+\w+|them))?(?:\s+now)?)\s*[.!]*$", I)
+
+
 def plan_answer_intent(t: str) -> Intent | None:
     """While an organize plan is waiting: 'yes good' applies it, 'no' cancels it, anything that sounds like a
     change ('keep the pictures where they are') edits it. Costs one kv read when no plan waits."""
     from jarvis.core import assist, organizer
+    if assist.retry_active() and _SELECTED_NOW.match(t):  # 'nothing highlighted' earlier; now it is
+        return Intent("assist", "text_assist", "clipboard", {"action": "retry"})
     if assist.pending_code_active():  # an improved code is waiting in the workspace
         if _YES_PLAN.match(t) or re.search(r"\breplace\s+it\b|\bput\s+it\s+in\b", t, I):
             return Intent("assist", "text_assist", "clipboard", {"action": "apply_code"})

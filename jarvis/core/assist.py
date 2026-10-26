@@ -107,16 +107,46 @@ def explain_code(code: str, lang: str = "", name: str = "") -> str:
                 smart=True, max_tokens=1200, purpose="assist_code_explain")
 
 
+_CODE_VERB = re.compile(r"\b(?:make|improve|optimi[sz]e|fix|refactor|format|clean|modify|change|update|edit|enhance|"
+                        r"expand|rewrite|correct|add|simplify|speed|debug|replace|convert|turn)\b", re.I)
+_CODE_TAIL = re.compile(r"(?:[\s,]+(?:and\s+)?(?:then\s+)?replace\s+it(?:\s+(?:there|here|in\s+place))?|[\s,]+actually|"
+                        r"[\s,]+please|[\s,]+okay)+\s*[.!?]*$", re.I)
+
+
+def clean_instruction(request: str) -> str:
+    """'Zarpis actually make this selected code better and replace it' -> 'make this selected code better':
+    drop the wake-word / filler before the first action word and the 'replace it' tail (replacing is a separate yes)."""
+    t = (request or "").strip()
+    if m := _CODE_VERB.search(t):
+        t = t[m.start():]
+    t = _CODE_TAIL.sub("", t).strip(" ,.")
+    if re.fullmatch(r"replace\s+(?:it|this|the\s+\w+)", t, re.I):
+        t = ""
+    return t or "fix and improve this code"
+
+
 def improve_code(code: str, instruction: str, lang_name: str = "") -> str:
-    """Fixed / optimized / formatted code, same indentation, ONLY the code."""
+    """Fixed / optimized / formatted code, same indentation, ONLY the rewritten selection (not a bigger program)."""
     first = next((ln for ln in code.splitlines() if ln.strip()), "")
     indent = first[: len(first) - len(first.lstrip())]
-    got = _llm("You edit code. Apply the user's instruction to their selected code and return ONLY the full new "
-               "code (no explanation, no markdown fences). Keep the same behaviour unless asked, the same names "
-               "used by other code, and the same indentation level." + (f" Language: {lang_name}." if lang_name else ""),
-               f"Instruction: {instruction}\n\nCode:\n{code[:12000]}", smart=True,
-               max_tokens=min(4000, len(code) // 2 + 800), purpose="assist_code_fix")
-    new = _strip_fence(got)
+    a = code.count("\n") + 1
+    system = ("You edit code. Apply the user's instruction to their SELECTED code and return ONLY the new version of "
+              "that selection (no explanation, no markdown fences). It replaces exactly the selection inside a bigger "
+              "file, so: no example usage, no tests, no demo or main block, no new imports or functions the "
+              "instruction didn't ask for. 'Better' or 'detailed' means clearer names, a short docstring or comments, "
+              "input checks and error handling, not a bigger program. Keep about the same length (at most twice "
+              "the lines). Keep the same behaviour unless asked, the same names used by other code, and the same "
+              "indentation level." + (f" Language: {lang_name}." if lang_name else ""))
+    user = f"Instruction: {instruction}\n\nSelected code ({a} lines):\n{code[:12000]}"
+    budget = min(4000, len(code) // 2 + 800)
+    new = _strip_fence(_llm(system, user, smart=True, max_tokens=budget, purpose="assist_code_fix"))
+    limit = max(3 * a + 10, 30)
+    if new.count("\n") + 1 > limit:  # padded with a whole program: ask once more, strictly
+        log.info("code improve too long (%d lines for %d), retrying", new.count("\n") + 1, a)
+        again = _strip_fence(_llm(system, user + f"\n\nYour answer must be at most {2 * a + 6} lines.", smart=True,
+                                  max_tokens=budget, purpose="assist_code_fix"))
+        if again.strip():
+            new = again
     if indent and new and not new.startswith(indent):  # the model dropped the block's indentation: put it back
         new = "\n".join(indent + ln if ln.strip() else ln for ln in new.splitlines())
     return new
@@ -175,6 +205,14 @@ def explain_file(path: Path, lang: str = "") -> str:
 
 # --- code edits: improved in the background, shown in the workspace, put in place only after "yes" ---
 _pending: dict = {}
+
+
+_retry: dict = {}  # the last request that found nothing highlighted: 'I selected it' runs it again
+
+
+def retry_active() -> bool:
+    import time
+    return bool(_retry) and time.time() < _retry.get("expires", 0)
 
 
 def pending_code_active() -> bool:
@@ -256,6 +294,12 @@ def run(action: str, request: str = "", lang: str = "", replace: bool = False, p
         return apply_pending_code()
     if action == "cancel_code":
         return cancel_pending_code()
+    if action == "retry":
+        if not retry_active():
+            return "Tell me again what to do with the highlighted text."
+        r = {k: v for k, v in _retry.items() if k != "expires"}
+        _retry.clear()
+        return run(**r)
     if action == "write":
         return write_code(request or "the code the user asked for")
     if action == "explain_file":
@@ -265,11 +309,16 @@ def run(action: str, request: str = "", lang: str = "", replace: bool = False, p
         return target if isinstance(target, str) else explain_file(target, lang)
     g = rewrite.grab()
     if isinstance(g, str):
-        return g
+        import time
+        _retry.clear()
+        _retry.update(action=action, request=request, lang=lang, replace=replace,
+                      expires=time.time() + config.ASSIST_PENDING_TTL_S)
+        return g + " Or highlight it and say 'done'."
+    _retry.clear()
     sel = g.text
     if action == "improve":
         if is_code(sel) or "code" in (request or "").lower():
-            return start_code_improve(g, request or "fix and improve this code")
+            return start_code_improve(g, clean_instruction(request))
         else:
             new = rewrite.transform(sel, request or "fix grammar and make it clearer")
         if not new:

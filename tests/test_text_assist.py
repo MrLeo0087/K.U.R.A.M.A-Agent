@@ -95,3 +95,26 @@ def test_long_answers_go_to_the_workspace():
     head = fastpath._speakable_head(long, "en")
     assert head.startswith("This function adds numbers.") and "workspace" in head and "total =" not in head
     assert assist._short("● test.py - KURAMA - Claude-1 - Visual Studio Code") == "test.py"
+
+
+def test_code_instruction_is_cleaned_and_kept_short(desk, monkeypatch):
+    st, calls = desk
+    assert assist.clean_instruction("Zarpis actually make this selected part of the code more better and detailed "
+                                    "and replace it.") == "make this selected part of the code more better and detailed"
+    assert assist.clean_instruction("replace it") == "fix and improve this code"
+    replies = ["x = 1\n" * 200, "def add(a, b):\n    return a + b"]
+    monkeypatch.setattr(assist, "_llm", lambda *a, **k: replies.pop(0))
+    assert assist.improve_code("def add(a,b):\n    return a+b", "make it better") == "def add(a, b):\n    return a + b"
+
+
+def test_selected_now_reruns_the_request(desk, monkeypatch):
+    st, calls = desk
+    monkeypatch.setattr(rewrite, "grab", lambda: "I couldn't see any highlighted text in 'Doc'.")
+    assert "highlighted" in assist.run("translate", "translate this into nepali", "ne")
+    assert assist.retry_active()
+    for s in ("done", "I selected it", "I select the text.", "it's selected now"):
+        assert fastpath.match(s).args == {"action": "retry"}, s
+    monkeypatch.setattr(rewrite, "grab", lambda: rewrite.Grab("hello", 7, False, False, "Doc"))
+    assert fastpath.match("done").args == {"action": "retry"}
+    assert assist.run("retry").startswith("[assist_translate]") and not assist.retry_active()
+    assert fastpath.match("I selected the text") is None or fastpath.match("I selected the text").args != {"action": "retry"}
