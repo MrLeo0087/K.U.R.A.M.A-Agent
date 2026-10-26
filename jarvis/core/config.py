@@ -94,6 +94,7 @@ STT_FIXES: dict[str, str] = {
     r"\bselective\b": "selected",
     r"\b(this|the|that|a|selected|highlighted)\s+(?:o\.?\s?auth|oauth|wordt|ward)\b": r"\1 word",  # "this word" misheard
     r"\bselect(?:ed)?\s+output\b": "selected word",
+    r"\b(?:return|written|britain|ridden)\s+(in|on)\s+(?=(?:the\s+)?(?:selected|this|that|my)\s)": r"written \1 ",  # "written in"
     r"\b(?:space|speak|speec|speach|spich)\s+(?:to|2)\s+text\b": "speech to text",
     r"\b(?:b\.?\s?s\.?|be\s?as|versus|vs\.?|v\.\s?s\.)\s+(?:code|cold|cord|court|coat)\b": "VS Code",
     r"\bvisual\s+studio(?:\s+code)?\b": "VS Code",
@@ -223,6 +224,7 @@ DIRECT_REPLY_TOOLS = {"open_url": "open", "open_app": "open", "audio": "audio", 
 # --- OCR (read_text): Tesseract first (0 tokens); the vision model only for handwriting / hard photos ---
 OCR_LANGS = os.getenv("KURAMA_OCR_LANGS", "eng+nep")
 OCR_MIN_CONF = float(os.getenv("KURAMA_OCR_MIN_CONF", "62"))  # Tesseract's mean word confidence below this = poor
+OCR_MIN_DENSITY = 60.0  # screen capture: fewer words per megapixel = a photo/handwriting Tesseract can't see
 OCR_VISION = os.getenv("KURAMA_OCR_VISION", "1").lower() not in ("0", "false", "no", "off")
 # a dashboard answer longer than this goes to the workspace in full; the chat gets one short line
 CHAT_MAX_CHARS = int(os.getenv("KURAMA_CHAT_MAX_CHARS", "380"))

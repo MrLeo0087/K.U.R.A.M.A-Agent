@@ -1699,23 +1699,30 @@ def qr_intent(t: str) -> Intent | None:
 
 
 def ocr_intent(t: str) -> Intent | None:
-    """'read this area', 'what does this photo say', 'copy the text from this screenshot', 'read the copied image',
-    'read handwriting from photo.jpg' -> read_text (Tesseract, 0 tokens)."""
+    """Reading the text in a picture. 'read this area' / 'the selected part of this image' -> drag a box;
+    'what is written in this paper / image / on my screen' -> the window the user looks at; 'the copied image'
+    -> clipboard; a named file / 'my latest photo' -> that file. (Tesseract, 0 tokens; the AI only for handwriting.)"""
     if _OCR_AREA.match(t):
         return Intent("ocr", "read_text", "screen", {"source": "area"})
     if _OCR_SCREEN.match(t):
-        return Intent("ocr", "read_text", "screen", {"source": "screen"})
-    if not _OCR_FILE.search(t) or len(t.split()) > 18:
+        return Intent("ocr", "read_text", "screen", {"source": "window"})
+    reading = re.search(r"\b(?:writ(?:ten|ing|e)|says?|text|read|ocr|transcribe|type\s+out|words?|letters?)\b|लेखिएको|लेखेको", t, I)
+    picture = re.search(r"\b(?:" + _OCR_PIC + r"|paper|page|note|notes|board|whiteboard|slide|screen|document|letter)\b", t, I)
+    if not (reading and picture) or len(t.split()) > 22:
         return None
-    if re.search(r"\b(?:take|capture)\s+(?:a\s+)?screenshot\b|\b(?:describe|caption|who|where|of\s+what|is\s+this\s+photo\s+of)\b|"
-                 r"\b(?:send|share|delete|open|resize|compress|rename|organi[sz]e|move|set\s+as)\b", t, I):
-        return None  # about the picture itself, not its text
-    if not re.search(r"\b(?:text|say|says|written|write|words?|note|handwriting|handwritten|read|ocr|transcribe|type)\b", t, I):
-        return None  # "convert this image to png" is a file conversion
+    if re.search(r"\b(?:take|capture)\s+(?:a\s+)?screenshot\b|\b(?:describe|caption|who\s+is|where\s+is|of\s+what|is\s+this\s+"
+                 r"(?:photo|picture|image)\s+of)\b|\b(?:send|share|delete|open|resize|compress|rename|organi[sz]e|move|"
+                 r"set\s+as|write\s+(?:a|an|the|my)|word\s+document|text\s+file|screen\s+(?:time|brightness|lock))\b", t, I):
+        return None  # about the picture itself / a file / writing something new, not reading its text
+    if re.search(r"\b(?:selected|select|area|region|part|portion|section|box|corner|crop)\b", t, I):
+        return Intent("ocr", "read_text", "screen", {"source": "area"})
     if re.search(r"\b(?:copied|clipboard)\b", t, I):
         return Intent("ocr", "read_text", "screen", {"source": "clipboard"})
-    f = re.search(r"([\w.~/-]+\.(?:png|jpe?g|webp|bmp|tiff?|gif|heic))\b", t, I)
-    return Intent("ocr", "read_text", "screen", {"source": "file", "path": f.group(1) if f else "this"})
+    if f := re.search(r"([\w.~/-]+\.(?:png|jpe?g|webp|bmp|tiff?|gif|heic))\b", t, I):
+        return Intent("ocr", "read_text", "screen", {"source": "file", "path": f.group(1)})
+    if re.search(r"\b(?:latest|newest|last|downloaded|recent)\b", t, I):
+        return Intent("ocr", "read_text", "screen", {"source": "file", "path": "latest"})
+    return Intent("ocr", "read_text", "screen", {"source": "window"})
 
 
 def match(text: str) -> Intent | None:

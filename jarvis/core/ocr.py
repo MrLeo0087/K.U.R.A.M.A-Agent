@@ -26,8 +26,9 @@ IMAGE_EXT = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff", ".gif", 
 
 
 class Result:
-    def __init__(self, text: str, engine: str, conf: float):
-        self.text, self.engine, self.conf = text, engine, conf
+    def __init__(self, text: str, engine: str, conf: float, unsure: float = 0.0, density: float = 999.0):
+        self.text, self.engine, self.conf, self.unsure = text, engine, conf, unsure
+        self.density = density  # words found per megapixel of the picture
 
 
 def _tmp(suffix: str = ".png") -> Path:
@@ -60,6 +61,45 @@ def grab_screen() -> Path | str:
     elif shutil.which("scrot"):
         subprocess.run(["scrot", "-o", str(out)], timeout=20, check=False, capture_output=True)
     return out if out.is_file() else "I couldn't take a screenshot."
+
+
+def _geometry(wid: int) -> tuple[int, int, int, int, str] | None:
+    """(x, y, w, h, wm_class) of a window on the screen (frame included)."""
+    try:
+        from Xlib import display
+        d = display.Display()
+        w = d.create_resource_object("window", wid)
+        g = w.get_geometry()
+        pos = w.translate_coords(d.screen().root, 0, 0)
+        cls = " ".join(w.get_wm_class() or ())
+        d.close()
+        return -pos.x, -pos.y, g.width, g.height, cls
+    except Exception as e:  # noqa: BLE001
+        log.info("window geometry failed: %s", e)
+        return None
+
+
+def grab_window() -> Path | str:
+    """The window the user is looking at (not KURAMA's), cropped from a screenshot; a browser's tab strip and
+    address bar are cut off so only the page is read."""
+    from jarvis.core import rewrite
+    shot = grab_screen()
+    if isinstance(shot, str):
+        return shot
+    wid, _ = rewrite.target_window()
+    geo = _geometry(wid) if wid else None
+    if not geo:
+        return shot
+    x, y, w, h, cls = geo
+    top = 0
+    if re.search(r"brave|chrom|firefox|edge|opera|vivaldi", cls, re.I):
+        top = min(110, h // 5)  # tabs + address bar
+    from PIL import Image
+    with Image.open(shot) as im:
+        box = (max(0, x), max(0, y + top), min(im.width, x + w), min(im.height, y + h))
+        if box[2] - box[0] > 50 and box[3] - box[1] > 50:
+            im.crop(box).save(shot)
+    return shot
 
 
 def grab_clipboard() -> Path | str:
@@ -112,6 +152,9 @@ def tesseract(src: Path) -> Result:
     """0 tokens. Text in reading order + the mean word confidence (0-100)."""
     if not shutil.which("tesseract"):
         return Result("", "none", 0.0)
+    from PIL import Image
+    with Image.open(src) as im:
+        mpx = max(0.05, im.width * im.height / 1e6)
     img = _prepare(src)
     langs = config.OCR_LANGS
     try:
@@ -140,39 +183,48 @@ def tesseract(src: Path) -> Result:
         out.append(" ".join(words))
         last_par = (b, p)
     text = "\n".join(out).strip()
-    return Result(text, "tesseract", sum(confs) / len(confs) if confs else 0.0)
+    unsure = sum(1 for c in confs if c < 50) / len(confs) if confs else 1.0  # handwriting: many unsure words
+    return Result(text, "tesseract", sum(confs) / len(confs) if confs else 0.0, unsure, len(confs) / mpx)
 
 
-def vision(src: Path) -> Result:
-    """The vision model reads it (handwriting / hard photos): one call, picture shrunk to 1024 px."""
+def vision(src: Path, focus: bool = False) -> Result:
+    """The vision model reads it (handwriting / hard photos): one call, picture shrunk to 1280 px. focus = a screen
+    capture: read only the main content (the photo / paper / page), not the app around it."""
     from PIL import Image, ImageOps
     from jarvis.core import llm
     with Image.open(src) as im:
         im = ImageOps.exif_transpose(im).convert("RGB")
-        im.thumbnail((1024, 1024))
+        im.thumbnail((1280, 1280))
         buf = io.BytesIO()
         im.save(buf, "JPEG", quality=80)
     b64 = base64.b64encode(buf.getvalue()).decode()
     r = llm.chat([{"role": "user", "content": [
-        {"type": "text", "text": "Write out exactly the text in this picture (handwriting too), keeping its lines and "
-                                 "language (Nepali in Devanagari). Only the text; '[?]' for a word you can't read."},
+        {"type": "text", "text": ("This is a screenshot. Read only the MAIN content: the photo, paper, handwriting or "
+                                  "document in it, not menus, tabs, buttons, names or comments around it. "
+                                  if focus else "") +
+         "Write out exactly the text (handwriting too), keeping its lines, numbering and language (Nepali/Hindi in "
+         "Devanagari). Only the text; '[?]' for a word you can't read."},
         {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}]}],
-        tier="vision", purpose="ocr_vision", max_tokens=1200)
+        tier="vision", purpose="ocr_vision", max_tokens=1500)
     return Result((r.text or "").strip(), "vision", 100.0)
 
 
-def looks_poor(r: Result) -> bool:
+def looks_poor(r: Result, focus: bool = False) -> bool:
+    """Tesseract wasn't sure: low mean confidence, many unsure words, hardly any words, or (a screen capture) very
+    few words for its size: the main thing on screen is a photo / handwriting it can't see, and it only read the
+    app around it (a Facebook photo of a handwritten page: 14 words/Mpx, all from the sidebar)."""
     words = re.findall(r"[^\W\d_]{2,}", r.text)
-    return r.conf < config.OCR_MIN_CONF or len(words) < 2
+    sparse = focus and r.density < config.OCR_MIN_DENSITY
+    return r.conf < config.OCR_MIN_CONF or r.unsure > 0.25 or len(words) < 2 or sparse
 
 
-def read(src: Path, allow_vision: bool | None = None) -> Result:
+def read(src: Path, allow_vision: bool | None = None, focus: bool = False) -> Result:
     """Tesseract first; the vision model only when that looks poor (and it's allowed)."""
     r = tesseract(src)
     allow = config.OCR_VISION if allow_vision is None else allow_vision
-    if looks_poor(r) and allow:
+    if looks_poor(r, focus) and allow:
         try:
-            v = vision(src)
+            v = vision(src, focus)
             if v.text:
                 return v
         except Exception as e:  # noqa: BLE001 - no AI (No AI mode, limit, offline): keep Tesseract's best try
@@ -186,10 +238,13 @@ def copy(text: str) -> None:
 
 
 def run(source: str = "area", path: str = "") -> str:
-    """source: area (drag a box) | screen | clipboard | file (path, or the newest picture)."""
+    """source: window (what the user is looking at) | area (drag a box) | screen | clipboard |
+    file (a path, or 'latest' = the newest picture in Downloads/Pictures)."""
     tmp = None
+    if source == "file" and path.strip().lower() in ("", "this", "it", "photo", "picture", "image"):
+        source, path = "window", ""  # "this photo" = the one on the screen, not an old file
     if source == "file" or path:
-        if path and path.strip().lower() not in ("this", "it", "photo", "picture", "image", "latest"):
+        if path and path.strip().lower() not in ("latest", "newest", "last"):
             from jarvis.core.paths import resolve_target
             p = resolve_target(path)
             if isinstance(p, str):
@@ -199,14 +254,15 @@ def run(source: str = "area", path: str = "") -> str:
             if p is None:
                 return "I couldn't find a picture in Downloads, Pictures or Desktop."
     else:
-        got = {"area": grab_area, "screen": grab_screen, "clipboard": grab_clipboard}.get(source, grab_area)()
+        got = {"area": grab_area, "screen": grab_screen, "clipboard": grab_clipboard,
+               "window": grab_window}.get(source, grab_area)()
         if isinstance(got, str):
             return got
         p = tmp = got
     if p.suffix.lower() not in IMAGE_EXT:
         return f"{p.name} isn't a picture. For a PDF say 'convert {p.name} to text'."
     try:
-        r = read(p)
+        r = read(p, focus=source in ("window", "screen"))
     finally:
         if tmp is not None:
             tmp.unlink(missing_ok=True)
