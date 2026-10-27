@@ -185,8 +185,20 @@ def test_use_complete_and_code_chat_line(monkeypatch, tmp_path):
     monkeypatch.setattr(assist, "_llm", lambda *a, **k: "```python\nif __name__ == \"__main__\":\n    calculator()\n```\nNEEDS: none")
     assert fastpath.match("how can I use this function").args == {"action": "use"}
     out = assist.run("use")
-    assert out.startswith("I added a small run block at the end of test.py") and 'if __name__ == "__main__":' in f.read_text()
+    assert "calls calculator()" in out and out.endswith("Should I add it at the end of test.py? Say yes, or no.")
+    assert "__main__" not in f.read_text()  # nothing written before the user says yes
+    assert fastpath.match("yes").args == {"action": "use_yes"}
+    assert assist.run("use_yes").startswith("Added at the end of test.py") and 'if __name__ == "__main__":' in f.read_text()
     assert "already has a run block" in assist.run("use")  # never twice
+    # 'no' -> 'try again?' -> yes = a new, better attempt (the rejected one is sent as feedback)
+    f.write_text("def calculator():\n    return 1\n")
+    assist.run("use")
+    assert fastpath.match("no").args == {"action": "use_no"}
+    assert assist.run("use_no").startswith("Okay, I didn't add it. Should I try again")
+    seen = []
+    monkeypatch.setattr(assist, "_llm", lambda s, u, **k: seen.append(u) or "```python\nif __name__ == \"__main__\":\n    print(calculator())\n```\nNEEDS: none")
+    assert fastpath.match("yes try again").args["action"] == "use_retry"
+    assert "calls calculator()" in assist.run("use_retry") and "did NOT like this attempt" in seen[-1]
     # complete: unclear -> one question first, the reply continues the job
     monkeypatch.setattr(assist, "_llm", lambda *a, **k: "QUESTION: Should it also handle powers like 2**3?")
     assert assist.complete_code("def f(x):\n    ...\n", "").startswith("QUESTION:")

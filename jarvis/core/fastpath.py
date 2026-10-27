@@ -1698,6 +1698,19 @@ def plan_answer_intent(t: str) -> Intent | None:
     """While an organize plan is waiting: 'yes good' applies it, 'no' cancels it, anything that sounds like a
     change ('keep the pictures where they are') edits it. Costs one kv read when no plan waits."""
     from jarvis.core import assist, organizer
+    stage = assist.use_waiting()  # the run block: "Should I add it?" / "Should I try again?"
+    if stage:
+        yes = _YES_PLAN.match(t) or re.fullmatch(r"(?:yes|yeah|yep|sure|ok(?:ay)?|please|go\s+ahead|do\s+it|add\s+it|try\s+again|"
+                                                 r"haan|ho)\b[\s\w,.!']{0,40}", t, I)
+        no = re.fullmatch(r"(?:no|nope|nah|not\s+(?:now|this|that)|don'?t|leave\s+it|cancel)\b[\s\w,.!']{0,60}", t, I)
+        if stage == "add" and yes and not no:
+            return Intent("assist", "text_assist", "clipboard", {"action": "use_yes"})
+        if stage == "add" and no:
+            return Intent("assist", "text_assist", "clipboard", {"action": "use_no"})
+        if stage == "retry" and yes and not no:
+            return Intent("assist", "text_assist", "clipboard", {"action": "use_retry", "request": t})
+        if stage == "retry" and no:
+            return Intent("assist", "text_assist", "clipboard", {"action": "use_cancel"})
     if assist.ask_back_waiting() and len(t.split()) <= 40 and not t.strip().endswith("?"):  # its question to the user
         return Intent("assist", "text_assist", "clipboard", {"action": "answer_back", "request": t})
     if assist.more_waiting():  # "This needs a longer explanation. Want me to write it?"

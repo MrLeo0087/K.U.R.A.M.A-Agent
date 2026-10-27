@@ -144,46 +144,129 @@ def explain(text: str, lang: str = "") -> str:
     return _offer_more(reply, "explain", text, lang=lang)
 
 
-def use_code(g) -> str:
-    """'How can I use this function / give me code to use it': ONLY a small run block (if __name__ == "__main__")
-    calling the selected code, appended to the file open in VS Code (backup first; VS Code reloads it). Values the
-    user must give (API keys, paths...) come from os.getenv / input() and are named in the reply."""
+_use: dict = {}  # the run block waiting for 'yes' (add it) / 'no' (then: try again?)
+
+
+def use_waiting() -> str:
+    """'add' = a run block waits for yes/no; 'retry' = 'should I try again?' waits; '' = nothing."""
+    import time
+    return _use.get("stage", "") if _use and time.time() < _use.get("until", 0) else ""
+
+
+def _names(code: str) -> list[str]:
+    return [a or b for a, b in re.findall(r"^\s*(?:async\s+)?def\s+(\w+)|^\s*class\s+(\w+)", code, re.M) if not (a or b).startswith("_")]
+
+
+def use_code(g, feedback: str = "") -> str:
+    """'How can I use this function': a small run block that calls the highlighted code, made by the smart model
+    from the selection + the whole file, checked to really call it (one retry), put on the clipboard and shown in
+    the workspace; then KURAMA ASKS 'Should I add it at the end of <file>?'. yes -> added (written to the file, or
+    pasted at its end when the editor has unsaved changes); no -> 'Should I try again?'."""
     import time
     f = open_file_in_editor()
-    name = f.name if f else _short(g.title)
-    lang_name = _EXT_LANG.get(f.suffix.lower(), "") if f else ""
+    name = f.name if f else _short(getattr(g, "title", ""))
     whole = f.read_text(errors="replace") if f and f.is_file() else ""
-    if whole and re.search(r"^if\s+__name__\s*==\s*['\"]__main__['\"]\s*:", whole, re.M):
+    sel = g.text if getattr(g, "text", "").strip() else whole
+    if not sel.strip():
+        return "Highlight the function in VS Code (or open its file), then ask again."
+    if whole and re.search(r"^if\s+__name__\s*==\s*['\"]__main__['\"]\s*:", whole, re.M) and not feedback:
         return f"{name} already has a run block (if __name__ == \"__main__\") at the end. Press Run (or: python {name})."
-    sys = ("Write ONLY a minimal run block that lets the user run and try the selected code right away "
-           "(for Python: an `if __name__ == \"__main__\":` block that calls it with simple sample values, or just "
-           "calls it when it asks for input itself). If it needs a value only the user has (API key, token, file path, "
-           "URL), read it with os.getenv('NAME') (or input()) and add a comment. No tests, no rewriting the code. "
-           "Then, on the LAST line, write 'NEEDS: <comma list of values the user must set>' or 'NEEDS: none'." +
-           (f" Language: {lang_name}." if lang_name else ""))
-    out = _llm(sys, f"Selected code:\n{g.text[:8000]}", smart=False, max_tokens=400, purpose="assist_use")
-    needs = ""
-    if m := re.search(r"^\s*NEEDS:\s*(.+)$", out, re.M | re.I):
-        needs = "" if m.group(1).strip().lower() in ("none", "-", "nothing") else m.group(1).strip()
-        out = out[:m.start()]
-    block = _strip_fence(out).strip("\n")
+    targets = _names(sel) or _names(whole)
+    lang_name = _EXT_LANG.get(f.suffix.lower(), "") if f else ""
+    sys = ("You help a learner run their own code. Write ONLY the small block of code to put at the END of their file "
+           "so they can run and try the selected code right away (Python: an `if __name__ == \"__main__\":` block that "
+           "calls it in a useful way: with realistic sample values, or simply calling it when it asks for input itself; "
+           "print results so they see something). If it needs a value only the user has (API key, token, file path, "
+           "URL), read it with os.getenv('NAME') or input() and add a short comment. Do not repeat or change their code, "
+           "no tests. Last line: 'NEEDS: <values the user must set>' or 'NEEDS: none'." +
+           (f" It must call: {', '.join(targets[:3])}." if targets else "") + (f" Language: {lang_name}." if lang_name else ""))
+    user = (f"Selected code:\n{sel[:6000]}\n\n" + (f"The whole file {name} (context):\n{whole[:6000]}\n\n" if whole and whole != sel else "")
+            + (f"{feedback}\n" if feedback else ""))
+    block, needs = "", ""
+    for attempt in range(2):
+        out = _llm(sys, user + ("" if not attempt else "\nYour last answer did not call the selected code. Call it."),
+                   smart=True, max_tokens=500, purpose="assist_use")
+        needs = ""
+        if m := re.search(r"^\s*NEEDS:\s*(.+)$", out, re.M | re.I):
+            needs = "" if m.group(1).strip().lower() in ("none", "-", "nothing") else m.group(1).strip()
+            out = out[:m.start()]
+        block = _strip_fence(out).strip("\n")
+        if block.strip() and (not targets or any(re.search(rf"\b{re.escape(t)}\b", block) for t in targets)):
+            break
     if not block.strip():
         return "error: no run code came back"
+    rewrite._xclip(["-selection", "clipboard"], block)
+    try:
+        from jarvis.core import workspace
+        workspace.publish(f"run block for {targets[0] if targets else name}", f"# Run block for {name}\n\n```{f.suffix.lstrip('.') if f else ''}\n{block}\n```\n", folder="answers")
+    except Exception:  # noqa: BLE001
+        pass
+    _use.clear()
+    _use.update(stage="add", block=block, needs=needs, file=str(f) if f else "", title=getattr(g, "title", ""),
+                wid=getattr(g, "wid", None), term=getattr(g, "term", False), sel=sel, whole=whole,
+                until=time.time() + config.ASSIST_PENDING_TTL_S)
+    call = f"{targets[0]}()" if targets else "your code"
+    need = f" It needs {needs} (set it before running)." if needs else ""
+    return f"I made a small run block that calls {call} and copied it (it's also in the workspace).{need} Should I add it at the end of {name}? Say yes, or no."
+
+
+def apply_use() -> str:
+    """'yes': add the run block at the end of the file: written to disk when it is saved (backup), else pasted at the
+    end in the editor (Ctrl+End, new line, paste) so the user's unsaved edits stay."""
+    import time
+    if use_waiting() != "add":
+        return "No run code is waiting."
+    u = dict(_use)
+    _use.clear()
+    block, f = u["block"], Path(u["file"]) if u["file"] else None
     imports = [ln for ln in block.splitlines() if re.match(r"(?:import|from)\s+\w", ln)]
-    body = "\n".join(ln for ln in block.splitlines() if ln not in imports)
-    dirty = g.title.lstrip().startswith(("●", "•"))
+    dirty = u["title"].lstrip().startswith(("●", "•"))
     if f and f.is_file() and not dirty:
+        whole = f.read_text(errors="replace")
         backup = Path(config.DATA_DIR) / "code_backups" / f"{f.name}.{int(time.time())}.bak"
         backup.parent.mkdir(parents=True, exist_ok=True)
         backup.write_text(whole, encoding="utf-8")
         missing = [i for i in imports if i not in whole]
-        text = ("\n".join(missing) + "\n" if missing else "") + whole.rstrip("\n") + "\n\n\n" + body.strip("\n") + "\n"
-        f.write_text(text, encoding="utf-8")
-        tail = f" It needs {needs}: set it before running (e.g. in your .env or terminal)." if needs else ""
-        return f"I added a small run block at the end of {name}. Press Run in VS Code (or: python {name}).{tail}"
+        body = "\n".join(ln for ln in block.splitlines() if ln not in imports)
+        f.write_text(("\n".join(missing) + "\n" if missing else "") + whole.rstrip("\n") + "\n\n\n" + body.strip("\n") + "\n",
+                     encoding="utf-8")
+        return f"Added at the end of {f.name}. Press Run in VS Code (or: python {f.name})."
+    if u["wid"] is None:
+        return "I couldn't find the editor window; the code is on your clipboard (Ctrl+V at the end of the file)."
+    from jarvis.core import uiagent
     rewrite._xclip(["-selection", "clipboard"], block)
-    return (f"{name} has unsaved changes, so I didn't touch it: the run code is on your clipboard. Paste it at the end of "
-            f"the file (or save with Ctrl+S and ask again).")
+    rewrite._activate(u["wid"])
+    time.sleep(0.3)
+    uiagent.key("ctrl+End")
+    uiagent.key("Return")
+    uiagent.key("Return")
+    uiagent.key("ctrl+shift+v" if u["term"] else "ctrl+v")
+    return f"Added at the end of {f.name if f else 'the file'} (not saved yet: Ctrl+S). Then press Run."
+
+
+def reject_use() -> str:
+    import time
+    if use_waiting() != "add":
+        return "Okay."
+    _use.update(stage="retry", until=time.time() + config.ASSIST_PENDING_TTL_S)
+    return "Okay, I didn't add it. Should I try again with a better version? Say yes, or no."
+
+
+def retry_use(feedback: str = "") -> str:
+    if use_waiting() != "retry":
+        return "Okay."
+    u = dict(_use)
+    _use.clear()
+    from jarvis.core.rewrite import Grab
+    g = Grab(u["sel"], u["wid"], False, u["term"], u["title"])
+    note = ("The user did NOT like this attempt, make a clearly better and more useful one:\n" + u["block"] +
+            (f"\nThey said: {feedback}" if feedback else ""))
+    return use_code(g, note)
+
+
+def cancel_use() -> str:
+    _use.clear()
+    return "Okay, I left your file as it is."
 
 
 def ask(sel: str, request: str, source: str = "", lang: str = "") -> str:
@@ -602,6 +685,14 @@ def run(action: str, request: str = "", lang: str = "", replace: bool = False, p
         return more()
     if action == "answer_back":
         return answer_back(request)
+    if action == "use_yes":
+        return apply_use()
+    if action == "use_no":
+        return reject_use()
+    if action == "use_retry":
+        return retry_use(request)
+    if action == "use_cancel":
+        return cancel_use()
     if action == "cancel_more":
         return cancel_more()
     if action == "apply_code":
