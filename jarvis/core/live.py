@@ -326,14 +326,44 @@ def facts(text: str) -> str | None:
 
 
 # --- fresh answer (LLM over fresh sources) ---
-def _article_text(url: str, limit: int = 1800) -> str:
+_RANK_LINE = re.compile(r"^\s*(?:#\s*)?(?:\d{1,2})(?:[.):]|\s*[-–—]|\s+(?=[A-Z]))|^\s*(?:\d{1,2}(?:st|nd|rd|th))\b", re.I)
+_LIST_Q = re.compile(r"\btop\s*\d+|\btop\s+(?:ten|five|three|twenty)|\branking|\brank(?:ed|s)?\b|\blist\b|\bwinners?\b|\bstandings?\b|"
+                     r"\bshortlist|\bnominees?\b|\bleaderboard|\bpoints\s+table|\bwho\s+(?:won|are|were)\b.*\b(?:award|ballon|oscar|prize)", re.I)
+
+
+def relevant(text: str, question: str, limit: int) -> str:
+    """The part of a page that answers: for rankings the block of numbered lines (articles bury the list under an
+    intro), else the paragraphs that share the most words with the question; the start of the page as a fallback."""
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    if not lines:
+        return ""
+    ranks = [i for i, ln in enumerate(lines) if _RANK_LINE.match(ln) and len(ln) < 220]
+    if len(ranks) >= 3:
+        best, cur = [ranks[0]], [ranks[0]]  # the longest run of rank lines (gaps of <= 6 lines allowed)
+        for i in ranks[1:]:
+            cur = cur + [i] if i - cur[-1] <= 6 else [i]
+            if len(cur) > len(best):
+                best = cur
+        a, b = max(0, best[0] - 4), min(len(lines), best[-1] + 4)
+        block = "\n".join(lines[a:b])
+        if len(block) >= 80:
+            return block[:limit]
+    words = {w for w in re.findall(r"[a-z0-9']{4,}", question.lower())}
+    scored = sorted(range(len(lines)), key=lambda i: -len(words & set(re.findall(r"[a-z0-9']{4,}", lines[i].lower()))))
+    keep = sorted(scored[:25])
+    out = "\n".join(lines[i] for i in keep)
+    return (out if len(out) > 200 else "\n".join(lines))[:limit]
+
+
+def _article_text(url: str, limit: int = 1800, question: str = "") -> str:
     try:
         from jarvis.tools.general import _web
         from jarvis.tools.general.read_webpage import fetch
         ctype, body = fetch(url)
         if "html" not in ctype:
             return ""
-        return _web.html_to_text(body)[1][:limit]
+        text = _web.html_to_text(body)[1]
+        return relevant(text, question, limit) if question else text[:limit]
     except Exception as e:  # noqa: BLE001 - one bad page shouldn't sink the answer
         log.info("article fetch failed: %s", e)
         return ""
@@ -360,17 +390,29 @@ def answer(question: str) -> str:
     heads = "\n".join(f"- [{i['when'].astimezone().strftime('%d %b %H:%M')}] {i['title']} ({i['source']})"
                       for i in items)
     snips = "\n".join(f"- {w['title']}: {w['snippet'][:220]} ({w['url'][:80]})" for w in web)
-    bodies = "\n\n".join(f"[{w['url'][:80]}]\n{t}" for w in web[:2] if (t := _article_text(w["url"])))
+    listy = bool(_LIST_Q.search(question))
+    if listy:  # rankings / lists: read more pages, at the numbered block, and let the smart model copy ONE source
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=4) as ex:
+            texts = list(ex.map(lambda w: _article_text(w["url"], 2200, question), web[:4]))
+        bodies = "\n\n".join(f"[PAGE {n}: {w['url']}]\n{t}" for n, (w, t) in enumerate(zip(web[:4], texts), 1) if t)
+    else:
+        bodies = "\n\n".join(f"[{w['url'][:80]}]\n{t}" for w in web[:2] if (t := _article_text(w["url"])))
     from jarvis.core import llm
-    msgs = [{"role": "system", "content": "Answer the question ONLY from the sources below, in 1-3 short sentences. "
-                                          "Prefer the newest source and give the date of the fact (and the number "
-                                          "with its unit for prices). If the sources don't contain the answer, say so "
-                                          "plainly. No guessing, no old knowledge."},
+    rules = ("Answer ONLY from the sources below. For a ranking or list: copy it from ONE page exactly as that page "
+             "lists it (same order, names, teams), start with one line naming that page and its date and whether it "
+             "is the OFFICIAL result or a prediction / power ranking, then one item per line. If no page lists every "
+             "place, give only what it lists and write 'not listed in the sources' for the rest. Never fill a gap, "
+             "never mix pages, never use old knowledge.") if listy else (
+             "Answer the question ONLY from the sources below, in 1-3 short sentences. Prefer the newest source and "
+             "give the date of the fact (and the number with its unit for prices). If the sources don't contain the "
+             "answer, say so plainly. No guessing, no old knowledge.")
+    msgs = [{"role": "system", "content": rules},
             {"role": "user", "content": f"Now: {now.strftime('%A %d %B %Y %H:%M %Z')}\nQuestion: {question}\n\n"
                                         f"News headlines (newest first):\n{heads or '-'}\n\nWeb results (past week):\n"
-                                        f"{snips or '-'}\n\nPages:\n{bodies[:3500] or '-'}"}]
+                                        f"{snips or '-'}\n\nPages:\n{bodies[:9000 if listy else 3500] or '-'}"}]
     try:
-        reply = llm.chat(msgs, tier="fast", purpose="live_answer", max_tokens=300)
+        reply = llm.chat(msgs, tier="smart" if listy else "fast", purpose="live_answer", max_tokens=700 if listy else 300)
         text = re.sub(r"【[^】]*】", "", (reply.text or "")).strip()  # gpt-oss inline citation marks
     except Exception as e:  # noqa: BLE001 - fall back to the 0-token headlines
         log.warning("live answer LLM failed: %s", e)

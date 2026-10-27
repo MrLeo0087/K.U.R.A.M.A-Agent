@@ -105,3 +105,22 @@ def test_only_projects_the_user_gave_are_watched(tmp_path):
     assert fastpath.match("stop watching").args == {"action": "forget", "project": ""}
     assert tm.forget("").startswith("Which one? I'm watching:\n1. mine")
     assert tm.forget("#1").startswith("I stopped watching mine") and tm.projects() == []
+
+
+def test_rankings_read_the_numbered_block_and_use_one_source(monkeypatch):
+    """Owner: 'top 10 Ballon d'Or 2026' came back half invented (only 1800 chars of 2 pages were read)."""
+    from jarvis.core import live, llm
+    page = "Intro.\n" * 40 + "RankPlayerNationalityClub\nWINNERHarry KaneEnglandBayern Munich\n" + \
+        "\n".join(f"{i}.Player {i}Country{i}Club{i}" for i in range(2, 11)) + "\nAfter the list."
+    block = live.relevant(page, "top 10 ballon d'or 2026", 2200)
+    assert "WINNERHarry Kane" in block and "10.Player 10" in block and block.count("Intro.") <= 4
+    monkeypatch.setattr(live, "news", lambda q, k=5, days=1: [])
+    monkeypatch.setattr(live, "_web_recent", lambda q, k=5: [{"title": "Top 10", "url": "https://s.example/top10", "snippet": "x"}])
+    monkeypatch.setattr(live, "_article_text", lambda url, limit=1800, question="": block)
+    seen = {}
+    from types import SimpleNamespace
+    monkeypatch.setattr(llm, "chat", lambda msgs, **k: seen.update(k, sys=msgs[0]["content"]) or
+                        SimpleNamespace(text="Page: s.example (OFFICIAL)\n1. Harry Kane"))
+    out = live.answer("who are top 10 ranking for ballon d'or 2026")
+    assert seen["tier"] == "smart" and "ONE page" in seen["sys"] and "Never fill a gap" in seen["sys"]
+    assert out.startswith("Page: s.example (OFFICIAL)")

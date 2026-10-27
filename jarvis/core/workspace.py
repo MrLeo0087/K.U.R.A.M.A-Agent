@@ -93,9 +93,15 @@ def short_line(text: str, lang: str = "en") -> str:
     items = [ln for ln in lines[1:] if _ITEM.match(ln)]
     if lines and lines[0].endswith(":") and len(lines[0]) <= 120 and len(items) >= 2 \
             and len(items) >= (len(lines) - 1) // 2:  # "Latest news:" + items -> heading + how many
-        n = {"ne": f"{len(items)} वटा workspace मा छन्।", "hi": f"{len(items)} आइटम workspace में हैं।"}.get(
-            lang, f"{len(items)} items, in the workspace.")
-        return f"{lines[0].rstrip(':').strip()}: {n}"
+        # "The 2026 Ballon d'Or top-10 rankings are (source: X, 27 Oct):" -> "I found the 2026 Ballon d'Or top-10
+        # rankings (10 items). It's in the workspace." (owner: one tidy line, no findings in the chat)
+        head = re.sub(r"\s*\([^)]*\)", "", lines[0].rstrip(":").strip())
+        head = re.sub(r"\s+(?:are|is|were|was)(?:\s+as\s+follows)?$", "", head, flags=re.I).strip(" ,-–")
+        head = re.sub(r"^(?:here\s+(?:are|is)\s+)", "", head, flags=re.I)
+        if head[:1].isupper() and not head[:2].isupper() and head.split()[0].lower() in ("the", "latest", "top", "your", "my", "all", "recent", "today's", "current"):
+            head = head[0].lower() + head[1:]
+        return {"ne": f"भेटियो: {head} ({len(items)} वटा) workspace मा छ।", "hi": f"मिल गया: {head} ({len(items)} आइटम) workspace में है।"}.get(
+            lang, f"I found {head} ({len(items)} items). It's in the workspace.")
     plain = " ".join(re.sub(r"(?<=[^\s.!?:;।])$", ".", ln.strip(" -*•#"))  # each line ends like a sentence
                      for ln in lines if not _CODEY.search(ln) and not re.search(r"/[\w.-]+/", ln))
     if not plain and lines:  # only code / paths: the first line, cut short

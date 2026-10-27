@@ -13,7 +13,10 @@ def test_rule():
     assert workspace.too_long(NEWS)
     assert not workspace.too_long("It's 1:15 PM.") and not workspace.too_long("Done.\nSaved it.")
     assert workspace.too_long("x " * 300)
-    assert workspace.short_line(NEWS) == "Latest news: 5 items, in the workspace."
+    assert workspace.short_line(NEWS) == "I found latest news (5 items). It's in the workspace."
+    ballon = ("The 2026 Ballon d’Or top‑10 men’s rankings are (source: Sporting News, 27 Oct 2026):\n"
+              + "\n".join(f"{i}. Player {i}" for i in range(1, 11)))
+    assert workspace.short_line(ballon) == "I found the 2026 Ballon d’Or top‑10 men’s rankings (10 items). It's in the workspace."
     prose = "Nepal is a country in South Asia. It has eight of the ten highest mountains. " * 8
     line = workspace.short_line(prose)
     assert line.startswith("Nepal is a country in South Asia.") and line.endswith("The full answer is in the workspace.")
@@ -23,7 +26,7 @@ def test_rule():
 def test_to_workspace_saves_the_full_text(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "OUTPUTS_DIR", tmp_path)
     line, path = workspace.to_workspace("latest news", NEWS)
-    assert line == "Latest news: 5 items, in the workspace." and path.parent.name == "answers"
+    assert line == "I found latest news (5 items). It's in the workspace." and path.parent.name == "answers"
     assert "Lula Wins" in path.read_text()
     assert workspace.to_workspace("time", "It's 1:15 PM.") == ("It's 1:15 PM.", None)
 
@@ -59,4 +62,4 @@ def test_llm_answers_too(monkeypatch, tmp_path):
     t = type("T", (), {"closed": False, "confirm_ids": [], "push": lambda self, e: events.append(e)})()
     eng.run_turn(t, "latest news", "text", "en")
     done = next(e for e in events if e and e.get("type") == "done")
-    assert done["text"] == "Latest news: 5 items, in the workspace." and done["workspace"]
+    assert done["text"] == "I found latest news (5 items). It's in the workspace." and done["workspace"]
