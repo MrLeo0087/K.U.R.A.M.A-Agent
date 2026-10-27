@@ -155,8 +155,31 @@ def _font(size: int, bold: bool = False):
 
 def _short(v: float) -> str:
     a = abs(v)
-    return f"{v / 1e9:.1f}B" if a >= 1e9 else f"{v / 1e6:.1f}M" if a >= 1e6 else f"{v / 1e3:.1f}k" if a >= 1e4 else \
-        f"{v:,.0f}" if a >= 100 or v == int(v) else f"{v:.2f}"
+    def trim(x: str) -> str:
+        return x.replace(".0M", "M").replace(".0k", "k").replace(".0B", "B")
+    return trim(f"{v / 1e9:.1f}B") if a >= 1e9 else trim(f"{v / 1e6:.1f}M") if a >= 1e6 else trim(f"{v / 1e3:.1f}k") \
+        if a >= 1e4 else f"{v:,.0f}" if a >= 100 or v == int(v) else f"{v:.1f}"
+
+
+def _nice(low: float, top: float) -> tuple[float, float, float]:
+    """Round axis ends + a 1/2/5 step: 0..2,041,587 -> 0..2.5M step 0.5M."""
+    span = (top - low) or abs(top) or 1
+    raw = span / 5
+    mag = 10 ** math.floor(math.log10(raw))
+    step = next(m * mag for m in (1, 2, 2.5, 5, 10) if m * mag >= raw)
+    return math.floor(low / step) * step, math.ceil(top / step) * step, step
+
+
+def _grid(d, low: float, top: float, x0: int, x1: int, y0: int, y1: int) -> tuple[float, float]:
+    lo, hi, step = _nice(low, top)
+    f = _font(14)
+    v = lo
+    while v <= hi + step / 2:
+        y = y1 - (v - lo) / ((hi - lo) or 1) * (y1 - y0)
+        d.line((x0, y, x1, y), fill=GRID)
+        d.text((x0 - 10, y), _short(round(v, 10)), fill=MUTED, font=f, anchor="rm")
+        v += step
+    return lo, hi
 
 
 def _canvas(title: str, subtitle: str = ""):
@@ -173,16 +196,11 @@ def bar(labels: list[str], series: list[tuple[str, list[float]]], title: str, su
     img, d = _canvas(title, subtitle)
     n, k = len(labels), len(series)
     vals = [v for _, s in series for v in s]
-    top, low = max(vals + [0]), min(vals + [0])
     x0, x1, y0, y1 = 110, W - 40, 110, H - 110
+    low, top = _grid(d, min(vals + [0]), max(vals + [0]), x0, x1, y0, y1)
     span = (top - low) or 1
     yz = y1 - (0 - low) / span * (y1 - y0)
     f = _font(14)
-    for g in range(5):  # grid + scale
-        v = low + span * g / 4
-        y = y1 - (v - low) / span * (y1 - y0)
-        d.line((x0, y, x1, y), fill=GRID)
-        d.text((x0 - 10, y), _short(v), fill=MUTED, font=f, anchor="rm")
     slot = (x1 - x0) / max(1, n)
     bw = max(2, slot * 0.75 / k)
     for j, (_, s) in enumerate(series):
@@ -204,15 +222,10 @@ def line(labels: list[str], series: list[tuple[str, list[float]]], title: str, s
     img, d = _canvas(title, subtitle)
     n = len(labels)
     vals = [v for _, s in series for v in s]
-    top, low = max(vals), min(vals + [0]) if min(vals) >= 0 else min(vals)
     x0, x1, y0, y1 = 110, W - 50, 110, H - 110
+    low, top = _grid(d, min(vals + [0]), max(vals), x0, x1, y0, y1)
     span = (top - low) or 1
     f = _font(14)
-    for g in range(5):
-        v = low + span * g / 4
-        y = y1 - (v - low) / span * (y1 - y0)
-        d.line((x0, y, x1, y), fill=GRID)
-        d.text((x0 - 10, y), _short(v), fill=MUTED, font=f, anchor="rm")
     def px(i):
         return x0 + (x1 - x0) * (i / max(1, n - 1))
     for j, (_, s) in enumerate(series):

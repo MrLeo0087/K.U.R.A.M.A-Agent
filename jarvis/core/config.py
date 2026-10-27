@@ -620,7 +620,7 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
     "jobs": "long writing jobs (essays, articles, reports) and background job status/cancel/resume",
     "schedule": "reminders and scheduled commands at a time or repeating; list or cancel them; long goals (exam "
                 "countdown, project check-ins, progress, report)",
-    "image": "generate a picture or drawing from a description",
+    "image": "make pictures, charts from data, diagrams, audio (MP3) and short videos",
     "study": "study notes by subject, lecture recorder (record a class, transcript, summary), class timetable "
              "(today, tomorrow, next class, reminders), quiz from my notes with spaced repetition",
     "daily": "file format conversion (pdf, md, images, audio/video, tables), calculator, unit and currency conversion, disk space cleaner (ML caches, old checkpoints, old venvs, "

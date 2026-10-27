@@ -799,6 +799,23 @@ _DETAIL = re.compile(r",?\s*\b(?:in\s+)?(?:high\s+quality|hq|hd|ultra\s+detailed
                      r"better\s+quality)\b", I)
 
 
+def chart_intent(t: str) -> Intent | None:
+    """'chart my expenses (this week)', 'pie chart of my spending', 'make a chart from sales.csv', 'draw a graph of
+    population by district from https://...', '/chart <file|link>' -> make_chart (0 tokens to route)."""
+    if not re.search(r"\b(?:chart|charts|graph|graphs|plot|visuali[sz]e|pie|histogram)\b", t, I) or len(t.split()) > 40:
+        return None
+    kind = "pie" if re.search(r"\bpie\b", t, I) else "line" if re.search(r"\bline\s+(?:chart|graph)\b", t, I) else \
+        "bar" if re.search(r"\bbar\s+(?:chart|graph)\b", t, I) else "all" if re.search(r"\b(?:all|different|every)\s+(?:views?|kinds?|types?|charts?)\b", t, I) else "auto"
+    url = re.search(r"https?://\S+", t)
+    path = re.search(r"(?:^|\s)((?:~|/)[^\s]+\.(?:csv|tsv|xlsx|xlsm|json)|[\w.-]+\.(?:csv|tsv|xlsx|xlsm|json))\b", t, I)
+    if url or path:
+        src = (url.group(0) if url else path.group(1)).rstrip(".,)")
+        return Intent("chart", "make_chart", "image", {"source": src, "request": t.replace(src, " ").strip(), "kind": kind})
+    if re.search(r"\b(?:expenses?|spending|spent|money|kharcha)\b", t, I) and re.search(r"\b(?:my|the)\b", t, I):
+        return Intent("chart", "make_chart", "image", {"source": "money", "kind": kind, "period": _period(t)})
+    return None
+
+
 def image_intent(t: str) -> Intent | None:
     """+ '4 versions of a fox', 'same picture but at night', 'another version', 'make it more colorful' (right after a
     picture), 'detailed / HD' -> the service improves the prompt."""
@@ -2703,6 +2720,8 @@ def match(text: str) -> Intent | None:
         return po
     if cr := coderun_intent(t):
         return cr
+    if ch := chart_intent(t):  # before the money words: 'chart my expenses' is a chart
+        return ch
     if tr := tracker_intent(t):
         return tr
     if li := links_intent(t):

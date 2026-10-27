@@ -99,6 +99,8 @@ COMMANDS: tuple[Cmd, ...] = (
     Cmd("yt", "play something on YouTube", "Media", "<what>", phrase="open youtube|play {a} on youtube",
         aliases=("youtube",)),
     Cmd("image", "make a picture", "Media", "<prompt>", phrase="generate an image of {a}", aliases=("img",)),
+    Cmd("chart", "charts of my spending, a file or a data link", "Media", "[file|link]",
+        phrase="chart my expenses this month|make a chart from {a}", aliases=("graph",)),
     Cmd("download", "download a video / audio", "Media", "<link>", phrase="download this video|download {a}",
         aliases=("dl",)),
     # --- web & text ---
