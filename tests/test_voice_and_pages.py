@@ -124,3 +124,24 @@ def test_rankings_read_the_numbered_block_and_use_one_source(monkeypatch):
     out = live.answer("who are top 10 ranking for ballon d'or 2026")
     assert seen["tier"] == "smart" and "ONE page" in seen["sys"] and "Never fill a gap" in seen["sys"]
     assert out.startswith("Page: s.example (OFFICIAL)")
+
+
+def test_selection_help_from_the_log(monkeypatch):
+    """Owner's 2:14 PM log: 'this word' heard as 'this wood' was translated literally, 'summary of this whole
+    paragraph' went to the AI without the selection, explanations quoted the text back with silly word lists."""
+    from jarvis.core import assist, rewrite
+    i = fastpath.match("Convert this wood into Nepali.")
+    assert i.args == {"action": "translate", "lang": "ne", "replace": False, "text": ""}
+    assert fastpath.match("Can you give me the Nepali translation of this word?").args["action"] == "translate"
+    i = fastpath.match("What is the summary of this whole paragraph? I mean, what is the main things that this paragraph want to say to me?")
+    assert i.args == {"action": "summary", "lang": ""}
+    assert fastpath.match("summarize this web page").tool == "page_summary"
+    monkeypatch.setattr(rewrite, "grab", lambda: rewrite.Grab("readable", 5, False, False, "Doc - Brave"))
+    seen = []
+    monkeypatch.setattr(assist, "_llm", lambda system, user, smart, max_tokens, purpose: seen.append((purpose, user, smart)) or "ok")
+    assist.run("translate", lang="ne", text="this wood")  # a pointer at the selection, not text to translate
+    assert seen[-1][:2] == ("assist_translate", "readable")
+    assist.run("summary", text="A long paragraph. " * 5)
+    assert seen[-1][0] == "assist_summary" and seen[-1][2] is True
+    assist.explain("The search found the right articles but read only the start.")
+    assert seen[-1][2] is True and "No 'It says'" not in assist.EXPLAIN_RULES and "no 'It says'" in assist.EXPLAIN_RULES

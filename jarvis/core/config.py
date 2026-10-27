@@ -94,6 +94,8 @@ STT_FIXES: dict[str, str] = {
     r"\b(this|the|my|better|python|selected|selective|that|whole|most|mouse|simple|clean|detail|detailed|good|new|"
     r"improved)\s+coat\b": r"\1 code",
     r"\bselective\b": "selected",
+    # 'this word' heard as 'this wood / road / ward' when asking for a meaning or translation (owner's log)
+    r"\b(this|that|the)\s+(?:wood|road|ward|world)\b(?=.*\b(?:mean|meaning|nepali|hindi|english|translat|convert)\w*)": r"\1 word",
     # Whisper hears 'task' as 'tax' / 'tags' (owner): only real tax words stay tax
     r"(?<!income )(?<!sales )(?<!road )(?<!vat )(?<!pay )(?<!property )\btaxes\b(?!\s+(?:return|rate|refund|office|bill))": "tasks",
     r"(?<!income )(?<!sales )(?<!road )(?<!vat )(?<!pay )(?<!property )\btax\b(?!\s+(?:return|rate|refund|office|bill|free))": "task",

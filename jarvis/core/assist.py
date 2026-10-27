@@ -83,14 +83,29 @@ def _strip_fence(code: str) -> str:
 
 
 # --- the jobs -----------------------------------------------------------------------------------------------
+EXPLAIN_RULES = ("Do not quote or repeat the text, no 'It says', no headings, bold or word lists, no definitions of "
+                 "normal words. If one word is really unusual, add one short line 'word = meaning' at the end.")
+
+
 def explain(text: str, lang: str = "") -> str:
+    """'Explain this': what it really means, in easy everyday words, like a friend would say it (owner: practical,
+    not fancy). The smart model: the small one quoted the text back and listed silly 'hard words'."""
     out = LANGS.get(lang or "en", "English")
     if is_code(text):
         return explain_code(text, lang)
-    return _llm(f"Explain what the user's selected text means, for a learner who isn't a native English speaker: "
-                f"what it is really saying, in simple words, then any hard word briefly. Reply in {out}. Short "
-                f"(1-3 sentences, a few more only for a long text).", text[:6000], smart=lang in ("ne", "hi"),
-                max_tokens=700, purpose="assist_explain")
+    return _llm(f"The user highlighted this text and wants to understand it. Explain it like a friend, in very simple "
+                f"everyday {out}: what it actually means and what it means for them in practice, 2-4 short sentences "
+                f"(a bit more only for a long text). {EXPLAIN_RULES}", text[:6000], smart=True,
+                max_tokens=500, purpose="assist_explain")
+
+
+def summary(text: str, lang: str = "") -> str:
+    """'Summary of this paragraph / what does it want to say': the main points, simply."""
+    out = LANGS.get(lang or "en", "English")
+    return _llm(f"Summarise the user's highlighted text in very simple everyday {out}: first one sentence with the main "
+                f"message, then 2-4 short bullets with the key points (fewer for a short text). What it wants to tell "
+                f"the reader, not a retelling. {EXPLAIN_RULES}", text[:8000], smart=True, max_tokens=450,
+                purpose="assist_summary")
 
 
 def meaning(text: str, lang: str = "en") -> str:
@@ -418,12 +433,20 @@ def _clipboard_text() -> str:
 
 
 # --- one entry point the tool calls ---------------------------------------------------------------------------
+# 'this word' misheard as 'this wood / road / ward': these are pointers at the selection, never text to translate
+_SEL_REF = re.compile(r"(?:(?:this|that|the|it|my)\s*)*(?:(?:whole|entire|selected|highlighted)\s+)?(?:word|wood|road|ward|world|"
+                      r"words|sentence|paragraph|line|text|part|phrase|one|thing|selection)?s?", re.I)
+
+
 def run(action: str, request: str = "", lang: str = "", replace: bool = False, path: str = "",
         text: str = "") -> str:
     lang = lang if lang in LANGS else lang_of(request)
-    if text.strip() and action in ("explain", "meaning", "translate", "code"):  # typed, not highlighted
+    if text.strip() and _SEL_REF.fullmatch(text.strip(" .?!'\"")):
+        text = ""  # 'translate this wood' = the highlighted word, not the word 'wood'
+    if text.strip() and action in ("explain", "meaning", "translate", "code", "summary"):  # typed, not highlighted
         return {"meaning": lambda: meaning(text, lang or "en"), "translate": lambda: translate(text, lang or "ne"),
-                "code": lambda: explain_code(text, lang)}.get(action, lambda: explain(text, lang))()
+                "code": lambda: explain_code(text, lang), "summary": lambda: summary(text, lang)}.get(
+            action, lambda: explain(text, lang))()
     if action == "apply_code":
         return apply_pending_code()
     if action == "cancel_code":
@@ -482,6 +505,8 @@ def run(action: str, request: str = "", lang: str = "", replace: bool = False, p
         return explain_code(sel, lang) if is_code(sel) else meaning(sel, lang or "en")
     if action == "code":
         return explain_code(sel, lang)
+    if action == "summary":
+        return explain_code(sel, lang) if is_code(sel) else summary(sel, lang)
     if not is_code(sel) and len(sel.split()) <= 3:  # one word / short phrase: a dictionary meaning
         return meaning(sel, lang or "en")
     return explain(sel, lang)

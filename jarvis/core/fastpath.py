@@ -1453,6 +1453,19 @@ def assist_intent(t: str) -> Intent | None:
         sel = bool(re.fullmatch(_SELREF + r"(?:\s+(?:word|sentence|paragraph|text|line|part))?", x, I))
         return Intent("assist", "text_assist", "clipboard", {"action": "translate", "lang": l, "replace": bool(m.group("r")),
                                                              "text": "" if sel else x.strip("'\"")})
+    # 'can you give me the Nepali translation of this word?' / 'translation of the selected text in Hindi'
+    if len(t.split()) <= 20 and re.search(r"\btranslat\w*\b", t, I) and (lm := re.search(r"\b(" + _LANG_ALT + r")\b", t, I)) and re.search(
+            r"\b(?:this|that|the\s+selected|selected|highlighted)(?:\s+(?:whole|entire))?(?:\s+(?:word|words|sentence|paragraph|text|line|part|phrase))?\b", t, I) \
+            and not re.search(r"\.\w{2,5}\b|\bfile\b", t, I):
+        return Intent("assist", "text_assist", "clipboard", {"action": "translate", "lang": lang_of(lm.group(1)) or "ne",
+                                                             "replace": bool(re.search(r"\breplace\b", t, I)), "text": ""})
+    # 'what is the summary of this whole paragraph? what does it want to say to me?' -> the main points of the selection
+    if len(t.split()) <= 30 and re.search(r"\b(?:summary|summari[sz]e|sum\s+(?:it\s+)?up|main\s+(?:points?|things?|ideas?|message)|gist|"
+                                          r"tl;?\s*dr|in\s+short|want(?:s)?\s+to\s+(?:say|tell)|trying\s+to\s+(?:say|tell))\b", t, I) and re.search(
+            r"\b(?:this|that|the|selected|highlighted)\s+(?:whole\s+|entire\s+|full\s+|long\s+)?(?:sentence|paragraph|paragraphs|passage|text|"
+            r"article|section|para|part|message|email|selection|page\s+part)\b|\b(?:summari[sz]e|sum\s+up)\s+(?:this|that|it)\b", t, I) \
+            and not re.search(r"\b(?:web\s*page|website|this\s+page|this\s+site|video|youtube|pdf|file|book|chapter|day|today|news)\b", t, I):
+        return Intent("assist", "text_assist", "clipboard", {"action": "summary", "lang": lang})
     if re.search(r"\b(?:meaning|artha|matlab|explain|explanation)\b", t, I) and re.search(
             r"\b(?:this|that|the)\s+(?:whole\s+|entire\s+|full\s+)?(?:sentence|sentences|paragraph|paragraphs|passage|"
             r"question|line|lines|para|text|section)\b", t, I) and len(t.split()) <= 20:
