@@ -1445,6 +1445,30 @@ def code_tidy_intent(t: str) -> Intent | None:
 _NAV_OBJ = r"(?:function|func|method|class|definition|def|code|implementation|source)"
 
 
+def port_intent(t: str) -> Intent | None:
+    """'what is running on port 8000' / 'is port 3000 free' / 'show my open ports' / '/ports' -> laptop_doctor port;
+    'free port 8000' / 'kill the process on port 8000' -> laptop_doctor stop 'port 8000' (asks first). 0 tokens."""
+    def show(n):
+        return Intent("doctor", "laptop_doctor", "system", {"action": "port", "target": str(n) if n else ""})
+    if m := re.fullmatch(r"/ports?(?:\s+(?P<n>\d{2,5}))?", t, I):
+        return show(m.group("n"))
+    if len(t.split()) > 16 or not re.search(r"\bports?\b", t, I):
+        return None
+    lead = r"(?:please\s+|kurama\W+|can\s+you\s+|hey\s+)*"
+    if m := re.fullmatch(lead + r"(?:free(?:\s+up)?|kill|stop|close|release|clear)\s+(?:the\s+)?(?:(?:process|program|app|server|thing)\s+"
+                         r"(?:on|using|that\s+uses|at)\s+|whatever\s+is\s+(?:on|using)\s+|what(?:'s|\s+is)\s+(?:on|using)\s+)?port\s+"
+                         r"(?P<n>\d{2,5})[\s.!?]*", t, I):
+        return Intent("doctor", "laptop_doctor", "system", {"action": "stop", "target": f"port {m.group('n')}"})
+    if m := re.search(r"\bport\s+(?:number\s+)?(?P<n>\d{2,5})\b", t, I):
+        if re.search(r"\b(?:what|which|who|whats|is|check|show|tell|running|using|uses|used|free|busy|open|taken|available|occupied)\b", t, I) \
+                or re.fullmatch(r"port\s+\d+[\s?]*", t, I):
+            return show(m.group("n"))
+    if re.search(r"\b(?:show|list|which|what|check|all|my|open|used|busy)\b.{0,25}\bports\b|\bports\s+(?:in\s+use|open|used|are\s+(?:open|used|in\s+use))\b",
+                 t, I) and not re.search(r"\b(?:usb|hdmi|serial|router|firewall)\b", t, I):
+        return show(0)
+    return None
+
+
 def libhelp_ask(t: str) -> bool:
     """'help me with this library', 'what arguments does this take', 'is this correct syntax', 'did I use this
     function right', 'suggest a better way to call this' (about the highlighted code)."""
@@ -2519,6 +2543,8 @@ def match(text: str) -> Intent | None:
         return pi
     if cn := codenav_intent(t):
         return cn
+    if po := port_intent(t):
+        return po
     if li := links_intent(t):
         return li
     if tn := todo_now_intent(t):

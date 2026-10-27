@@ -2,6 +2,7 @@
 what's on a port, stop a process (safe; stopping anything asks first). Replaces resource_status (alias kept)."""
 from __future__ import annotations
 
+import re
 from typing import Literal
 
 from jarvis.core import doctor, safety
@@ -35,17 +36,27 @@ def laptop_doctor(action: Literal["check", "free_ram", "port", "stop", "kurama"]
             return "The user said no, so nothing was stopped."
         return f"Stopped {', '.join(doctor.stop([k[0] for k in ks]))}; about {mb:.0f} MB freed."
     port = int(target) if target.strip().isdigit() and len(target.strip()) <= 5 and action == "port" else None
-    if action == "port":
-        rows = doctor.listeners(port)
-        if not rows:
-            return f"Nothing is listening on port {port}." if port else "Nothing is listening on any port."
-        return "\n".join(f"port {pt}: {name} (PID {pid})" if pid else f"port {pt}: (another user's process)"
-                         for pt, pid, name in rows[:20])
+    if action == "port":  # program + project + age per port (jarvis/core/ports.py)
+        from jarvis.core import ports
+        return ports.check(port) if port else ports.list_all()
     # stop
     t = target.strip()
     if not t:
         return "error: which process (PID, name) or port should I stop?"
-    procs = doctor.find(t)
+    if m := re.fullmatch(r"port\s+(\d{2,5})", t, re.I):  # 'port 8000' = only what listens there, never a PID 8000
+        from jarvis.core import ports
+        pid = ports.pid_on(int(m.group(1)))
+        if not pid:
+            return f"Port {m.group(1)} is free, nothing to stop."
+        try:
+            proc = doctor.psutil.Process(pid)
+            if "jarvis" in " ".join(proc.cmdline()):
+                return f"Port {m.group(1)} is KURAMA itself, I won't stop it."
+        except doctor.psutil.Error:
+            return f"Port {m.group(1)} belongs to another user's process; I can't stop it."
+        procs = [proc]
+    else:
+        procs = doctor.find(t)
     if not procs and t.isdigit():  # a port
         procs = [doctor.psutil.Process(pid) for _, pid, _ in doctor.listeners(int(t)) if pid]
     if not procs:

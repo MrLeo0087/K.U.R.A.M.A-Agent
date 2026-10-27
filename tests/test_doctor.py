@@ -36,9 +36,12 @@ def test_free_ram_and_stop_ask_first(monkeypatch):
     assert "said no" in no.output and not stopped
     yes = safety.execute("laptop_doctor", {"action": "free_ram"}, confirm=lambda p: True)
     assert stopped == [111, 112] and "about 1000 MB freed" in yes.output
+    from jarvis.core import ports
+    monkeypatch.setattr(ports, "listening", lambda: {8000: {"pid": 4242, "host": "127.0.0.1"}})
+    monkeypatch.setattr(ports, "describe", lambda pid: f"python app.py (pid {pid})")
     monkeypatch.setattr(doctor, "listeners", lambda port=None: [(8000, 4242, "python app.py")])
-    assert "port 8000: python app.py (PID 4242)" in registry.call("laptop_doctor", {"action": "port",
-                                                                                   "target": "8000"}).output
+    assert "Port 8000 is used by python app.py (pid 4242)" in registry.call("laptop_doctor", {"action": "port",
+                                                                                            "target": "8000"}).output
     monkeypatch.setattr(doctor, "find", lambda t: [])
     monkeypatch.setattr(doctor.psutil, "Process", lambda pid: SimpleNamespace(pid=pid, name=lambda: "python"))
     monkeypatch.setattr(doctor, "app_name", lambda p: "python app.py")
