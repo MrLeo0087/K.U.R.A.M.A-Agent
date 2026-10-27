@@ -799,6 +799,33 @@ _DETAIL = re.compile(r",?\s*\b(?:in\s+)?(?:high\s+quality|hq|hd|ultra\s+detailed
                      r"better\s+quality)\b", I)
 
 
+def music_intent(t: str) -> Intent | None:
+    """'play lofi music', 'play some music', 'play arijit singh songs', 'listen to nepali songs', 'put on some jazz',
+    'stop the music', 'music volume up', 'next song' (when KURAMA's player runs) -> music (mpv, no browser)."""
+    def mu(action, q=""):
+        return Intent("music", "music", "media", {"action": action, "query": q})
+    if re.search(r"\b(?:youtube|video|videos|movie|spotify)\b", t, I) or len(t.split()) > 14:
+        return None
+    lead = r"(?:please\s+|kurama\W+|can\s+you\s+|hey\s+|now\s+)*"
+    if re.fullmatch(lead + r"(?:stop|turn\s+off|switch\s+off|end|kill|close)\s+(?:the\s+|my\s+|this\s+)?(?:music|songs?|playing\s+music)(?:\s+now|\s+please)?"
+                    r"|(?:music|gana|गाना)\s+(?:off|band\s+gara|banda\s+gara|बन्द\s+गर)", t, I):
+        from jarvis.core import music
+        return mu("stop") if music.running() else None  # no music of ours: 'stop the music' pauses the browser
+    if m := re.fullmatch(lead + r"(?:turn\s+)?(?:the\s+)?music\s+(?:volume\s+)?(?P<d>up|down|louder|quieter|softer)", t, I):
+        return mu("volume_up" if m.group("d").lower() in ("up", "louder") else "volume_down")
+    if m := re.fullmatch(lead + r"(?:play|put\s+on|start|listen\s+to|i\s+want\s+to\s+listen\s+to|bajau|bajaau)\s+(?:me\s+)?(?:some\s+|a\s+|the\s+)?"
+                         r"(?P<q>.*?)\s*(?P<k>music|songs?|playlist|mix|beats|lofi|gana|गाना|geet|bhajan|ghazal)(?:\s+(?:please|now|for\s+me))?[\s.!]*", t, I):
+        q = f"{m.group('q')} {m.group('k')}".strip()
+        if re.fullmatch(r"(?:my\s+)?(?:music|songs?|playlist)", q, I) or re.match(r"my\s+", q, I):
+            q = "relaxing music" if q.lower() in ("music", "song", "songs") else q
+            if re.match(r"my\s+", q, I):
+                return None  # 'play my playlist' / 'my songs': the saved playlists
+        return mu("play", q)
+    if m := re.fullmatch(lead + r"(?:listen\s+to|i\s+want\s+to\s+listen\s+to)\s+(?P<q>.+)", t, I):
+        return mu("play", m.group("q").strip(" ."))
+    return None
+
+
 def video_make_intent(t: str) -> Intent | None:
     """'make a short video about the Himalayas' / 'make a reel about tea' / 'make a video with this script: ...' /
     'make a slideshow from ~/Pictures/trip' / '/video <topic>' -> make_video."""
@@ -2792,6 +2819,8 @@ def match(text: str) -> Intent | None:
         return po
     if cr := coderun_intent(t):
         return cr
+    if mi := music_intent(t):
+        return mi
     if mv := video_make_intent(t):
         return mv
     if au := audio_intent(t):

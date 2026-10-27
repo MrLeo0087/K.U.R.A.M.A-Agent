@@ -96,6 +96,8 @@ COMMANDS: tuple[Cmd, ...] = (
     Cmd("pause", "pause it", "Media"),
     Cmd("next", "next track", "Media", aliases=("skip",)),
     Cmd("prev", "previous track", "Media", aliases=("previous", "back")),
+    Cmd("music", "music without the browser (sound only)", "Media", "[what]", phrase="play some music|play {a} music"),
+    Cmd("stopmusic", "stop the music", "Media", tool=("music", "media", {"action": "stop"}, "")),
     Cmd("yt", "play something on YouTube", "Media", "<what>", phrase="open youtube|play {a} on youtube",
         aliases=("youtube",)),
     Cmd("image", "make a picture", "Media", "<prompt>", phrase="generate an image of {a}", aliases=("img",)),

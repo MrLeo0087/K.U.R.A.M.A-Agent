@@ -359,7 +359,7 @@ POSITIVE = {
     "lock the screen": ("lock_screen", {}),
     "screen lock karo": ("lock_screen", {}),
 }
-NEGATIVE = ["stop it", "start it", "continue", "stop", "volume to 150", "set volume to loud", "play despacito", "play music", "lock the door",
+NEGATIVE = ["stop it", "start it", "continue", "stop", "volume to 150", "set volume to loud", "play despacito", "lock the door",
             "mute the zoom call", "what is a screenshot", "next", "skip", "volume up and open youtube",
             "make the volume better", "brightness is too high for my eyes", "pause for a second and think",
             "screenshot the error and send it to my boss", "should I lock the screen"]
