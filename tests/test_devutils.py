@@ -5,7 +5,6 @@ import json
 import pytest
 
 from jarvis.core import config, jobs, llm, meta, registry, router, safety, store
-from jarvis.tools.interactive import config_diff as cd
 from jarvis.tools.interactive import generate_requirements as gr
 from jarvis.tools.interactive import notebook_to_script as nts
 
@@ -20,7 +19,7 @@ def safe_roots(tmp_path, monkeypatch):
 
 def test_registered_group_and_safety():
     tools = {t.name: t for t in registry.schemas_for(["devutils"])}
-    assert set(tools) == {"notebook_to_script", "generate_requirements", "config_diff", "decode_text"}
+    assert set(tools) == {"notebook_to_script", "generate_requirements", "decode_text"}
     assert all(registry.safety_of(t) == "safe" for t in tools.values())
 
 
@@ -113,28 +112,3 @@ def test_generate_requirements(tmp_path, monkeypatch):
     monkeypatch.setattr(safety, "ask", lambda q: False)  # never overwrite requirements.txt without a yes
     gr.generate_requirements(str(proj), output="requirements.txt")
     assert (proj / "requirements.txt").read_text() == "PyYAML\nrequests\n"
-
-
-def test_config_diff_snapshots_and_secret_masking(tmp_path):
-    proj = tmp_path / "proj"
-    proj.mkdir()
-    (proj / ".env").write_text(f"GROQ_API_KEY={G}\nREAL_ENV_ONLY=1\n")
-    (proj / ".env.example").write_text("GROQ_API_KEY=your-key-here\nDEBUG=0\n")
-    (proj / "config.yaml").write_text(f"model:\n  lr: 0.01\n  layers: [1, 2]\ndb_password: {P}\n")
-    (proj / "settings.toml").write_text(f'[api]\nurl = "https://x.dev"\nkey = "{G}"\n')
-    (proj / "credentials.json").write_text('{"client_secret": "zzz"}')
-    first = cd.config_diff(str(proj))
-    assert "saved config snapshot #1" in first and "3 files" in first
-    assert "no config changes" in cd.config_diff(str(proj))
-    (proj / "config.yaml").write_text(f"model:\n  lr: 0.02\n  layers: [1, 2]\n  dropout: 0.1\ndb_password: {P}x\n")
-    (proj / "settings.toml").write_text('[api]\nurl = "https://x.dev"\n')
-    out = cd.config_diff(str(proj))
-    assert "#1 → #2" in out and "~model.lr: 0.01 → 0.02" in out and "+model.dropout=0.1" in out
-    assert "~db_password (secret changed, masked)" in out and "-api.key" in out
-    rows = store._exec("SELECT data FROM config_snapshots")
-    blob = " ".join(r["data"] for r in rows) + out + cd.config_diff(str(proj), action="compare", a=1, b=2)
-    for raw in (G, P, G[4:14], P[:8], "REAL_ENV_ONLY", "zzz"):
-        assert raw not in blob, raw
-    assert "****#" in blob and "#2" in cd.config_diff(str(proj), action="list")
-
-

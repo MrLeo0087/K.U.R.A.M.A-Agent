@@ -27,7 +27,6 @@ WORKERS = {  # name -> (label, what it does); order = how the UI lists them
     "guard": ("Laptop guard", "photo + location to Telegram on wrong password (only while armed)"),
     "timemachine": ("Time machine", "snapshots your protected projects"),
     "daily_digest": ("Daily digest", "a summary once a day"),
-    "auto_theme": ("Auto theme", "light / dark at sunrise and sunset"),
     "location_tracker": ("Location history", "records where the laptop is"),
 }
 ALL = tuple(WORKERS)

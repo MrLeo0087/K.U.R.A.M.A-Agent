@@ -1,7 +1,7 @@
 """time_machine: snapshots of your code you never have to think about. What changed since a time, the history of
 a file, put a file back as it was, protect a new project (safe; restoring asks first).
 
-Diffs are plain git output (0 tokens). (config_diff stays separate: it masks secrets in config files.)
+Diffs are plain git output (0 tokens).
 """
 from __future__ import annotations
 

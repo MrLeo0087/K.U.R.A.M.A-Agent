@@ -485,7 +485,7 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
                 "डिस्टर्ब", "फोकस मोड", "सूचना", "नोटिफिकेशन"),
     "display": ("brightness", "brighter", "dimmer", "dim the screen", "screen brightness", "backlight",
                 "चमक", "ब्राइटनेस", "light mode", "dark mode", "light theme", "dark theme", "theme",
-                "night mode", "day mode", "auto theme", "auto dark", "automatic dark", "dark at sunset", "sunset", "sunrise"),
+                "night mode", "day mode"),
     "screen": ("screenshot", "screenshots", "screen shot", "screen capture", "capture the screen",
                "capture screen", "स्क्रीनशॉट"),
     "power": ("battery", "charging", "charge left", "battery health", "बैटरी", "ब्याट्री", "बेट्री",
@@ -588,7 +588,7 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
     "automation": "crash watchdog for dev servers; download manager (big files now or tonight, resumes); tidy the "
                   "Downloads folder; backups to another drive",
     "audio": "speaker volume, mute, microphone mute",
-    "display": "screen brightness, light/dark mode (also automatic at sunset)",
+    "display": "screen brightness, light/dark mode",
     "desktop": "do not disturb, night light, wallpaper, focus (pomodoro) session",
     "screen": "take a screenshot (full screen, window or area)",
     "power": "battery status, lock the screen, sleep/suspend, shut down, restart, log out; laptop guard (anti-theft "
@@ -662,7 +662,7 @@ SHELL_ALLOWLIST = ("ls", "cat", "head", "tail", "wc", "grep", "rg", "fdfind", "f
 # --- Background core (P6): python -m jarvis.workers ---
 WORKERS_ENABLED: tuple[str, ...] = tuple(
     w.strip() for w in os.getenv("JARVIS_WORKERS", "process_watch,resource_guard,crash_watchdog,"
-                                 "telegram_bot,daily_digest,auto_theme,scheduler,timemachine,guard,"
+                                 "telegram_bot,daily_digest,scheduler,timemachine,guard,"
                                  "location_tracker,clipboard_watch").split(",") if w.strip())
 # run them inside the server process (one Python instead of two, ~55 MB less); 0 = the separate supervisor process
 WORKERS_IN_SERVER = os.getenv("JARVIS_WORKERS_IN_SERVER", "1").lower() not in ("0", "false", "no", "off")
@@ -921,10 +921,6 @@ TELEGRAM_FILE_MAX_MB = 50
 # --- P9a --- desktop extras (DND, night light, wallpaper, auto theme, focus, YouTube, playlists)
 WALLPAPER_DIRS = tuple(p for p in (Path.home() / "Pictures" / "Wallpapers", Path.home() / "Pictures",
                                    Path("/home/leo/WhiteSur-wallpapers")) if p.exists()) or (Path.home() / "Pictures",)
-AUTO_THEME = os.getenv("JARVIS_AUTO_THEME", "0").lower() in ("1", "true", "yes", "on")  # kv "auto_theme" overrides
-AUTO_THEME_SOURCE = "sun"  # "sun" = home-city sunrise/sunset (Open-Meteo), "fixed" = AUTO_THEME_TIMES
-AUTO_THEME_TIMES = ("07:00", "18:30")  # (light from, dark from); also the offline fallback
-AUTO_THEME_INTERVAL_S = 60.0
 # Location history (lightweight): the laptop logs its position only this often (default 30 min); the worker
 # wakes every LOCATION_TICK_S but does network work only when LOCATION_LOG_INTERVAL_S has passed (or lost mode).
 LOCATION_HISTORY = os.getenv("KURAMA_LOCATION_HISTORY", "1").lower() not in ("0", "false", "no", "off")

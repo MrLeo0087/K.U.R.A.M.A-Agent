@@ -7,12 +7,11 @@ from datetime import datetime, time as dtime
 import pytest
 
 from jarvis.core import config, fastpath, llm, registry, router, store
-from jarvis.tools.general import _autotheme, _sys, open_url
+from jarvis.tools.general import _sys, open_url
 from jarvis.tools.general import focus_mode as fm
 from jarvis.tools.general import kill_app as ka
 from jarvis.tools.general import playlist as pl
 from jarvis.tools.general import youtube as yt
-from jarvis.tools.general.auto_theme import auto_theme
 from jarvis.tools.general.battery_status import battery_status
 from jarvis.tools.general.do_not_disturb import do_not_disturb
 from jarvis.tools.general.night_light import night_light
@@ -238,50 +237,6 @@ def test_playlist(monkeypatch, tmp_path):
     assert pl.playlist("my workout") == "Playing your Workout playlist." and spawned
     assert spawned[0][-1] == str(tmp_path)
     assert pl.playlist("jazz").startswith("error") and "lofi" in pl.playlist("")
-
-
-def test_auto_theme_transitions(monkeypatch):
-    monkeypatch.setattr(config, "AUTO_THEME_SOURCE", "fixed")
-    monkeypatch.setattr(config, "AUTO_THEME_TIMES", ("07:00", "18:30"))
-    switched = []
-    sw = lambda m: switched.append(m) or f"Switched to {m} mode."  # noqa: E731
-    day = lambda h, mi=0: datetime(2026, 10, 23, h, mi)  # noqa: E731
-    assert _autotheme.period(day(6)) == ("dark", "2026-10-22:sunset")
-    assert _autotheme.period(day(12)) == ("light", "2026-10-23:sunrise")
-    assert _autotheme.period(day(19)) == ("dark", "2026-10-23:sunset")
-    assert _autotheme.check(day(12), sw) is None  # off by default
-    _autotheme.set_enabled(True)
-    assert _autotheme.check(day(12), sw) and switched == ["light"]
-    assert _autotheme.check(day(15), sw) is None  # same period: a manual change is left alone
-    assert _autotheme.check(day(18, 31), sw) and switched == ["light", "dark"]
-    assert _autotheme.check(day(23), sw) is None
-    # failed switch is retried next tick
-    assert _autotheme.check(datetime(2026, 10, 24, 8), lambda m: "error: nope") == "error: nope"
-    assert _autotheme.check(datetime(2026, 10, 24, 8, 1), sw) and switched[-1] == "light"
-
-
-def test_auto_theme_sun_times_cached(monkeypatch):
-    monkeypatch.setattr(config, "AUTO_THEME_SOURCE", "sun")
-    _autotheme._sun.clear()
-    calls = []
-    monkeypatch.setattr(_autotheme, "fetch_sun", lambda d: calls.append(d) or (dtime(6, 5), dtime(17, 30)))
-    d = datetime(2026, 10, 23).date()
-    assert _autotheme.times_for(d) == (dtime(6, 5), dtime(17, 30))
-    _autotheme._sun.clear()  # restart: kv cache still answers
-    assert _autotheme.times_for(d) == (dtime(6, 5), dtime(17, 30)) and len(calls) == 1
-    monkeypatch.setattr(_autotheme, "fetch_sun", lambda d: (_ for _ in ()).throw(OSError("offline")))
-    monkeypatch.setattr(config, "AUTO_THEME_TIMES", ("07:00", "18:30"))
-    assert _autotheme.times_for(datetime(2026, 10, 24).date()) == (dtime(7, 0), dtime(18, 30))
-
-
-def test_auto_theme_tool(gn, monkeypatch):
-    monkeypatch.setattr(config, "AUTO_THEME_SOURCE", "fixed")
-    assert auto_theme("status") == "Auto theme is off."
-    assert auto_theme("on").startswith("Auto theme is on: light at 07:00, dark at 18:30")
-    assert store.kv_get("auto_theme") == "on" and store.kv_get("auto_theme_last")
-    assert auto_theme("off").startswith("Auto theme is off") and not _autotheme.enabled()
-    from jarvis.workers.supervisor import WORKERS
-    assert "auto_theme" in WORKERS
 
 
 FAST = {

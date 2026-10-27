@@ -33,7 +33,6 @@ WORKERS: dict[str, str] = {
     "crash_watchdog": "jarvis.workers.crash_watchdog:CrashWatchdog",
     "telegram_bot": "jarvis.workers.telegram_bot:TelegramBot",
     "daily_digest": "jarvis.workers.daily_digest:DailyDigest",
-    "auto_theme": "jarvis.workers.auto_theme:AutoTheme",  # P9a
     "scheduler": "jarvis.workers.scheduler:Scheduler",  # P9b
     "timemachine": "jarvis.workers.timemachine:TimeMachine",
     "guard": "jarvis.workers.guard:Guard",
