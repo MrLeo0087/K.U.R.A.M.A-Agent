@@ -48,6 +48,13 @@ COMMANDS: tuple[Cmd, ...] = (
     Cmd("quiz", "a quiz question from my notes", "Day", "[subject]", tool=("quiz", "study", {"action": "ask"}, "subject")),
     Cmd("focus", "focus session (DND on)", "Day", "[minutes]", tool=("focus_mode", "desktop", {"action": "start", "minutes": 25}, "minutes")),
     Cmd("digest", "summary of my day", "Day", phrase="summarize my day"),
+    Cmd("spent", "add an expense", "Day", "<amount> <what>", phrase="|spent {a}", aliases=("expense",)),
+    Cmd("money", "spending report", "Day", "[today|week|month|year]",
+        phrase="how much did I spend this month|how much did I spend {a}", aliases=("expenses",)),
+    Cmd("budget", "set the monthly budget", "Day", "<amount> or <category> <amount>", phrase="|set budget {a}"),
+    Cmd("habits", "my habits and streaks", "Day", phrase="my habits", aliases=("habit", "streaks")),
+    Cmd("done", "check in a habit", "Day", "<habit>", phrase="|{a} done"),
+    Cmd("brief", "my morning brief now", "Day", phrase="give me my morning brief"),
     # --- laptop ---
     Cmd("status", "what's going on right now", "Laptop", phrase="status"),
     Cmd("battery", "battery level", "Laptop", phrase="battery", aliases=("bat",)),

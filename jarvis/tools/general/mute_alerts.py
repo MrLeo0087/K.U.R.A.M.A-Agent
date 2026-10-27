@@ -13,7 +13,8 @@ LABEL = {"resource": "RAM / resource warnings", "location": "location messages",
          "commands": "command-finished messages", "digest": "the daily summary", "backup": "backup messages",
          "kaggle": "Kaggle messages", "internet": "internet messages", "guard": "anti-theft guard alerts",
          "reminders": "reminders and timers", "todo": "random to-do / read-later nudges",
-         "goals": "goal reminders and check-ins", "all": "all alerts (reminders, timers and the guard still come)"}
+         "goals": "goal reminders and check-ins", "money": "bill reminders", "habits": "habit reminders",
+         "brief": "the morning brief", "all": "all alerts (reminders, timers and the guard still come)"}
 _BY_SOURCE = {src: k for k, srcs in config.MUTE_KINDS.items() for src in srcs}
 
 

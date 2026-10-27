@@ -1445,6 +1445,92 @@ def code_tidy_intent(t: str) -> Intent | None:
 _NAV_OBJ = r"(?:function|func|method|class|definition|def|code|implementation|source)"
 
 
+_PERIOD = (("today", r"\btoday|aaja|आज\b"), ("yesterday", r"\byesterday|hijo|हिजो\b"),
+           ("last_month", r"\blast\s+month|previous\s+month|gayeko\s+mahina\b"),
+           ("week", r"\b(?:this\s+|the\s+|per\s+|a\s+)?week(?:ly)?\b|\bhapta\b"),
+           ("year", r"\b(?:this\s+|the\s+|per\s+)?year(?:ly)?\b|\bbarsa\b"),
+           ("month", r"\b(?:this\s+|the\s+|per\s+)?month(?:ly)?\b|\bmahina\b|महिना"))
+_MONEY_AMT = r"(?:rs\.?\s*|npr\s*|रु\.?\s*)?\d[\d,]*(?:\.\d+)?\s*(?:k\b|thousand|hajar)?\s*(?:rs|rupees?|npr)?"
+
+
+def _period(t: str, default: str = "month") -> str:
+    return next((p for p, rx in _PERIOD if re.search(rx, t, I)), default)
+
+
+def tracker_intent(t: str) -> Intent | None:
+    """Money + habits, 0 tokens: 'spent 500 on food', 'got 20000 salary', 'how much did I spend this week',
+    'how much on food this month', 'show my expenses', 'delete the last expense', 'the last one was 450',
+    'set my food budget to 8000', 'remind me to pay internet 1500 every month on the 5th', 'paid internet';
+    'add a habit: drink water 8 glasses a day', 'I drank 2 glasses of water', 'my habits', 'delete the water habit'."""
+    if len(t.split()) > 30:
+        return None
+    from jarvis.core import expenses as ex, habits as hb
+    def money(action, **kw):
+        return Intent("money", "expenses", "tracker", {"action": action, **kw})
+    def habit(action, text=""):
+        return Intent("habit", "habits", "tracker", {"action": action, "text": text})
+    low = t.lower().strip(" .!?")
+    if re.fullmatch(r"(?:please\s+)?(?:give\s+me\s+|tell\s+me\s+|read\s+me\s+|what(?:'s|\s+is)\s+)?(?:my\s+|the\s+|today'?s\s+)?(?:morning\s+|daily\s+)?brief(?:ing)?"
+                    r"(?:\s+(?:for\s+)?today)?|brief\s+me|how\s+does\s+my\s+day\s+look(?:\s+like)?|what\s+does\s+my\s+day\s+look\s+like", low, I):
+        return Intent("brief", "_brief", "self", {})
+    # --- habits ---
+    if m := re.fullmatch(r"(?:please\s+)?(?:add|create|start|new|make|track)(?:\s+a)?(?:\s+new)?\s+habit(?:\s+(?:to|of|for|called|named))?[:\s]+(?P<x>.+)"
+                         r"|(?:please\s+)?(?:start\s+)?track(?:ing)?\s+(?:my\s+)?(?P<y>.+?)\s+(?:daily|every\s+day|as\s+a\s+habit)(?P<r>.*)", low, I):
+        return habit("add", (m.group("x") or (m.group("y") + (m.group("r") or ""))).strip())
+    if re.fullmatch(r"(?:show\s+|check\s+|what\s+are\s+|how\s+are\s+|list\s+)?(?:me\s+)?(?:my\s+|all\s+(?:my\s+)?)?(?:habits?|habit\s+(?:streaks?|tracker|status|list)|streaks?)"
+                    r"(?:\s+(?:today|status|going|doing|so\s+far))?|how\s+(?:are|is)\s+my\s+(?:habits?|streaks?)(?:\s+going)?|/habits?", low, I):
+        return habit("status")
+    if m := re.fullmatch(r"(?:please\s+)?(?:delete|remove|stop\s+tracking|drop)\s+(?:the\s+|my\s+)?(?P<x>.+?)\s+habit|(?:please\s+)?stop\s+tracking\s+(?P<y>.+)", low, I):
+        if hb.names():
+            return habit("delete", m.group("x") or m.group("y"))
+    names = hb.names()
+    if names and re.search(r"\b(?:didn'?t|did\s+not|haven'?t|have\s+not|undo)\b", low) and hb.find(low):
+        return habit("undo", t)
+    if names and hb._VERB.search(low) and hb.find(low) and not re.search(r"\b(?:spent|paid|rs|rupees|bought)\b", low):
+        return habit("done", t)
+    if names and (m := re.fullmatch(r"(?P<x>.+?)\s+(?:done|complete|completed|finished|ho\s+gayo|sakiyo)", low, I)) and hb.find(m.group("x")):
+        return habit("done", t)
+    # --- money ---
+    if m := re.fullmatch(r"(?:please\s+)?remind\s+me\s+to\s+pay\s+(?:the\s+|my\s+)?(?P<n>[a-z ]+?)(?:\s+bill)?\s+(?P<a>" + _MONEY_AMT +
+                         r")\s+(?:every|each)\s+month(?:\s+on)?(?:\s+the)?\s+(?P<d>\d{1,2})(?:st|nd|rd|th)?", low, I):
+        return money("bill", text=m.group("n").strip(), amount=ex._amount(m.group("a")) or 0, day=int(m.group("d")))
+    if m := re.fullmatch(r"(?:i\s+)?(?:have\s+)?paid\s+(?:the\s+|my\s+)?(?P<n>[a-z ]+?)(?:\s+bill)?", low, I):
+        from jarvis.core import expenses as _e
+        if any(b.get("name") and b["name"] in m.group("n") for b in _e._book()[2]):
+            return money("pay", text=m.group("n"))
+    if m := re.fullmatch(r"(?:please\s+)?(?:set|make|change|keep)\s+(?:my\s+|the\s+)?(?:monthly\s+)?(?P<c>[a-z]+\s+)?budget(?:\s+for\s+(?P<c2>[a-z]+))?\s+(?:to|at|as)?\s*(?P<a>"
+                         + _MONEY_AMT + r")(?:\s+(?:a|per|every)\s+month)?|my\s+(?:monthly\s+)?(?P<c3>[a-z]+\s+)?budget\s+is\s+(?P<a2>" + _MONEY_AMT + r")(?:\s+a\s+month)?", low, I):
+        cat = (m.group("c") or m.group("c2") or m.group("c3") or "total").strip()
+        cat = "total" if cat in ("monthly", "total", "whole", "overall", "my") else cat
+        return money("budget", category=cat, amount=ex._amount(m.group("a") or m.group("a2")) or 0)
+    if m := re.fullmatch(r"set\s+(?:my\s+)?(?:monthly\s+)?budget\s+(?:for\s+)?(?:(?P<c>[a-z]+)\s+)?(?:to\s+)?(?P<a>" + _MONEY_AMT + r")", low, I):
+        return money("budget", category=m.group("c") or "total", amount=ex._amount(m.group("a")) or 0)
+    if re.fullmatch(r"(?:please\s+)?(?:delete|remove|undo|cancel)\s+(?:the\s+|my\s+)?last\s+(?:expense|entry|spending|one|transaction|income)", low, I):
+        return money("delete", text="last")
+    if m := re.fullmatch(r"(?:please\s+)?(?:delete|remove)\s+(?:the\s+)?(?:expense|entry|transaction)\s+(?:number\s+)?(?P<n>\d+)", low, I):
+        return money("delete", text=m.group("n"))
+    if re.fullmatch(r"(?:no\W+)?(?:the\s+)?last\s+(?:one|expense|entry)\s+(?:was|is|should\s+be)\s+.+|(?:change|make)\s+(?:the\s+)?last\s+(?:one|expense|entry)\s+(?:to|into)\s+.+", low, I):
+        return money("edit", text=t)
+    if re.search(r"\b(?:how\s+much|kati)\b.{0,30}\b(?:spen[dt]|spending|expense|kharcha|खर्च|kharch)", low) or re.fullmatch(
+            r"(?:show\s+|give\s+|tell\s+)?(?:me\s+)?(?:my\s+|the\s+)?(?:total\s+)?(?:expense|expenses|spending|money|kharcha)\s+(?:report|summary|total|so\s+far|breakdown)"
+            r"(?:\s+(?:for|of)\s+.+|\s+(?:today|yesterday|this\s+\w+|last\s+month))?|(?:monthly|weekly|yearly|daily)\s+(?:expense|spending|money)\s+report", low, I):
+        cat = next((c for c in ex.CATS if re.search(rf"\b(?:on|for)\s+{c}\b|\b{c}\b", low)), "")
+        if not cat and (mm := re.search(r"\bon\s+([a-z]+)", low)):
+            c2 = ex.category_of(mm.group(1))
+            cat = "" if c2 == "other" else c2
+        return money("report", period=_period(low), category=cat)
+    if re.fullmatch(r"(?:show|list|what\s+are|give\s+me)\s+(?:me\s+)?(?:my\s+|the\s+|all\s+)?(?:expenses|spendings?|transactions)(?:\s+(?:for\s+)?(?:today|yesterday|this\s+\w+|last\s+month))?", low, I):
+        return money("list", period=_period(low, "today"))
+    not_money = re.search(r"\b(?:time|minutes?|mins?|hours?|hrs?|seconds?|days?|weeks?|months?|years?|tokens?|ram|gb|mb|percent|"
+                          r"remind|schedule|alarm|timer|how\s+much|points?|marks?|goals?|runs?|wickets?)\b|%", low)
+    if not not_money and re.search(r"\d", low) and (
+            re.search(r"\b(?:spent|spend|paid|bought|kharcha|kharch|खर्च|salary|income)\b", low)
+            or (re.search(r"\b(?:got|received|earned)\b", low) and re.search(
+                r"\b(?:rs|rupees?|npr|money|paisa|salary|income|bonus|refund|payment|freelance)\b|रु|\$|\d\s*k\b", low))):
+        return money("add", text=t)
+    return None
+
+
 def slash_intent(t: str) -> Intent | None:
     """'/weather pokhara', '/todo buy milk', '/def', '/list' (jarvis/core/slash.py): the command's phrase through the
     fast path, or its tool directly. Unknown '/word' -> the list hint (a path like /home/x is not a command)."""
@@ -1460,7 +1546,7 @@ def slash_intent(t: str) -> Intent | None:
         return match(p)
     if tc := slash.tool_call(cmd, arg):
         return Intent("slash", tc[0], tc[1], tc[2], cmd.name)
-    if cmd.tool:  # '/search' alone
+    if cmd.tool or cmd.hint.startswith("<"):  # '/search' alone
         return Intent("say", "_say", "self", {"en": f"Usage: /{cmd.name} {cmd.hint} — {cmd.desc}."})
     canon = f"/{cmd.name}" + (f" {arg}" if arg else "")
     return None if canon == t else match(canon)  # '/plya' -> '/play' (the media rules)
@@ -2587,6 +2673,8 @@ def match(text: str) -> Intent | None:
         return po
     if cr := coderun_intent(t):
         return cr
+    if tr := tracker_intent(t):
+        return tr
     if li := links_intent(t):
         return li
     if tn := todo_now_intent(t):
@@ -2925,6 +3013,9 @@ def _internal(intent: Intent) -> tuple[bool, str]:
         return True, selfknow.try_unlock(intent.args["text"])
     if intent.tool == "_say":
         return True, "ok"
+    if intent.tool == "_brief":
+        from jarvis.core import brief
+        return True, brief.build()
     if intent.tool == "_where":
         from jarvis.core import focus
         p = focus.get_path(config.FOCUS_TTL_H * 3600)

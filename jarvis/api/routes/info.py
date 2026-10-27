@@ -421,6 +421,12 @@ async def greeting():
     if _greeted["done"]:
         return {"text": ""}
     _greeted["done"] = True
+    from jarvis.core import brief
+    if brief.due():  # the first screen of the day: the morning brief instead of a plain hello
+        text = await run_in_threadpool(brief.deliver, "screen")
+        if text:
+            brief.take_pending()
+            return {"text": text, "brief": True}
 
     def build() -> str:  # short and natural: no clock, no weather, no instructions
         import random
@@ -434,6 +440,40 @@ async def greeting():
         return {"text": await run_in_threadpool(build)}
     except Exception as e:  # a greeting must never break the page
         return {"text": "", "error": str(e)[:120]}
+
+
+@router.get("/brief", summary="The morning brief waiting to be spoken (once), '' if none")
+async def brief_pending():
+    from jarvis.core import brief
+    return {"text": await run_in_threadpool(brief.take_pending)}
+
+
+@router.get("/money", summary="Numbers for the Money card")
+async def money_card():
+    from jarvis.core import expenses
+    return await run_in_threadpool(expenses.dashboard)
+
+
+@router.get("/habits", summary="Habits with today's progress, streaks and the last 7 days")
+async def habits_card():
+    from jarvis.core import habits
+    return {"habits": await run_in_threadpool(habits.overview)}
+
+
+class Tracked(BaseModel):
+    kind: str = Field(..., description="expense_delete | habit_done | habit_undo")
+    ref: str = Field("", description="row number or habit name")
+
+
+@router.post("/tracker", summary="Dashboard buttons: delete an expense row, check in / undo a habit (0 tokens)")
+async def tracker_action(body: Tracked):
+    from jarvis.core import expenses, habits
+    fn = {"expense_delete": lambda: expenses.delete(body.ref),
+          "habit_done": lambda: habits.check_in(body.ref) or f"No habit called {body.ref!r}.",
+          "habit_undo": lambda: habits.undo(body.ref)}.get(body.kind)
+    if fn is None:
+        return JSONResponse({"ok": False, "error": "unknown kind"}, status_code=400)
+    return {"ok": True, "text": await run_in_threadpool(fn)}
 
 
 # ---------- power switch: stop every KURAMA process (scripts/kurama-power.sh; Super+K turns it back on) ----------

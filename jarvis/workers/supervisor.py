@@ -35,6 +35,7 @@ WORKERS: dict[str, str] = {
     "daily_digest": "jarvis.workers.daily_digest:DailyDigest",
     "scheduler": "jarvis.workers.scheduler:Scheduler",  # P9b
     "timemachine": "jarvis.workers.timemachine:TimeMachine",
+    "brief": "jarvis.workers.brief:Brief",
     "guard": "jarvis.workers.guard:Guard",
     "location_tracker": "jarvis.workers.location_tracker:LocationTracker",
     "clipboard_watch": "jarvis.workers.clipboard_watch:ClipboardWatch",

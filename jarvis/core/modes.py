@@ -27,10 +27,12 @@ WORKERS = {  # name -> (label, what it does); order = how the UI lists them
     "guard": ("Laptop guard", "photo + location to Telegram on wrong password (only while armed)"),
     "timemachine": ("Time machine", "snapshots your protected projects"),
     "daily_digest": ("Daily digest", "a summary once a day"),
+    "brief": ("Morning brief", "says your day's plan the first time you use the laptop each day"),
     "location_tracker": ("Location history", "records where the laptop is"),
 }
 ALL = tuple(WORKERS)
-ESSENTIAL = ("scheduler", "telegram_bot", "clipboard_watch", "process_watch", "resource_guard", "crash_watchdog", "guard")
+ESSENTIAL = ("scheduler", "telegram_bot", "clipboard_watch", "process_watch", "resource_guard", "crash_watchdog", "guard",
+             "brief")
 
 PRESETS: dict[str, dict] = {
     "full": {"name": "Full power", "desc": "Everything on and always ready: fastest answers, most RAM.",

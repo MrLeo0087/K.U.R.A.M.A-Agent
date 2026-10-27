@@ -329,6 +329,8 @@ ROUTER_CHAT_EXAMPLES: tuple[str, ...] = (
 )
 # A few natural ways people ask, per group (what keywords can't list). Short and different from each other.
 ROUTER_EXAMPLES: dict[str, tuple[str, ...]] = {
+    "tracker": ("spent 500 on food", "how much did I spend this month", "set my food budget to 8000",
+                "check in my exercise habit", "show my habit streaks", "add a habit to read 20 pages a day"),
     "system": ("my laptop feels slow and laggy", "what is eating my memory", "check cpu and ram usage",
                "what is using port 8000", "free up some memory", "my laptop is getting hot",
                "the internet is not working", "websites are not loading", "how fast is my connection",
@@ -436,6 +438,8 @@ WORKSPACES: dict[str, dict[str, list[str]]] = {
 }
 # Keyword rules: group -> words/phrases (matched on word boundaries, case-insensitive).
 ROUTER_RULES: dict[str, tuple[str, ...]] = {
+    "tracker": ("spent", "expense", "expenses", "spending", "budget", "kharcha", "खर्च", "income", "salary",
+                "habit", "habits", "streak", "streaks", "how much did i spend", "money report"),
     "self": ("yourself", "about you", "your name", "who are you", "what can you do", "what you can do",
              "do you have a tool", "do you have any tool", "can you help", "help me", "i'm stuck", "i am stuck",
              "stuck", "don't know how", "dont know how", "no idea", "guide me", "what should i do", "how do i",
@@ -573,6 +577,7 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
 }
 # Descriptions offered to the fast classifier when no rule matched.
 TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
+    "tracker": "money spent/earned, budgets, bills; habit streaks",
     "general": "time and date (any city or country), simple utilities",
     "weather": "current weather and up to 3-day forecast for any place",
     "files": "create folders, write files, move/copy, move to trash",
@@ -626,14 +631,15 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
 # Tiny glosses for the request_tools meta-tool (sent on every unmatched turn, so each word costs):
 # "" = the group name says it all.
 TOOL_GROUP_GLOSS: dict[str, str] = {
+    "tracker": "money",
     "general": "time", "weather": "", "files": "folders", "filesearch": "",
-    "telegram": "phone", "toolsmith": "new tool", "skills": "", "system": "slow, wifi",
+    "telegram": "phone", "toolsmith": "", "skills": "", "system": "slow, wifi",
     "watch": "training", "automation": "backup", "audio": "volume", "display": "brightness",
     "screen": "screenshot", "power": "battery", "clipboard": "", "windows": "",
     "apps": "", "media": "music", "desktop": "wallpaper", "git": "", "dev": "tests", "codequality": "review",
     "devutils": "notebooks", "study": "lectures",
     "web": "search", "memory": "notes",
-    "knowledge": "my code", "usage": "tokens", "browser": "",
+    "knowledge": "code", "usage": "tokens", "browser": "",
     "jobs": "writing",
     "schedule": "remind",
     "clock": "",
@@ -662,7 +668,7 @@ SHELL_ALLOWLIST = ("ls", "cat", "head", "tail", "wc", "grep", "rg", "fdfind", "f
 # --- Background core (P6): python -m jarvis.workers ---
 WORKERS_ENABLED: tuple[str, ...] = tuple(
     w.strip() for w in os.getenv("JARVIS_WORKERS", "process_watch,resource_guard,crash_watchdog,"
-                                 "telegram_bot,daily_digest,scheduler,timemachine,guard,"
+                                 "telegram_bot,daily_digest,brief,scheduler,timemachine,guard,"
                                  "location_tracker,clipboard_watch").split(",") if w.strip())
 # run them inside the server process (one Python instead of two, ~55 MB less); 0 = the separate supervisor process
 WORKERS_IN_SERVER = os.getenv("JARVIS_WORKERS_IN_SERVER", "1").lower() not in ("0", "false", "no", "off")
@@ -738,6 +744,12 @@ GOAL_ASK_AGAIN_S = float(os.getenv("KURAMA_GOAL_ASK_AGAIN_S", "3600"))  # no ans
 GOAL_ANSWER_S = 3 * 3600.0  # a plain 'today I did X' within this time after a check-in = its answer
 GOAL_WEEKLY_AT = "21:30"  # Sunday: the weekly summary of each project goal
 CONTACTS_FILE = os.getenv("KURAMA_CONTACTS", "~/Documents/KURAMA/contacts.xlsx")  # name/phone sheet (Excel)
+EXPENSES_FILE = os.getenv("KURAMA_EXPENSES", "~/Documents/KURAMA/expenses.xlsx")  # money: Money / Budgets / Bills tabs
+HABITS_FILE = os.getenv("KURAMA_HABITS", "~/Documents/KURAMA/habits.xlsx")  # habits: Habits / Log tabs
+CURRENCY = os.getenv("KURAMA_CURRENCY", "Rs")
+BRIEF = os.getenv("KURAMA_BRIEF", "1").lower() not in ("0", "false", "no", "off")  # morning brief on first use of the day
+BRIEF_FROM_HOUR = 4  # an unlock before 04:00 is still 'last night'
+BRIEF_INTERVAL_S = 15.0  # the brief worker's poll (only loginctl while today's brief is still due)
 DICTATION_PAUSE_MS = 900  # a pause this long ends a dictated phrase (then it is typed)
 DICTATION_DEVANAGARI_LANG = os.getenv("JARVIS_DICTATION_DEVANAGARI", "ne")  # auto mode: Nepali/Hindi speech -> this
 DICTATION_IDLE_S = 180  # dictation stops after 3 min of silence
@@ -782,7 +794,8 @@ MUTE_KINDS: dict[str, tuple[str, ...]] = {
     "resource": ("resource_guard",), "location": ("location",), "jobs": ("jobs",), "downloads": ("downloads",),
     "watchdog": ("watchdog",), "web": ("webwatch",), "commands": ("cmdalerts", "process_watch"),
     "digest": ("daily_digest",), "backup": ("backup",), "kaggle": ("kaggle",), "internet": ("netdoctor",),
-    "guard": ("guard",), "reminders": ("scheduler", "timer"), "todo": ("todo",), "goals": ("goals",)}
+    "guard": ("guard",), "reminders": ("scheduler", "timer"), "todo": ("todo",), "goals": ("goals",),
+    "money": ("money",), "habits": ("habits",), "brief": ("brief",)}
 MUTE_ALL_KEEPS = ("scheduler", "timer", "guard", "goals")
 MUTE_DEFAULT_MIN = 30.0  # 'mute alerts' without a time (owner: never mute for life)
 MUTE_MAX_MIN = 24 * 60.0  # no mute lasts longer than a day

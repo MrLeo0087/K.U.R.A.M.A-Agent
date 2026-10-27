@@ -54,6 +54,14 @@ class Scheduler(Worker):
         except Exception as e:
             self.log.warning("kaggle check failed: %s", e)
         try:
+            if time.time() - getattr(self, "_tracker_at", 0) >= 120:  # Excel reads: every 2 min is plenty
+                self._tracker_at = time.time()
+                from jarvis.core import expenses, habits
+                expenses.check_bills()
+                habits.remind_due()
+        except Exception as e:
+            self.log.warning("money/habit check failed: %s", e)
+        try:
             from jarvis.core import remotedesk
             remotedesk.expire_if_due(self._now())
             remotedesk.keep_alive(self._now())

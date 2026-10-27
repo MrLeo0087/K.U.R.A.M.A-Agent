@@ -31,6 +31,9 @@ def tmp_store(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "READ_LATER_FILE", str(tmp_path / "read_later.xlsx"))  # never the real to-do list
     monkeypatch.setattr(config, "CONTACTS_FILE", str(tmp_path / "contacts.xlsx"))  # never the real contacts
     monkeypatch.setattr(config, "LINKS_FILE", str(tmp_path / "links.xlsx"))
+    monkeypatch.setattr(config, "EXPENSES_FILE", str(tmp_path / "expenses.xlsx"))  # never the real money sheet
+    monkeypatch.setattr(config, "BRIEF", False)  # the morning brief only where a test turns it on
+    monkeypatch.setattr(config, "HABITS_FILE", str(tmp_path / "habits.xlsx"))
     monkeypatch.setattr(config, "GOALS_DIR", str(tmp_path / "goals"))
     monkeypatch.setattr(config, "SKILLS_DIR", tmp_path / "skills")  # P7c: never the real saved skills
     monkeypatch.setattr(config, "SANDBOX_DIR", tmp_path / "sandbox")
