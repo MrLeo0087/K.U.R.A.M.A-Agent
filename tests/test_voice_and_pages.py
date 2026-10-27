@@ -207,3 +207,59 @@ def test_use_complete_and_code_chat_line(monkeypatch, tmp_path):
           "**How to run the tests**\n\n```bash\npytest -q test_calculator.py\n```")
     assert workspace.short_line(md) == ("I wrote the tests (test_calculator.py). It's in the workspace, you can check it there. "
                                         "Run them with: pytest -q test_calculator.py")
+
+
+def test_use_block_with_unsaved_editor(monkeypatch, tmp_path):
+    """Unsaved file (owner's case: test.py empty on disk, the code only in VS Code): the editor's current text is
+    copied, the block added at its end, and the whole text pasted back (never Enter after an indented line)."""
+    from jarvis.core import assist, rewrite, uiagent
+    f = tmp_path / "test.py"
+    f.write_text("")  # disk: empty
+    buf = {"clip": ""}
+    editor = "def calculator():\n    print('hi')\n"
+    keys = []
+
+    def xclip(args, text=None):
+        if text is not None:
+            buf["clip"] = text
+            return ""
+        return buf["clip"]
+
+    def key(k):
+        keys.append(k)
+        if k == "ctrl+c":
+            buf["clip"] = editor
+    monkeypatch.setattr(rewrite, "_xclip", xclip)
+    monkeypatch.setattr(rewrite, "_activate", lambda wid: None)
+    monkeypatch.setattr(uiagent, "key", key)
+    monkeypatch.setattr(assist, "open_file_in_editor", lambda: f)
+    g = rewrite.Grab(editor, 7, False, False, "● test.py - KURAMA - Visual Studio Code")
+    monkeypatch.setattr(rewrite, "grab", lambda: g)
+    monkeypatch.setattr(assist, "_llm", lambda *a, **k: "if __name__ == \"__main__\":\n    calculator()\nNEEDS: none")
+    assert "calls calculator()" in assist.run("use")
+    pasted = {}
+    orig = key
+
+    def key2(k):
+        if k == "ctrl+v":
+            pasted["text"] = buf["clip"]
+        orig(k)
+    monkeypatch.setattr(uiagent, "key", key2)
+    assert assist.run(**fastpath.match("Yes? Yes?").args).startswith("Added at the end of test.py. Save with Ctrl+S")
+    assert pasted["text"] == "def calculator():\n    print('hi')\n\n\nif __name__ == \"__main__\":\n    calculator()\n"
+    assert "Return" not in keys and f.read_text() == ""  # disk untouched; no Enter that could auto-indent
+
+
+def test_generated_tests_are_run_and_fixed(monkeypatch):
+    from jarvis.core import assist
+    answer = "**`test_calc.py`**\n\n```python\ndef test_a():\n    assert 1 == 2\n```\n"
+    runs = iter([(False, "E assert 1 == 2\n1 failed in 0.01s"), (True, "1 passed in 0.01s")])
+    monkeypatch.setattr(assist, "_run_tests", lambda code, name, tests: next(runs))
+    monkeypatch.setattr(assist, "_llm", lambda *a, **k: "```python\ndef test_a():\n    assert 1 == 1\n```")
+    out = assist.verify_tests(answer, "def calc():\n    return 1\n", "calc")
+    assert "assert 1 == 1" in out and out.endswith("✅ I ran them on a copy of your code: 1 passed in 0.01s.")
+    for yes in ("Yes? Yes?", "Yeah, yeah, add it.", "हो", "ok yes"):
+        assert fastpath.yes_no(yes) == "yes", yes
+    for no in ("No no, leave it", "don't add it", "nope."):
+        assert fastpath.yes_no(no) == "no", no
+    assert fastpath.yes_no("open youtube") == ""

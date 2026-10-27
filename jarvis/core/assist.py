@@ -233,15 +233,35 @@ def apply_use() -> str:
         return f"Added at the end of {f.name}. Press Run in VS Code (or: python {f.name})."
     if u["wid"] is None:
         return "I couldn't find the editor window; the code is on your clipboard (Ctrl+V at the end of the file)."
+    # unsaved edits: take the editor's CURRENT text (Ctrl+A, Ctrl+C), add the block at its end here, paste the whole
+    # text back (Ctrl+A, Ctrl+V). Exact (no auto-indent pulling the block into the function), the user's unsaved
+    # edits stay, and one Ctrl+Z in the editor undoes it.
     from jarvis.core import uiagent
-    rewrite._xclip(["-selection", "clipboard"], block)
     rewrite._activate(u["wid"])
     time.sleep(0.3)
-    uiagent.key("ctrl+End")
-    uiagent.key("Return")
-    uiagent.key("Return")
+    sentinel = f"__kurama_buffer_{time.time()}__"
+    rewrite._xclip(["-selection", "clipboard"], sentinel)
+    uiagent.key("ctrl+a")
+    uiagent.key("ctrl+c")
+    time.sleep(0.35)
+    buf = rewrite._xclip(["-selection", "clipboard"])
+    if not buf.strip() or buf == sentinel:
+        uiagent.key("ctrl+End")  # nothing selected/copied: leave the cursor at the end; the block is on the clipboard
+        rewrite._xclip(["-selection", "clipboard"], block)
+        return f"I couldn't read the editor, so the run code is on your clipboard: press Ctrl+V at the end of {f.name if f else 'the file'}."
+    if re.search(r"^if\s+__name__\s*==\s*['\"]__main__['\"]\s*:", buf, re.M):
+        uiagent.key("ctrl+End")
+        return f"{f.name if f else 'The file'} already has a run block. Press Run."
+    missing = [i for i in imports if i not in buf]
+    body = "\n".join(ln for ln in block.splitlines() if ln not in imports)
+    new_text = ("\n".join(missing) + "\n" if missing else "") + buf.rstrip("\n") + "\n\n\n" + body.strip("\n") + "\n"
+    rewrite._xclip(["-selection", "clipboard"], new_text)
+    uiagent.key("ctrl+a")
     uiagent.key("ctrl+shift+v" if u["term"] else "ctrl+v")
-    return f"Added at the end of {f.name if f else 'the file'} (not saved yet: Ctrl+S). Then press Run."
+    time.sleep(0.3)
+    uiagent.key("ctrl+End")
+    rewrite._xclip(["-selection", "clipboard"], block)
+    return f"Added at the end of {f.name if f else 'the file'}. Save with Ctrl+S, then press Run (Ctrl+Z undoes it)."
 
 
 def reject_use() -> str:
@@ -269,6 +289,61 @@ def cancel_use() -> str:
     return "Okay, I left your file as it is."
 
 
+_TESTS_REQ = re.compile(r"\b(?:tests?|testing|unit\s*tests?|pytest|test\s+cases?)\b", re.I)
+
+
+def _run_tests(module_code: str, module_name: str, tests: str) -> tuple[bool, str]:
+    """Run generated pytest tests against a COPY of the user's code in a temp folder (30 s cap, no stdin).
+    (passed, short output)."""
+    import subprocess
+    import sys
+    import tempfile
+    with tempfile.TemporaryDirectory(prefix="kurama-tests-") as d:
+        Path(d, f"{module_name}.py").write_text(module_code, encoding="utf-8")
+        Path(d, f"test_{module_name}.py").write_text(tests, encoding="utf-8")
+        try:
+            r = subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", f"test_{module_name}.py"],
+                               cwd=d, capture_output=True, text=True, timeout=30, stdin=subprocess.DEVNULL)
+        except subprocess.TimeoutExpired:
+            return False, "the tests did not finish within 30 s (an input()/loop is probably not mocked)"
+        out = (r.stdout + r.stderr).strip()
+        return r.returncode == 0, out[-2500:]
+
+
+def verify_tests(answer: str, module_code: str, module_name: str) -> str:
+    """'Test this function' (Python): RUN the generated tests on a copy of the code; on failure give the model the
+    output (up to two rounds) to fix wrong expectations (a real bug in the user's code is kept as a failing test marked BUG). The
+    answer ends with what happened, so the user never gets tests that silently fail."""
+    m = re.search(r"```(?:python|py)?\n(.*?)```", answer, re.S)
+    if not m or not module_code.strip():
+        return answer
+    tests = m.group(1)
+    ok, out = _run_tests(module_code, module_name, tests)
+    for _ in range(2):  # at most two fix rounds
+        if ok:
+            break
+        fix = _llm("These pytest tests were run against the user's code and some failed. Fix the TESTS so every "
+                   "expectation matches what the code really does (e.g. '2++2' is valid Python = 4). Only if the CODE "
+                   "itself is clearly wrong, keep that test, mark it with a comment '# BUG: ...' and expect the correct "
+                   "behaviour. Return the complete corrected test file in one ```python block, nothing else.",
+                   f"Code ({module_name}.py):\n{module_code[:6000]}\n\nTests:\n{tests}\n\nRun output:\n{out}",
+                   smart=True, max_tokens=1800, purpose="assist_tests_fix")
+        m2 = re.search(r"```(?:python|py)?\n(.*?)```", fix, re.S)
+        if not m2:
+            break
+        new_tests = m2.group(1)
+        ok, out = _run_tests(module_code, module_name, new_tests)
+        answer = answer[:m.start(1)] + new_tests + answer[m.end(1):]
+        m = re.search(r"```(?:python|py)?\n(.*?)```", answer, re.S)
+        tests = new_tests
+    last = out.strip().splitlines()[-1] if out.strip() else ""
+    if ok:
+        return answer + f"\n\n✅ I ran them on a copy of your code: {last}."
+    bug = re.search(r"#\s*BUG:\s*(.+)", tests)
+    return answer + (f"\n\n⚠️ I ran them: {last}. " + (f"It looks like a real bug in your code: {bug.group(1).strip()}"
+                                                       if bug else "Some still fail; check the output when you run them."))
+
+
 def ask(sel: str, request: str, source: str = "", lang: str = "") -> str:
     """Anything else about the highlighted code/text ('give me code to test this function', 'show an example of using
     this', 'add type hints and show me', 'write a docstring for it'): the selection + the request, one call. The
@@ -288,7 +363,13 @@ def ask(sel: str, request: str, source: str = "", lang: str = "") -> str:
             f" Answer in simple {out}, short.") + MORE_RULE
     reply = _llm(sys, f"Request: {request}\n\nSelected {'code' if code else 'text'}:\n{sel[:8000]}", smart=True,
                  max_tokens=SHORT_MAX["ask_code" if code else "ask_text"], purpose="assist_ask")
-    return _offer_more(reply, "ask", sel, request, source, lang)
+    reply = _offer_more(reply, "ask", sel, request, source, lang)
+    if code and mod and _TESTS_REQ.search(request or ""):  # tests: run them before handing them over
+        f = open_file_in_editor()
+        disk = f.read_text(errors="replace") if f and f.is_file() else ""
+        module = disk if re.search(r"\bdef\s+\w+|\bclass\s+\w+", disk) else sel  # unsaved editor: the selection
+        reply = verify_tests(reply, module, mod)
+    return reply
 
 
 def summary(text: str, lang: str = "") -> str:

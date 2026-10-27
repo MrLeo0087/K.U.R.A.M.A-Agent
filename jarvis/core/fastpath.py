@@ -1680,6 +1680,33 @@ _YES_PLAN = re.compile(r"^(?:ok(?:ay)?\s+|yes\s+|yeah\s+)*(?:yes|yeah|yep|yup|su
                        r"please|apply\s+it|organi[sz]e(?:\s+it)?|thanks?))*[\s.!]*$", I)
 _NO_PLAN = re.compile(r"^(?:no|nope|nah|cancel(?:\s+it|\s+the\s+plan)?|don'?t|do\s+not|stop|leave\s+it|forget\s+it|hoina|होइन|"
                       r"नगर)(?:[\s,.!]+(?:thanks?|please|don'?t\s+do\s+it))*[\s.!]*$", I)
+_YES_WORDS = {"yes", "yeah", "yea", "yep", "yup", "ya", "y", "sure", "ok", "okay", "k", "please", "haan", "han", "ho", "hajur",
+              "हो", "हुन्छ", "हजुर", "हाँ", "correct", "right", "definitely", "absolutely", "fine", "good", "great", "perfect"}
+_YES_LEADS = re.compile(r"(?:go\s+ahead|do\s+it|add\s+it|write\s+it|replace\s+it|apply\s+it|put\s+it|try\s+again|of\s+course|"
+                        r"why\s+not|sounds\s+good|let'?s\s+do\s+it|yes\s+please)\b", I)
+_NO_WORDS = {"no", "nope", "nah", "n", "cancel", "stop", "nahi", "nahin", "hoina", "होइन", "नाइ", "नहीं", "never"}
+_NO_LEADS = re.compile(r"(?:don'?t|do\s+not|not\s+now|not\s+this|leave\s+it|forget\s+it|no\s+thanks?|skip\s+it|never\s*mind)\b", I)
+
+
+def yes_no(t: str) -> str:
+    """'yes' / 'no' / '' for a reply to one of KURAMA's own questions. Robust to voice punctuation and repeats
+    ('Yes? Yes?', 'Yeah, yeah, add it.', 'No no, leave it'); a long new request is neither."""
+    s = re.sub(r"[^\w\s'\u0900-\u097f]", " ", (t or "").lower()).split()
+    if not s or len(s) > 14:
+        return ""
+    while len(s) > 1 and s[0] in ("okay", "ok", "so", "well", "hmm", "kurama", "hey", "and", "then", "actually"):
+        if s[1] in _YES_WORDS or s[1] in _NO_WORDS or s[1] in ("go", "do", "add", "dont", "don't", "not", "leave"):
+            s = s[1:]
+        else:
+            break
+    joined = " ".join(s)
+    if s[0] in _NO_WORDS or _NO_LEADS.match(joined):
+        return "no"
+    if s[0] in _YES_WORDS or _YES_LEADS.match(joined):
+        return "" if re.search(r"\b(?:but|instead|change|make\s+it|shorter|longer|different)\b", joined) and s[0] != "yes" else "yes"
+    return ""
+
+
 _EDIT_PLAN = re.compile(r"\b(?:change|keep|don'?t\s+move|do\s+not\s+move|leave|put|move|skip|instead|exclude|except|rename|"
                         r"separate|together|into|folder)\b", I)
 
@@ -1700,9 +1727,8 @@ def plan_answer_intent(t: str) -> Intent | None:
     from jarvis.core import assist, organizer
     stage = assist.use_waiting()  # the run block: "Should I add it?" / "Should I try again?"
     if stage:
-        yes = _YES_PLAN.match(t) or re.fullmatch(r"(?:yes|yeah|yep|sure|ok(?:ay)?|please|go\s+ahead|do\s+it|add\s+it|try\s+again|"
-                                                 r"haan|ho)\b[\s\w,.!']{0,40}", t, I)
-        no = re.fullmatch(r"(?:no|nope|nah|not\s+(?:now|this|that)|don'?t|leave\s+it|cancel)\b[\s\w,.!']{0,60}", t, I)
+        yn = yes_no(t)
+        yes, no = yn == "yes", yn == "no"
         if stage == "add" and yes and not no:
             return Intent("assist", "text_assist", "clipboard", {"action": "use_yes"})
         if stage == "add" and no:
@@ -1714,9 +1740,9 @@ def plan_answer_intent(t: str) -> Intent | None:
     if assist.ask_back_waiting() and len(t.split()) <= 40 and not t.strip().endswith("?"):  # its question to the user
         return Intent("assist", "text_assist", "clipboard", {"action": "answer_back", "request": t})
     if assist.more_waiting():  # "This needs a longer explanation. Want me to write it?"
-        if _YES_PLAN.match(t) or re.fullmatch(r"(?:yes|yeah|yep|sure|ok(?:ay)?|please|go\s+ahead|write\s+it|do\s+it)\b[\s\w,.!]{0,30}", t, I):
+        if (yn := yes_no(t)) == "yes":
             return Intent("assist", "text_assist", "clipboard", {"action": "more"})
-        if re.fullmatch(r"(?:no|nope|nah|not\s+now|no\s+thanks?|that'?s\s+(?:enough|fine|ok))[\s.!]*", t, I):
+        if yn == "no" or re.fullmatch(r"that'?s\s+(?:enough|fine|ok)[\s.!]*", t, I):
             return Intent("assist", "text_assist", "clipboard", {"action": "cancel_more"})
     if assist.retry_active() and _SELECTED_NOW.match(t):  # 'nothing highlighted' earlier; now it is
         return Intent("assist", "text_assist", "clipboard", {"action": "retry"})
@@ -1725,7 +1751,7 @@ def plan_answer_intent(t: str) -> Intent | None:
             return Intent("assist", "text_assist", "clipboard", {"action": "cancel_code"})
         fresh = re.search(r"\b(?:better|good|improve|fix|optimi[sz]e|detail|clean|faster|simpl|short|long|more|less|"
                           r"but|instead|add|remove|comment)", t, I)
-        if _YES_PLAN.match(t) or (not fresh and (_YES_START.match(t) or _APPLY_CODE.search(t))):
+        if _YES_PLAN.match(t) or (not fresh and (yes_no(t) == "yes" or _YES_START.match(t) or _APPLY_CODE.search(t))):
             return Intent("assist", "text_assist", "clipboard", {"action": "apply_code"})
         if fresh and (_YES_START.match(t) or re.match(r"(?:no|but|and|now|also|instead)\b|make\s+it\b", t, I)) \
                 and len(t.split()) <= 16:  # 'yes but make it shorter': a new version of the same selection
@@ -1895,6 +1921,10 @@ def todo_now_intent(t: str) -> Intent | None:
     L = lambda a, **k: Intent("todo", "read_later", "browser", {"action": a, **k})  # noqa: E731
     lead = r"(?:okay\W+|ok\W+|so\W+|please\W+|kurama\W+|can\s+you\s+|could\s+you\s+|now\W+)*"
     from jarvis.core import pageread
+    if pageread.waiting() and yes_no(t) == "no":
+        return Intent("page", "page_summary", "browser", {"action": "cancel"})
+    if pageread.waiting() and yes_no(t) == "yes":
+        return Intent("page", "page_summary", "browser", {"action": "detail"})
     if pageread.waiting():  # "Want a detailed overview?" was just asked
         if re.fullmatch(r"(?:yes|yeah|yep|sure|ok(?:ay)?|please|go\s+ahead|do\s+it|haan|ho)(?:\W+(?:please|do\s+it|give\s+(?:it|me)|"
                         r"detail(?:ed)?(?:\s+overview)?|show\s+me))*|(?:give|show|write)\s+(?:me\s+)?(?:the\s+|a\s+)?(?:detail(?:ed)?|full)"

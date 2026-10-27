@@ -40,6 +40,9 @@ def tmp_store(tmp_path, monkeypatch):
     trashed: list = []
     monkeypatch.setattr(_files, "trash", trashed.append)  # never move real files to the trash
     ratelimit.reset()
+    from jarvis.core import assist
+    for pending in (assist._use, assist._more, assist._ask_back, assist._retry, assist._pending):
+        pending.clear()  # in-memory 'waiting for yes' states never leak from one test into the next
     from jarvis.core import modes
     modes._cache = (0.0, {})  # the power mode is read from each test's own DB
     yield store

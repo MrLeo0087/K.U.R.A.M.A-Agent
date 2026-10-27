@@ -111,6 +111,8 @@ def short_line(text: str, lang: str = "en") -> str:
         line = f"I wrote {what}" + (f" ({fname})" if fname else "") + ". It's in the workspace, you can check it there."
         if run:
             line += f" Run {'them' if tests else 'it'} with: {run.group(1).strip()}"
+        if verdict := re.search(r"^(✅|⚠️)\s*(.+)$", text, re.M):  # tests were run before handing them over
+            line += f" {verdict.group(1)} {verdict.group(2).strip()}"
         return {"ne": "कोड workspace मा राखेँ, त्यहाँ हेर्नुहोस्।", "hi": "कोड workspace में रख दिया, वहाँ देखिए।"}.get(lang, line)
     plain = " ".join(re.sub(r"(?<=[^\s.!?:;।])$", ".", ln.strip(" -*•#"))  # each line ends like a sentence
                      for ln in lines if not _CODEY.search(ln) and not re.search(r"/[\w.-]+/", ln))
