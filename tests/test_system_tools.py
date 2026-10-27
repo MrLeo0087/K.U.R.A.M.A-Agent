@@ -337,6 +337,14 @@ POSITIVE = {
     "next song": ("media_control", {"action": "next"}),
     "previous track": ("media_control", {"action": "previous"}),
     "गाना रोको": ("media_control", {"action": "pause"}),
+    "Stop.playing video": ("media_control", {"action": "pause"}),  # owner's log: STT dot, was the AI
+    "video pause": ("media_control", {"action": "pause"}),
+    "video roka": ("media_control", {"action": "pause"}),
+    "Start play video": ("media_control", {"action": "play"}),  # was youtube: opened a NEW video
+    "Continue video": ("media_control", {"action": "play"}),  # was youtube + gesture control
+    "play the video": ("media_control", {"action": "play"}),
+    "keep playing": ("media_control", {"action": "play"}),
+    "भिडियो चलाउ": ("media_control", {"action": "play"}),
     "अगला गाना": ("media_control", {"action": "next"}),
     "brightness up": ("brightness", {"action": "up"}),
     "brightness down": ("brightness", {"action": "down"}),
@@ -347,7 +355,7 @@ POSITIVE = {
     "lock the screen": ("lock_screen", {}),
     "screen lock karo": ("lock_screen", {}),
 }
-NEGATIVE = ["volume to 150", "set volume to loud", "play despacito", "play music", "lock the door",
+NEGATIVE = ["stop it", "start it", "continue", "stop", "volume to 150", "set volume to loud", "play despacito", "play music", "lock the door",
             "mute the zoom call", "what is a screenshot", "next", "skip", "volume up and open youtube",
             "make the volume better", "brightness is too high for my eyes", "pause for a second and think",
             "screenshot the error and send it to my boss", "should I lock the screen"]
@@ -421,3 +429,11 @@ def test_yes_no_understands_run_it_and_refusal_variants():
     assert safety.parse_yes_no("hmm maybe") is None and safety.parse_yes_no("no, don't") is False
     assert meta.looks_like_refusal("I don't currently have a tool to directly change the system theme.")
     assert fastpath.match("Okay, switch the light mode now.").args == {"mode": "light"}
+
+
+def test_media_pause_hits_every_player_and_no_player_is_explained(desk):
+    assert media_control("pause") == "paused" and desk.calls[-1][1:] == ["-a", "pause"]
+    desk.player = None
+    out = media_control("play")
+    assert fastpath.render(fastpath.Intent("media", "media_control", "media", {"action": "play"}, "media"),
+                           True, out, "en").startswith("Nothing is playing")

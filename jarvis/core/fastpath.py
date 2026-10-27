@@ -418,6 +418,8 @@ LEVELS = {  # name -> (tool, group, {action: patterns})
 _MEDIA_OBJ = r"(?: (?:the |my )?(?:music|song|video|playback|track|player|media|it))?"
 _SONG = r"(?:song|track|video)"
 _SONG_HI = r"(?:gaana|gana|geet|song|track|गाना|गीत)"
+_VID = r"(?:[\s.,]+(?:the |my |this |that )?(?:music|song|video|movie|playback|youtube(?: video)?))"  # "Stop.playing video" (STT dot)
+_VID_NE = r"(?:video|bhidiyo|भिडियो|भिडिओ|वीडियो|gaana|gana|गाना|गीत)"
 SWITCHES = [  # (intent name, tool, group, args, patterns); first full match wins
     ("loc_history", "location_history", "system", {"device": "phone"}, _rx(
         r"(?:show |give me |see )?(?:my )?(?:phone|mobile)(?:'s)? (?:location |movement |travel )?history",
@@ -453,9 +455,15 @@ SWITCHES = [  # (intent name, tool, group, args, patterns); first full match win
         r"(?:awaz|awaaz|आवाज़|आवाज) (?:chalu karo|wapas lao|चालू करो|फेरि चालू गर)")),
     ("media", "media_control", "media", {"action": "pause"}, _rx(
         r"pause" + _MEDIA_OBJ, r"stop (?:the |my )?(?:music|song|playback|video)",
-        _SONG_HI + r" (?:roko|rok do|रोको|रोक दो|रोक|रोकिदेउ)")),
+        _SONG_HI + r" (?:roko|rok do|रोको|रोक दो|रोक|रोकिदेउ)",
+        r"stop[\s.,]+playing(?: it)?" + _VID + "?", r"(?:stop|hold|freeze)" + _VID, r"(?:music|song|video|movie)[\s.,]+(?:pause|stop)",
+        _VID_NE + r" (?:roka|roku|rok|roko|pause gara|pause garnu|रोक|रोका|रोकिदेउ|रोको|रोक दो|पज गर)")),
     ("media", "media_control", "media", {"action": "play"}, _rx(
-        r"play", r"(?:resume|unpause)" + _MEDIA_OBJ, r"continue (?:playing|the (?:music|song|video))")),
+        r"play", r"(?:resume|unpause)" + _MEDIA_OBJ, r"continue (?:playing|the (?:music|song|video))",
+        r"(?:start|continue|keep|resume)(?:[\s.,]+play(?:ing)?)?" + _VID + r"(?: again| now)?",
+        r"(?:start|continue|keep) playing(?: it)?", r"play it(?: again| now)?", r"play(?: the| this| that)? (?:video|movie)(?: again| now)?",
+        r"(?:music|song|video|movie)[\s.,]+(?:play|resume|continue)",
+        _VID_NE + r" (?:chalau|chalaa|chalao|chalu gara|play gara|चलाउ|चलाऊ|चलाओ|चलाइदेउ|फेरि चलाउ)")),
     ("media", "media_control", "media", {"action": "next"}, _rx(
         r"(?:play |go to |skip to )?(?:the )?next " + _SONG, r"skip(?: this| the)? " + _SONG,
         r"(?:agla|agla wala|arko|aarko|अगला|अर्को) " + _SONG_HI)),
@@ -2617,6 +2625,8 @@ _T = {
     "mic_muted": {"en": "Okay, your microphone is muted.", "hi": "माइक बंद कर दिया।", "ne": "माइक बन्द गरें।"},
     "mic_unmuted": {"en": "Okay, your microphone is on.", "hi": "माइक चालू कर दिया।", "ne": "माइक चालू गरें।"},
     "paused": {"en": "Okay, paused.", "hi": "रोक दिया।", "ne": "रोकें।"},
+    "no_player": {"en": "Nothing is playing right now. Say 'play <name> on YouTube' to start a video.",
+                  "hi": "अभी कुछ नहीं चल रहा है।", "ne": "अहिले केही चलिरहेको छैन।"},
     "playing": {"en": "Okay, playing.", "hi": "चला रहा हूँ।", "ne": "बजाउँदैछु।"},
     "next": {"en": "Okay, next track.", "hi": "अगला गाना।", "ne": "अर्को गीत।"},
     "previous": {"en": "Okay, previous track.", "hi": "पिछला गाना।", "ne": "अघिल्लो गीत।"},
@@ -2694,6 +2704,8 @@ def render(intent: Intent, ok: bool, output: str, lang: str) -> str:
     if intent.name in ("time", "weather") and err and "couldn't find a place" in out:
         return _say("no_place", lang, intent.label)
     if err:
+        if intent.name == "media" and "no media player" in out:
+            return _say("no_player", lang, "")
         if intent.name in ("open", "search"):
             return _say("open_fail", lang, intent.label.split("|")[0])
         return _say("failed", lang, re.sub(r"^error:\s*", "", out))

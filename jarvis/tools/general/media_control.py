@@ -48,7 +48,8 @@ def media_control(action: Literal["play_pause", "play", "pause", "next", "previo
             return f"{st.lower()}: {meta}" if meta else st.lower()
         if action not in COMMANDS:
             return f"error: unknown action {action!r}"
-        _sys.run([*_base(player), COMMANDS[action]])
+        # pause = every player (the default one may be an idle Spotify while the browser video plays)
+        _sys.run([*(_base(player) if player or action != "pause" else ["playerctl", "-a"]), COMMANDS[action]])
         if action == "play_pause":
             return "paused" if st.lower() == "playing" else "playing"
         return DONE[action]
