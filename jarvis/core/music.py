@@ -194,7 +194,8 @@ class Player:
             return self._play()
 
     def _mpv(self, title: str, src: list[str], extra: tuple = ()) -> list[str]:
-        return ["mpv", "--no-video", "--idle=no", "--force-window=no", "--really-quiet", "--no-terminal",
+        return ["mpv", "--no-video", "--idle=no", "--force-window=no", "--really-quiet", "--no-terminal", "--cache=yes",
+                "--cache-secs=30", "--audio-buffer=0.4",
                 f"--input-ipc-server={_sock()}", f"--volume={min(DUCK_VOLUME, self.volume) if _duck['on'] else self.volume}", f"--force-media-title={title or 'music'}",
                 *([f"--ao={os.environ['KURAMA_MUSIC_AO']}"] if os.environ.get("KURAMA_MUSIC_AO") else []),  # null = silent check
                 *extra, "--", *src]
@@ -511,12 +512,18 @@ def prev_track() -> str | None:
     return f"Previous song: {cur.get('title') or 'loading'}."
 
 
-def volume(step: int) -> str | None:
+def volume(step: int = 0, to: int | None = None) -> str | None:
+    """Music volume (mpv, 0-130): up / down by step or to a level. The laptop's own volume is not touched."""
     if not running():
         return None
-    PLAYER.volume = max(0, min(130, PLAYER.volume + step))
-    _send("set_property", "volume", PLAYER.volume)
-    return f"Music volume {PLAYER.volume}%."
+    new = to if to is not None else PLAYER.volume + step
+    new = max(0, min(130, int(new)))
+    if new == PLAYER.volume and step:
+        return f"The music is already at {'its loudest' if step > 0 else 'its quietest'} ({new}%)."
+    PLAYER.volume = new
+    if not _duck["on"]:
+        _send("set_property", "volume", new)
+    return f"Music volume {new}%."
 
 
 def now_playing() -> str | None:
@@ -528,7 +535,7 @@ def now_playing() -> str | None:
     return f"{'Paused' if paused else 'Playing'}: {cur.get('title') or 'music'}" + (f" ({left} more after it)." if left else ".")
 
 
-DUCK_VOLUME = 12  # % while you talk to KURAMA or it answers, so it hears you over the music
+DUCK_VOLUME = 25  # % while you speak to KURAMA or it answers, so it hears you over the music
 _duck = {"on": False, "timer": None}
 
 

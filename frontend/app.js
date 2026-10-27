@@ -121,10 +121,14 @@ function updateState() {
   $("m-conv").classList.toggle("live", mode === "conv" && conv.on);
   $("m-mute").setAttribute("aria-pressed", String(conv.muted));
   if (!mic.open && !player.active && !recording) audioSleepSoon(); // free the audio thread when idle (asleep = API listens)
-  const duck = st === "listening" || st === "thinking" || st === "speaking"; // music down while we talk
-  if (duck !== ducked) { ducked = duck; api.musicDuck(duck).catch(() => {}); }
+  // music down only while you actually speak (or the mic button records), KURAMA thinks or answers; back up 2 s
+  // after (not while talk mode merely waits: that kept the music at a whisper and every state flip pumped it)
+  const duck = recording || conv.state === "capturing" || busy || sttBusy || player.playing;
+  clearTimeout(unduckTimer);
+  if (duck && !ducked) { ducked = true; api.musicDuck(true).catch(() => {}); }
+  else if (!duck && ducked) unduckTimer = setTimeout(() => { ducked = false; api.musicDuck(false).catch(() => {}); }, 2000);
 }
-let ducked = false;
+let ducked = false, unduckTimer = 0;
 
 // ---------- the KURAMA mark: glows and shifts colour with the voice (only while listening / speaking) ----------
 let markRaf = 0, markAt = 0;

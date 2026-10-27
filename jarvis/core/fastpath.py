@@ -398,7 +398,7 @@ _BRI = r"(?:the )?(?:screen )?brightness"
 _BRI_HI = r"(?:brightness|ब्राइटनेस|चमक)"
 LEVELS = {  # name -> (tool, group, {action: patterns})
     "volume": ("volume", "audio", {
-        "set": _rx(r"(?:set|change|put|turn) " + _VOL + r"(?: level)? (?:to|at) " + _N + _PCT,
+        "set": _rx(r"(?:set|change|put|turn) " + _VOL + r"(?: level)? (?:to |at )?" + _N + _PCT,
                    r"(?:volume|sound)(?: level)? (?:to |at )?" + _N + _PCT,
                    _VOL_HI + " " + _N + _PCT + " " + _DO_HI),
         "up": _rx(r"(?:turn|bump|crank) up " + _VOL + _BY, r"(?:turn|bump|crank) " + _VOL + " up" + _BY,
@@ -524,7 +524,7 @@ def _system_intent(t: str) -> Intent | None:
                 n = m.groupdict().get("n")
                 args: dict = {"action": action}
                 if action == "set":
-                    if n is None or not 0 <= int(n) <= 100:
+                    if n is None or not 0 <= int(n) <= 150:  # up to 150 with Ubuntu's Over-Amplification
                         return None  # "volume to 150": let the LLM ask
                     args["level"] = int(n)
                 elif n is not None:
@@ -848,6 +848,17 @@ def music_intent(t: str) -> Intent | None:
     if re.fullmatch(lead + r"(?:play|shuffle)\s+(?:my\s+(?:own\s+)?(?:music|songs)|(?:the\s+)?(?:songs|music)\s+(?:on|from|in)\s+(?:my\s+)?(?:laptop|computer|pc|music\s+folder)|"
                     r"my\s+(?:downloaded|offline)\s+(?:songs|music)|offline\s+music)", low, I):
         return mu("local")
+    if music.running() and not re.search(r"\b(?:system|laptop|computer|speakers?|device|mic|microphone|brightness)\b", low):
+        if m := re.fullmatch(lead + r"(?:(?:increase|raise|turn\s+up|louder|more)\s+(?:the\s+)?(?:music\s+|song\s+)?(?:volume|sound)?"
+                             r"|(?:the\s+)?(?:music\s+|song\s+)?(?:volume|sound)\s+(?:up|higher|louder)|louder(?:\s+please)?|turn\s+it\s+up)"
+                             r"(?:\s+by\s+(?P<n>\d{1,3}))?(?:\s+(?:a\s+(?:bit|little)|please|more))*", low, I):
+            return Intent("music", "music", "media", {"action": "volume_up", "query": m.group("n") or ""})
+        if m := re.fullmatch(lead + r"(?:(?:decrease|lower|reduce|turn\s+down|quieter|less)\s+(?:the\s+)?(?:music\s+|song\s+)?(?:volume|sound)?"
+                             r"|(?:the\s+)?(?:music\s+|song\s+)?(?:volume|sound)\s+(?:down|lower)|(?:softer|quieter)(?:\s+please)?|turn\s+it\s+down)"
+                             r"(?:\s+by\s+(?P<n>\d{1,3}))?(?:\s+(?:a\s+(?:bit|little)|please|more))*", low, I):
+            return Intent("music", "music", "media", {"action": "volume_down", "query": m.group("n") or ""})
+        if m := re.fullmatch(lead + r"(?:set\s+)?(?:the\s+)?(?:music\s+)?volume\s+(?:to\s+)?(?P<n>\d{1,3})\s*%?", low, I):
+            return Intent("music", "music", "media", {"action": "volume_set", "query": m.group("n")})
     if re.search(r"\b(?:youtube|video|videos|movie|spotify)\b", t, I) or len(t.split()) > 16:
         return None
     if re.fullmatch(lead + r"(?:stop|turn\s+off|switch\s+off|end|kill|close)\s+(?:the\s+|my\s+|this\s+)?(?:music|songs?|playing\s+music)(?:\s+now|\s+please)?"
@@ -855,6 +866,7 @@ def music_intent(t: str) -> Intent | None:
         return mu("stop") if music.running() else None  # no music of ours: 'stop the music' pauses the browser
     if m := re.fullmatch(lead + r"(?:turn\s+)?(?:the\s+)?music\s+(?:volume\s+)?(?P<d>up|down|louder|quieter|softer)", t, I):
         return mu("volume_up" if m.group("d").lower() in ("up", "louder") else "volume_down")
+    t = re.sub(r"[\s,]+(?:buddy|bro|brother|dude|yaar|dai|bhai|man|my\s+friend|kurama|please|now)[\s.!?]*$", "", t, flags=I)
     shuffle = bool(re.match(lead + r"shuffle\b", low, I))
     if m := re.fullmatch(lead + r"(?:play|shuffle|put\s+on|start|listen\s+to|i\s+want\s+to\s+listen\s+to|bajau|bajaau)\s+(?:me\s+)?(?:some\s+|a\s+|the\s+)?"
                          r"(?P<q>.*?)\s*(?P<k>music|songs?|playlist|mix|beats|lofi|gana|गाना|geet|bhajan|ghazal)(?:\s+(?:please|now|for\s+me))?[\s.!]*", t, I):

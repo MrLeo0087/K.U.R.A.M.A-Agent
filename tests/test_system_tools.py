@@ -133,12 +133,15 @@ def test_missing_cli_gives_clear_message(desk):
 
 
 # --- audio ---
-def test_volume_get_set_step_and_clamp(desk):
+def test_volume_get_set_step_and_clamp(desk, monkeypatch):
+    from jarvis.tools.general import volume as vol_mod
+    monkeypatch.setattr(vol_mod, "max_level", lambda: 100)  # Over-Amplification off
     assert volume() == "volume 50%"
     assert volume("set", 30) == "volume 30%" and desk.vol == 30
     assert volume("up") == "volume 40%"
     assert volume("down", step=5) == "volume 35%"
-    assert volume("set", 150) == "volume 100%"
+    assert "Over-Amplification" in volume("set", 150)
+    assert volume("set", 100) == "volume 100%"
     assert volume("set").startswith("error")
     desk.muted = True
     assert volume() == "volume 100% (muted)"
@@ -359,7 +362,7 @@ POSITIVE = {
     "lock the screen": ("lock_screen", {}),
     "screen lock karo": ("lock_screen", {}),
 }
-NEGATIVE = ["stop it", "start it", "continue", "stop", "volume to 150", "set volume to loud", "play despacito", "lock the door",
+NEGATIVE = ["stop it", "start it", "continue", "stop", "volume to 200", "set volume to loud", "play despacito", "lock the door",
             "mute the zoom call", "what is a screenshot", "next", "skip", "volume up and open youtube",
             "make the volume better", "brightness is too high for my eyes", "pause for a second and think",
             "screenshot the error and send it to my boss", "should I lock the screen"]
@@ -452,3 +455,14 @@ def test_youtube_play_without_name_resumes_instead_of_new_tab(desk, monkeypatch)
     assert youtube(action="play") == "playing" and not opened
     desk.player = None
     assert youtube(action="play") == "Opened YouTube." and opened
+
+
+def test_volume_above_100_with_over_amplification(desk, monkeypatch):
+    from jarvis.tools.general import volume as vol
+    from jarvis.core import fastpath
+    monkeypatch.setattr(vol, "max_level", lambda: 150)
+    assert vol.volume("set", 130) == "volume 130%"
+    assert vol.volume("set", 180) == "The most is 150%."
+    monkeypatch.setattr(vol, "max_level", lambda: 100)
+    assert "Over-Amplification" in vol.volume("set", 130)
+    assert fastpath.match("set volumn 130").args == {"action": "set", "level": 130}

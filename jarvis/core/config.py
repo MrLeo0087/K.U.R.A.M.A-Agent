@@ -81,6 +81,7 @@ STT_PROMPT = os.getenv("JARVIS_STT_PROMPT", MY_WORDS + ", "
 # Common mishearings fixed after transcription (regex, case-insensitive, word-bounded).
 # Typing slips seen in the real chat log, fixed before matching (word-level, case-insensitive)
 TYPO_FIXES: dict[str, str] = {
+    "volumn": "volume", "volum": "volume", "valume": "volume", "volumne": "volume", "voulme": "volume",
     "alram": "alarm", "alaram": "alarm", "allarm": "alarm", "remainder": "reminder", "remiander": "reminder",
     "traning": "training", "trainig": "training", "usuage": "usage", "useage": "usage", "staus": "status",
     "statsu": "status", "thsi": "this", "niw": "now", "insdie": "inside", "insde": "inside", "plz": "please",

@@ -10,7 +10,7 @@ from jarvis.core.registry import tool
       "YouTube link or playlist, a saved playlist, or the songs in ~/Music; save/list/delete playlists; pause, resume, "
       "next, previous, volume, what's playing, stop.")
 def music(action: Literal["play", "url", "playlist", "local", "save", "playlists", "delete", "pause", "resume", "next",
-                          "previous", "volume_up", "volume_down", "status", "stop"] = "play",
+                          "previous", "volume_up", "volume_down", "volume_set", "status", "stop"] = "play",
           query: str = "", shuffle: bool = False) -> str:
     """Music player.
 
@@ -18,7 +18,7 @@ def music(action: Literal["play", "url", "playlist", "local", "save", "playlists
         action: play (query = song/artist/mood), url (query = YouTube link; empty = the tab open in the browser),
             playlist (query = saved playlist name), local (query = folder, empty = ~/Music), save (query = name for
             the open/linked playlist), playlists (list them), delete (query = name), pause, resume, next, previous,
-            volume_up, volume_down, status, stop.
+            volume_up / volume_down (query = step, default 15), volume_set (query = 0-130), status, stop.
         query: See action.
         shuffle: Play in random order.
     """
@@ -47,6 +47,7 @@ def music(action: Literal["play", "url", "playlist", "local", "save", "playlists
     if action == "delete":
         return m.delete_playlist(query)
     out = {"pause": m.pause, "resume": m.resume, "next": m.next_track, "previous": m.prev_track,
-           "volume_up": lambda: m.volume(10), "volume_down": lambda: m.volume(-10), "status": m.now_playing,
+           "volume_up": lambda: m.volume(int(query or 15)), "volume_down": lambda: m.volume(-int(query or 15)),
+           "volume_set": lambda: m.volume(to=int(query or 60)), "status": m.now_playing,
            "stop": m.stop}[action]()
     return out or "No music is playing. Say 'play lofi music' to start some."

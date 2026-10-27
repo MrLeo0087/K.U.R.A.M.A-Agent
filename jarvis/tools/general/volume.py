@@ -11,6 +11,17 @@ from jarvis.tools.general import _sys
 SINK = "@DEFAULT_SINK@"
 
 
+def max_level() -> int:
+    """150 when Ubuntu's Sound > Over-Amplification is on (the laptop can go past 100%), else config.VOLUME_MAX."""
+    try:
+        import subprocess
+        out = subprocess.run(["gsettings", "get", "org.gnome.desktop.sound", "allow-volume-above-100-percent"],
+                             capture_output=True, text=True, timeout=3).stdout.strip()
+    except (OSError, Exception):  # noqa: BLE001
+        out = ""
+    return max(config.VOLUME_MAX, 150) if out == "true" else config.VOLUME_MAX
+
+
 def get_level() -> int:
     n = _sys.pct(_sys.run(["pactl", "get-sink-volume", SINK]))
     if n is None:
@@ -23,7 +34,7 @@ def volume(action: Literal["get", "set", "up", "down"] = "get", level: int | Non
 
     Args:
         action: get, set (needs level), up or down (by step).
-        level: Target volume 0-100 for action=set.
+        level: Target volume for action=set: 0-100, or up to 150 when Over-Amplification is on.
         step: Percent to change for up/down (default 10).
     """
     try:
@@ -35,10 +46,14 @@ def volume(action: Literal["get", "set", "up", "down"] = "get", level: int | Non
         if action == "set":
             if level is None:
                 return "error: say which level (0-100)"
-            new = _sys.clamp(level, 0, config.VOLUME_MAX)
+            top = max_level()
+            if level > top:
+                return (f"The most this laptop allows is {top}%. Turn on Settings > Sound > Over-Amplification to go up to "
+                        f"150%." if top <= 100 else f"The most is {top}%.")
+            new = _sys.clamp(level, 0, top)
         elif action in ("up", "down"):
             delta = abs(int(step or config.VOLUME_STEP))
-            new = _sys.clamp(get_level() + (delta if action == "up" else -delta), 0, config.VOLUME_MAX)
+            new = _sys.clamp(get_level() + (delta if action == "up" else -delta), 0, max_level())
         else:
             return f"error: unknown action {action!r}"
         _sys.run(["pactl", "set-sink-volume", SINK, f"{new}%"])

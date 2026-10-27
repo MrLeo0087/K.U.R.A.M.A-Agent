@@ -192,3 +192,18 @@ def test_stop_and_next_answers_render():
     i = fastpath.Intent("media", "media_control", "media", {"action": "next"}, "media")
     assert fastpath.render(i, True, "Next song: Blue.", "en") == "Next song: Blue."
     assert fastpath.match("Udama, stop song.").tool == "media_control"
+
+
+def test_volume_words_drive_the_music(monkeypatch, tmp_path):
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    mpv = FakeMpv(music._sock())
+    music.PLAYER.queue = [{"url": "u", "id": "uuuuuu", "title": "x", "duration": 100}]
+    music.PLAYER.i, music.PLAYER.procs, music.PLAYER.volume = 0, [FakeProc()], 60
+    m = fastpath.match
+    assert m("Increase the volume.").args == {"action": "volume_up", "query": ""}
+    assert m("increase the volume by 30").args["query"] == "30" and m("music volume 80").args["action"] == "volume_set"
+    assert music.volume(15) == "Music volume 75%." and mpv.state["volume"] == 75
+    assert music.volume(to=130) == "Music volume 130%." and music.volume(15).startswith("The music is already at its loudest")
+    assert m("Listen to music, buddy.").args["query"] == "relaxing music"
+    music.PLAYER.procs = []
+    assert m("Increase the volume.").tool == "volume"  # no music of ours: the laptop's volume
