@@ -1391,10 +1391,6 @@ function renderTracker(t) {
   }
   const bills = (m.bills_due || []).map((b) => `<span class="mchip due">💸 ${esc(b)} due</span>`).join("");
   $("m-top").innerHTML = bills + (m.top || []).slice(0, 3).map((c) => `<span class="mchip">${esc(c.cat)} ${amt(c.amount)}</span>`).join("");
-  const today = new Date().toISOString().slice(0, 10);
-  $("m-recent").innerHTML = (m.recent || []).filter((r) => r.type !== "income").slice(0, 3).map((r) => `<li>
-    <span class="ell">${esc(r.note || r.category)} <small>${esc(r.category)}${r.date && r.date !== today ? " · " + esc(r.date.slice(5)) : ""}</small></span>
-    <b>${amt(Number(r.amount))}</b><button type="button" class="tb" data-habit="expense_delete" data-ref="${r.row}" title="Delete this expense" aria-label="Delete">✕</button></li>`).join("");
   const done = hs.filter((h) => h.done).length;
   $("track-pill").textContent = hs.length ? `habits ${done}/${hs.length}` : "";
   const ul = $("habit-list");
