@@ -4,6 +4,7 @@ import { VOICE_DEFAULTS, loadSettings, saveSettings } from "./config.js";
 import { Dust } from "./dust.js";
 import { Orb } from "./orb.js";
 import { attachSlash } from "./slash.js";
+import { openMoney } from "./money.js";
 import { Conversation, Mic, Player, Recorder, SentenceSplitter, audioCtx, audioSleepSoon, insertAtCursor } from "./voice.js";
 
 const $ = (id) => document.getElementById(id);
@@ -1404,6 +1405,10 @@ function renderTracker(t) {
     <button type="button" class="tb ${h.done ? "" : "ok"}" data-habit="${h.done ? "habit_undo" : "habit_done"}" data-ref="${esc(h.name)}"
       title="${h.done ? "Undo today" : "Done today"}" aria-label="${h.done ? "Undo" : "Done"}">${h.done ? "↺" : "✓"}</button></li>`).join("");
 }
+$("track").addEventListener("click", (e) => { // the card itself opens the Money window (date range, category, rows)
+  if (e.target.closest("button")) return;
+  openMoney(api, { esc, toast, onChange: () => { fresh = true; loadDash(); } });
+});
 document.addEventListener("click", async (e) => { // Money & habits card: ✓ habit done / ↺ undo (no chat, 0 tokens)
   const b = e.target.closest("[data-habit]");
   if (!b) return;

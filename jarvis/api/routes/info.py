@@ -459,6 +459,16 @@ async def money_card():
     return await run_in_threadpool(expenses.dashboard)
 
 
+@router.get("/money/range", summary="Money window: rows + totals from one date to another (YYYY-MM-DD)")
+async def money_range(start: str = Query(..., max_length=10), end: str = Query("", max_length=10),
+                      category: str = Query("", max_length=30)):
+    from jarvis.core import expenses
+    try:
+        return await run_in_threadpool(expenses.range_data, start, end, category)
+    except ValueError:
+        return JSONResponse({"error": "dates must look like 2026-10-27"}, status_code=400)
+
+
 @router.get("/habits", summary="Habits with today's progress, streaks and the last 7 days")
 async def habits_card():
     from jarvis.core import habits

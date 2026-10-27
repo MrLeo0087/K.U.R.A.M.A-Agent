@@ -75,6 +75,7 @@ export class Api {
   cancelJob(id) { return this.request(`/api/v1/jobs/${encodeURIComponent(id)}/cancel`, { method: "POST", body: {} }); }
   alerts() { return this.request("/api/v1/alerts?limit=20"); }
   alertsRead() { return this.request("/api/v1/alerts/read", { method: "POST", body: {} }); }
+  moneyRange(start, end = "", category = "") { return this.request(`/api/v1/money/range?start=${start}&end=${end}&category=${encodeURIComponent(category)}`); }
   tracker(kind, ref) { return this.request("/api/v1/tracker", { method: "POST", body: { kind, ref } }); }
   todo(action, title, type = "") { return this.request("/api/v1/todo", { method: "POST", body: { action, title, type } }); }
   dashboard(fresh = false) { return this.request(`/api/v1/dashboard${fresh ? "?fresh=1" : ""}`); }

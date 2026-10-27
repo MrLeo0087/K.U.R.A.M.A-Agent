@@ -1596,6 +1596,14 @@ _PERIOD = (("today", r"\btoday|aaja|आज\b"), ("yesterday", r"\byesterday|hijo
 _MONEY_AMT = r"(?:rs\.?\s*|npr\s*|रु\.?\s*)?\d[\d,]*(?:\.\d+)?\s*(?:k\b|thousand|hajar)?\s*(?:rs|rupees?|npr)?"
 
 
+def _money_period(t: str, default: str = "month") -> str:
+    """A date range said in words ('from Oct 1 to Oct 15', 'on the 20th', 'last 10 days') wins over 'this month'."""
+    from jarvis.core import expenses as ex
+    if r := ex.dates_in(re.sub(r"\b(?:today|yesterday)\b", "", t, flags=I)):
+        return ex.range_period(*r)
+    return _period(t, default)
+
+
 def _period(t: str, default: str = "month") -> str:
     return next((p for p, rx in _PERIOD if re.search(rx, t, I)), default)
 
@@ -1657,16 +1665,17 @@ def tracker_intent(t: str) -> Intent | None:
     if re.search(r"\b(?:break\s*down|category[\s-]?wise|by\s+category|each\s+category|every\s+category|all\s+(?:the\s+)?categories|"
                  r"per\s+category|whole\s+(?:budget|expenses?|spending)|full\s+(?:expense|spending|money)\s+report|where\s+(?:did|does)\s+"
                  r"(?:my|all\s+my|the)\s+money\s+go)", low) and re.search(r"\b(?:spen[dt]|spending|expenses?|money|budget|kharcha|category|categories)\b", low):
-        return money("breakdown", period=_period(low))
+        return money("breakdown", period=_money_period(low))
     if re.search(r"\b(?:how\s+much|kati)\b.{0,30}\b(?:spen[dt]|spending|expense|kharcha|खर्च|kharch)", low) or re.fullmatch(
             r"(?:show\s+|give\s+|tell\s+)?(?:me\s+)?(?:my\s+|the\s+)?(?:total\s+)?(?:expense|expenses|spending|money|kharcha)\s+(?:report|summary|total|so\s+far|breakdown)"
             r"(?:\s+(?:for|of)\s+.+|\s+(?:today|yesterday|this\s+\w+|last\s+month))?|(?:monthly|weekly|yearly|daily)\s+(?:expense|spending|money)\s+report", low, I):
         cat = next((c for c in ex.CATS if re.search(rf"\b{c}\b", low)), "")
         if not cat and (mm := re.search(r"\b(?:on|for|in|of)\s+(?:my\s+|the\s+)?([a-z]+)", low)):
             cat = ex.resolve_category(mm.group(1))
-        return money("report", period=_period(low), category=cat)
-    if re.fullmatch(r"(?:show|list|what\s+are|give\s+me)\s+(?:me\s+)?(?:my\s+|the\s+|all\s+)?(?:expenses|spendings?|transactions)(?:\s+(?:for\s+)?(?:today|yesterday|this\s+\w+|last\s+month))?", low, I):
-        return money("list", period=_period(low, "today"))
+        return money("report", period=_money_period(low), category=cat)
+    if re.fullmatch(r"(?:show|list|what\s+are|give\s+me)\s+(?:me\s+)?(?:my\s+|the\s+|all\s+)?(?:expenses|spendings?|transactions)(?:\s+(?:for\s+)?(?:today|yesterday|this\s+\w+|last\s+month))?"
+                    r"|(?:show|list|give\s+me)\s+(?:me\s+)?(?:my\s+|the\s+|all\s+)?(?:expenses|spendings?|transactions)\s+(?:from|between|on|since|for|of|in)\s+.+", low, I):
+        return money("list", period=_money_period(low, "today"))
     not_money = re.search(r"\b(?:time|minutes?|mins?|hours?|hrs?|seconds?|days?|weeks?|months?|years?|tokens?|ram|gb|mb|percent|"
                           r"remind|schedule|alarm|timer|how\s+much|points?|marks?|goals?|runs?|wickets?)\b|%", low)
     if not not_money and re.search(r"\d", low) and (

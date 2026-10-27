@@ -21,8 +21,11 @@ BUDGET_HEAD = ["Category", "Monthly"]
 BILL_HEAD = ["Name", "Amount", "Category", "Day", "Last paid"]
 CATS = {  # category: words that point to it
     "food": "food|lunch|dinner|breakfast|snack|snacks|tea|coffee|momo|momos|restaurant|meal|khana|khaja|chiya|"
-            "pizza|burger|biryani|chai|juice|cafe|canteen|dal bhat|chicken|eat|ate",
-    "groceries": "groceries|grocery|vegetables|veggies|fruits|milk|rice|sabji|tarkari|market|kirana|eggs|bread",
+            "pizza|burger|biryani|chai|juice|cafe|canteen|dal bhat|chowmein|samosa|ice cream|eat|ate",
+    "groceries": "groceries|grocery|vegetables?|veggies|fruits?|milk|rice|sabji|tarkari|market|kirana|eggs?|bread|meat|"
+                 "chicken|mutton|buff|pork|fish|tomato(?:es)?|onions?|potato(?:es)?|garlic|ginger|oil|dal|lentils?|flour|"
+                 "atta|sugar|salt|spices?|masala|paneer|curd|dahi|ghee|butter|cheese|banana|apple|mango|spinach|saag|"
+                 "cauliflower|cabbage|beans|peas|chili|chilli|lemon|coriander",
     "transport": "transport|bus|taxi|bike|petrol|fuel|diesel|uber|pathao|indrive|ride|ticket|fare|parking|tempo|micro",
     "bills": "bill|bills|electricity|light bill|water bill|internet|wifi|recharge|data pack|phone bill|mobile|ntc|ncell|"
              "subscription|netflix|spotify|youtube premium",
@@ -96,6 +99,8 @@ def category_of(text: str) -> str:
 
 def _day(text: str, today: date) -> date:
     low = text.lower()
+    if (m := re.search(r"\b(?:on|dated)\s+(?:the\s+)?(" + _D1 + r")", low)) and (d := _one_date(m, today)) and d <= today:
+        return d  # 'spent 500 on momo on October 20
     if re.search(r"\b(?:yesterday|hijo|हिजो|kal)\b", low):
         return today - timedelta(days=1)
     if m := re.search(r"\b(\d+)\s+days?\s+ago\b", low):
@@ -105,30 +110,61 @@ def _day(text: str, today: date) -> date:
 
 def _note(text: str) -> str:
     t = re.sub(r"\b(?:i\s+)?(?:spent|spend|paid|pay|bought|buy|got|received|earned|kharcha|kharch|on|for|of|in|"
-               r"rs\.?|rupees?|npr|today|yesterday|hijo|aaja|bhayo|gare|garyo|the|a|an|my|me|was|it|just|ko|ma|le)\b", " ",
+               r"rs\.?|rupees?|npr|today|yesterday|hijo|aaja|bhayo|gare|garyo|the|a|an|my|me|was|it|just|ko|ma|le|"
+               r"actually|also|some|worth|total|i)\b", " ",
                text, flags=re.I)
     t = _AMT.sub(" ", t)
     return " ".join(t.split()).strip(" ,.-")[:60]
 
 
+def items(text: str) -> list[tuple[float, str]]:
+    """'spent 200 in the meat and 50 in the tomato and 500 in the vegetable' -> [(200, 'meat ...'), (50, ...), (500, ...)].
+    Each amount gets the words around it; a part without an amount ('... on momo and tea') joins the item before."""
+    parts = [p for p in re.split(r"\s*(?:(?<!\d),|,(?!\d{3}\b)|;|&|\+|\band\s+(?:also\s+)?|\bplus\b|\balso\b|\bthen\b)\s*", text, flags=re.I) if p.strip()]
+    out: list[list] = []
+    for p in parts:
+        amt = _amount(p)
+        if amt is None:
+            if out:
+                out[-1][1] += " and " + p
+            continue
+        out.append([amt, p])
+    if not out and (amt := _amount(text)) is not None:
+        out = [[amt, text]]
+    return [(a, t) for a, t in out]
+
+
 def add(text: str, now: datetime | None = None) -> str:
-    """'spent 500 on momo', 'got 20000 salary', 'paid 1500 internet bill yesterday'."""
+    """'spent 500 on momo', 'got 20000 salary', 'paid 1500 internet bill yesterday',
+    'spent 200 on meat, 50 on tomato and 500 on vegetables' (three rows, each with its own category)."""
     now = now or datetime.now()
-    amt = _amount(text)
-    if amt is None:
+    found = items(text)
+    if not found:
         return "How much was it? Say for example 'spent 500 on food'."
-    kind = "income" if _INCOME.search(text) else "expense"
-    cat = "income" if kind == "income" else category_of(text)
     day = _day(text, now.date())
-    note = _note(text) or cat
     m, b, bills = _book()
-    m.append({"date": day.isoformat(), "type": kind, "amount": f"{amt:g}", "category": cat, "note": note})
+    added = []
+    for amt, part in found:
+        kind = "income" if _INCOME.search(part) or (len(found) == 1 and _INCOME.search(text)) else "expense"
+        cat = "income" if kind == "income" else category_of(part)
+        if cat == "other" and len(found) > 1:
+            cat = category_of(text)  # 'spent 200 and 300 on groceries'
+        note = _note(re.sub(r"\b(?:on|dated)\s+(?:the\s+)?" + _D1 + r"|\byesterday\b|\b\d+\s+days?\s+ago\b", " ", part, flags=re.I)) or cat
+        m.append({"date": day.isoformat(), "type": kind, "amount": f"{amt:g}", "category": cat, "note": note})
+        added.append((amt, kind, cat, note))
     _save(m, b, bills)
-    if kind == "income":
-        return f"Added income {money(amt)} ({note})."
-    out = f"Added {money(amt)} for {cat}" + (f" ({note})" if note and note != cat else "") + \
-          (" yesterday" if day < now.date() else "") + f". This month: {money(_sum(m, 'month', now.date()))}."
-    return out + budget_warning(m, b, cat, now.date())
+    when = "" if day == now.date() else " yesterday" if day == now.date() - timedelta(days=1) else f" on {day:%b %d}"
+    month = f"This month: {money(_sum(m, 'month', now.date()))}."
+    warn = "".join(dict.fromkeys(budget_warning(m, b, c, now.date()) for _, k, c, _ in added if k == "expense"))
+    if len(added) == 1:
+        amt, kind, cat, note = added[0]
+        if kind == "income":
+            return f"Added income {money(amt)} ({note}){when}."
+        return f"Added {money(amt)} for {cat}" + (f" ({note})" if note and note != cat else "") + f"{when}. {month}" + warn
+    lines = ", ".join(f"{money(a)} {n if n != c else c}" + (f" ({c})" if n != c else "") for a, k, c, n in added)
+    total = sum(a for a, k, _, _ in added if k == "expense")
+    word = "entries" if any(k == "income" for _, k, _, _ in added) else "expenses"
+    return f"Added {len(added)} {word}{when}: {lines}. Total {money(total)}. {month}" + warn
 
 
 def _rows(m: list[dict], kind: str = "expense") -> list[tuple[date, float, str, str]]:
@@ -144,8 +180,72 @@ def _rows(m: list[dict], kind: str = "expense") -> list[tuple[date, float, str, 
     return out
 
 
+_MONTHS = {m: i + 1 for i, m in enumerate(("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"))}
+_MON = r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?"
+_D1 = (r"(?:(?P<y>\d{4})-(?P<m>\d{1,2})-(?P<d>\d{1,2})"  # 2026-10-20
+       r"|(?P<d2>\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?(?P<m2>" + _MON + r")(?:,?\s+(?P<y2>\d{4}))?"  # 20th of October
+       r"|(?P<m3>" + _MON + r")\s+(?P<d3>\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(?P<y3>\d{4}))?"  # Oct 20
+       r"|(?P<d4>\d{1,2})/(?P<m4>\d{1,2})(?:/(?P<y4>\d{2,4}))?"  # 20/10/2026
+       r"|the\s+(?P<d5>\d{1,2})(?:st|nd|rd|th)"  # the 20th (this month)
+       r"|(?P<w>today|yesterday))")
+
+
+def _one_date(m: re.Match, today: date) -> date | None:
+    g = m.groupdict()
+    if g.get("w"):
+        return today if g["w"].lower() == "today" else today - timedelta(days=1)
+    try:
+        if g.get("y"):
+            return date(int(g["y"]), int(g["m"]), int(g["d"]))
+        if g.get("d4"):
+            y = int(g["y4"] or today.year)
+            return date(y + 2000 if y < 100 else y, int(g["m4"]), int(g["d4"]))
+        if g.get("d5"):
+            return today.replace(day=int(g["d5"]))
+        d, mon, y = (g["d2"], g["m2"], g["y2"]) if g.get("d2") else (g["d3"], g["m3"], g["y3"])
+        out = date(int(y or today.year), _MONTHS[mon[:3].lower()], int(d))
+        return out.replace(year=out.year - 1) if not y and out > today else out  # 'Dec 20' said in January = last year
+    except (ValueError, KeyError, TypeError):
+        return None
+
+
+def dates_in(text: str, today: date | None = None) -> tuple[date, date] | None:
+    """'from Oct 1 to Oct 15', 'between 1/10 and 15/10', 'on October 20', 'last 10 days', 'last week' -> (start, end)."""
+    today = today or date.today()
+    low = text.lower()
+    if m := re.search(r"\b(?:last|past|previous)\s+(\d{1,3})\s+days?\b", low):
+        return today - timedelta(days=int(m.group(1)) - 1), today
+    if re.search(r"\blast\s+week\b", low):
+        start = today - timedelta(days=today.weekday() + 7)
+        return start, start + timedelta(days=6)
+    found = [d for d in (_one_date(m, today) for m in re.finditer(r"\b" + _D1 + r"\b", low, re.I)) if d]
+    if not found:
+        return None
+    if len(found) == 1:
+        if re.search(r"\b(?:since|from)\b", low) and not re.search(r"\b(?:to|till|until|and)\b", low):
+            return found[0], today  # 'since October 10'
+        return found[0], found[0]
+    a, z = found[0], found[1]
+    return (a, z) if a <= z else (z, a)
+
+
+def range_period(a: date, z: date) -> str:
+    return f"range:{a.isoformat()}:{z.isoformat()}"
+
+
+def period_words(period: str) -> str:
+    if period.startswith("range:"):
+        _, a, z = period.split(":")
+        da, dz = date.fromisoformat(a), date.fromisoformat(z)
+        return f"on {da:%b %d}" if da == dz else f"from {da:%b %d} to {dz:%b %d}"
+    return PERIOD_WORDS.get(period, period)
+
+
 def span(period: str, today: date) -> tuple[date, date]:
-    """[start, end] for today / yesterday / week / month / last month / year."""
+    """[start, end] for today / yesterday / week / month / last month / year / range:<from>:<to>."""
+    if period.startswith("range:"):
+        _, a, z = period.split(":")
+        return date.fromisoformat(a), date.fromisoformat(z)
     if period == "today":
         return today, today
     if period == "yesterday":
@@ -200,12 +300,12 @@ def report(period: str = "month", cat: str = "", now: datetime | None = None) ->
     a, z = span(period, today)
     rows = [(d, v, c, n) for d, v, c, n in _rows(m) if a <= d <= z and (not cat or c == cat)]
     total = sum(v for _, v, _, _ in rows)
-    word = PERIOD_WORDS.get(period, period)
+    word = period_words(period)
     if not rows:
         return f"No spending{' on ' + cat if cat else ''} {word}."
     if cat:
         top = sorted(rows, key=lambda r: -r[1])[:3]
-        return (f"You spent {money(total)} on {cat} {word} ({len(rows)} times). Biggest: "
+        return (f"You spent {money(total)} on {cat} {word} ({len(rows)} time{'s' if len(rows) != 1 else ''}). Biggest: "
                 + ", ".join(f"{money(v)} {n}" for _, v, _, n in top) + "." + _cat_budget_line(m, b, cat, today, period))
     by = defaultdict(float)
     for _, v, c, _ in rows:
@@ -216,7 +316,7 @@ def report(period: str = "month", cat: str = "", now: datetime | None = None) ->
     if inc:
         line += f" Income {money(inc)}, saved {money(inc - total)}."
     days = (z - a).days + 1
-    if period in ("week", "month", "year") and days > 1:
+    if (period in ("week", "month", "year") or period.startswith("range:")) and days > 1:
         line += f" About {money(round(total / days))} a day."
     if period == "month" and (lim := _budget(b, "total")):
         line += f" Budget: {total / lim:.0%} used, {money(max(0, lim - total))} left."
@@ -232,7 +332,7 @@ def breakdown(period: str = "month", now: datetime | None = None) -> str:
     for d, v, c, _n in _rows(m):
         if a <= d <= z:
             by[c] += v
-    word = PERIOD_WORDS.get(period, period)
+    word = period_words(period)
     if not by:
         return f"No spending {word}."
     total = sum(by.values())
@@ -276,10 +376,11 @@ def list_text(period: str = "today", now: datetime | None = None) -> str:
     a, z = span(period, today)
     rows = [(i + 1, r) for i, r in enumerate(m) if a.isoformat() <= r.get("date", "")[:10] <= z.isoformat()]
     if not rows:
-        return f"Nothing recorded {PERIOD_WORDS.get(period, period)}."
+        return f"Nothing recorded {period_words(period)}."
     lines = [f"{i}. {r['date'][5:]} {'+' if r.get('type') == 'income' else ''}{money(float(r['amount'] or 0))} "
              f"{r.get('category')} · {r.get('note')}" for i, r in rows[-15:]]
-    return f"{PERIOD_WORDS.get(period, period).capitalize()}:\n" + "\n".join(lines) + "\nSay 'delete expense N' to remove one."
+    w = period_words(period)
+    return f"{w[0].upper() + w[1:]}:\n" + "\n".join(lines) + "\nSay 'delete expense N' to remove one."
 
 
 def delete(which: str | int) -> str:
@@ -383,6 +484,35 @@ def check_bills(now: datetime | None = None) -> int:
                       f"Say 'paid {r['name']}' when done.", source="money")
         sent += 1
     return sent
+
+
+def range_data(start: str, end: str = "", cat: str = "") -> dict:
+    """For the Money window's date filter: every row from start to end (one day when end is empty), totals by category."""
+    a = date.fromisoformat(start)
+    z = date.fromisoformat(end) if end else a
+    a, z = min(a, z), max(a, z)
+    m, b, _ = _book()
+    cat = resolve_category(cat) if cat else ""
+    rows = []
+    for i, r in enumerate(m):
+        try:
+            d = date.fromisoformat(r.get("date", "")[:10])
+            v = float(str(r.get("amount") or 0).replace(",", ""))
+        except ValueError:
+            continue
+        if a <= d <= z and (not cat or r.get("category") == cat):
+            rows.append({"row": i + 1, "date": d.isoformat(), "amount": v, "category": r.get("category") or "other",
+                         "note": r.get("note") or "", "type": (r.get("type") or "expense").lower()})
+    spent = [r for r in rows if r["type"] == "expense"]
+    by = defaultdict(float)
+    for r in spent:
+        by[r["category"]] += r["amount"]
+    period = range_period(a, z)
+    return {"start": a.isoformat(), "end": z.isoformat(), "category": cat, "words": period_words(period),
+            "total": sum(r["amount"] for r in spent), "income": sum(r["amount"] for r in rows if r["type"] == "income"),
+            "by": sorted(({"cat": c, "amount": v, "budget": _budget(b, c)} for c, v in by.items()), key=lambda x: -x["amount"]),
+            "rows": sorted(rows, key=lambda r: (r["date"], r["row"]), reverse=True), "categories": sorted(CATS),
+            "currency": config.CURRENCY}
 
 
 def dashboard(now: datetime | None = None) -> dict:

@@ -336,12 +336,12 @@ def chart_money(period: str = "month", now: datetime | None = None) -> tuple[lis
     a, z = ex.span(period, today)
     rows = [(d, v, c) for d, v, c, _ in ex._rows(m) if a <= d <= z]
     if not rows:
-        return [], f"No spending recorded {ex.PERIOD_WORDS.get(period, period)} to draw."
+        return [], f"No spending recorded {ex.period_words(period)} to draw."
     by = defaultdict(float)
     for _, v, c in rows:
         by[c] += v
     cats = sorted(by, key=lambda c: -by[c])
-    word = ex.PERIOD_WORDS.get(period, period)
+    word = ex.period_words(period)
     sub = f"Total {ex.money(sum(by.values()))} · {word}"
     paths = draw(cats, [("spent", [by[c] for c in cats])], f"Spending by category, {word}", "auto", sub)
     days = (z - a).days + 1

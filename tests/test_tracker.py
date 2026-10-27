@@ -104,3 +104,23 @@ def test_categories_synonyms_and_breakdown():
     assert m("how much I spend on cloth this month").args["category"] == "clothes"
     assert m("show me the whole budget and expense").args == {"action": "breakdown", "period": "month"}
     assert m("set my study budget to 6000").args["category"] == "education"
+
+
+def test_several_items_in_one_sentence_and_dates():
+    out = ex.add("I actually spend 200 in the meat and 50 in the tomato and 500 in the vegetable.", NOW)
+    assert out.startswith("Added 3 expenses: Rs 200 meat (groceries), Rs 50 tomato (groceries), Rs 500 vegetable")
+    assert "Total Rs 750" in out
+    assert ex.add("paid 1,500 for internet", NOW).startswith("Added Rs 1,500 for bills")  # a thousands comma is no split
+    assert "(momo and tea)" in ex.add("spent 100 on momo and tea", NOW)
+    assert "on Oct 20" in ex.add("spent 300 on bus on October 20", NOW)
+    t = NOW.date()
+    assert ex.dates_in("from Oct 1 to Oct 15", t) == (t.replace(day=1), t.replace(day=15))
+    assert ex.dates_in("on the 20th", t) == (t.replace(day=20),) * 2
+    assert ex.dates_in("last 10 days", t)[0] == t.replace(day=18)
+    assert ex.report(ex.range_period(t.replace(day=20), t.replace(day=20)), now=NOW).startswith("You spent Rs 300 on Oct 20")
+    d = ex.range_data("2026-10-01", "2026-10-27")
+    assert d["total"] == 2650 and d["by"][0]["cat"] == "bills" and d["rows"][0]["date"] == "2026-10-27"
+    assert ex.range_data("2026-10-20")["total"] == 300
+    m = fastpath.match
+    assert m("how much did I spend from Oct 1 to Oct 15").args["period"] == "range:2026-10-01:2026-10-15"
+    assert m("show my expenses on October 20").args == {"action": "list", "period": "range:2026-10-20:2026-10-20"}
