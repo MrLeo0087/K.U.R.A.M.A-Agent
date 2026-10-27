@@ -1772,7 +1772,7 @@ def copy_history_intent(t: str) -> Intent | None:
 
 # --- saved links: 'this is the link for Claude Code, save it', 'give me my Facebook link' (0 tokens) ---
 _L_WORD = r"(?:link|url|page|site|website|address)"
-_L_STORE = r"(?:\s+(?:in|to|into)\s+(?:your\s+|my\s+|the\s+)?(?:memory|links?|link\s+stor(?:e|er)|bookmarks?|saved\s+links))?"
+_L_STORE = r"(?:\s+(?:in|to|into|at)\s+(?:your\s+|my\s+|the\s+)?(?:memory|link\s+stor(?:e|er)|links?|store|bookmarks?|saved\s+links))?"
 _L_SAVE = r"(?:save|store|keep|remember|bookmark|add)"
 
 
@@ -1783,7 +1783,8 @@ def links_intent(t: str) -> Intent | None:
     u = links.URL.search(t)
     url = {"url": u.group(0)} if u and re.search(r"https?://|www\.", u.group(0), I) else {}
     if links.pending():  # 'What should I call this link?' was asked
-        if re.fullmatch(r"(?:no|cancel|never\s*mind|don'?t\s+save(?:\s+it)?|forget\s+it|leave\s+it)", low):
+        if re.fullmatch(r"(?:no|cancel|never\s*mind|don'?t\s+save(?:\s+it)?|forget\s+it|leave\s+it)", low) or re.search(
+                r"\b(?:already\s+(?:have|saved|got)|we\s+have\s+(?:it|this)|don'?t\s+(?:save|store)|remove\s+this\s+link)\b", low):
             return L("cancel")
         if m := re.fullmatch(r"(?:call|name|save|label)\s+it\s+(?:as\s+)?(?P<n>.+)|(?:it'?s|it\s+is|this\s+is)\s+(?:my\s+|the\s+)?(?P<n2>.+)", t.strip(" .!"), I):
             return L("name", name=m.group("n") or m.group("n2"))
@@ -1803,7 +1804,7 @@ def links_intent(t: str) -> Intent | None:
                 return L("save", name=n, **url)
     # save, no name: KURAMA asks for one
     if re.fullmatch(r"(?:please\s+|can\s+you\s+)*" + _L_SAVE + r"\s+(?:the\s+)?(?:" + _L_WORD + r"\s+of\s+)?(?:this|that|the|it)\s*(?:"
-                    + _L_WORD + r")?(?:\s+of\s+this)?" + _L_STORE.replace(")?", ")") + r"(?:\s+please)?", low, I) or (
+                    + _L_WORD + r")?(?:\s+of\s+this)?" + _L_STORE[:-1] + r"(?:\s+please)?", low, I) or (
             re.fullmatch(r"(?:please\s+)?" + _L_SAVE + r"\s+(?:this\s+)?" + _L_WORD, low, I)):
         return L("save", **url)
     if re.fullmatch(r"(?:show|list|see|open|what\s+are|give\s+me|tell\s+me)?\s*(?:me\s+)?(?:all\s+)?(?:my\s+|the\s+)?(?:saved\s+links|links|"
@@ -1840,6 +1841,27 @@ def todo_now_intent(t: str) -> Intent | None:
     low = t.strip(" .!?").lower()
     L = lambda a, **k: Intent("todo", "read_later", "browser", {"action": a, **k})  # noqa: E731
     lead = r"(?:okay\W+|ok\W+|so\W+|please\W+|kurama\W+|can\s+you\s+|could\s+you\s+|now\W+)*"
+    from jarvis.core import pageread
+    if pageread.waiting():  # "Want a detailed overview?" was just asked
+        if re.fullmatch(r"(?:yes|yeah|yep|sure|ok(?:ay)?|please|go\s+ahead|do\s+it|haan|ho)(?:\W+(?:please|do\s+it|give\s+(?:it|me)|"
+                        r"detail(?:ed)?(?:\s+overview)?|show\s+me))*|(?:give|show|write)\s+(?:me\s+)?(?:the\s+|a\s+)?(?:detail(?:ed)?|full)"
+                        r"(?:\s+(?:overview|summary|version))?", low, I):
+            return Intent("page", "page_summary", "browser", {"action": "detail"})
+        if re.fullmatch(r"(?:no|nope|nah|not\s+now|no\s+thanks?|that'?s\s+(?:it|enough))", low, I):
+            return Intent("page", "page_summary", "browser", {"action": "cancel"})
+    if len(low.split()) <= 24 and re.search(r"\b(?:web\s*site|web\s*page|this\s+(?:page|site|tab|article)|current\s+(?:page|tab|site))\b", low) \
+            and re.search(r"\b(?:about|showing|shows|summar|explain|overview|what|tell)\w*", low) \
+            and not re.search(r"\b(?:link|save|store|bookmark|open|close|read\s+later|reading\s+list|qr|screenshot|copy|when|changes?|"
+                              r"updates?|watch|monitor|notify|alert|https?)\b", low):
+        return Intent("page", "page_summary", "browser", {"action": "summary"})
+    # 'I already read the attention is all you need paper' = that reading-list / to-do item is done
+    if (m := re.fullmatch(lead + r"i\s+(?:have\s+|had\s+)?(?:already\s+|just\s+)?(?:read|finished(?:\s+reading)?|completed|done\s+reading)\s+"
+                          r"(?:the\s+)?(?P<x>.+?)(?:\s+(?:already|now|today))?", low, I)) and readlater.find(m.group("x")):
+        return L("remove", text=m.group("x"))
+    if (m := re.fullmatch(lead + r"(?:mark|set|tick)\s+(?:the\s+)?(?P<n>first|second|third|last|1st|2nd|3rd|\d{1,2})\s*(?:one|task|item|link|article)?"
+                          r"\s+(?:in|on|from)\s+(?:my\s+|the\s+)?(?:read(?:ing)?[\s-]*later(?:\s+list)?|reading\s+list)\s+(?:as\s+)?(?:done|read|finished|complete(?:d)?)", low, I)):
+        n = _nth(m.group("n"))
+        return L("done", n=n if n > 0 else len(readlater.unread()), text="read")
     # 'schedule a task' was asked without details: this short reply is the task (and maybe its time)
     if readlater.pending() and len(low.split()) <= 14 and not t.strip().endswith("?") and not re.match(
             r"(?:no|cancel|never\s*mind|stop|what|why|how|open|close|show)\b", low):
@@ -2275,6 +2297,8 @@ def ocr_intent(t: str) -> Intent | None:
     """Reading the text in a picture. 'read this area' / 'the selected part of this image' -> drag a box;
     'what is written in this paper / image / on my screen' -> the window the user looks at; 'the copied image'
     -> clipboard; a named file / 'my latest photo' -> that file. (Tesseract, 0 tokens; the AI only for handwriting.)"""
+    if re.match(r"i\s+(?:have\s+|had\s+)?(?:already\s+|just\s+)?(?:read|finished)\b", t.strip(), I):
+        return None  # 'I already read X' = news about the user's reading, not 'read the screen'
     if _OCR_AREA.match(t):
         return Intent("ocr", "read_text", "screen", {"source": "area"})
     if _OCR_SCREEN.match(t):
@@ -2315,6 +2339,9 @@ def match(text: str) -> Intent | None:
         return None
     if si := _self_intent(t):
         return si
+    from jarvis.core import templates
+    if ans := templates.match(t):  # small talk + setup guides: a ready answer, 0 tokens
+        return Intent("say", "_say", "self", ans)
     if pi := plan_answer_intent(t):
         return pi
     if li := links_intent(t):

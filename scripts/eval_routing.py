@@ -137,8 +137,12 @@ def score(cases: list[tuple[str, str]], fastpath, registry, router) -> tuple[int
 def main() -> int:
     import logging
     logging.disable(logging.WARNING)
-    from jarvis.core import config, fastpath, registry, router
+    import tempfile
+    from jarvis.core import config, fastpath, registry, router, store
 
+    # a fresh temporary database: the owner's live power mode (e.g. Low RAM = understanding model off) or saved
+    # pending states must never change what this check measures
+    store.init(Path(tempfile.mkdtemp()) / "eval.db")
     config.FASTPATH = True
     router.classify = lambda text, available: ([], False)  # 0 tokens: no LLM classifier in this check
     registry.REGISTRY._ensure()

@@ -257,11 +257,33 @@ def transcribe(wav: bytes, language: str | None = None) -> Transcript:
     return _gate(best, auto)
 
 
+_OTHER_SCRIPT = re.compile(r"[^\x00-\u024f\u0900-\u097f\u2000-\u206f\u20b9\u0964\u0965\s]")  # not Latin / Devanagari
+
+
+def not_ours(best: Transcript, auto: Transcript) -> str:
+    """Why this transcript is not the owner speaking English / Nepali / Hindi (fan, drill, TV), or ''.
+    Only English, Nepali and Hindi are supported: anything else is ignored ('Didn't catch that')."""
+    text = best.text.strip()
+    if not text:
+        return ""
+    if _OTHER_SCRIPT.search(text):  # 'Продолжение следует...' (Cyrillic), Tamil, Chinese...
+        return "other script"
+    lp = best.logprob
+    if auto.raw_lang.strip().lower() not in LANG_MAP and lp is not None and lp < config.STT_FOREIGN_MAX_LOGPROB:
+        return f"{auto.raw_lang or '?'} at low confidence"  # 'E aí' (Portuguese), Tamil-labelled nonsense
+    if lp is not None and lp < config.STT_GARBAGE_LOGPROB and len(text.split()) <= 4:
+        return "short and unsure"  # 'The', 'RUN'
+    return ""
+
+
 def _gate(best: Transcript, auto: Transcript) -> Transcript:
     """Noise check on the final pick only (gating each pass threw away the good one)."""
     heard = best.text
     if best.text and is_noise(auto):
         log.info("dropped as noise (no_speech %.2f): %r", auto.no_speech or 0, best.text[:60])
+        best.text = ""
+    if best.text and (why := not_ours(best, auto)):
+        log.info("dropped (%s): %r", why, best.text[:60])
         best.text = ""
     _trail(best, auto, heard)
     return best

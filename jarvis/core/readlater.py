@@ -318,8 +318,13 @@ def open_item(n: int = 1) -> str:
     return f"Opened: {r['title']} (done, removed from your list)."
 
 
-def done(n: int) -> str:
-    r = _pick(n)
+def done(n: int, kind: str = "") -> str:
+    """Item n finished. kind 'read': n counts the reading list only ('mark the first one in read later as done')."""
+    if kind == "read":
+        reads = unread()
+        r = reads[n - 1] if 1 <= n <= len(reads) else None
+    else:
+        r = _pick(n)
     if r is None:
         return f"There's no item {n} in your list."
     _drop(r)
@@ -341,7 +346,7 @@ def remove(n: int) -> str:
 
 def _words(s: str) -> set[str]:
     return {w for w in re.findall(r"[a-z0-9]+", (s or "").lower()) if len(w) > 2 or w.isdigit()} - {
-        "the", "and", "for", "from", "list", "todo", "task", "my"}
+        "the", "and", "for", "from", "list", "todo", "task", "my", "paper", "article", "link", "page", "video", "post"}
 
 
 def find(text: str, kinds: tuple[str, ...] = ("reminder", "todo", "read")) -> dict | None:
@@ -594,7 +599,9 @@ def run(action: str = "add", url: str = "", n: int = 0, text: str = "", tag: str
     if action == "open":
         return open_item(n or 1)
     if action in ("done", "read"):
-        return done(n or 1)
+        if text and not n and text not in ("read", "todo"):
+            return remove_named(text)
+        return done(n or 1, "read" if text == "read" or action == "read" else "")
     if action == "remove":
         return remove_named(text) if text and not n else remove(n or 1)
     if action == "reschedule":

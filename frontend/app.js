@@ -440,7 +440,7 @@ async function answerConfirm(id, yes) {
 }
 
 let lastBotAt = 0; // talk mode: speech long after KURAMA last spoke is probably room talk (sent as "ambient")
-const FOLLOWUP_MS = 45000;
+const FOLLOWUP_MS = 120000; // talk mode: within 2 min of KURAMA's last reply anything said is for it
 
 // a long answer is not read out in full: the first ~3 sentences, then "the rest is on the screen"
 const SPEAK_MAX = 420;
@@ -501,7 +501,12 @@ async function sendChat(text, { voice = false, lang = null, speak = false, ambie
         case "error": bot.error(ev.text); flashError(); miniCaption("bot", ev.text, true); break;
         case "done":
           openConfirm = null;
-          if (ev.ignored) { bot.root.remove(); userBubble?.remove(); maybeResume(); break; } // room talk, not for KURAMA
+          if (ev.ignored) { // room talk / TV, not for KURAMA: keep it visible (faded) so the user knows why nothing happened
+            bot.root.remove();
+            if (userBubble) { userBubble.classList.add("ignored"); userBubble.title = "Not sent: it sounded like room talk. Start with 'KURAMA …'"; }
+            toast("Heard you, but it sounded like room talk. Start with “KURAMA …” after a pause.");
+            maybeResume(); break;
+          }
           lastBotAt = Date.now();
           if (split) { const rest = split.flush(); if (rest) speakPart(rest, hint || ev.lang, gen); }
           bot.done(ev);

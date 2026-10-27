@@ -76,9 +76,17 @@ def _tool_ms(name: str, ts0: float, used: set[int]) -> int | None:
 _NAME = re.compile(r"\b(?:kurama|kuramaa|jarvis|karma|curama)\b|कुरामा|कुरमा", re.I)
 
 
+_ASKS = re.compile(r"(?:(?:hey|hi|hello|okay|ok|so|now|and|please)\W+)*(?:can\s+you|could\s+you|would\s+you|will\s+you|please|"
+                   r"tell\s+me|give\s+me|show\s+me|let\s+me\s+know|i\s+want|i\s+need|open|close|play|stop|start|set|turn|"
+                   r"remind\s+me|schedule|add|remove|delete|make|write|explain|search|find|send|read|look|what(?:'s|\s+is|\s+are)\s+(?:my|the|this)|"
+                   r"how\s+(?:do|can|much|many)|is\s+there|are\s+there|do\s+i|did\s+i)\b", re.I)
+
+
 def addressed(text: str) -> bool:
     """Is this utterance meant for KURAMA? It names KURAMA, or the fast path knows it as a command (0 tokens)."""
     if _NAME.search(text or ""):
+        return True
+    if _ASKS.match((text or "").strip()):  # spoken like a request to an assistant ('can you…', 'tell me…', 'open…')
         return True
     try:
         from jarvis.core import fastpath

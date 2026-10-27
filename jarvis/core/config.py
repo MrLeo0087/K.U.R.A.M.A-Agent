@@ -68,6 +68,8 @@ STT_DUAL = os.getenv("JARVIS_STT_DUAL", "1").lower() not in ("0", "false", "no",
 STT_EN_MIN_LOGPROB = -0.6  # auto "English" below this confidence is treated as suspicious
 # Whisper vocabulary hint (biases spelling of names/apps; tested not to break hi/ne detection).
 STT_NO_SPEECH_MAX = 0.6  # Whisper's no_speech_prob above this...
+STT_GARBAGE_LOGPROB = -1.0  # a short transcript (<= 4 words) below this confidence = noise ('The', 'RUN', 'E aí')
+STT_FOREIGN_MAX_LOGPROB = -0.6  # Whisper says a language we don't speak AND confidence is below this = noise
 STT_NOISE_MAX_LOGPROB = -0.8  # ...and confidence below this: background noise, not a command
 # The owner's own names and places, so speech-to-text spells them right (dictation + voice chat). Add more in .env:
 # JARVIS_MY_WORDS="Darshan Chaulagain, Nepalgunj, ..."
@@ -258,6 +260,8 @@ ROUTER_MAX_GROUPS = 3
 # Free phrasing for tools: paraphrases embedded by the semantic router (0 tokens), so "enable speech to text
 # mode" finds dictate even though no keyword rule says so. Add a few lines here for any tool that gets missed.
 TOOL_EXAMPLES: dict[str, tuple[str, ...]] = {
+    "page_summary": ("what is this page about", "look at the screen and tell me what this website is about",
+                     "summarize this web page", "what is this website showing"),
     "saved_links": ("save this link as facebook", "this is the link for claude code, save it", "give me the link of my "
                     "facebook", "what's my grok link", "open my github link", "show my saved links"),
     "goals": ("my exam is in 30 days, remind me every day", "I started a project that ends in 6 months, ask me daily "
@@ -721,6 +725,7 @@ NUDGE_HOURS = (10, 21)  # only between these hours
 TASK_OVERDUE_S = float(os.getenv("KURAMA_TASK_OVERDUE_S", str(60 * 60)))  # due to-do still open this long after -> 'not done yet'
 SELECTION_MEMORY_S = float(os.getenv("KURAMA_SELECTION_MEMORY_S", "600"))  # a highlight outside KURAMA counts this long
 READ_LATER_FILE = os.getenv("KURAMA_READ_LATER", "~/Documents/KURAMA/read_later.xlsx")  # reading list (Excel)
+PAGE_DETAIL_TTL_S = 180.0  # "Want a detailed overview?" waits this long for yes
 LINKS_FILE = os.getenv("KURAMA_LINKS", "~/Documents/KURAMA/links.xlsx")  # named saved links (Excel)
 LINK_NAME_TTL_S = 300.0  # 'what should I call this link?' waits this long for the name
 GOALS_FILE = os.getenv("KURAMA_GOALS", "~/Documents/KURAMA/goals.xlsx")  # long goals (tabs Goals + Log)
