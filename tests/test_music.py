@@ -170,3 +170,25 @@ def test_more_routes(monkeypatch):
     assert m("next") is None  # nothing of ours playing: plain 'next' isn't a command
     monkeypatch.setattr(music, "running", lambda: True)
     assert m("next").args == {"action": "next"} and m("skip").tool == "media_control" and m("previous").args == {"action": "previous"}
+
+
+def test_duck_while_talking(monkeypatch, tmp_path):
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    assert music.duck(True) is False  # nothing playing
+    mpv = FakeMpv(music._sock())
+    music.PLAYER.queue = [{"url": "u", "id": "uuuuuu", "title": "x", "duration": 100}]
+    music.PLAYER.i, music.PLAYER.procs, music.PLAYER.volume = 0, [FakeProc()], 60
+    assert music.duck(True) and mpv.state["volume"] == music.DUCK_VOLUME
+    assert music.duck(False) and mpv.state["volume"] == 60
+    from jarvis.core import devaudio
+    monkeypatch.setattr(devaudio, "cancelling", lambda: True)
+    assert devaudio.raw_source() is None  # our music plays: the wake word listens on the cleaned mic
+    music.PLAYER.procs = []
+
+
+def test_stop_and_next_answers_render():
+    i = fastpath.Intent("media", "media_control", "media", {"action": "stop"}, "media")
+    assert fastpath.render(i, True, "stopped", "en") == "Stopped."  # was KeyError: 'stop'
+    i = fastpath.Intent("media", "media_control", "media", {"action": "next"}, "media")
+    assert fastpath.render(i, True, "Next song: Blue.", "en") == "Next song: Blue."
+    assert fastpath.match("Udama, stop song.").tool == "media_control"

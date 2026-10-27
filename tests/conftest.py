@@ -48,6 +48,7 @@ def tmp_store(tmp_path, monkeypatch):
     from jarvis.core import assist
     for pending in (assist._use, assist._more, assist._ask_back, assist._retry, assist._pending):
         pending.clear()  # in-memory 'waiting for yes' states never leak from one test into the next
+    monkeypatch.setattr(assist, "_screen_chat", lambda: "")  # no screenshots / OCR of the real screen in tests
     from jarvis.core import coderun
     coderun._last_error.clear()
     from jarvis.core import music

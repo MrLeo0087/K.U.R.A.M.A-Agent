@@ -195,7 +195,7 @@ class Player:
 
     def _mpv(self, title: str, src: list[str], extra: tuple = ()) -> list[str]:
         return ["mpv", "--no-video", "--idle=no", "--force-window=no", "--really-quiet", "--no-terminal",
-                f"--input-ipc-server={_sock()}", f"--volume={self.volume}", f"--force-media-title={title or 'music'}",
+                f"--input-ipc-server={_sock()}", f"--volume={min(DUCK_VOLUME, self.volume) if _duck['on'] else self.volume}", f"--force-media-title={title or 'music'}",
                 *([f"--ao={os.environ['KURAMA_MUSIC_AO']}"] if os.environ.get("KURAMA_MUSIC_AO") else []),  # null = silent check
                 *extra, "--", *src]
 
@@ -526,6 +526,30 @@ def now_playing() -> str | None:
     paused = _send("get_property", "pause", want=True)
     left = len(PLAYER.queue) - PLAYER.i - 1
     return f"{'Paused' if paused else 'Playing'}: {cur.get('title') or 'music'}" + (f" ({left} more after it)." if left else ".")
+
+
+DUCK_VOLUME = 12  # % while you talk to KURAMA or it answers, so it hears you over the music
+_duck = {"on": False, "timer": None}
+
+
+def duck(on: bool, max_s: float = 45.0) -> bool:
+    """Lower the music while KURAMA listens / answers, back to normal after (and by itself after max_s)."""
+    if not running():
+        _duck["on"] = False
+        return False
+    t = _duck.get("timer")
+    if t:
+        t.cancel()
+    if on:
+        _send("set_property", "volume", min(DUCK_VOLUME, PLAYER.volume))
+        _duck["on"] = True
+        _duck["timer"] = threading.Timer(max_s, lambda: duck(False))  # never stay quiet if the 'off' never comes
+        _duck["timer"].daemon = True
+        _duck["timer"].start()
+    elif _duck["on"]:
+        _send("set_property", "volume", PLAYER.volume)
+        _duck["on"] = False
+    return True
 
 
 def stop(quiet: bool = False) -> str | None:

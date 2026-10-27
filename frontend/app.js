@@ -121,7 +121,10 @@ function updateState() {
   $("m-conv").classList.toggle("live", mode === "conv" && conv.on);
   $("m-mute").setAttribute("aria-pressed", String(conv.muted));
   if (!mic.open && !player.active && !recording) audioSleepSoon(); // free the audio thread when idle (asleep = API listens)
+  const duck = st === "listening" || st === "thinking" || st === "speaking"; // music down while we talk
+  if (duck !== ducked) { ducked = duck; api.musicDuck(duck).catch(() => {}); }
 }
+let ducked = false;
 
 // ---------- the KURAMA mark: glows and shifts colour with the voice (only while listening / speaking) ----------
 let markRaf = 0, markAt = 0;

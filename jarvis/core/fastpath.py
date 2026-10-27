@@ -440,14 +440,21 @@ SWITCHES = [  # (intent name, tool, group, args, patterns); first full match win
     ("find_phone", "find_my_phone", "system", {"phone": "iphone"}, _rx(
         r"(?:find|locate|where(?:'s| is)|track|ring) (?:my |the )?(?:lost |missing )?iphone(?: now)?",
         r"find my (?:phone|mobile) \(?iphone\)?")),
-    ("find_phone", "find_my_phone", "system", {"phone": "android"}, _rx(
+    ("find_phone", "find_my_phone", "system", {"phone": "android", "want": "location"}, _rx(
+        r"where(?:'s| is| are)? (?:my |the )?(?:phone|mobile(?: phone)?|android|cell\s*phone)(?: location| at| now| right now)?",
+        r"(?:(?:what(?:'s| is)|give|send|show|get|tell)(?: me)?\s*)?(?:the )?(?:current |last |latest |live |real[\s-]?time )?location of (?:my |the )?"
+        r"(?:phone|mobile(?: phone)?|android|cell\s*phone)(?: now)?",
+        r"(?:give|send|show|get|tell)(?: me)?(?: the| my)? (?:phone|mobile)(?:'s)? (?:current |last |live )?location(?: now)?",
+        r"(?:my |the )?(?:phone|mobile|android)(?:'s)? (?:current |last |live )?location(?: now)?",
+        r"(?:(?:give|send|show|get|tell)(?: me)?\s*)?(?:the )?(?:middle|mid|little|live) version of (?:my |the )?(?:mobile|phone)(?: phone)?(?:,? right)?",
+        r"(?:give|send|show|get|tell)(?: me)?(?: the| my)? (?:last |latest )?location (?:that |which )?(?:i |you )?(?:shared?|sent|got|received)"
+        r"(?: (?:in|on|via|through|with you on) (?:the )?telegram)?",
+        r"(?:the )?location (?:i |that i )?(?:shared?|sent) (?:in|on|via) (?:the )?telegram",
+        r"(?:phone|mobile|मोबाइल|फोन) (?:kaha|kahan|कहाँ|कहां)(?: (?:cha|chha|xa|छ|hai|है))?")),
+    ("find_phone", "find_my_phone", "system", {"phone": "android", "want": "open"}, _rx(
         r"(?:find|locate|track|ring) (?:my |the )?(?:lost |missing )?(?:phone|mobile(?: phone)?|android|cell\s*phone)(?: now)?",
-        r"where(?:'s| is| are)? (?:my |the )?(?:phone|mobile(?: phone)?|android|cell\s*phone)(?: location| at| now)?",
-        r"(?:(?:what(?:'s| is)|give|send|show|get|tell)(?: me)?\s*)?(?:the )?location of (?:my |the )?(?:phone|mobile(?: phone)?|android|cell\s*phone)(?: now)?",
-        r"(?:give|send|show|get|tell)(?: me)?(?: the| my)? (?:phone|mobile)(?:'s)? location(?: now)?",
-        r"(?:my |the )?(?:phone|mobile|android)(?:'s)? location(?: now)?",
         r"(?:open |launch )?(?:google )?find my (?:device|phone|mobile|android)",
-        r"(?:phone|mobile|मोबाइल|फोन) (?:kaha|kahan|khoj|कहाँ|कहां|खोज)(?:\s\w+)?")),
+        r"(?:phone|mobile|मोबाइल|फोन) (?:khoj|खोज)(?:\s\w+)?")),
     ("mic", "mic_mute", "audio", {"action": "mute"}, _rx(
         r"(?:mute|turn off|switch off|disable) (?:the |my )?(?:mic|microphone)", r"(?:mic|microphone) (?:off|mute)",
         r"(?:mic|माइक) (?:band karo|band kar do|बंद करो|बन्द गर|बन्द गरिदेउ)")),
@@ -1720,7 +1727,7 @@ def tracker_intent(t: str) -> Intent | None:
     not_money = re.search(r"\b(?:time|minutes?|mins?|hours?|hrs?|seconds?|days?|weeks?|months?|years?|tokens?|ram|gb|mb|percent|"
                           r"remind|schedule|alarm|timer|how\s+much|points?|marks?|goals?|runs?|wickets?)\b|%", low)
     if not not_money and re.search(r"\d", low) and (
-            re.search(r"\b(?:spent|spend|paid|bought|kharcha|kharch|खर्च|salary|income)\b", low)
+            re.search(r"\b(?:spent|spend|spending|paid|paying|bought|buying|kharcha|kharch|खर्च|salary|income)\b", low)
             or (re.search(r"\b(?:got|received|earned)\b", low) and re.search(
                 r"\b(?:rs|rupees?|npr|money|paisa|salary|income|bonus|refund|payment|freelance)\b|रु|\$|\d\s*k\b", low))):
         return money("add", text=t)
@@ -1781,10 +1788,11 @@ def port_intent(t: str) -> Intent | None:
                          r"(?:on|using|that\s+uses|at)\s+|whatever\s+is\s+(?:on|using)\s+|what(?:'s|\s+is)\s+(?:on|using)\s+)?port\s+"
                          r"(?P<n>\d{2,5})[\s.!?]*", t, I):
         return Intent("doctor", "laptop_doctor", "system", {"action": "stop", "target": f"port {m.group('n')}"})
-    if m := re.search(r"\bport\s+(?:number\s+)?(?P<n>\d{2,5})\b", t, I):
+    if m := re.search(r"\bport\s+(?:number\s+)?(?P<n>\d{2,5})\b|\b(?P<n2>\d{2,5})\s+port\b", t, I):
+        n = m.group("n") or m.group("n2")
         if re.search(r"\b(?:what|which|who|whats|is|check|show|tell|running|using|uses|used|free|busy|open|taken|available|occupied)\b", t, I) \
                 or re.fullmatch(r"port\s+\d+[\s?]*", t, I):
-            return show(m.group("n"))
+            return show(n)
     if re.search(r"\b(?:show|list|which|what|check|all|my|open|used|busy)\b.{0,25}\bports\b|\bports\s+(?:in\s+use|open|used|are\s+(?:open|used|in\s+use))\b",
                  t, I) and not re.search(r"\b(?:usb|hdmi|serial|router|firewall)\b", t, I):
         return show(0)
@@ -1849,7 +1857,9 @@ def assist_intent(t: str) -> Intent | None:
     if m := re.match(r"^(?:please\s+|kurama\W+|kura\W+|can\s+you\s+)*(?:convert|change|turn|put|write|say|make)\s+(?P<x>.+?)\s+"
                      r"(?:in|into|to)\s+(?P<l>" + _LANG_ALT + r")(?:\s+language)?(?P<r>\s+and\s+replace(?:\s+it)?)?\s*[.!?]*$", t, I):
         x = m.group("x").strip()
-        sel = bool(re.fullmatch(_SELREF + r"(?:\s+(?:word|sentence|paragraph|text|line|part))?", x, I))
+        sel = bool(re.fullmatch(_SELREF + r"(?:\s+(?:word|sentence|paragraph|text|line|part))?", x, I)
+                   or re.fullmatch(r"(?:the\s+)?(?:language|lang|text|words?|sentence)(?:\s+of\s+.*)?", x, I)  # 'the language of the selected sentence'
+                   or re.search(r"\b(?:selected|highlighted|selection)\b", x, I))
         if sel or not re.search(r"\.\w{2,5}\b|\bfile\b", x, I):  # a language target: translation, not a file
             return Intent("assist", "text_assist", "clipboard", {"action": "translate", "lang": lang_of(m.group("l")) or "ne",
                                                                  "replace": bool(m.group("r")), "text": "" if sel else x})
@@ -1909,6 +1919,15 @@ def assist_intent(t: str) -> Intent | None:
                 r"(?:\s+(?:to|for))?\s+(?:this|that|it|the\s+(?:selected|copied|last))(?!\s+question)(?:\s+(?:message|chat|conversation|"
                 r"text|email|mail|messages|one))?\b|^(?:what\s+should\s+i\s+(?:reply|say|answer|write)(?:\s+(?:to\s+)?(?:this|that|him|her|them))?)"
                 r"[\s?.!]*$", t, I) and len(t.split()) <= 30:  # 'reply to this, say I'm busy till Friday'
+        return Intent("assist", "text_assist", "clipboard", {"action": "reply", "request": t, "lang": lang})
+    if len(t.split()) <= 30 and re.search(
+            r"\b(?:what|how)\s+(?:should|do|can|could|would|shall)\s+(?:be\s+)?(?:the\s+|my\s+|a\s+|i\s+)*(?:reply|respond|answer|say|write|text\s+back)\b"
+            r"|\bwhat\s+(?:reply|response|answer)\s+(?:should|do|can|could|shall)\s+i\b|\bwhat\s+(?:to|should\s+i)\s+(?:reply|say|answer)\b"
+            r"|\b(?:suggest|give\s+me|write|draft|make)\s+(?:me\s+)?(?:a\s+|the\s+|my\s+)?(?:good\s+|nice\s+|short\s+|polite\s+)?(?:reply|response|answer)\b"
+            r"|\breply\s+(?:for|to)\s+(?:his|her|their|my\s+friend'?s?|this|that|the)\b", t, I) \
+            and re.search(r"\b(?:friend|him|her|them|his|their|this|that|message|messages|chat|conversation|text|email|mail|"
+                          r"whatsapp|messenger|viber|dm|reply|answer)\b", t, I) \
+            and not re.search(r"\b(?:essay|exam|interview|speech|code|function|error|test)\b", t, I):
         return Intent("assist", "text_assist", "clipboard", {"action": "reply", "request": t, "lang": lang})
     if dc := decode_intent(t):  # decode / prettify the selection, 0 tokens
         return dc
@@ -3081,7 +3100,9 @@ def _render_system(intent: Intent, out: str, lang: str) -> str:
         action = intent.args.get("action")
         if action == "status":
             return out[:1].upper() + out[1:].rstrip(".") + "."
-        return _say({"pause": "paused", "play": "playing"}.get(action, action), lang, "")
+        if action in ("pause", "play"):
+            return _say({"pause": "paused", "play": "playing"}[action], lang, "")
+        return out[:1].upper() + out[1:].rstrip(".") + "."  # next / previous / stop: the tool's own words
     if intent.name == "theme":
         return out if not out.lower().startswith("error") else out
     return _say(intent.name, lang, "")  # screenshot / lock

@@ -393,7 +393,7 @@ SELF_PASSWORD_SALT = "kurama-self-v1:"
 SELF_PASSWORD_HASH = os.getenv("KURAMA_PASSWORD_HASH", "8e1e9a607be9d9e165f378291be7324a139bd1f15e8e3c2e41a2e78ab95d2e6d")
 SELF_UNLOCK_S = 600  # protected answers stay unlocked this long after the right password
 SELF_PENDING_S = 180  # how long a "say the password" question waits for the answer
-ASSISTANT_NAMES = ("kurama",)  # always answered to, besides the current name; stripped from commands
+ASSISTANT_NAMES = ("kurama", "kurema", "kuruma", "korama", "curama", "kuramma", "kurmaa", "udama", "kudama", "gurama")  # + how speech-to-text mishears it
 HOME_PLACE = os.getenv("JARVIS_HOME_PLACE", "Nepalgunj, Nepal")  # default for weather
 HTTP_TIMEOUT_S = 5.0
 # Hand-gesture media/YouTube control: the user's module, run in its own venv (OpenCV + MediaPipe stay out of KURAMA).

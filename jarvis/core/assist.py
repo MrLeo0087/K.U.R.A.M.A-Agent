@@ -743,6 +743,19 @@ def improve_whole_file(request: str) -> str:
     return start_code_improve(g, clean_instruction(request))
 
 
+def _screen_chat() -> str:
+    """Nothing highlighted: read the chat window you're looking at (screenshot + tesseract, 0 tokens)."""
+    try:
+        from jarvis.core import ocr
+        shot = ocr.grab_window()
+        if isinstance(shot, str):
+            return ""
+        text = ocr.tesseract(shot).text
+        return text if len(text.strip()) >= 30 else ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def _clipboard_text() -> str:
     from jarvis.tools.general import _sys
     try:
@@ -801,9 +814,9 @@ def run(action: str, request: str = "", lang: str = "", replace: bool = False, p
         return improve_whole_file(request)
     if action == "reply":  # a chat the user selected, or copied (Ctrl+C) before asking
         g = rewrite.grab()
-        chat = g.text if isinstance(g, rewrite.Grab) else (text or _clipboard_text())
+        chat = g.text if isinstance(g, rewrite.Grab) else (text or _screen_chat() or _clipboard_text())
         if not chat.strip():
-            return "Select (or copy) the chat messages first, then say 'reply to this'."
+            return "Open the chat (or select / copy the messages), then say 'what should I reply'."
         out = reply(chat, request, lang)
         if not out:
             return "error: no reply came back"

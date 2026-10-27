@@ -286,7 +286,7 @@ def test_reply_falls_back_to_the_copied_chat(desk, monkeypatch):
     monkeypatch.setattr(assist, "_clipboard_text", lambda: CHAT)
     assert assist.run("reply", "what should i reply").startswith("[assist_reply]")
     monkeypatch.setattr(assist, "_clipboard_text", lambda: "")
-    assert "Select (or copy) the chat" in assist.run("reply", "reply to this")
+    assert "Open the chat (or select / copy the messages)" in assist.run("reply", "reply to this")
 
 
 def test_reply_routing():

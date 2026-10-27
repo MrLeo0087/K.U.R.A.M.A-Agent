@@ -21,7 +21,9 @@ BUDGET_HEAD = ["Category", "Monthly"]
 BILL_HEAD = ["Name", "Amount", "Category", "Day", "Last paid"]
 CATS = {  # category: words that point to it
     "food": "food|lunch|dinner|breakfast|snack|snacks|tea|coffee|momo|momos|restaurant|meal|khana|khaja|chiya|"
-            "pizza|burger|biryani|chai|juice|cafe|canteen|dal bhat|chowmein|samosa|ice cream|eat|ate",
+            "pizza|burger|biryani|chai|juice|cafe|canteen|dal bhat|chowmein|samosa|ice cream|eat|ate|noodles?|"
+            "wai wai|maggi|toffees?|candy|candies|chocolates?|biscuits?|chips|cake|sweets?|mithai|soda|coke|pepsi|"
+            "water bottle|panipuri|chatpate|sel roti|pakoda|lassi|kulfi",
     "groceries": "groceries|grocery|vegetables?|veggies|fruits?|milk|rice|sabji|tarkari|market|kirana|eggs?|bread|meat|"
                  "chicken|mutton|buff|pork|fish|tomato(?:es)?|onions?|potato(?:es)?|garlic|ginger|oil|dal|lentils?|flour|"
                  "atta|sugar|salt|spices?|masala|paneer|curd|dahi|ghee|butter|cheese|banana|apple|mango|spinach|saag|"
@@ -111,7 +113,7 @@ def _day(text: str, today: date) -> date:
 def _note(text: str) -> str:
     t = re.sub(r"\b(?:i\s+)?(?:spent|spend|paid|pay|bought|buy|got|received|earned|kharcha|kharch|on|for|of|in|"
                r"rs\.?|rupees?|npr|today|yesterday|hijo|aaja|bhayo|gare|garyo|the|a|an|my|me|was|it|just|ko|ma|le|"
-               r"actually|also|some|worth|total|i)\b", " ",
+               r"actually|also|some|worth|total|i|am|is|are|was|were|spending|paying|buying|going|outside|out|today's)\b", " ",
                text, flags=re.I)
     t = _AMT.sub(" ", t)
     return " ".join(t.split()).strip(" ,.-")[:60]

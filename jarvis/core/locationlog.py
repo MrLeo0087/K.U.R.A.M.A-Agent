@@ -119,6 +119,24 @@ def record_phone(lat: float, lon: float, accuracy: int = 0, live: bool = False) 
     return record("phone", lat, lon, accuracy, "live" if live else "shared", place)
 
 
+def phone_now() -> str | None:
+    """'Where is my phone': the last location the phone shared on Telegram, how old it is, and a map link."""
+    last = store.location_last("phone")
+    if not last or last.get("lat") is None:
+        return None
+    age = time.time() - last["ts"]
+    when = "just now" if age < 120 else f"{int(age // 60)} min ago" if age < 3600 else \
+        f"{age / 3600:.0f} h ago" if age < 86400 else f"{age / 86400:.0f} days ago"
+    live = last.get("source") == "live" and age < 900
+    acc = f" (±{last['accuracy']} m)" if last.get("accuracy") else ""
+    out = (f"📍 Your phone {'is' if live else 'was'} at {last.get('place') or 'an unnamed place'}{acc}, "
+           f"{'live, ' if live else ''}shared on Telegram {when}.\nhttps://maps.google.com/?q={last['lat']:.5f},{last['lon']:.5f}")
+    if age > 3600:
+        out += ("\nThat's old: share your live location with KURAMA on Telegram for a fresh one, or say "
+                "'open find my device' to see it right now.")
+    return out
+
+
 # --- viewing ---
 def _bounds(pts: list[dict]) -> tuple[float, float, float, float]:
     lats = [p["lat"] for p in pts]

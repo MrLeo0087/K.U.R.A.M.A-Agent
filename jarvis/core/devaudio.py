@@ -92,7 +92,14 @@ def status() -> dict:
 
 
 def raw_source() -> str | None:
-    """The real mic while the canceller runs (the sleeping wake listener reads it: cheaper), else None."""
+    """The real mic while the canceller runs (the sleeping wake listener reads it: cheaper), else None.
+    While KURAMA's own music plays, the cleaned mic instead: the wake word must be heard over the music."""
+    try:
+        from jarvis.core import music
+        if music.running():
+            return None
+    except Exception:
+        pass
     return _load_saved().get("source") if cancelling() else None
 
 

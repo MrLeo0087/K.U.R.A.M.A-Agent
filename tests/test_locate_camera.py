@@ -113,6 +113,6 @@ def test_find_my_phone_opens_the_page(monkeypatch):
 def test_find_my_phone_fastpath(monkeypatch):
     from jarvis.core import config, fastpath
     monkeypatch.setattr(config, "FASTPATH", True)
-    assert fastpath.match("find my phone").args == {"phone": "android"}
+    assert fastpath.match("find my phone").args == {"phone": "android", "want": "open"}
     assert fastpath.match("find my iphone").args == {"phone": "iphone"}
     assert fastpath.match("where is my laptop") is None  # the laptop, not the phone

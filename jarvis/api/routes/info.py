@@ -452,6 +452,16 @@ async def money_card():
     return await run_in_threadpool(expenses.dashboard)
 
 
+class Duck(BaseModel):
+    on: bool
+
+
+@router.post("/music/duck", summary="Lower KURAMA's music while it listens or speaks (back up with on=false)")
+async def music_duck(body: Duck):
+    from jarvis.core import music
+    return {"ok": await run_in_threadpool(music.duck, body.on)}
+
+
 @router.get("/suggest", summary="Random suggestions for the chat box, weighted by what you're doing (0 tokens)")
 async def suggestions(n: int = Query(4, ge=1, le=8)):
     from jarvis.core import suggest
