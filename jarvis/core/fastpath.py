@@ -1922,18 +1922,19 @@ def everyday_intent(t: str) -> Intent | None:
     """0-token replies for things that were costing an LLM call each (greetings, thanks, 'kill brave',
     'top memory processes', 'laptop is slow', 'status of training', 'summarise today', 'exact path of that folder')."""
     if _HELLO.match(t):
-        return Intent("say", "_say", "self", {"en": "Hi! What can I do for you?", "hi": "नमस्ते! बताइए, क्या करूँ?",
-                                               "ne": "नमस्ते! भन्नुहोस्, के गरूँ?"})
+        from jarvis.core import phrases
+        return Intent("say", "_say", "self", phrases.pick(phrases.HELLO))
     if _HOWRU.match(t):
-        return Intent("say", "_say", "self", {"en": "I'm good and ready. What should I do?",
-                                               "hi": "मैं ठीक हूँ, बताइए क्या करना है?", "ne": "म ठिक छु, के गर्नु पर्छ भन्नुहोस्।"})
+        from jarvis.core import phrases
+        return Intent("say", "_say", "self", phrases.pick(phrases.HOWRU))
     if _THANKS.match(t):
-        return Intent("say", "_say", "self", {"en": "You're welcome.", "hi": "कोई बात नहीं।", "ne": "स्वागत छ।"})
+        from jarvis.core import phrases
+        return Intent("say", "_say", "self", phrases.pick(phrases.THANKS))
     if _OKAY.match(t):
         return Intent("say", "_say", "self", {"en": "Okay.", "hi": "ठीक है।", "ne": "हुन्छ।"})
     if _BYE.match(t):
-        return Intent("say", "_say", "self", {"en": "Bye! Call me when you need me.", "hi": "ठीक है, ज़रूरत हो तो बुलाइए।",
-                                               "ne": "हुन्छ, चाहिँदा बोलाउनुहोस्।"})
+        from jarvis.core import phrases
+        return Intent("say", "_say", "self", phrases.bye(t))
     if re.fullmatch(r"(?:please\s+)?(?:share|show|give\s+me)\s+(?:the\s+|my\s+)?(?:wi[\s-]*fi|wifi)(?:\s+(?:password|qr(?:\s+code)?|"
                     r"code))?(?:\s+(?:qr(?:\s+code)?))?(?:\s+(?:to|with)\s+.{1,30})?[\s.!]*|(?:wi[\s-]*fi|wifi)\s+qr(?:\s+code)?[\s.!]*", t, I):
         return Intent("wifiqr", "share_wifi", "desktop", {})

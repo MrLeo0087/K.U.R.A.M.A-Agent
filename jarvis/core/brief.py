@@ -28,7 +28,9 @@ def _safe(fn, default=""):
 
 def _hello(now: datetime) -> str:
     name = _safe(lambda: __import__("jarvis.core.profile", fromlist=["x"]).user_name(), "")
-    part = "Good morning" if 4 <= now.hour < 12 else "Good afternoon" if now.hour < 17 else "Good evening"
+    import random
+    part = random.choice(("Good morning", "Morning", "Rise and shine")) if 4 <= now.hour < 12 else \
+        random.choice(("Good afternoon", "Hello")) if now.hour < 17 else random.choice(("Good evening", "Hello"))
     day = _safe(lambda: __import__("jarvis.core.nepdate", fromlist=["x"]).bs_phrase(now.date()), "") or \
         now.strftime("%A, %d %B")
     return f"{part}{' ' + name if name else ''}! Today is {day}."

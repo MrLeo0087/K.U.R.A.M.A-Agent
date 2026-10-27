@@ -97,7 +97,7 @@ def test_noise_gate_and_greeting_once(monkeypatch):
     monkeypatch.setattr(info, "_greeted", {"done": False})
     c = TestClient(create_app(settings()), base_url=BASE)
     first = c.get("/api/v1/greeting").json()["text"]
-    assert " sir, " in first and len(first.split()) <= 10 and ":" not in first  # short, no clock
+    assert len(first.split()) <= 14 and ":" not in first  # short, no clock (a different hello each time)
     assert c.get("/api/v1/greeting").json()["text"] == ""  # once per start
 
 

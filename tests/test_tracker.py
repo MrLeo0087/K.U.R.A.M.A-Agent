@@ -76,7 +76,7 @@ def test_brief_once_a_day_and_watch(monkeypatch):
     ex.add("spent 300 on tea yesterday", NOW)
     store.kv_set(brief.DONE_KEY, "")
     text = brief.deliver("unlock", NOW)
-    assert text.startswith("Good morning") and "18°C" in text and "Habits today: exercise" in text \
+    assert "Today is" in text and "18°C" in text and "Habits today: exercise" in text \
         and "Yesterday you spent Rs 300" in text
     assert brief.deliver("unlock", NOW) is None and len(sent) == 1
     assert brief.take_pending() == text and brief.take_pending() == ""

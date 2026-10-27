@@ -597,7 +597,7 @@ async function sendChat(text, { voice = false, lang = null, speak = false, ambie
     bot.finish();
     updateState();
     maybeResume();
-    fresh = true; setTimeout(() => { loadDash(); loadToday(); }, 300); // a turn may have changed the list / goals / reminders: show it now
+    fresh = true; setTimeout(() => { loadDash(); loadToday(); loadSuggest(true); }, 300); // a turn may have changed the list / goals / reminders: show it now
   }
 }
 
@@ -696,13 +696,18 @@ function welcome() {
   w.id = "welcome";
   w.innerHTML = "<p>Type, tap the mic, or start a hands-free conversation.</p>";
   const row = el("div", "suggest");
-  for (const s of ["Summarize today", "Latest news", "What can you do?", "Generate an image of a misty Himalayan sunrise"]) {
-    const b = el("button", "chip sug");
-    b.type = "button";
-    b.textContent = s;
-    b.onclick = () => { if (!S.mute) audioCtx(); sendChat(s, { lang: S.lang, speak: !S.mute }); };
-    row.append(b);
-  }
+  const chips = (list) => {
+    row.textContent = "";
+    for (const s of list) {
+      const b = el("button", "chip sug");
+      b.type = "button";
+      b.textContent = s;
+      b.onclick = () => { if (!S.mute) audioCtx(); sendChat(s, { lang: S.lang, speak: !S.mute }); };
+      row.append(b);
+    }
+  };
+  chips(["What's on today?", "Latest news", "What can you do?", "Play lofi music"]); // until the random ones arrive
+  api.suggest(4).then((r) => r.items?.length && chips(r.items)).catch(() => {});
   w.append(row);
   return w;
 }
@@ -1574,14 +1579,25 @@ async function sheetHtml(panel) {
 document.addEventListener("click", (e) => { if (e.target.id === "open-sched") { $("sheet").close(); openSched(); } });
 
 // suggestions above the box: what fits right now (0 tokens to pick)
+// suggestions under the chat box: a few urgent ones first, then random picks from a pool of ~300 (server side,
+// weighted: more coding ones while VS Code is in front, the day in the morning, money/habits in the evening).
+// They change every 3 minutes and after each answer, never every 10 s dashboard refresh.
+let sugg = [], suggAt = 0;
+async function loadSuggest(force = false) {
+  if (MINI || (!force && Date.now() - suggAt < 180000)) return;
+  suggAt = Date.now();
+  try { sugg = (await api.suggest(4)).items || []; } catch { /* keep the old ones */ }
+  renderSuggest();
+}
 function renderSuggest() {
   const s = [];
   if (dash?.now?.some((x) => x.kind === "train")) s.push("How's training?");
   if ((lastStatus?.ram?.percent || 0) >= 85) s.push("Why is my laptop slow?");
-  if (dash?.coding?.project) s.push("Where was I?");
-  s.push("What's on today?", "Status");
-  $("suggest").innerHTML = s.slice(0, 4).map((t) => `<button type="button" data-ask="${esc(t)}">${esc(t)}</button>`).join("");
+  for (const x of (sugg.length ? sugg : ["What's on today?", "Status"])) if (!s.includes(x)) s.push(x);
+  $("suggest").innerHTML = s.slice(0, 3).map((t) => `<button type="button" data-ask="${esc(t)}">${esc(t)}</button>`).join("");
+  loadSuggest();
 }
+setInterval(() => loadSuggest(), 60000);
 
 // ---------- a wallpaper KURAMA made is drawn behind the dashboard (this window covers the real desktop) ----------
 let wallMtime = -1;

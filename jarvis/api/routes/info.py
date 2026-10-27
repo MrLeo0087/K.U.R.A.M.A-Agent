@@ -417,8 +417,6 @@ async def stopwatch_action(action: str):
 
 # ---------- greeting: the first dashboard load after KURAMA starts says hello (once per start) ----------
 _greeted = {"done": False}
-GREETING_ASKS = ("how are you?", "what are we doing today?", "what's the plan today?", "I'm ready when you are.",
-                 "what are we working on?")
 
 
 @router.get("/greeting", summary="A spoken hello, only on the first call after KURAMA starts")
@@ -433,14 +431,9 @@ async def greeting():
             brief.take_pending()
             return {"text": text, "brief": True}
 
-    def build() -> str:  # short and natural: no clock, no weather, no instructions
-        import random
-        from datetime import datetime
-
-        h = datetime.now().hour
-        hello = "Good morning sir" if 5 <= h < 12 else "Good afternoon sir" if h < 17 else \
-            "Good evening sir" if h < 22 else "Hello sir"
-        return f"{hello}, {random.choice(GREETING_ASKS)}"
+    def build() -> str:  # short and natural: a different hello each time (jarvis/core/phrases.py)
+        from jarvis.core import phrases
+        return phrases.greeting()
     try:
         return {"text": await run_in_threadpool(build)}
     except Exception as e:  # a greeting must never break the page
@@ -457,6 +450,12 @@ async def brief_pending():
 async def money_card():
     from jarvis.core import expenses
     return await run_in_threadpool(expenses.dashboard)
+
+
+@router.get("/suggest", summary="Random suggestions for the chat box, weighted by what you're doing (0 tokens)")
+async def suggestions(n: int = Query(4, ge=1, le=8)):
+    from jarvis.core import suggest
+    return {"items": await run_in_threadpool(suggest.pick, n)}
 
 
 @router.get("/money/range", summary="Money window: rows + totals from one date to another (YYYY-MM-DD)")

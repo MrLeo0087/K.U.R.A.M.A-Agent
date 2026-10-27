@@ -18,4 +18,5 @@ def test_zero_token_everyday_phrases():
     for t, tool in want.items():
         i = fastpath.match(t)
         assert i is not None and i.tool == tool, (t, i)
-    assert fastpath.render(fastpath.match("hi"), True, "ok", "ne").startswith("नमस्ते")
+    from jarvis.core import phrases
+    assert fastpath.render(fastpath.match("hi"), True, "ok", "ne") in phrases.HELLO["ne"]  # Nepali, one of the variants
