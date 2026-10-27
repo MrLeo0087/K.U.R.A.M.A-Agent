@@ -75,7 +75,7 @@ def test_coding_projects_list_pin_forget(tmp_path):
     from jarvis.core import store, timemachine as tm
     for n in ("KURAMA", "civic-report", "Dummpy"):
         (tmp_path / n).mkdir()
-    store.kv_set("tm_found", json.dumps([str(tmp_path / n) for n in ("KURAMA", "civic-report", "Dummpy")]))
+    store.kv_set("tm_added", json.dumps([str(tmp_path / n) for n in ("KURAMA", "civic-report", "Dummpy")]))
     assert fastpath.match("list my coding projects").args == {"action": "list"}
     assert fastpath.match("pin the kurama project").args == {"action": "pin", "project": "kurama"}
     assert fastpath.match("stop watching the dummpy project").args == {"action": "forget", "project": "dummpy"}
@@ -90,3 +90,18 @@ def test_coding_projects_list_pin_forget(tmp_path):
 def test_where_was_i_is_not_a_folder_path():
     i = fastpath.match("where was I?")
     assert i.tool == "where_was_i" and i.name != "where"  # the 'The full path is ...' template is for folders only
+
+
+def test_only_projects_the_user_gave_are_watched(tmp_path):
+    import json
+    from jarvis.core import store, timemachine as tm
+    (tmp_path / "old").mkdir()
+    (tmp_path / "mine").mkdir()
+    store.kv_set("tm_found", json.dumps([str(tmp_path / "old")]))  # found on disk: NOT watched any more
+    assert tm.projects() == []
+    assert fastpath.match(f"watch the project at {tmp_path / 'mine'}").args == {"action": "protect", "project": str(tmp_path / "mine")}
+    store.kv_set("tm_added", json.dumps([str(tmp_path / "mine")]))
+    assert [p.name for p in tm.projects()] == ["mine"]
+    assert fastpath.match("stop watching").args == {"action": "forget", "project": ""}
+    assert tm.forget("").startswith("Which one? I'm watching:\n1. mine")
+    assert tm.forget("#1").startswith("I stopped watching mine") and tm.projects() == []

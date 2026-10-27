@@ -22,7 +22,7 @@ def proj(tmp_path, monkeypatch):
     (p / "venv").mkdir()
     (p / "venv" / "big.py").write_text("x")
     (p / "model.pt").write_bytes(b"\0" * 10)
-    store.kv_set("tm_found", json.dumps([str(p)]))
+    store.kv_set("tm_added", json.dumps([str(p)]))  # watched = only projects the user gave
     store.kv_set("tm_found_at", str(time.time()))
     return p
 

@@ -1262,7 +1262,7 @@ function fmtDue(due) { // '2026-10-27 17:00' -> 'tomorrow 5 PM'
 }
 function renderCoding(c) {
   const box = $("code-body");
-  if (!c.project) { box.innerHTML = '<p class="empty">No project yet: say “protect my project”.</p>'; $("code-snap").textContent = ""; return; }
+  if (!c.project) { box.innerHTML = '<p class="empty">No project watched: say “watch the project at /path” (or open it in VS Code and say “watch this project”).</p>'; $("code-snap").textContent = ""; return; }
   $("code-snap").textContent = c.snapshot ? `snapshot ${c.snapshot === "now" ? "just now" : c.snapshot + " ago"}` : "";
   const e = c.error;
   box.innerHTML = `<div class="proj"><b class="ell">${esc(c.project)}</b>${c.branch ? `<span class="branch">${esc(c.branch)}</span>` : ""}</div>

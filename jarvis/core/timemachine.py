@@ -69,12 +69,12 @@ def _ensure(project: Path) -> None:
 
 # ---------------------------------------------------------------- which projects
 def projects() -> list[Path]:
-    """Protected projects: added by the user + git repos found under the search roots."""
+    """Watched projects = ONLY the folders the user gave ('watch the project at ~/code/app'); nothing is picked up
+    automatically (owner: most repos on the disk are old)."""
     added = json.loads(store.kv_get("tm_added") or "[]")
-    found = json.loads(store.kv_get("tm_found") or "[]")
     hidden = set(json.loads(store.kv_get("tm_hidden") or "[]"))
     out = []
-    for p in dict.fromkeys(added + found):
+    for p in dict.fromkeys(added):
         if Path(p).is_dir() and p not in hidden:
             out.append(Path(p))
     return out
@@ -106,13 +106,34 @@ def discover(force: bool = False) -> list[str]:
 
 
 def add_project(path: Path) -> str:
+    hidden = json.loads(store.kv_get("tm_hidden") or "[]")
+    if str(path) in hidden:
+        store.kv_set("tm_hidden", json.dumps([h for h in hidden if h != str(path)]))
     added = json.loads(store.kv_get("tm_added") or "[]")
     if str(path) not in added:
         added.append(str(path))
         store.kv_set("tm_added", json.dumps(added))
     snap = snapshot(path, "first snapshot")
-    return f"{path.name} is protected now: I'll keep a snapshot of its code every {config.TIMEMACHINE_EVERY_S // 60} " \
-           f"minutes when it changes. {snap}"
+    return f"Watching {path.name} ({path}) now: every {config.TIMEMACHINE_EVERY_S // 60} minutes I save a snapshot of its " \
+           f"code when it changed, and the Coding card can show it. {snap}"
+
+
+def vscode_folder() -> Path | None:
+    """The folder open in VS Code (its window title 'file - folder - Visual Studio Code'), for 'watch this project'."""
+    try:
+        import subprocess as sp
+        out = sp.run(["wmctrl", "-l"], capture_output=True, text=True, timeout=3).stdout
+    except (OSError, sp.SubprocessError):
+        return None
+    for line in out.splitlines():
+        if line.rstrip().endswith("Visual Studio Code"):
+            parts = [x.strip() for x in line.split(None, 3)[-1].rsplit(" - ", 2)]
+            if len(parts) == 3:
+                from jarvis.core.paths import smart_path
+                hit = smart_path(parts[1], want="dir")
+                if hit is not None:
+                    return hit
+    return None
 
 
 def _find(name: str) -> Path | None:
@@ -137,11 +158,28 @@ def unpin() -> str:
     return "Automatic again: the Coding card shows the project you changed most recently."
 
 
+def _pick_list() -> str:
+    ps = sorted(projects(), key=last_activity, reverse=True)
+    if not ps:
+        return "I'm not watching any project right now."
+    return "I'm watching:\n" + "\n".join(f"{i}. {p.name} ({p})" for i, p in enumerate(ps, 1)) + \
+        "\nSay 'stop watching <name>' or 'stop watching number 2'."
+
+
 def forget(name: str) -> str:
-    """Stop watching a project (its folder and code are NOT touched)."""
-    p = _find(name)
+    """Stop watching a project (its folder and code are NOT touched). No name / unknown name -> the list to pick from;
+    '#2' = number 2 of that list."""
+    name = (name or "").strip()
+    if not name:
+        return "Which one? " + _pick_list()
+    if name.startswith("#"):
+        ps = sorted(projects(), key=last_activity, reverse=True)
+        n = int(name[1:] or 0)
+        p = ps[n - 1] if 1 <= n <= len(ps) else (ps[-1] if n == -1 and ps else None)
+    else:
+        p = _find(name)
     if p is None:
-        return f"I don't watch a project called '{name}'."
+        return f"I'm not watching a project called '{name}'. " + _pick_list()
     hidden = json.loads(store.kv_get("tm_hidden") or "[]")
     if str(p) not in hidden:
         hidden.append(str(p))
@@ -167,16 +205,18 @@ def overview() -> str:
     """'list my coding projects': which one the Coding card shows and why, then all watched ones."""
     ps = sorted(projects(), key=last_activity, reverse=True)
     if not ps:
-        return "I'm not watching any coding project yet. Say 'protect my <name> project'."
+        return ("I'm not watching any coding project. Say 'watch the project at /path/to/folder', or open it in VS Code "
+                "and say 'watch this project'. Only the projects you give me are watched.")
     try:
         cur = resolve("")
     except TMError:
         cur = ps[0]
     why = "you pinned it" if store.kv_get("tm_pinned") == str(cur) else "you changed it most recently"
-    lines = [f"💻 The Coding card shows {cur.name} ({why}).", f"I watch {len(ps)} git projects (newest first):"]
+    lines = [f"💻 The Coding card shows {cur.name} ({why}).", f"I watch {len(ps)} project{'s' if len(ps) > 1 else ''} you gave me (newest first):"]
     # every one, short: the name + where it lives (its parent folder), so 24+ projects fit
     lines += [f"{i}. {p.name} ({p.parent.name or p.parent})" for i, p in enumerate(ps, 1)]
-    lines.append("Say 'pin <name> project' to always show one, 'stop watching <name>' to hide one (code is never deleted).")
+    lines.append("Say 'watch the project at <path>' to add one, 'stop watching <name>' to remove one (code is never deleted), "
+                 "'pin <name> project' to always show one.")
     return "\n".join(lines)
 
 
@@ -197,7 +237,8 @@ def resolve(project: str = "") -> Path:
         if t > when:
             best, when = p, t
     if best is None:
-        raise TMError("which project? (none is protected yet; say e.g. 'protect my kurama project')")
+        raise TMError("I'm not watching any project yet. Say 'watch the project at /path/to/folder' (or open it in VS Code "
+                      "and say 'watch this project').")
     return best
 
 
@@ -273,8 +314,7 @@ def snapshot(project: Path, reason: str = "auto") -> str:
 
 
 def auto_snapshots() -> list[str]:
-    """Worker tick: snapshot every protected project with changes since its last snapshot."""
-    discover()
+    """Worker tick: snapshot every WATCHED project (the ones the user gave) with changes since its last snapshot."""
     done = []
     for p in projects():
         since = float(store.kv_get(f"tm_last:{p}") or 0)

@@ -42,9 +42,15 @@ def time_machine(action: Literal["changes", "history", "restore", "undo", "prote
             return tm.unforget(project)
         if action == "undo":
             return tm.undo()
-        p = tm.resolve(project)
-        if action == "protect":
+        if action == "protect":  # 'watch the project at <path>' / 'watch this project' (= the folder open in VS Code)
+            if project.strip() and project.strip().lower() not in ("this", "it", "this project", "current"):
+                p = tm.resolve(project)
+            else:
+                p = tm.vscode_folder()
+                if p is None:
+                    return "Which folder? Say 'watch the project at /path/to/folder'."
             return tm.add_project(p)
+        p = tm.resolve(project)
         if action == "snapshot":
             return tm.snapshot(p, "manual")
         if action == "history":

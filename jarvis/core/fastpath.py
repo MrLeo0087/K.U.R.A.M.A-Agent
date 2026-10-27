@@ -2017,11 +2017,23 @@ def _goal_intent(t: str) -> Intent | None:
         return Intent("code", "time_machine", "git", {"action": "pin", "project": m.group("p") or m.group("p2")})
     if re.fullmatch(r"unpin\s+(?:the\s+|my\s+)?(?:coding\s+)?project|(?:go\s+back\s+to\s+)?automatic\s+project", low, I):
         return Intent("code", "time_machine", "git", {"action": "unpin"})
-    if m := re.fullmatch(r"(?:stop\s+(?:watching|tracking)|forget|hide|remove|delete)\s+(?:the\s+|my\s+)?(?P<p>.+?)\s+(?:project|repo)"
+    if re.fullmatch(r"(?:please\s+)?stop\s+(?:watching|tracking|looking\s+at|snapshotting)(?:\s+(?:a|the|my|this|that|some|all\s+the)?\s*(?:projects?|repos?|folders?))?", low, I):
+        return Intent("code", "time_machine", "git", {"action": "forget", "project": ""})  # no name: show the list to pick from
+    if m := re.fullmatch(r"(?:please\s+)?stop\s+(?:watching|tracking|looking\s+at)\s+(?:the\s+)?(?:project\s+)?(?:number\s+|no\.?\s*)?(?P<n>\d{1,2}|first|second|third|last)"
+                         r"(?:\s+(?:one|project))?", low, I):
+        return Intent("code", "time_machine", "git", {"action": "forget", "project": "#" + str(_nth(m.group("n")))})
+    if m := re.fullmatch(r"(?:stop\s+(?:watching|tracking|looking\s+at)|forget|hide|remove|delete)\s+(?:the\s+|my\s+)?(?P<p>.+?)\s+(?:project|repo)"
                          r"(?:\s+from\s+(?:the\s+)?(?:coding(?:\s+card)?|list|kurama))?", low, I):
         return Intent("code", "time_machine", "git", {"action": "forget", "project": m.group("p")})
     if m := re.fullmatch(r"(?:watch|track)\s+(?:the\s+|my\s+)?(?P<p>.+?)\s+(?:project|repo)\s+again", low, I):
         return Intent("code", "time_machine", "git", {"action": "watch", "project": m.group("p")})
+    # 'watch the project at ~/code/app', 'look at this project /media/.../X', 'start watching my KURAMA project', 'watch this project'
+    if m := re.fullmatch(r"(?:please\s+)?(?:start\s+)?(?:watch(?:ing)?|track(?:ing)?|protect|monitor|look\s+at|keep\s+an\s+eye\s+on|snapshot)\s+"
+                         r"(?:the\s+|my\s+|this\s+)?(?:(?:coding\s+)?(?:project|folder|repo)\s*)?(?:(?:at|in|from|called|named|:)\s+)?(?P<p>[~/].+|.+?)"
+                         r"(?:\s+(?:project|folder|repo))?", t.strip(" .!?"), I):
+        p = m.group("p").strip()
+        if p.startswith(("/", "~")) or re.search(r"\b(?:project|folder|repo)\b", low):
+            return Intent("code", "time_machine", "git", {"action": "protect", "project": "" if p.lower() in ("this", "it", "project", "this project") else p})
     # the CODE work (what you're doing in your project): 'code work for today', 'code worker', 'what do I have to do
     # in my code', 'related to code' -> where was I (git changes, errors, next step)
     if len(low.split()) <= 20 and (re.search(r"\b(?:code|coding|programming)\s+(?:work(?:er)?s?|tasks?|jobs?|progress|to[\s-]?dos?)\b", low)
