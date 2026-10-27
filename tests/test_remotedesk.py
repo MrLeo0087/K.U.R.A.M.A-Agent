@@ -5,6 +5,7 @@ def _fake(monkeypatch, ok=True):
     calls, kv = [], {}
     monkeypatch.setattr(remotedesk, "installed", lambda: True)
     monkeypatch.setattr(remotedesk, "_ensure_running", lambda: None)
+    monkeypatch.setattr(remotedesk, "service_up", lambda: True)
     monkeypatch.setattr(remotedesk, "get_id", lambda: "123456789")
     monkeypatch.setattr(remotedesk, "_helper", lambda *a: (calls.append(a), (ok, "" if ok else "sudo: a password is required"))[1])
     monkeypatch.setattr(remotedesk.store, "kv_set", lambda k, v: kv.__setitem__(k, v))
@@ -55,3 +56,37 @@ def test_password_only_on_telegram_with_pin_every_time(monkeypatch):
     assert telesec.verify_pin(str(telesec.config.TELEGRAM_RISKY_PIN))  # PIN window open...
     assert "PIN" in telesec.gate("/changepass")                       # ...still asks for the password
     assert telesec.gate("/control off") is None
+
+
+def test_service_down_is_started_before_password(monkeypatch):
+    calls, _ = _fake(monkeypatch)
+    state = {"up": False}
+    monkeypatch.setattr(remotedesk, "service_up", lambda: state["up"])
+    real = remotedesk._helper
+    def helper(*a):
+        if a == ("ensure",):
+            state["up"] = True
+        return real(*a)
+    monkeypatch.setattr(remotedesk, "_helper", helper)
+    r = remotedesk.start()
+    assert r["id"] == "123456789" and calls[0] == ("ensure",) and calls[1][0] == "on"
+
+
+def test_service_wont_start_says_why(monkeypatch):
+    _fake(monkeypatch)
+    monkeypatch.setattr(remotedesk, "service_up", lambda: False)
+    monkeypatch.setattr(remotedesk.time, "sleep", lambda s: None)
+    assert "offline" in remotedesk.start()["error"]
+
+
+def test_keep_alive_restarts_stopped_service_throttled(monkeypatch):
+    calls, _ = _fake(monkeypatch)
+    state = {"up": False}
+    monkeypatch.setattr(remotedesk, "service_up", lambda: state["up"])
+    monkeypatch.setattr(remotedesk, "_last_check", 0.0)
+    real = remotedesk._helper
+    monkeypatch.setattr(remotedesk, "_helper", lambda *a: (state.__setitem__("up", True), real(*a))[1])
+    assert remotedesk.keep_alive(1000.0) and calls == [("ensure",)]
+    state["up"] = False
+    assert not remotedesk.keep_alive(1100.0) and len(calls) == 1  # within 5 min: no check
+    assert remotedesk.keep_alive(1400.0) and len(calls) == 2

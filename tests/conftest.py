@@ -39,6 +39,8 @@ def tmp_store(tmp_path, monkeypatch):
     from jarvis.tools.general import _files
     trashed: list = []
     monkeypatch.setattr(_files, "trash", trashed.append)  # never move real files to the trash
+    from jarvis.core import remotedesk
+    monkeypatch.setattr(remotedesk, "_helper", lambda *a: (False, "test"))  # never touch the real RustDesk service/password
     ratelimit.reset()
     from jarvis.core import assist
     for pending in (assist._use, assist._more, assist._ask_back, assist._retry, assist._pending):

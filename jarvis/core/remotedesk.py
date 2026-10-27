@@ -18,6 +18,8 @@ from jarvis.core import config, store
 
 log = logging.getLogger(__name__)
 _EXP_KEY = "rustdesk_expires_at"
+KEEP_ALIVE_S = 300  # scheduler checks the RustDesk service at most every 5 min
+_last_check = 0.0
 INSTALL_HINT = ("RustDesk isn't installed. Install it once:  sudo apt install -y ./rustdesk.deb  "
                 "(download the .deb from https://github.com/rustdesk/rustdesk/releases) — then ask me again.")
 # RustDesk only lets root set the password, so a tiny root-owned helper does it (one-time setup by the owner)
@@ -71,6 +73,41 @@ def _ensure_running() -> None:
         if _is_running():
             break
         time.sleep(0.5)
+
+
+def service_up() -> bool:
+    """The root `rustdesk --service` is what puts the laptop online; the window alone isn't enough."""
+    try:
+        return subprocess.run(["systemctl", "is-active", "--quiet", "rustdesk"], timeout=10).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def ensure_service() -> tuple[bool, str]:
+    """Start/enable the service (also undoes a 'Stop service' click) via the helper. Returns (up, error text)."""
+    if service_up():
+        return True, ""
+    ok, err = _helper("ensure")
+    for _ in range(10):
+        if service_up():
+            return True, ""
+        time.sleep(1)
+    return False, err if not ok else "the service didn't start"
+
+
+def keep_alive(now: float | None = None) -> bool:
+    """Called by the scheduler worker: so remote desktop works from far away, restart the service if it stopped.
+    Returns True when it had to restart it."""
+    global _last_check
+    now = now or time.time()
+    if now - _last_check < KEEP_ALIVE_S or not installed():
+        return False
+    _last_check = now
+    if service_up():
+        return False
+    up, err = ensure_service()
+    log.warning("rustdesk service was down -> %s", "restarted" if up else "restart failed: " + err)
+    return up
 
 
 def _new_password() -> str:
@@ -127,6 +164,11 @@ def start() -> dict:
     """Turn on unattended access with a fresh password that works for REMOTE_PW_TTL_MIN; {id, password, minutes} or {error}."""
     if not installed():
         return {"error": INSTALL_HINT}
+    up, err = ensure_service()
+    if not up:
+        log.warning("rustdesk service won't start: %s", err)
+        return {"error": SETUP_HINT if "usage" in err or "password" in err else
+                "RustDesk's background service won't start (" + err + "), so the laptop looks offline to your phone."}
     _ensure_running()
     pw = _new_password()
     ok, err = _helper("on", pw)

@@ -56,6 +56,7 @@ class Scheduler(Worker):
         try:
             from jarvis.core import remotedesk
             remotedesk.expire_if_due(self._now())
+            remotedesk.keep_alive(self._now())
         except Exception as e:
             self.log.warning("remote desktop expiry check failed: %s", e)
         for sid in reminders.heads_up(self._now()):
