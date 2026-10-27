@@ -144,6 +144,48 @@ def explain(text: str, lang: str = "") -> str:
     return _offer_more(reply, "explain", text, lang=lang)
 
 
+def use_code(g) -> str:
+    """'How can I use this function / give me code to use it': ONLY a small run block (if __name__ == "__main__")
+    calling the selected code, appended to the file open in VS Code (backup first; VS Code reloads it). Values the
+    user must give (API keys, paths...) come from os.getenv / input() and are named in the reply."""
+    import time
+    f = open_file_in_editor()
+    name = f.name if f else _short(g.title)
+    lang_name = _EXT_LANG.get(f.suffix.lower(), "") if f else ""
+    whole = f.read_text(errors="replace") if f and f.is_file() else ""
+    if whole and re.search(r"^if\s+__name__\s*==\s*['\"]__main__['\"]\s*:", whole, re.M):
+        return f"{name} already has a run block (if __name__ == \"__main__\") at the end. Press Run (or: python {name})."
+    sys = ("Write ONLY a minimal run block that lets the user run and try the selected code right away "
+           "(for Python: an `if __name__ == \"__main__\":` block that calls it with simple sample values, or just "
+           "calls it when it asks for input itself). If it needs a value only the user has (API key, token, file path, "
+           "URL), read it with os.getenv('NAME') (or input()) and add a comment. No tests, no rewriting the code. "
+           "Then, on the LAST line, write 'NEEDS: <comma list of values the user must set>' or 'NEEDS: none'." +
+           (f" Language: {lang_name}." if lang_name else ""))
+    out = _llm(sys, f"Selected code:\n{g.text[:8000]}", smart=False, max_tokens=400, purpose="assist_use")
+    needs = ""
+    if m := re.search(r"^\s*NEEDS:\s*(.+)$", out, re.M | re.I):
+        needs = "" if m.group(1).strip().lower() in ("none", "-", "nothing") else m.group(1).strip()
+        out = out[:m.start()]
+    block = _strip_fence(out).strip("\n")
+    if not block.strip():
+        return "error: no run code came back"
+    imports = [ln for ln in block.splitlines() if re.match(r"(?:import|from)\s+\w", ln)]
+    body = "\n".join(ln for ln in block.splitlines() if ln not in imports)
+    dirty = g.title.lstrip().startswith(("●", "•"))
+    if f and f.is_file() and not dirty:
+        backup = Path(config.DATA_DIR) / "code_backups" / f"{f.name}.{int(time.time())}.bak"
+        backup.parent.mkdir(parents=True, exist_ok=True)
+        backup.write_text(whole, encoding="utf-8")
+        missing = [i for i in imports if i not in whole]
+        text = ("\n".join(missing) + "\n" if missing else "") + whole.rstrip("\n") + "\n\n\n" + body.strip("\n") + "\n"
+        f.write_text(text, encoding="utf-8")
+        tail = f" It needs {needs}: set it before running (e.g. in your .env or terminal)." if needs else ""
+        return f"I added a small run block at the end of {name}. Press Run in VS Code (or: python {name}).{tail}"
+    rewrite._xclip(["-selection", "clipboard"], block)
+    return (f"{name} has unsaved changes, so I didn't touch it: the run code is on your clipboard. Paste it at the end of "
+            f"the file (or save with Ctrl+S and ask again).")
+
+
 def ask(sel: str, request: str, source: str = "", lang: str = "") -> str:
     """Anything else about the highlighted code/text ('give me code to test this function', 'show an example of using
     this', 'add type hints and show me', 'write a docstring for it'): the selection + the request, one call. The
@@ -403,8 +445,39 @@ def pending_code_active() -> bool:
     return bool(_pending) and time.time() < _pending.get("expires", 0)
 
 
-def start_code_improve(g, instruction: str) -> str:
-    """Improve the highlighted code as a background job; the result goes to the workspace and waits for a yes."""
+def complete_code(code: str, note: str, lang_name: str = "", context: str = "") -> str:
+    """'Complete this code': the finished selection (level 0), or 'QUESTION: ...' when its purpose is unclear."""
+    system = ("You finish unfinished code. Return ONLY the completed version of the user's selected code (no "
+              "explanation, no markdown fences): implement every missing part (empty bodies, TODO, '...', pass, "
+              "half-written lines) so it runs, keep the existing code, names and style, add only the imports it needs, "
+              "no tests or demo block. If you really cannot tell what the code is meant to do, reply ONLY with "
+              "'QUESTION: <one short question to the user>'. Return it at indentation level 0." +
+              (f" Language: {lang_name}." if lang_name else ""))
+    user = ((f"The user explained: {note}\n\n" if note else "") +
+            (f"Surrounding code (context only):\n{context}\n\n" if context else "") + f"Selected code:\n{code[:12000]}")
+    out = _llm(system, user, smart=True, max_tokens=min(4000, len(code) + 1500), purpose="assist_code_complete")
+    return out.strip() if out.strip().upper().startswith("QUESTION:") else textwrap.dedent(_strip_fence(out).strip("\n"))
+
+
+_ask_back: dict = {}  # 'complete this code' asked the user a question: their next reply is the answer
+
+
+def ask_back_waiting() -> bool:
+    import time
+    return bool(_ask_back) and time.time() < _ask_back.get("until", 0)
+
+
+def answer_back(reply: str) -> str:
+    if not ask_back_waiting():
+        return "Nothing is waiting for an answer."
+    d = dict(_ask_back)
+    _ask_back.clear()
+    return start_code_improve(d["g"], "", mode="complete", note=(d.get("note", "") + " " + reply).strip())
+
+
+def start_code_improve(g, instruction: str, mode: str = "improve", note: str = "") -> str:
+    """Improve (or, mode 'complete', finish) the highlighted code as a background job; the result goes to the
+    workspace and waits for a yes."""
     import time
     from jarvis.core import jobs
     f = open_file_in_editor()
@@ -412,25 +485,35 @@ def start_code_improve(g, instruction: str) -> str:
     old, name = g.text, (f.name if f else _short(g.title))
 
     def run(ctx) -> str | None:
-        ctx.progress("improving the code")
+        ctx.progress("completing the code" if mode == "complete" else "improving the code")
         lead, base, code0 = _layout(old, f)
-        new0 = improve_code(code0, instruction, lang_name, _context(f, old))
+        if mode == "complete":
+            new0 = complete_code(code0, note, lang_name, _context(f, old))
+            if new0.upper().startswith("QUESTION:"):  # unsure what it should do: ask first, never guess
+                _ask_back.clear()
+                _ask_back.update(g=g, note=note, until=time.time() + config.ASSIST_PENDING_TTL_S)
+                ctx.progress("» Before I complete it: " + new0.split(":", 1)[1].strip())
+                return None
+        else:
+            new0 = improve_code(code0, instruction, lang_name, _context(f, old))
         ctx.check()
         if not new0.strip():
             ctx.progress("» No improved code came back; nothing changed.")
             return None
         new = _rebase(new0, base, old)
-        out = Path(config.OUTPUTS_DIR) / "code" / f"{Path(name).stem}-improved-{time.strftime('%H%M%S')}{Path(name).suffix or '.txt'}"
+        tag = "completed" if mode == "complete" else "improved"
+        out = Path(config.OUTPUTS_DIR) / "code" / f"{Path(name).stem}-{tag}-{time.strftime('%H%M%S')}{Path(name).suffix or '.txt'}"
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(new.rstrip("\n") + "\n", encoding="utf-8")
         _pending.clear()
         _pending.update(old=old, new=new, lead=lead, file=str(f) if f else "", wid=g.wid, term=g.term, title=g.title,
                         expires=time.time() + config.ASSIST_PENDING_TTL_S)
         a, b = old.strip("\n").count("\n") + 1, new.strip("\n").count("\n") + 1
-        ctx.progress(f"» Ready: {a} → {b} lines, in the workspace. Replace it?")
+        ctx.progress(f"» I {'completed' if mode == 'complete' else 'improved'} the code ({a} → {b} lines). It's in the "
+                     f"workspace. Should I replace it in {name}?")
         return str(out)
-    jobs.get_manager().submit(f"Improve code in {name}", "code", run)
-    return f"Improving the selected code in {name}…"
+    jobs.get_manager().submit(f"{'Complete' if mode == 'complete' else 'Improve'} code in {name}", "code", run)
+    return f"{'Completing' if mode == 'complete' else 'Improving'} the selected code in {name}…"
 
 
 def apply_pending_code() -> str:
@@ -517,6 +600,8 @@ def run(action: str, request: str = "", lang: str = "", replace: bool = False, p
             action, lambda: explain(text, lang))()
     if action == "more":
         return more()
+    if action == "answer_back":
+        return answer_back(request)
     if action == "cancel_more":
         return cancel_more()
     if action == "apply_code":
@@ -581,6 +666,10 @@ def run(action: str, request: str = "", lang: str = "", replace: bool = False, p
         return explain_code(sel, lang) if is_code(sel) else summary(sel, lang)
     if action == "ask":
         return ask(sel, request or "explain it", _short(g.title), lang)
+    if action == "use":
+        return use_code(g)
+    if action == "complete":
+        return start_code_improve(g, "", mode="complete", note=clean_instruction(request))
     if not is_code(sel) and len(sel.split()) <= 3:  # one word / short phrase: a dictionary meaning
         return meaning(sel, lang or "en")
     return explain(sel, lang)

@@ -102,6 +102,16 @@ def short_line(text: str, lang: str = "en") -> str:
             head = head[0].lower() + head[1:]
         return {"ne": f"भेटियो: {head} ({len(items)} वटा) workspace मा छ।", "hi": f"मिल गया: {head} ({len(items)} आइटम) workspace में है।"}.get(
             lang, f"I found {head} ({len(items)} items). It's in the workspace.")
+    if "```" in text:  # code: never read code lines out; say what was made (owner: 'test_calculator.py. python. from ...')
+        fname = re.search(r"\*\*`?([\w.-]+\.\w{1,6})`?\*\*|#\s*(?:file:\s*)?([\w.-]+\.\w{1,6})\b", text)
+        fname = (fname.group(1) or fname.group(2)) if fname else ""
+        tests = bool(re.search(r"\bdef\s+test_\w+|\bimport\s+pytest\b|\bunittest\b", text))
+        what = "the tests" if tests else "the code"
+        run = re.search(r"^\s*(pytest[^\n`]*|python3?\s+[\w./-]+\.py[^\n`]*)$", text, re.M)
+        line = f"I wrote {what}" + (f" ({fname})" if fname else "") + ". It's in the workspace, you can check it there."
+        if run:
+            line += f" Run {'them' if tests else 'it'} with: {run.group(1).strip()}"
+        return {"ne": "कोड workspace मा राखेँ, त्यहाँ हेर्नुहोस्।", "hi": "कोड workspace में रख दिया, वहाँ देखिए।"}.get(lang, line)
     plain = " ".join(re.sub(r"(?<=[^\s.!?:;।])$", ".", ln.strip(" -*•#"))  # each line ends like a sentence
                      for ln in lines if not _CODEY.search(ln) and not re.search(r"/[\w.-]+/", ln))
     if not plain and lines:  # only code / paths: the first line, cut short

@@ -1453,6 +1453,17 @@ def assist_intent(t: str) -> Intent | None:
         sel = bool(re.fullmatch(_SELREF + r"(?:\s+(?:word|sentence|paragraph|text|line|part))?", x, I))
         return Intent("assist", "text_assist", "clipboard", {"action": "translate", "lang": l, "replace": bool(m.group("r")),
                                                              "text": "" if sel else x.strip("'\"")})
+    # 'how can I use this function / give me the code to use (run, call) it' -> a run block added to the file
+    if len(t.split()) <= 40 and re.search(r"\b(?:how\s+(?:can|do|should|would)\s+i\s+(?:use|run|call|execute)|(?:code|example|block)\s+(?:to|for)\s+"
+                                          r"(?:use|using|run|running|call|calling|execute)|(?:use|run|call|execute)\s+(?:this|that|my|the)\s+(?:function|"
+                                          r"code|class|method|script)|usage\s+(?:code|example)|example\s+of\s+using)\b", t, I) \
+            and not re.search(r"\b(?:tests?|pytest|unit\s*tests?|terminal\s+command)\b", t, I):
+        return Intent("assist", "text_assist", "clipboard", {"action": "use"})
+    # 'complete this code' / 'finish my function' -> completed in the background, asks if unclear, then 'replace it?'
+    if len(t.split()) <= 30 and re.search(r"\b(?:complete|finish|fill\s+in|implement)\s+(?:the\s+rest\s+of\s+)?(?:this|that|my|the|selected)?\s*"
+                                          r"(?:code|function|class|method|script|program|todo|it)\b", t, I) \
+            and not re.search(r"\b(?:task|to[\s-]?do\s+list|reading|book|goal)\b", t, I):
+        return Intent("assist", "text_assist", "clipboard", {"action": "complete", "request": t})
     # anything NEW about the highlighted code/text: 'give me code to test this function', 'show an example of using this
     # class', 'write a docstring for the selected code', 'what inputs break this function?' -> selection + request
     if len(t.split()) <= 45 and re.search(r"\b(?:this|that|the\s+selected|selected|highlighted|my|the)\s+(?:python\s+)?(?:function|code|class|"
@@ -1687,6 +1698,8 @@ def plan_answer_intent(t: str) -> Intent | None:
     """While an organize plan is waiting: 'yes good' applies it, 'no' cancels it, anything that sounds like a
     change ('keep the pictures where they are') edits it. Costs one kv read when no plan waits."""
     from jarvis.core import assist, organizer
+    if assist.ask_back_waiting() and len(t.split()) <= 40 and not t.strip().endswith("?"):  # its question to the user
+        return Intent("assist", "text_assist", "clipboard", {"action": "answer_back", "request": t})
     if assist.more_waiting():  # "This needs a longer explanation. Want me to write it?"
         if _YES_PLAN.match(t) or re.fullmatch(r"(?:yes|yeah|yep|sure|ok(?:ay)?|please|go\s+ahead|write\s+it|do\s+it)\b[\s\w,.!]{0,30}", t, I):
             return Intent("assist", "text_assist", "clipboard", {"action": "more"})

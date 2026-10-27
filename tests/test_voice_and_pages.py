@@ -171,3 +171,27 @@ def test_ask_about_selection_and_token_guard(monkeypatch):
     assert assist.run("more") == "# Full\nlong text" and calls[-1][1] == 1800 and not assist.more_waiting()
     assist.explain("A normal sentence that needs no long answer at all.")
     assert calls[-1][1] == assist.SHORT_MAX["explain"] and "[more]" in calls[-1][2]
+
+
+def test_use_complete_and_code_chat_line(monkeypatch, tmp_path):
+    """Owner: 'use this function' = only a run block put into the VS Code file; 'complete this code' finishes it
+    (asks if unclear); 'test' = pytest; the chat says 'I wrote the tests ... in the workspace', never code lines."""
+    from jarvis.core import assist, rewrite, workspace
+    f = tmp_path / "test.py"
+    f.write_text("def calculator():\n    return 1\n")
+    monkeypatch.setattr(assist, "open_file_in_editor", lambda: f)
+    g = rewrite.Grab("def calculator():\n    return 1\n", 5, False, False, "test.py - KURAMA - Visual Studio Code")
+    monkeypatch.setattr(rewrite, "grab", lambda: g)
+    monkeypatch.setattr(assist, "_llm", lambda *a, **k: "```python\nif __name__ == \"__main__\":\n    calculator()\n```\nNEEDS: none")
+    assert fastpath.match("how can I use this function").args == {"action": "use"}
+    out = assist.run("use")
+    assert out.startswith("I added a small run block at the end of test.py") and 'if __name__ == "__main__":' in f.read_text()
+    assert "already has a run block" in assist.run("use")  # never twice
+    # complete: unclear -> one question first, the reply continues the job
+    monkeypatch.setattr(assist, "_llm", lambda *a, **k: "QUESTION: Should it also handle powers like 2**3?")
+    assert assist.complete_code("def f(x):\n    ...\n", "").startswith("QUESTION:")
+    assert fastpath.match("hey kurama can you complete this code").args["action"] == "complete"
+    md = ("**`test_calculator.py`**\n\n```python\nimport pytest\nfrom test import calculator\n\ndef test_x():\n    pass\n```\n\n"
+          "**How to run the tests**\n\n```bash\npytest -q test_calculator.py\n```")
+    assert workspace.short_line(md) == ("I wrote the tests (test_calculator.py). It's in the workspace, you can check it there. "
+                                        "Run them with: pytest -q test_calculator.py")
