@@ -50,6 +50,12 @@ async def status_stream(request: Request):
     return StreamingResponse(events(), media_type="text/event-stream", headers=SSE_HEADERS)
 
 
+@router.get("/slash", summary="Slash commands for the chat box suggestions (0 tokens)")
+async def slash_commands():
+    from jarvis.core import slash
+    return {"commands": slash.catalog()}
+
+
 @router.get("/jobs", summary="Background jobs (newest first)")
 async def jobs(limit: int = Query(20, ge=1, le=200), status: str | None = Query(None, description="e.g. running")):
     from jarvis.core import store

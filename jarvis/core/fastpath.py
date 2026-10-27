@@ -1445,6 +1445,27 @@ def code_tidy_intent(t: str) -> Intent | None:
 _NAV_OBJ = r"(?:function|func|method|class|definition|def|code|implementation|source)"
 
 
+def slash_intent(t: str) -> Intent | None:
+    """'/weather pokhara', '/todo buy milk', '/def', '/list' (jarvis/core/slash.py): the command's phrase through the
+    fast path, or its tool directly. Unknown '/word' -> the list hint (a path like /home/x is not a command)."""
+    from jarvis.core import slash
+    cmd, arg, typed = slash.lookup(t)
+    if cmd is None:
+        if typed and not arg and len(typed) <= 15:
+            return Intent("say", "_say", "self", {"en": f"I don't know /{typed}. Type /list to see every command."})
+        return None
+    if cmd.name == "list":
+        return Intent("say", "_say", "self", {"en": slash.help_text("md")})
+    if cmd.phrase and (p := slash.phrase_for(cmd, arg)):
+        return match(p)
+    if tc := slash.tool_call(cmd, arg):
+        return Intent("slash", tc[0], tc[1], tc[2], cmd.name)
+    if cmd.tool:  # '/search' alone
+        return Intent("say", "_say", "self", {"en": f"Usage: /{cmd.name} {cmd.hint} — {cmd.desc}."})
+    canon = f"/{cmd.name}" + (f" {arg}" if arg else "")
+    return None if canon == t else match(canon)  # '/plya' -> '/play' (the media rules)
+
+
 def coderun_intent(t: str) -> Intent | None:
     """'run this code' / 'run the selected code' / 'execute this' / '/run' -> code_nav run (0 tokens);
     'fix it' right after a failed run -> the code fixer with that error."""
@@ -2551,6 +2572,8 @@ def match(text: str) -> Intent | None:
         return everyday_intent(" ".join((text or "").split()).strip(" ,"))
     if len(t) > 200:
         return None
+    if t.startswith("/") and (sl := slash_intent(t)):
+        return sl
     if si := _self_intent(t):
         return si
     from jarvis.core import templates

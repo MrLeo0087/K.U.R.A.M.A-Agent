@@ -3,6 +3,7 @@ import { Api } from "./api.js";
 import { VOICE_DEFAULTS, loadSettings, saveSettings } from "./config.js";
 import { Dust } from "./dust.js";
 import { Orb } from "./orb.js";
+import { attachSlash } from "./slash.js";
 import { Conversation, Mic, Player, Recorder, SentenceSplitter, audioCtx, audioSleepSoon, insertAtCursor } from "./voice.js";
 
 const $ = (id) => document.getElementById(id);
@@ -607,6 +608,7 @@ for (const ev of ["focus", "mouseup", "keyup", "select"]) input.addEventListener
 input.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); $("composer").requestSubmit(); }
 });
+attachSlash(input, api, $("composer"), autosize);
 $("composer").addEventListener("submit", (e) => {
   e.preventDefault();
   const t = input.value.trim();

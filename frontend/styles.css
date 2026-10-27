@@ -1141,3 +1141,13 @@ body:not(.mini) .dots i:nth-child(3) { animation-delay: 0.3s !important; }
 .ws-text pre.doc-code .lang { position: absolute; top: 4px; right: 8px; font-size: 10px; color: var(--dim); text-transform: uppercase; }
 .ws-big-view .ws-text { font-size: 15px; }
 .ws-big-view .ws-text h1 { font-size: 24px; } .ws-big-view .ws-text h2 { font-size: 19px; }
+
+/* slash-command suggestions (frontend/slash.js) */
+.ask { position: relative; }
+.slash-pop { position: absolute; left: 10px; right: 10px; bottom: calc(100% + 6px); z-index: 30; max-height: 320px; overflow-y: auto;
+  background: #15171c; border: 1px solid var(--line); border-radius: 10px; padding: 4px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); }
+.slash-item { display: flex; gap: 8px; align-items: baseline; padding: 6px 10px; border-radius: 7px; cursor: pointer; font-size: 13px; }
+.slash-item b { color: #ff9a4a; font-weight: 600; }
+.slash-item i { color: var(--muted); font-style: normal; font-size: 12px; }
+.slash-item span { margin-left: auto; color: var(--muted); font-size: 12px; text-align: right; }
+.slash-item.on, .slash-item:hover { background: rgba(255, 122, 26, 0.14); }

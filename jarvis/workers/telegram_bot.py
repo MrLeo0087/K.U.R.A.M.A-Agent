@@ -21,6 +21,7 @@ OFFSET_KEY = "telegram_offset"
 HELP = (
     "🤖 KURAMA — all commands (/list any time)\n"
     "Or just write / send a voice note in your own words.\n"
+    "📚 /all — every KURAMA command: weather, to-do, timer, code, YouTube, search, translate... (0 tokens)\n"
     "\n💻 Laptop\n"
     "/status — training, jobs, downloads, what's running\n"
     "/battery — battery level and time left\n"
@@ -97,6 +98,14 @@ NATURAL = tuple((re.compile(_W + rx + r"(?:\s+(?:please|now))?\s*[.!?]*\s*$", re
 ))
 
 
+def menu() -> list[tuple[str, str]]:
+    """Telegram's '/' menu: the phone commands first, then every KURAMA slash command (max 100)."""
+    from jarvis.core import slash
+    seen = {c for c, _ in MENU}
+    return (list(MENU) + [("all", "every KURAMA command")] +
+            [(c, d) for c, d in slash.telegram_menu() if c not in seen and c != "all"])[:100]
+
+
 def natural_command(text: str) -> str | None:
     """Plain words for a slash command ('what is my laptop doing' -> /status); None = not one."""
     if len(text.split()) > 10:
@@ -144,7 +153,7 @@ class TelegramBot(Worker):
         except ValueError:
             self.offset = 0
         try:  # the "/" menu in Telegram shows these commands
-            notify.telegram_call("setMyCommands", {"commands": [{"command": c, "description": d} for c, d in MENU]})
+            notify.telegram_call("setMyCommands", {"commands": [{"command": c, "description": d} for c, d in menu()]})
         except RuntimeError as e:
             self.log.info("setMyCommands skipped: %s", e)
 
@@ -417,7 +426,10 @@ class TelegramBot(Worker):
             if cmd in ("/reset", "/wipe"):
                 from jarvis.core import reset
                 return reset.reset_all(self._agent)
-            if cmd in ("/list", "/help", "/start", "/commands", "/command", "/?", "/menu", "/all"):
+            if cmd in ("/all", "/commands", "/command", "/kurama"):
+                from jarvis.core import slash
+                return slash.help_text()
+            if cmd in ("/list", "/help", "/start", "/?", "/menu"):
                 return HELP
             if cmd in ("/battery", "/bat"):
                 from jarvis.tools.general.battery_status import battery_status

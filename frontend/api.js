@@ -41,6 +41,7 @@ export class Api {
   status() { return this.request("/api/v1/status"); }
   confirm(id, yes) { return this.request("/api/v1/confirm", { method: "POST", body: { id, yes } }); }
   tools() { return this.request("/api/v1/tools"); }
+  slash() { return this.request("/api/v1/slash"); }
   profile() { return this.request("/api/v1/profile"); }
   jobs() { return this.request("/api/v1/jobs?limit=20"); }
   fetchWeather() { return this.request("/api/v1/weather"); }
