@@ -11,7 +11,7 @@ from jarvis.core import safety, timemachine as tm
 from jarvis.core.registry import tool
 
 
-@tool(group="git", safety="safe",
+@tool(group="git", safety="safe", max_chars=2500,
       description="Code time machine (automatic snapshots, even uncommitted): what changed since a time ('2 hours "
                   "ago', 'yesterday'), history of a file, restore a file as it was then, undo a restore, protect a "
                   "project, snapshot now.")

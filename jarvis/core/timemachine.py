@@ -174,9 +174,8 @@ def overview() -> str:
         cur = ps[0]
     why = "you pinned it" if store.kv_get("tm_pinned") == str(cur) else "you changed it most recently"
     lines = [f"💻 The Coding card shows {cur.name} ({why}).", f"I watch {len(ps)} git projects (newest first):"]
-    lines += [f"{i}. {p.name} — {p}" for i, p in enumerate(ps[:15], 1)]
-    if len(ps) > 15:
-        lines.append(f"…and {len(ps) - 15} more.")
+    # every one, short: the name + where it lives (its parent folder), so 24+ projects fit
+    lines += [f"{i}. {p.name} ({p.parent.name or p.parent})" for i, p in enumerate(ps, 1)]
     lines.append("Say 'pin <name> project' to always show one, 'stop watching <name>' to hide one (code is never deleted).")
     return "\n".join(lines)
 
