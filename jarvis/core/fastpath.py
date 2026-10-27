@@ -1453,6 +1453,15 @@ def assist_intent(t: str) -> Intent | None:
         sel = bool(re.fullmatch(_SELREF + r"(?:\s+(?:word|sentence|paragraph|text|line|part))?", x, I))
         return Intent("assist", "text_assist", "clipboard", {"action": "translate", "lang": l, "replace": bool(m.group("r")),
                                                              "text": "" if sel else x.strip("'\"")})
+    # anything NEW about the highlighted code/text: 'give me code to test this function', 'show an example of using this
+    # class', 'write a docstring for the selected code', 'what inputs break this function?' -> selection + request
+    if len(t.split()) <= 45 and re.search(r"\b(?:this|that|the\s+selected|selected|highlighted|my|the)\s+(?:python\s+)?(?:function|code|class|"
+                                          r"method|snippet|script|program|loop|query)\b|\bi\s+(?:just\s+)?(?:selected|highlighted)\b", t, I) \
+            and re.search(r"\b(?:tests?|testing|unit\s*tests?|pytest|test\s+cases?|examples?|usage|use\s+(?:it|this)|call\s+(?:it|this)|"
+                          r"docstrings?|type\s+hints?|edge\s+cases?|inputs?|complexity|big\s*o|bugs?|security|time\s+complexity|"
+                          r"flow\s*chart|diagram|pseudo\s*code|convert\s+(?:it|this|that)(?:\s+\w+)?\s+(?:to|into)|in\s+(?:javascript|java|c\+\+|rust|go))\b", t, I) \
+            and not _A_CODEFIX.search(t) and not re.search(r"\b(?:replace|in\s+place|run\s+(?:the\s+|my\s+)?tests?)\b", t, I):
+        return Intent("assist", "text_assist", "clipboard", {"action": "ask", "request": t})
     # 'can you give me the Nepali translation of this word?' / 'translation of the selected text in Hindi'
     if len(t.split()) <= 20 and re.search(r"\btranslat\w*\b", t, I) and (lm := re.search(r"\b(" + _LANG_ALT + r")\b", t, I)) and re.search(
             r"\b(?:this|that|the\s+selected|selected|highlighted)(?:\s+(?:whole|entire))?(?:\s+(?:word|words|sentence|paragraph|text|line|part|phrase))?\b", t, I) \
@@ -1678,6 +1687,11 @@ def plan_answer_intent(t: str) -> Intent | None:
     """While an organize plan is waiting: 'yes good' applies it, 'no' cancels it, anything that sounds like a
     change ('keep the pictures where they are') edits it. Costs one kv read when no plan waits."""
     from jarvis.core import assist, organizer
+    if assist.more_waiting():  # "This needs a longer explanation. Want me to write it?"
+        if _YES_PLAN.match(t) or re.fullmatch(r"(?:yes|yeah|yep|sure|ok(?:ay)?|please|go\s+ahead|write\s+it|do\s+it)\b[\s\w,.!]{0,30}", t, I):
+            return Intent("assist", "text_assist", "clipboard", {"action": "more"})
+        if re.fullmatch(r"(?:no|nope|nah|not\s+now|no\s+thanks?|that'?s\s+(?:enough|fine|ok))[\s.!]*", t, I):
+            return Intent("assist", "text_assist", "clipboard", {"action": "cancel_more"})
     if assist.retry_active() and _SELECTED_NOW.match(t):  # 'nothing highlighted' earlier; now it is
         return Intent("assist", "text_assist", "clipboard", {"action": "retry"})
     if assist.pending_code_active():  # an improved code is waiting in the workspace

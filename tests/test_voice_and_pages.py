@@ -145,3 +145,29 @@ def test_selection_help_from_the_log(monkeypatch):
     assert seen[-1][0] == "assist_summary" and seen[-1][2] is True
     assist.explain("The search found the right articles but read only the start.")
     assert seen[-1][2] is True and "No 'It says'" not in assist.EXPLAIN_RULES and "no 'It says'" in assist.EXPLAIN_RULES
+
+
+def test_ask_about_selection_and_token_guard(monkeypatch):
+    """Owner: 'give me code to test this function' (code highlighted in VS Code) asked 'please share the function';
+    explanations must stay short and ASK before writing a long one."""
+    from jarvis.core import assist, rewrite
+    q = ("This is the function that I created in the python and I want a code to test this function. "
+         "Can you give me the code for test this function?")
+    assert fastpath.match(q).args == {"action": "ask", "request": q.rstrip("?")}
+    assert fastpath.match("convert this function to javascript").args["action"] == "ask"
+    assert fastpath.match("improve this code").args["action"] == "improve"
+    code = "def calculator():\n    expr = input('x')\n    print(eval(expr))\n"
+    monkeypatch.setattr(rewrite, "grab", lambda: rewrite.Grab(code, 5, False, False, "test.py - KURAMA - Visual Studio Code"))
+    calls = []
+
+    def fake(system, user, smart, max_tokens, purpose):
+        calls.append((purpose, max_tokens, system, user))
+        return "Short version.\n[more]" if purpose != "assist_more" else "# Full\nlong text"
+    monkeypatch.setattr(assist, "_llm", fake)
+    out = assist.run("ask", request=q)
+    assert "from test import" in calls[-1][2] and calls[-1][1] == assist.SHORT_MAX["ask_code"] and "calculator" in calls[-1][3]
+    assert out.endswith("Want me to write it (in the workspace)? Say yes.") and "[more]" not in out
+    assert fastpath.match("yes").args == {"action": "more"}
+    assert assist.run("more") == "# Full\nlong text" and calls[-1][1] == 1800 and not assist.more_waiting()
+    assist.explain("A normal sentence that needs no long answer at all.")
+    assert calls[-1][1] == assist.SHORT_MAX["explain"] and "[more]" in calls[-1][2]

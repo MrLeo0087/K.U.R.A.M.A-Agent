@@ -83,6 +83,50 @@ def _strip_fence(code: str) -> str:
 
 
 # --- the jobs -----------------------------------------------------------------------------------------------
+# token guard (owner): explanations stay short; when a full answer would be long, the model ends with [more] and
+# KURAMA ASKS before writing the long one (one 'yes' within ASSIST_MORE_TTL_S writes it to the workspace)
+MORE_TAG = "[more]"
+MORE_RULE = (f" Stay within the size above. If a really good answer would need much more, give the short version and end "
+             f"with the line {MORE_TAG} (nothing after it).")
+SHORT_MAX = {"explain": 320, "summary": 320, "ask_text": 450, "ask_code": 1100}
+_more: dict = {}
+
+
+def _offer_more(reply: str, kind: str, sel: str, request: str = "", source: str = "", lang: str = "") -> str:
+    """Strip the [more] tag; when present remember the job so 'yes' can write the long version."""
+    import time
+    if MORE_TAG not in reply:
+        return reply
+    short = reply.replace(MORE_TAG, "").rstrip()
+    _more.clear()
+    _more.update(kind=kind, sel=sel, request=request, source=source, lang=lang, until=time.time() + config.ASSIST_MORE_TTL_S)
+    return short + "\nThis needs a longer explanation. Want me to write it (in the workspace)? Say yes."
+
+
+def more_waiting() -> bool:
+    import time
+    return bool(_more) and time.time() < _more.get("until", 0)
+
+
+def more() -> str:
+    """'yes' after 'Want me to write it?': the long version, one call with a bigger budget."""
+    if not more_waiting():
+        return "Ask me to explain something first."
+    m = dict(_more)
+    _more.clear()
+    out = LANGS.get(m["lang"] or "en", "English")
+    long_sys = (f"Write a complete, well organised explanation in simple everyday {out} with short headings and bullets "
+                f"(Markdown). {EXPLAIN_RULES}") if m["kind"] != "ask" else (
+                "Do exactly what the user asks about the selected code/text, completely this time. Code in fenced blocks.")
+    user = m["sel"] if m["kind"] != "ask" else f"Request: {m['request']}\n\nSelected:\n{m['sel']}"
+    return _llm(long_sys, user[:8000], smart=True, max_tokens=1800, purpose="assist_more")
+
+
+def cancel_more() -> str:
+    _more.clear()
+    return "Okay."
+
+
 EXPLAIN_RULES = ("Do not quote or repeat the text, no 'It says', no headings, bold or word lists, no definitions of "
                  "normal words. If one word is really unusual, add one short line 'word = meaning' at the end.")
 
@@ -93,19 +137,43 @@ def explain(text: str, lang: str = "") -> str:
     out = LANGS.get(lang or "en", "English")
     if is_code(text):
         return explain_code(text, lang)
-    return _llm(f"The user highlighted this text and wants to understand it. Explain it like a friend, in very simple "
-                f"everyday {out}: what it actually means and what it means for them in practice, 2-4 short sentences "
-                f"(a bit more only for a long text). {EXPLAIN_RULES}", text[:6000], smart=True,
-                max_tokens=500, purpose="assist_explain")
+    reply = _llm(f"The user highlighted this text and wants to understand it. Explain it like a friend, in very simple "
+                 f"everyday {out}: what it actually means and what it means for them in practice, 2-4 short sentences. "
+                 f"{EXPLAIN_RULES}{MORE_RULE}", text[:6000], smart=True, max_tokens=SHORT_MAX["explain"],
+                 purpose="assist_explain")
+    return _offer_more(reply, "explain", text, lang=lang)
+
+
+def ask(sel: str, request: str, source: str = "", lang: str = "") -> str:
+    """Anything else about the highlighted code/text ('give me code to test this function', 'show an example of using
+    this', 'add type hints and show me', 'write a docstring for it'): the selection + the request, one call. The
+    answer goes to the chat (long code lands in the workspace by the chat rule); the selection is NOT changed."""
+    out = LANGS.get(lang or "en", "English")
+    code = is_code(sel)
+    mod = re.sub(r"\.py$", "", source) if source.endswith(".py") else ""
+    hint = (f" The code is in the file '{source}'" + (f" (import it with 'from {mod} import ...')." if mod else ".")
+            if source else "")
+    sys = ("The user highlighted the code below and asks for something about it. Do exactly what they ask, using the "
+           "code as the context; don't rewrite the selection unless asked. If they want tests: pytest tests that cover "
+           "the normal cases, edge cases and errors (mock input()/print with monkeypatch/capsys when the code reads input "
+           "or prints), plus one line saying how to run them." + hint if code else
+           "The user highlighted the text below and asks for something about it. Do exactly what they ask, using the "
+           "text as the context.")
+    sys += (f" Code in one fenced block (at most ~70 lines). Explanations in simple {out}, short." if code else
+            f" Answer in simple {out}, short.") + MORE_RULE
+    reply = _llm(sys, f"Request: {request}\n\nSelected {'code' if code else 'text'}:\n{sel[:8000]}", smart=True,
+                 max_tokens=SHORT_MAX["ask_code" if code else "ask_text"], purpose="assist_ask")
+    return _offer_more(reply, "ask", sel, request, source, lang)
 
 
 def summary(text: str, lang: str = "") -> str:
     """'Summary of this paragraph / what does it want to say': the main points, simply."""
     out = LANGS.get(lang or "en", "English")
-    return _llm(f"Summarise the user's highlighted text in very simple everyday {out}: first one sentence with the main "
-                f"message, then 2-4 short bullets with the key points (fewer for a short text). What it wants to tell "
-                f"the reader, not a retelling. {EXPLAIN_RULES}", text[:8000], smart=True, max_tokens=450,
-                purpose="assist_summary")
+    reply = _llm(f"Summarise the user's highlighted text in very simple everyday {out}: first one sentence with the main "
+                 f"message, then 2-4 short bullets with the key points (fewer for a short text). What it wants to tell "
+                 f"the reader, not a retelling. {EXPLAIN_RULES}{MORE_RULE}", text[:8000], smart=True,
+                 max_tokens=SHORT_MAX["summary"], purpose="assist_summary")
+    return _offer_more(reply, "summary", text, lang=lang)
 
 
 def meaning(text: str, lang: str = "en") -> str:
@@ -447,6 +515,10 @@ def run(action: str, request: str = "", lang: str = "", replace: bool = False, p
         return {"meaning": lambda: meaning(text, lang or "en"), "translate": lambda: translate(text, lang or "ne"),
                 "code": lambda: explain_code(text, lang), "summary": lambda: summary(text, lang)}.get(
             action, lambda: explain(text, lang))()
+    if action == "more":
+        return more()
+    if action == "cancel_more":
+        return cancel_more()
     if action == "apply_code":
         return apply_pending_code()
     if action == "cancel_code":
@@ -507,6 +579,8 @@ def run(action: str, request: str = "", lang: str = "", replace: bool = False, p
         return explain_code(sel, lang)
     if action == "summary":
         return explain_code(sel, lang) if is_code(sel) else summary(sel, lang)
+    if action == "ask":
+        return ask(sel, request or "explain it", _short(g.title), lang)
     if not is_code(sel) and len(sel.split()) <= 3:  # one word / short phrase: a dictionary meaning
         return meaning(sel, lang or "en")
     return explain(sel, lang)

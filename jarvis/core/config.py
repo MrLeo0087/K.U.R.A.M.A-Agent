@@ -742,6 +742,7 @@ DICTATION_PAUSE_MS = 900  # a pause this long ends a dictated phrase (then it is
 DICTATION_DEVANAGARI_LANG = os.getenv("JARVIS_DICTATION_DEVANAGARI", "ne")  # auto mode: Nepali/Hindi speech -> this
 DICTATION_IDLE_S = 180  # dictation stops after 3 min of silence
 DICTATION_MAX_S = 3600  # ...or after 1 hour in total
+ASSIST_MORE_TTL_S = 180.0  # "Want me to write the longer explanation?" waits this long for yes
 ASSIST_PENDING_TTL_S = 300.0  # an improved code waits this long for 'yes' (then counts as no)
 ORGANIZE_PLAN_TTL_S = float(os.getenv("KURAMA_PLAN_TTL_S", "120"))  # a waiting plan expires (= no)
 ORGANIZE_MAX_FILES = 80  # files looked at per organize run (newest first)
