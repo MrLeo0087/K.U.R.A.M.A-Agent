@@ -42,6 +42,9 @@ def playlist(name: str = "") -> str:
         return f"error: no playlist called {name!r}. Your playlists: {names}."
     label, target = hit
     if target.startswith(("http://", "https://")):
+        if shutil.which("mpv"):  # sound only, no browser tab (jarvis/core/music.py)
+            from jarvis.core import music
+            return music.play_url(target, label=f"your {label} playlist")
         open_url._open(target)
         return f"Playing your {label} playlist."
     folder = Path(target).expanduser()

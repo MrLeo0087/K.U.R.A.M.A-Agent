@@ -71,13 +71,20 @@ _TYPO_RX = re.compile(r"(?<![\w.])(?:" + "|".join(re.escape(k) for k in sorted(c
 
 def normalize(text: str) -> str:
     t = " ".join((text or "").split())
+    urls: list[str] = []  # links are kept exactly: typo fixes must never touch them ('?list=PLz' is not 'please')
+
+    def hide(m: re.Match) -> str:
+        urls.append(m.group(0))
+        return f"\x00{len(urls) - 1}\x00"
+    t = re.sub(r"https?://\S+", hide, t)
     t = _TYPO_RX.sub(lambda m: config.TYPO_FIXES[m.group(0).lower()], t) if config.TYPO_FIXES else t
     t = re.sub(r"\s*\.{2,}\s*", " ", t)  # "show me X .. send it" -> one sentence
     for pat, rep in config.STT_FIXES.items():  # the same mishearing fixes as voice ("tone of" -> "turn off")
         t = re.sub(pat, rep, t, flags=I)
     t = _LEAD.sub("", t, count=1)
     t = _DEVICE_TAIL.sub("", t)  # "take the screenshot of my display" = "take the screenshot"
-    return _TRAIL.sub("", t).strip(" ,")
+    t = _TRAIL.sub("", t).strip(" ,")
+    return re.sub(r"\x00(\d+)\x00", lambda m: urls[int(m.group(1))], t)
 
 
 def _rx(*alts: str) -> list[re.Pattern]:
@@ -800,27 +807,58 @@ _DETAIL = re.compile(r",?\s*\b(?:in\s+)?(?:high\s+quality|hq|hd|ultra\s+detailed
 
 
 def music_intent(t: str) -> Intent | None:
-    """'play lofi music', 'play some music', 'play arijit singh songs', 'listen to nepali songs', 'put on some jazz',
-    'stop the music', 'music volume up', 'next song' (when KURAMA's player runs) -> music (mpv, no browser)."""
-    def mu(action, q=""):
-        return Intent("music", "music", "media", {"action": action, "query": q})
-    if re.search(r"\b(?:youtube|video|videos|movie|spotify)\b", t, I) or len(t.split()) > 14:
+    """Music without the browser (0 tokens): 'play lofi music', 'play kya mujhe pyar hai by KK', 'play <youtube link>',
+    'play this playlist', 'save this playlist as study', 'play / shuffle my study playlist', 'show my playlists',
+    'delete the study playlist', 'play my music' (~/Music), 'stop the music', 'music volume up', and plain
+    'next' / 'skip' / 'previous' while the music plays."""
+    from jarvis.core import music
+    def mu(action, q="", shuffle=False):
+        return Intent("music", "music", "media", {"action": action, "query": q, **({"shuffle": True} if shuffle else {})})
+    low = t.strip(" .!?").lower()
+    lead = r"(?:please\s+|kurama\W+|can\s+you\s+|hey\s+|now\s+|okay\s+|ok\s+)*"
+    if re.fullmatch(lead + r"(?:next|skip|skip\s+(?:it|this)|next\s+one|another\s+one|change\s+(?:it|the\s+song))", low, I) and music.running():
+        return Intent("media", "media_control", "media", {"action": "next"}, "media")
+    if re.fullmatch(lead + r"(?:previous|back|go\s+back|last\s+one|play\s+(?:the\s+)?previous\s+one)", low, I) and music.running():
+        return Intent("media", "media_control", "media", {"action": "previous"}, "media")
+    bare = re.sub(r"\s*https?://\S+", "", low).strip()
+    if m := re.fullmatch(lead + r"(?:save|store|keep)\s+(?:this|that|the)\s+(?:playlist|song|music|mix)\s+(?:as|in)\s+(?:my\s+)?(?P<n>[\w\s]+?)(?:\s+playlist)?", bare, I) \
+            or re.fullmatch(lead + r"save\s+(?:this|that)\s+as\s+(?:my\s+)?(?P<n>[\w\s]+?)\s+playlist", bare, I):
+        url = re.search(r"https?://\S+", t)
+        return mu("save", m.group("n").strip() + ("|" + url.group(0) if url else ""))
+    if re.fullmatch(lead + r"(?:show|list|what\s+are)\s+(?:me\s+)?(?:all\s+)?(?:my|the)\s+(?:saved\s+)?playlists?|my\s+playlists", low, I):
+        return mu("playlists")
+    if m := re.fullmatch(lead + r"(?:delete|remove)\s+(?:the\s+|my\s+)?(?P<n>[\w\s]+?)\s+playlist", low, I):
+        return mu("delete", m.group("n"))
+    if m := re.search(r"https?://(?:www\.|m\.|music\.)?(?:youtube\.com|youtu\.be)/\S+", t):
+        if re.match(lead + r"(?:play|shuffle|listen\s+to)\b", low, I) and not re.search(r"\b(?:video|watch|download)\b", low):
+            return mu("url", m.group(0), shuffle=low.startswith("shuffle"))
+    if re.fullmatch(lead + r"(?:play|shuffle|listen\s+to)\s+(?:this|that)\s+(?:playlist|song|music|mix)", low, I):
+        return mu("url", "", shuffle=low.startswith("shuffle"))
+    if m := re.fullmatch(lead + r"(?P<v>play|shuffle|start|put\s+on)\s+(?:my|the)\s+(?P<n>[\w\s]+?)\s+playlist", low, I):
+        return mu("playlist", m.group("n"), shuffle=m.group("v").lower() == "shuffle")
+    if re.fullmatch(lead + r"(?:play|shuffle|start)\s+(?:my|the)\s+(?:saved\s+)?playlists?", low, I):
+        return mu("playlists")
+    if re.fullmatch(lead + r"(?:play|shuffle)\s+(?:my\s+(?:own\s+)?(?:music|songs)|(?:the\s+)?(?:songs|music)\s+(?:on|from|in)\s+(?:my\s+)?(?:laptop|computer|pc|music\s+folder)|"
+                    r"my\s+(?:downloaded|offline)\s+(?:songs|music)|offline\s+music)", low, I):
+        return mu("local")
+    if re.search(r"\b(?:youtube|video|videos|movie|spotify)\b", t, I) or len(t.split()) > 16:
         return None
-    lead = r"(?:please\s+|kurama\W+|can\s+you\s+|hey\s+|now\s+)*"
     if re.fullmatch(lead + r"(?:stop|turn\s+off|switch\s+off|end|kill|close)\s+(?:the\s+|my\s+|this\s+)?(?:music|songs?|playing\s+music)(?:\s+now|\s+please)?"
                     r"|(?:music|gana|गाना)\s+(?:off|band\s+gara|banda\s+gara|बन्द\s+गर)", t, I):
-        from jarvis.core import music
         return mu("stop") if music.running() else None  # no music of ours: 'stop the music' pauses the browser
     if m := re.fullmatch(lead + r"(?:turn\s+)?(?:the\s+)?music\s+(?:volume\s+)?(?P<d>up|down|louder|quieter|softer)", t, I):
         return mu("volume_up" if m.group("d").lower() in ("up", "louder") else "volume_down")
-    if m := re.fullmatch(lead + r"(?:play|put\s+on|start|listen\s+to|i\s+want\s+to\s+listen\s+to|bajau|bajaau)\s+(?:me\s+)?(?:some\s+|a\s+|the\s+)?"
+    shuffle = bool(re.match(lead + r"shuffle\b", low, I))
+    if m := re.fullmatch(lead + r"(?:play|shuffle|put\s+on|start|listen\s+to|i\s+want\s+to\s+listen\s+to|bajau|bajaau)\s+(?:me\s+)?(?:some\s+|a\s+|the\s+)?"
                          r"(?P<q>.*?)\s*(?P<k>music|songs?|playlist|mix|beats|lofi|gana|गाना|geet|bhajan|ghazal)(?:\s+(?:please|now|for\s+me))?[\s.!]*", t, I):
         q = f"{m.group('q')} {m.group('k')}".strip()
-        if re.fullmatch(r"(?:my\s+)?(?:music|songs?|playlist)", q, I) or re.match(r"my\s+", q, I):
-            q = "relaxing music" if q.lower() in ("music", "song", "songs") else q
-            if re.match(r"my\s+", q, I):
-                return None  # 'play my playlist' / 'my songs': the saved playlists
-        return mu("play", q)
+        if re.match(r"my\s+", q, I):
+            return None  # 'play my playlist' / 'my songs': handled above or the saved playlists
+        if re.fullmatch(r"(?:music|songs?|playlist|gana|गाना)", q, I):
+            q = "relaxing music"
+        return mu("play", q, shuffle)
+    if m := re.fullmatch(lead + r"(?:play|shuffle)\s+(?P<q>.+?)\s+by\s+(?P<a>[\w .'-]+)", t, I):  # 'play kya mujhe pyar hai by KK'
+        return mu("play", f"{m.group('q')} {m.group('a')}", shuffle)
     if m := re.fullmatch(lead + r"(?:listen\s+to|i\s+want\s+to\s+listen\s+to)\s+(?P<q>.+)", t, I):
         return mu("play", m.group("q").strip(" ."))
     return None
@@ -1129,6 +1167,9 @@ _JOT = re.compile(r"^(?:jot|note|write|put) (?:this |it )?down (?:for|in|under) 
 def _daily_intent(t: str) -> Intent | None:
     if m := _JOT.match(t):  # "jot down for physics newton's third law": a study note (one-word subject)
         return Intent("note", "study_notes", "study", {"action": "add", "text": m.group("t"), "subject": m.group("s")})
+    if re.match(r"(?:please\s+)?(?:save|store|keep)\s+(?:this|that|the)\s+(?:playlist|song|music|mix)\s+as\b|save\s+(?:this|that)\s+as\s+(?:my\s+)?\w+\s+playlist", t, I) \
+            and (mi := music_intent(t)):  # a playlist to keep, not a download
+        return mi
     if vd := video_dl_intent(t):
         return vd
     if m := _DL.match(t):
