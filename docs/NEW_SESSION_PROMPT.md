@@ -112,5 +112,20 @@ You are continuing work on **KURAMA**, my personal always-on voice + text assist
   If I report a problem, ask for exactly what I said and what happened. My pasted chat logs show route, tier, tokens and ms for each message, so use them.
 - **My own actions still open:** `kaggle.json`, optionally `sudo apt install libreoffice-writer`, "enable screen control" plus restarting Brave / VS Code (for AT-SPI clicks).
 
-## Where we stopped
-Last commit: "Date tool with Bikram Sambat (weekday + week); 'sleep now' sleeps KURAMA in talk mode, not the laptop" (`d70da9e`). Routing eval 110/110 + 32/32 + 27/27, tool tests pass, KURAMA restarted. Recent work before that: talk mode now listens immediately when I click the talk button; read-later / OCR / copy-history / clipboard fixes; Telegram PIN + /lock; RustDesk remote desktop; power modes with in-process workers. Next, I'll tell you what to work on.
+## Where we stopped (2026-10-27)
+Last commit `4cacbbe` (selection help). Full suite 872 passed; routing eval 110/110 + 32/32 + 27/27 (the eval now uses a temp DB, so my live power mode can't skew it). KURAMA restarted. Details of every step are at the end of `PROGRESS.md` (read `tail -40`).
+
+Built/changed on 2026-10-26/27 (all 0 tokens unless noted):
+- **Three kinds of work, never mixed:** to-do = short tasks + reminders (the DEFAULT for "task/work/reminder"); long tasks (`goals` tool, `goals.xlsx`) only when I say long task / monthly / goal / countdown; code work only with code words. To-do: schedule/plan X at T, what's on today, remove by name or number, done N, move/rename, clear all, ✓/✕ buttons on the Work card (POST /api/v1/todo). The screen refreshes after every turn (`/dashboard?fresh=1`).
+- **Coding projects:** snapshots ONLY for projects I give ("watch the project at /path", "watch this project" = VS Code folder); "stop watching" shows the list; pin/unpin; "list my coding projects". My list is empty until I add one.
+- **Links store** (`saved_links`, `links.xlsx`): save the open page / highlighted link by name, give/open by name; "open X" checks saved links first.
+- **Page reading** (`page_summary`): "what is this page about" reads the tab open now (OCR if login wall), short answer + "Want a detailed overview?" (yes = workspace).
+- **Live search lists/rankings:** reads the numbered block of 4 pages, smart model copies ONE source, no gap filling (~4.6k tokens per ranking question).
+- **Selection help:** explain = plain practical words (smart model); new `summary` action; "this wood/road" = this word (the selection).
+- **Voice:** only English/Nepali/Hindi pass (`stt.not_ours`); talk mode never silently drops requests (2-min follow-up, ignored lines stay faded with a toast); typing dots animate.
+- **Ready answers** (`jarvis/core/templates.py`): small talk, Python project setup, venv, Colab setup.
+- **Notifications:** every alert goes to laptop AND Telegram; day summary at 22:00; goal messages 05:00-22:00.
+- **Screen:** new look (my wallpaper behind, flat cards, the old animated orb with KURAMA's fox face, Now & today left, weather card + Work + big Workspace right, balanced columns with a CPU+RAM graph). WebKit GPU compositing is OFF (it caused 100% CPU / freezes); a watchdog restarts a frozen page. To SEE the screen, read `~/.local/share/kurama/desktop.png` (the screen app saves it 8 s after a reload). `data/wp_probe.js` runs a read-only JS check inside the live page (answer in `data/wp_probe.out`).
+- Mic/voice code is the OLD one (my reverted experiment broke talk mode): don't change mic/voice/UI layout without asking me first.
+
+Still not tried on my real screen: link saving from Brave, page_summary on a real tab, Work card buttons, talk mode after the room-talk fix. Next, I'll tell you what to work on.
