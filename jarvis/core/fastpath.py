@@ -1445,6 +1445,23 @@ def code_tidy_intent(t: str) -> Intent | None:
 _NAV_OBJ = r"(?:function|func|method|class|definition|def|code|implementation|source)"
 
 
+def coderun_intent(t: str) -> Intent | None:
+    """'run this code' / 'run the selected code' / 'execute this' / '/run' -> code_nav run (0 tokens);
+    'fix it' right after a failed run -> the code fixer with that error."""
+    if re.fullmatch(r"/(?:run|exec|execute)", t, I) or re.fullmatch(
+            r"(?:please\s+|kurama\W+|can\s+you\s+|hey\s+)*(?:run|execute|try)\s+(?:this|that|the\s+selected|the\s+highlighted|my|"
+            r"selected|highlighted)(?:\s+(?:code|snippet|line|lines|part|block|function|script|program))?(?:\s+(?:for\s+me|now|please|"
+            r"and\s+show\s+(?:me\s+)?(?:the\s+)?(?:output|result)))*[\s.!?]*", t, I):
+        return Intent("codenav", "code_nav", "codequality", {"action": "run", "name": "", "request": t})
+    from jarvis.core import coderun
+    if coderun.pending_fix() and re.fullmatch(r"(?:please\s+|ok(?:ay)?\W+|yes\W+)*(?:fix|correct|repair|solve)\s+(?:it|this|that|the\s+(?:error|"
+                                              r"bug|problem|code))(?:\s+(?:for\s+me|now|please))*[\s.!?]*", t, I):
+        e = coderun.pending_fix()
+        return Intent("assist", "text_assist", "clipboard",
+                      {"action": "improve", "request": "Fix this code so it runs without this error:\n" + e["error"]})
+    return None
+
+
 def port_intent(t: str) -> Intent | None:
     """'what is running on port 8000' / 'is port 3000 free' / 'show my open ports' / '/ports' -> laptop_doctor port;
     'free port 8000' / 'kill the process on port 8000' -> laptop_doctor stop 'port 8000' (asks first). 0 tokens."""
@@ -2545,6 +2562,8 @@ def match(text: str) -> Intent | None:
         return cn
     if po := port_intent(t):
         return po
+    if cr := coderun_intent(t):
+        return cr
     if li := links_intent(t):
         return li
     if tn := todo_now_intent(t):
