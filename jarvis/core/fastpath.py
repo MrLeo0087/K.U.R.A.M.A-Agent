@@ -1695,6 +1695,8 @@ def slash_intent(t: str) -> Intent | None:
         if typed and not arg and len(typed) <= 15:
             return Intent("say", "_say", "self", {"en": f"I don't know /{typed}. Type /list to see every command."})
         return None
+    if cmd.tool and cmd.tool[0] == "_cmd":  # the Telegram commands, done on the laptop
+        return Intent("cmd", "_cmd", "self", {"cmd": cmd.tool[2]["cmd"], "arg": arg}, cmd.name)
     if cmd.name == "list":
         return Intent("say", "_say", "self", {"en": slash.help_text("md")})
     if cmd.phrase and (p := slash.phrase_for(cmd, arg)):
@@ -3178,6 +3180,9 @@ def _internal(intent: Intent) -> tuple[bool, str]:
         return True, selfknow.try_unlock(intent.args["text"])
     if intent.tool == "_say":
         return True, "ok"
+    if intent.tool == "_cmd":
+        from jarvis.core import phonecmds
+        return True, phonecmds.run(intent.args["cmd"], intent.args.get("arg", ""))
     if intent.tool == "_brief":
         from jarvis.core import brief
         return True, brief.build()

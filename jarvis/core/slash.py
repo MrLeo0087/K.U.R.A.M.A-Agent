@@ -28,7 +28,11 @@ def _git_repo() -> str:
     return str(p) if p else "."
 
 
-CATS = ("Day", "Laptop", "Code", "Media", "Web & text", "KURAMA")
+CATS = ("Day", "Laptop", "Phone & safety", "Code", "Media", "Web & text", "KURAMA")
+
+
+def _c(name: str) -> tuple:
+    return ("_cmd", "self", {"cmd": name}, "")
 COMMANDS: tuple[Cmd, ...] = (
     # --- day to day ---
     Cmd("time", "the time now", "Day", "[city]", phrase="what time is it|what time is it in {a}"),
@@ -65,7 +69,7 @@ COMMANDS: tuple[Cmd, ...] = (
     Cmd("freeram", "free RAM (stops idle notebooks, asks first)", "Laptop", phrase="free up some ram"),
     Cmd("ports", "programs using ports", "Laptop", "[port]", phrase="show my open ports|what is running on port {a}",
         aliases=("port",)),
-    Cmd("screenshot", "take a screenshot", "Laptop", phrase="take a screenshot", aliases=("ss",)),
+    Cmd("screenshot", "take a screenshot", "Laptop", phrase="take a screenshot", aliases=("ss", "screen")),
     Cmd("lockscreen", "lock the screen", "Laptop", phrase="lock the screen"),
     Cmd("vol", "volume up / down / 0-100", "Laptop", "<up|down|N>", phrase="volume up|volume {a}", aliases=("volume",)),
     Cmd("bright", "brightness up / down / 0-100", "Laptop", "<up|down|N>", phrase="brightness up|brightness {a}",
@@ -77,6 +81,27 @@ COMMANDS: tuple[Cmd, ...] = (
     Cmd("clip", "clipboard history", "Laptop", phrase="show the clipboard history"),
     Cmd("jobs", "background jobs", "Laptop", tool=("jobs", "jobs", {"action": "list"}, "")),
     Cmd("tokens", "today's token use", "KURAMA", phrase="token usage"),
+    Cmd("clearchat", "clear this conversation", "KURAMA", tool=_c("clearchat"), aliases=("new",)),
+    Cmd("clear", "clear chat + reminders (asks first)", "KURAMA", "[yes]", tool=_c("clear")),
+    Cmd("reset", "wipe everything (Settings or Telegram)", "KURAMA", tool=_c("reset")),
+    Cmd("stop", "stop a stuck answer", "KURAMA", tool=_c("stop")),
+    # --- the Telegram commands, on the laptop too ---
+    Cmd("camera", "a photo from the laptop camera (to the workspace)", "Phone & safety", tool=_c("camera"), aliases=("photo",)),
+    Cmd("video", "a short camera clip, e.g. /video 8", "Phone & safety", "[seconds]", tool=_c("video"), aliases=("rec", "record")),
+    Cmd("where", "where the laptop is (map link)", "Phone & safety", tool=_c("where"), aliases=("locate",)),
+    Cmd("here", "name this place, e.g. /here home", "Phone & safety", "[name]", tool=_c("here")),
+    Cmd("history", "where the laptop/phone has been", "Phone & safety", "[laptop|phone] [hours]", tool=_c("history"),
+        aliases=("trail",)),
+    Cmd("guard", "anti-theft guard on / off / status", "Phone & safety", "[on|off]", tool=_c("guard")),
+    Cmd("track", "lost mode on / off", "Phone & safety", "[on|off]", tool=_c("track")),
+    Cmd("mute", "pause alerts, e.g. /mute ram 20", "Phone & safety", "[what] [minutes]", tool=_c("mute")),
+    Cmd("unmute", "alerts back on", "Phone & safety", "[what]", tool=_c("unmute")),
+    Cmd("notifications", "which alerts are on / paused", "Phone & safety", tool=_c("notifications"), aliases=("muted",)),
+    Cmd("clipnow", "what's on the clipboard now", "Phone & safety", tool=_c("clipnow")),
+    Cmd("control", "remote desktop (password on Telegram only)", "Phone & safety", tool=_c("control")),
+    Cmd("changepass", "new remote password (Telegram only)", "Phone & safety", tool=_c("changepass")),
+    Cmd("lock", "block risky Telegram commands (Telegram only)", "Phone & safety", tool=_c("lock")),
+    Cmd("unlock", "unlock Telegram after /lock (Telegram only)", "Phone & safety", "<pin>", tool=_c("unlock")),
     # --- code ---
     Cmd("def", "open where the highlighted function is defined", "Code", "[name]",
         tool=("code_nav", "codequality", {"action": "find"}, "name"), aliases=("goto",)),
@@ -124,7 +149,7 @@ COMMANDS: tuple[Cmd, ...] = (
         phrase="meaning of this word|what is the meaning of {a}"),
     Cmd("summary", "summary of the highlighted text", "Web & text", phrase="summary of this paragraph"),
     Cmd("calc", "calculate", "Web & text", "<sum>", phrase="calculate {a}"),
-    Cmd("alerts", "which alerts are on / muted", "KURAMA", phrase="notification status"),
+    Cmd("alerts", "recent alerts / which are muted", "KURAMA", phrase="notification status"),
 )
 _BY_NAME: dict[str, Cmd] = {}
 for _c in COMMANDS:
