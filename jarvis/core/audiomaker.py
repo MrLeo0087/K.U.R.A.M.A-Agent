@@ -53,18 +53,23 @@ def text_of(source: str) -> tuple[str, str]:
     return src, src[:40]
 
 
+def voice_lang(text: str) -> str:
+    """en / ne / hi for the voice: Devanagari is Nepali or Hindi by their everyday words."""
+    from jarvis.core.planner import detect_lang
+    lang = detect_lang(text[:2000])
+    if lang in ("ne", "hi"):  # same script: count each language's everyday words
+        ne = len(re.findall(r"(?<!\S)(?:छ|छन्|छु|हो|हुँ|थियो|भयो|मेरो|तपाईं|गर्नु|गर्छ|हुन्छ|र|पनि|यो|त्यो|म)(?=[\s।,.!?]|$)", text))
+        hi = len(re.findall(r"(?<!\S)(?:है|हैं|था|थी|मैं|मेरा|का|की|के|नहीं|और|भी|यह|वह|आप)(?=[\s।,.!?]|$)", text))
+        return "ne" if ne > hi else "hi" if hi > ne else lang
+    return "en"
+
+
 def make(text: str, title: str, lang: str | None = None) -> Path:
     from jarvis.core import tts
-    from jarvis.core.planner import detect_lang
     clean = tts.clean_for_speech(re.sub(r"```.*?```", " ", text, flags=re.S))[:MAX_CHARS].strip()
     if len(clean) < 2:
         raise ValueError("There's no readable text in it.")
-    lang = lang or detect_lang(clean[:2000])
-    if lang in ("ne", "hi"):  # same script: count each language's everyday words
-        ne = len(re.findall(r"(?<!\S)(?:छ|छन्|छु|हो|हुँ|थियो|भयो|मेरो|तपाईं|गर्नु|गर्छ|हुन्छ|र|पनि|यो|त्यो|म)(?=[\s।,.!?]|$)", clean))
-        hi = len(re.findall(r"(?<!\S)(?:है|हैं|था|थी|मैं|मेरा|का|की|के|नहीं|और|भी|यह|वह|आप)(?=[\s।,.!?]|$)", clean))
-        lang = "ne" if ne > hi else "hi" if hi > ne else lang
-    voice = tts.voice_for(lang if lang in ("ne", "hi") else "en")
+    voice = tts.voice_for(lang or voice_lang(clean))
     out = config.OUTPUTS_DIR / "audio"
     out.mkdir(parents=True, exist_ok=True)
     path = out / f"{datetime.now():%Y%m%d-%H%M%S}-{re.sub(r'[^a-z0-9]+', '-', title.lower()).strip('-')[:40] or 'audio'}.mp3"

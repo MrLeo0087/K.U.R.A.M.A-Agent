@@ -107,6 +107,8 @@ COMMANDS: tuple[Cmd, ...] = (
         aliases=("flowchart",)),
     Cmd("callgraph", "who calls whom in the open Python file", "Code", tool=("make_diagram", "image", {"kind": "code"}, "target")),
     Cmd("audio", "MP3 of the highlighted text / a link / a file", "Media", "[link|file|text]", aliases=("mp3",)),
+    Cmd("makevideo", "short narrated video about a topic", "Media", "<topic>", aliases=()),
+    Cmd("reel", "vertical short video (reel)", "Media", "<topic>"),
     Cmd("download", "download a video / audio", "Media", "<link>", phrase="download this video|download {a}",
         aliases=("dl",)),
     # --- web & text ---

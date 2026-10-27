@@ -799,6 +799,26 @@ _DETAIL = re.compile(r",?\s*\b(?:in\s+)?(?:high\s+quality|hq|hd|ultra\s+detailed
                      r"better\s+quality)\b", I)
 
 
+def video_make_intent(t: str) -> Intent | None:
+    """'make a short video about the Himalayas' / 'make a reel about tea' / 'make a video with this script: ...' /
+    'make a slideshow from ~/Pictures/trip' / '/video <topic>' -> make_video."""
+    if m := re.fullmatch(r"/(?:makevideo|reel)(?:\s+(?P<a>.+))?", t, I | re.S):
+        return Intent("makevideo", "make_video", "image", {"topic": (m.group("a") or "").strip(), "vertical": t.lower().startswith("/reel")})
+    if not re.search(r"\b(?:make|create|generate|produce)\b", t, I) or not re.search(r"\b(?:video|reel|reels|short|shorts|slideshow|slide\s+show)\b", t, I):
+        return None
+    if re.search(r"\b(?:download|record|screen\s+record|camera|youtube\s+video\s+of|convert)\b", t, I):
+        return None
+    vertical = bool(re.search(r"\b(?:reel|reels|shorts|vertical|tiktok|story)\b", t, I))
+    if m := re.search(r"\b(?:slide\s*show|video)\s+(?:from|of|with)\s+(?:the\s+|my\s+)?(?:pictures|photos|images)\s+(?:in|from|of)\s+(?P<f>.+)$"
+                      r"|\bslide\s*show\s+(?:from|of)\s+(?P<g>.+)$", t, I):
+        return Intent("makevideo", "make_video", "image", {"folder": (m.group("f") or m.group("g")).strip(" ."), "vertical": vertical})
+    if m := re.search(r"\b(?:script|narration|story)\s*[:\-]\s*(?P<s>.+)$", t, I | re.S):
+        return Intent("makevideo", "make_video", "image", {"script": m.group("s").strip(), "vertical": vertical})
+    if m := re.search(r"\b(?:video|reel|short|shorts)\s+(?:about|on|of|explaining|showing|for)\s+(?P<t>.{3,})$", t, I):
+        return Intent("makevideo", "make_video", "image", {"topic": m.group("t").strip(" ."), "vertical": vertical})
+    return None
+
+
 def audio_intent(t: str) -> Intent | None:
     """'make an audio of this' / 'read this as mp3' / 'convert this text to speech' / 'turn the last result into audio'
     / 'make an mp3 of https://...' / 'make an audio of: hello' / '/audio [link|file|text]' -> make_audio (0 tokens)."""
@@ -1645,7 +1665,7 @@ def slash_intent(t: str) -> Intent | None:
         return match(p)
     if tc := slash.tool_call(cmd, arg):
         return Intent("slash", tc[0], tc[1], tc[2], cmd.name)
-    if cmd.tool or cmd.hint.startswith("<"):  # '/search' alone
+    if (cmd.tool or cmd.hint.startswith("<")) and not arg:  # '/search' alone
         return Intent("say", "_say", "self", {"en": f"Usage: /{cmd.name} {cmd.hint} — {cmd.desc}."})
     canon = f"/{cmd.name}" + (f" {arg}" if arg else "")
     return None if canon == t else match(canon)  # '/plya' -> '/play' (the media rules)
@@ -2772,6 +2792,8 @@ def match(text: str) -> Intent | None:
         return po
     if cr := coderun_intent(t):
         return cr
+    if mv := video_make_intent(t):
+        return mv
     if au := audio_intent(t):
         return au
     if dg := diagram_intent(t):
