@@ -799,6 +799,32 @@ _DETAIL = re.compile(r",?\s*\b(?:in\s+)?(?:high\s+quality|hq|hd|ultra\s+detailed
                      r"better\s+quality)\b", I)
 
 
+def audio_intent(t: str) -> Intent | None:
+    """'make an audio of this' / 'read this as mp3' / 'convert this text to speech' / 'turn the last result into audio'
+    / 'make an mp3 of https://...' / 'make an audio of: hello' / '/audio [link|file|text]' -> make_audio (0 tokens)."""
+    if m := re.fullmatch(r"/(?:audio|mp3|speak)(?:\s+(?P<a>.+))?", t, I | re.S):
+        a = (m.group("a") or "").strip()
+        src = a if re.match(r"https?://|[~/]|.+\.(?:txt|md|pdf)$", a, I) else ("text" if a else "selection")
+        return Intent("audio", "make_audio", "image", {"source": src, "text": a if src == "text" else ""})
+    if not re.search(r"\b(?:audio|mp3|audiobook|podcast|text\s+to\s+speech|speech|voice\s+file|sound\s+file)\b", t, I) \
+            or re.search(r"\b(?:video|youtube|song|music|movie|record|recording|mic|microphone|download)\b", t, I) \
+            or re.search(r"\.(?:mp4|mkv|webm|avi|mov|wav|m4a|flac|ogg)\b", t, I):
+        return None
+    if not re.search(r"\b(?:make|create|turn|convert|change|read|generate|give|save|export|produce)\b", t, I):
+        return None
+    if m := re.search(r"https?://\S+", t):
+        return Intent("audio", "make_audio", "image", {"source": m.group(0).rstrip(".,)")})
+    if m := re.search(r"((?:~|/)[^\s]+\.(?:txt|md|pdf)|[\w.-]+\.(?:txt|md|pdf))\b", t, I):
+        return Intent("audio", "make_audio", "image", {"source": m.group(1)})
+    if m := re.search(r"(?:audio|mp3|speech)\s+(?:of|for|saying|that\s+says)\s*:\s*(?P<x>.+)", t, I | re.S):
+        return Intent("audio", "make_audio", "image", {"source": "text", "text": m.group("x").strip()})
+    if re.search(r"\b(?:last|latest|newest)\s+(?:result|answer|document|doc|essay|file|output)|\bworkspace\b|\bthe\s+(?:essay|article|report|notes?)\b", t, I):
+        return Intent("audio", "make_audio", "image", {"source": "last"})
+    if re.search(r"\b(?:this|that|it|selected|highlighted|the\s+selection|these)\b", t, I) and len(t.split()) <= 16:
+        return Intent("audio", "make_audio", "image", {"source": "selection"})
+    return None
+
+
 def diagram_intent(t: str) -> Intent | None:
     """'make a diagram of this project' / 'diagram of the kurama project' / 'flowchart: login, check password, open
     the dashboard' / 'diagram of this code' / '/diagram' / '/flow steps' -> make_diagram (0 tokens)."""
@@ -2746,6 +2772,8 @@ def match(text: str) -> Intent | None:
         return po
     if cr := coderun_intent(t):
         return cr
+    if au := audio_intent(t):
+        return au
     if dg := diagram_intent(t):
         return dg
     if ch := chart_intent(t):  # before the money words: 'chart my expenses' is a chart

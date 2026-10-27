@@ -160,6 +160,8 @@ async def weather_now(place: str = Query("", description="city, e.g. 'Nepalgunj,
 # ---------- workspace: finished outputs (essays, poems, code, images) under data/outputs ----------
 _IMG = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 _TXT = {".md", ".txt", ".py", ".json", ".csv", ".html", ".js", ".sh"}
+_AUDIO = {".mp3", ".wav", ".ogg", ".m4a"}
+_VIDEO = {".mp4", ".webm"}
 
 
 def _outputs_dir():
@@ -173,10 +175,13 @@ async def outputs(limit: int = Query(12, ge=1, le=100)):
         root = _outputs_dir()
         if not root.is_dir():
             return []
-        files = [p for p in root.rglob("*") if p.is_file() and p.suffix.lower() in _IMG | _TXT
+        files = [p for p in root.rglob("*") if p.is_file() and p.suffix.lower() in _IMG | _TXT | _AUDIO | _VIDEO
                  and not p.name.startswith((".", "bench-"))]
         files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-        return [{"name": str(p.relative_to(root)), "kind": "image" if p.suffix.lower() in _IMG else "text",
+        def kind(p):
+            x = p.suffix.lower()
+            return "image" if x in _IMG else "audio" if x in _AUDIO else "video" if x in _VIDEO else "text"
+        return [{"name": str(p.relative_to(root)), "kind": kind(p),
                  "mtime": p.stat().st_mtime, "size": p.stat().st_size} for p in files[:limit]]
     return {"items": await run_in_threadpool(run)}
 
@@ -309,9 +314,9 @@ async def output_file(name: str = Query(..., max_length=300)):
 
     root = _outputs_dir()
     p = (root / name).resolve()
-    if root not in p.parents or not p.is_file() or p.suffix.lower() not in _IMG | _TXT:
+    if root not in p.parents or not p.is_file() or p.suffix.lower() not in _IMG | _TXT | _AUDIO | _VIDEO:
         return JSONResponse({"error": "not found"}, status_code=404)
-    media = None if p.suffix.lower() in _IMG else "text/plain; charset=utf-8"
+    media = "text/plain; charset=utf-8" if p.suffix.lower() in _TXT else None  # images/audio/video: by extension
     return FileResponse(p, media_type=media, headers={"Cache-Control": "no-cache"})
 
 

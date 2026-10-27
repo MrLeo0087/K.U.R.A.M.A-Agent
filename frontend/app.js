@@ -1064,9 +1064,10 @@ const chatHead = (t) => (t.split("\n").find((l) => l.trim()) || "").slice(0, 200
 const LONG_REPLY = (t) => t && (t.split("\n").filter((l) => l.trim()).length >= 14 || t.length > 1500);
 const WS_MAX = 100; // kept in the panel (the files themselves stay in data/outputs for good)
 const WS_SHOW = 10; // listed per tab: the last 10 documents, 10 pictures, 10 code files...
-const WS_TABS = [["all", "All"], ["doc", "Docs"], ["code", "Code"], ["image", "Images"], ["data", "Data"]];
+const WS_TABS = [["all", "All"], ["doc", "Docs"], ["code", "Code"], ["image", "Images"], ["media", "Audio"], ["data", "Data"]];
 function wsType(it) {
   if (it.kind === "image") return "image";
+  if (it.kind === "audio" || it.kind === "video") return "media";
   const ext = (it.name || "").split(".").pop().toLowerCase();
   if (["py", "js", "sh", "html", "json", "ipynb", "ts", "css"].includes(ext)) return "code";
   if (["csv", "tsv", "jsonl"].includes(ext)) return "data";
@@ -1124,6 +1125,12 @@ function wsList() {
 async function wsBody(it, box) {
   const tok = (box._tok = Symbol("render")); // a newer render wins (startup loads several items at once)
   box.innerHTML = "";
+  if (it.kind === "audio" || it.kind === "video") { // MP3s (read aloud) and short videos KURAMA made
+    const m = el(it.kind, "ws-media");
+    m.controls = true; m.preload = "metadata"; m.src = it.src;
+    box.append(m);
+    return;
+  }
   if (it.kind === "image") {
     const img = el("img", "ws-img");
     img.alt = it.title; img.src = it.src; img.decoding = "async"; img.draggable = false;
@@ -1162,12 +1169,12 @@ function wsActs() { // what you can do with the selected result
   const it = ws.items[ws.cur], box = $("ws-acts");
   if (!it) { box.innerHTML = ""; return; }
   const file = !!it.name;
-  const kind = { image: "image", code: "code", data: "data", doc: "doc" }[it.type] || it.type;
+  const kind = { image: "image", code: "code", data: "data", doc: "doc", media: it.kind }[it.type] || it.type;
   const lines = it.text ? ` · ${(it.text.match(/\n/g) || []).length + 1} lines` : "";
   box.innerHTML = `<span class="tiny grow ell">${esc(kind + lines + (it.size ? ` · ${fmtSize(it.size)}` : ""))}</span>`
-    + (file && it.type !== "image" ? '<button type="button" class="act" data-ws="open_vscode">VS Code</button>' : "")
-    + (file && it.type === "image" ? '<button type="button" class="act" data-ws="open">Open</button>' : "")
-    + (it.type !== "image" ? '<button type="button" class="act ghost" data-ws="copy">Copy</button>' : "")
+    + (file && it.type !== "image" && it.type !== "media" ? '<button type="button" class="act" data-ws="open_vscode">VS Code</button>' : "")
+    + (file && (it.type === "image" || it.type === "media") ? '<button type="button" class="act" data-ws="open">Open</button>' : "")
+    + (it.type !== "image" && it.type !== "media" ? '<button type="button" class="act ghost" data-ws="copy">Copy</button>' : "")
     + (file ? '<button type="button" class="act ghost" data-ws="send_phone">Phone</button><button type="button" class="act ghost" data-ws="show_folder">Folder</button>' : "")
     + (file ? '<button type="button" class="act ghost danger" data-ws="delete" title="Delete this item (to the trash)">Delete</button>' : "");
 }
@@ -1780,6 +1787,13 @@ async function mwsShow() {
   $("mws-title").textContent = `${wsTitle(x.name)}  (${mws.cur + 1}/${mws.items.length})`;
   const body = $("mws-body");
   body.textContent = "";
+  if (x.kind === "audio" || x.kind === "video") {
+    const m = document.createElement(x.kind);
+    m.controls = true; m.src = api.outputUrl(x.name);
+    m.style.width = "100%";
+    body.append(m);
+    return;
+  }
   if (x.kind === "image" || /\.(png|jpe?g|webp|gif)$/i.test(x.name)) {
     const img = document.createElement("img");
     img.src = api.outputUrl(x.name);
