@@ -21,7 +21,7 @@ def test_summary_shape_and_cache(api, monkeypatch):
     monkeypatch.setattr(dash, "_switches", lambda: {"wifi": True, "bluetooth": False})
     r = api.get("/api/v1/dashboard").json()
     assert r["apps"]["apps"][0]["name"] == "Brave" and r["coding"]["changed"] == 3 and r["switches"]["wifi"] is True
-    assert set(r) == {"apps", "coding", "work", "now", "today", "kurama", "switches"}
+    assert set(r) == {"apps", "coding", "work", "now", "today", "kurama", "switches", "tracker"}
     api.get("/api/v1/dashboard")
     assert len(calls) == 1  # cached
     monkeypatch.setattr(dash, "_coding", lambda: (_ for _ in ()).throw(RuntimeError("git broke")))

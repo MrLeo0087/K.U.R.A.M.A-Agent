@@ -175,6 +175,12 @@ def _work() -> dict:
                      "next": {"title": nxt["title"][:60], "due": nxt["due"], "type": nxt["type"]} if nxt else None}}
 
 
+def _tracker() -> dict:
+    """Money & habits card: this month's money and every habit's week."""
+    from jarvis.core import expenses, habits
+    return {"money": expenses.dashboard(), "habits": habits.overview()}
+
+
 def summary() -> dict:
     def safe(fn, default):
         try:
@@ -183,7 +189,8 @@ def summary() -> dict:
             return {**(default if isinstance(default, dict) else {}), "error": type(e).__name__} \
                 if isinstance(default, dict) else default
     return {"apps": safe(_apps, {}), "coding": safe(_coding, {}), "work": _cached("work", 20, lambda: safe(_work, {})), "now": safe(_now, []), "today": safe(_today_chips, []),
-            "kurama": safe(_kurama, {}), "switches": _cached("switches", 15, lambda: safe(_switches, {}))}
+            "kurama": safe(_kurama, {}), "switches": _cached("switches", 15, lambda: safe(_switches, {})),
+            "tracker": _cached("tracker", 30, lambda: safe(_tracker, {}))}
 
 
 class TodoIn(BaseModel):
@@ -210,7 +217,7 @@ async def todo_action(body: TodoIn):
 @router.get("/dashboard", summary="Everything the dashboard cards show (cached 8 s; ?fresh=1 right after a chat turn)")
 async def dashboard(fresh: bool = False):
     if fresh:  # the turn may have changed the to-do list / long tasks / reminders: never show the old ones
-        for k in ("summary", "work"):
+        for k in ("summary", "work", "tracker"):
             _cache.pop(k, None)
     return await run_in_threadpool(lambda: _cached("summary", 8, summary))
 

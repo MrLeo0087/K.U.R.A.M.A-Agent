@@ -473,7 +473,11 @@ async def tracker_action(body: Tracked):
           "habit_undo": lambda: habits.undo(body.ref)}.get(body.kind)
     if fn is None:
         return JSONResponse({"ok": False, "error": "unknown kind"}, status_code=400)
-    return {"ok": True, "text": await run_in_threadpool(fn)}
+    text = await run_in_threadpool(fn)
+    from jarvis.api.routes import dash
+    for k in ("summary", "tracker"):
+        dash._cache.pop(k, None)
+    return {"ok": True, "text": text}
 
 
 # ---------- power switch: stop every KURAMA process (scripts/kurama-power.sh; Super+K turns it back on) ----------

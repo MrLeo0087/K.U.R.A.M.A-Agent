@@ -1046,10 +1046,10 @@ body:not(.mini) .suggest button { border-radius: 20px; padding: 7px 14px; backgr
 .tlist:empty { display: none; }
 .tlist li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; align-items: center; gap: 6px; font-size: 12.5px; }
 .tlist small { color: var(--dim); font-size: 11px; white-space: nowrap; }
-.tlist .tb { width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.03);
+.tlist .tb, .hlist .tb { width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.03);
   color: var(--muted); font-size: 12px; line-height: 1; display: grid; place-items: center; padding: 0; }
-.tlist .tb:hover { color: var(--danger); border-color: rgba(255, 93, 93, 0.4); }
-.tlist .tb.ok:hover { color: var(--ok); border-color: rgba(127, 209, 139, 0.4); }
+.tlist .tb:hover, .hlist .tb:hover { color: var(--danger); border-color: rgba(255, 93, 93, 0.4); }
+.tlist .tb.ok:hover, .hlist .tb.ok:hover { color: var(--ok); border-color: rgba(127, 209, 139, 0.4); }
 
 /* the old animated circle with KURAMA's face in its centre: a dark fox face, amber eyes that glow brighter when it
    listens / speaks (colour only; the circle itself does the motion) */
@@ -1151,3 +1151,28 @@ body:not(.mini) .dots i:nth-child(3) { animation-delay: 0.3s !important; }
 .slash-item i { color: var(--muted); font-style: normal; font-size: 12px; }
 .slash-item span { margin-left: auto; color: var(--muted); font-size: 12px; text-align: right; }
 .slash-item.on, .slash-item:hover { background: rgba(255, 122, 26, 0.14); }
+
+/* Money & habits card */
+.track-card { padding-bottom: 12px; }
+.mrow { display: grid; grid-template-columns: 1fr 1.2fr 1.1fr; gap: 10px; align-items: end; }
+.mrow > div:not(.mbars) { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.mrow b { font-size: 17px; font-weight: 400; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mbars { display: flex; align-items: flex-end; gap: 3px; height: 30px; }
+.mbars i { flex: 1; border-radius: 2px; background: rgba(255, 154, 74, 0.45); min-height: 2px; }
+.mbars i.now { background: #ff9a4a; }
+.mbars i.zero { background: rgba(255, 255, 255, 0.08); }
+.mbudget { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.mbudget .bar { flex: 1; margin: 0; }
+.mbudget small { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.mtop { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+.mchip { font-size: 11px; color: var(--muted); padding: 2px 8px; border-radius: 10px; background: rgba(255, 255, 255, 0.05); }
+.mchip.due { color: #ffb36b; background: rgba(255, 122, 26, 0.12); }
+.hlist { list-style: none; margin-top: 8px; border-top: 1px solid var(--line); padding-top: 6px; }
+.hlist li { display: grid; grid-template-columns: 1fr auto 34px 24px; gap: 8px; align-items: center; padding: 3px 0; font-size: 13px; }
+.hlist li.empty { display: block; font-size: 12px; color: var(--muted); }
+.hlist li.done .hn { color: var(--muted); }
+.hlist .hn small { color: var(--dim); font-size: 11px; }
+.hlist .hw { display: flex; gap: 3px; }
+.hlist .hw i { width: 7px; height: 7px; border-radius: 50%; background: rgba(255, 255, 255, 0.1); }
+.hlist .hw i.on { background: #5fd38d; }
+.hlist .hs { font-size: 12px; color: #ffb36b; text-align: right; }

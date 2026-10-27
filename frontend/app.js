@@ -1263,6 +1263,7 @@ function renderDash() {
   renderWork(dash.work || {});
   renderNow(dash.now || [], dash.today || []);
   renderSwitches(dash.switches || {});
+  renderTracker(dash.tracker || {});
   const k = dash.kurama || {};
   $("t-free").textContent = k.free_pct == null ? "–" : `${k.free_pct}%`;
   $("t-calls").textContent = k.calls_today ? `${k.calls_today} calls` : "";
@@ -1355,8 +1356,49 @@ function renderNow(items, classes) {
   }).join("");
   const n = items.length, first = items[0], nextChip = chips.find((c) => c.next || c.at) || chips[0];
   $("today-count").textContent = n ? `${n} running` : chips.length ? `${chips.length} today` : "all quiet";
-  if (!n && !chips.length) ul.innerHTML = '<li class="empty">Nothing running. Training, downloads and jobs show up here.</li>';
+  if (!n && !chips.length) ul.innerHTML = '<li class="empty">Nothing running right now.</li>';
 }
+// Money & habits card: today / month (+ budget), 7-day bars, top categories, habits with their week and a ✓ button
+function renderTracker(t) {
+  const m = t.money || {}, hs = t.habits || [], cur = m.currency || "Rs";
+  const amt = (v) => `${cur} ${Math.round(v || 0).toLocaleString("en-IN")}`;
+  $("m-today").textContent = amt(m.today);
+  $("m-month").textContent = amt(m.month);
+  const w = m.last7 || [], top = Math.max(1, ...w);
+  $("m-bars").innerHTML = w.map((v, i) => `<i style="height:${Math.max(6, Math.round(v / top * 100))}%" class="${i === w.length - 1 ? "now" : ""}${v ? "" : " zero"}" title="${amt(v)}"></i>`).join("");
+  const used = m.budget_used;
+  $("m-budget-row").hidden = used == null;
+  if (used != null) {
+    const bar = $("m-budget-bar");
+    bar.style.transform = `scaleX(${Math.min(1, used)})`;
+    bar.classList.toggle("low", used >= 1);
+    bar.classList.toggle("hot", used >= 0.8 && used < 1);
+    $("m-budget").textContent = `${Math.round(used * 100)}% of ${amt(m.budget)} budget`;
+  }
+  const bills = (m.bills_due || []).map((b) => `<span class="mchip due">💸 ${esc(b)} due</span>`).join("");
+  $("m-top").innerHTML = bills + (m.top || []).slice(0, 3).map((c) => `<span class="mchip">${esc(c.cat)} ${amt(c.amount)}</span>`).join("");
+  const done = hs.filter((h) => h.done).length;
+  $("track-pill").textContent = hs.length ? `habits ${done}/${hs.length}` : "";
+  const ul = $("habit-list");
+  if (!hs.length && !m.month) {
+    ul.innerHTML = `<li class="empty">Say “spent 500 on food” or “add a habit: drink water 8 glasses a day”.</li>`;
+    return;
+  }
+  ul.innerHTML = hs.slice(0, 4).map((h) => `<li class="${h.done ? "done" : ""}">
+    <span class="hn ell" title="${esc(h.name)}">${esc(h.name)}${h.target > 1 ? ` <small>${h.today}/${h.target}</small>` : ""}</span>
+    <span class="hw">${h.week.map((d) => `<i class="${d ? "on" : ""}"></i>`).join("")}</span>
+    <span class="hs" title="best ${h.best}">${h.streak ? `🔥${h.streak}` : ""}</span>
+    <button type="button" class="tb ${h.done ? "" : "ok"}" data-habit="${h.done ? "habit_undo" : "habit_done"}" data-ref="${esc(h.name)}"
+      title="${h.done ? "Undo today" : "Done today"}" aria-label="${h.done ? "Undo" : "Done"}">${h.done ? "↺" : "✓"}</button></li>`).join("");
+}
+document.addEventListener("click", async (e) => { // Money & habits card: ✓ habit done / ↺ undo (no chat, 0 tokens)
+  const b = e.target.closest("[data-habit]");
+  if (!b) return;
+  e.stopPropagation();
+  b.disabled = true;
+  try { const r = await api.tracker(b.dataset.habit, b.dataset.ref); toast(r.text); } catch { toast("Couldn't change it right now."); }
+  fresh = true; loadDash();
+}, true);
 function renderSwitches(sw) {
   for (const b of document.querySelectorAll("[data-switch]")) {
     const on = !!sw[b.dataset.switch];
