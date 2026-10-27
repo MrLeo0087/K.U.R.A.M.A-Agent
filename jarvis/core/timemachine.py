@@ -72,9 +72,10 @@ def projects() -> list[Path]:
     """Protected projects: added by the user + git repos found under the search roots."""
     added = json.loads(store.kv_get("tm_added") or "[]")
     found = json.loads(store.kv_get("tm_found") or "[]")
+    hidden = set(json.loads(store.kv_get("tm_hidden") or "[]"))
     out = []
     for p in dict.fromkeys(added + found):
-        if Path(p).is_dir():
+        if Path(p).is_dir() and p not in hidden:
             out.append(Path(p))
     return out
 
@@ -114,6 +115,72 @@ def add_project(path: Path) -> str:
            f"minutes when it changes. {snap}"
 
 
+def _find(name: str) -> Path | None:
+    """A watched project by a loose name ('kurama', 'civic report')."""
+    key = name.strip().lower().replace(" ", "")
+    hits = [p for p in projects() if key and key in p.name.lower().replace(" ", "").replace("_", "").replace("-", "")]
+    if not hits:
+        return None
+    return max(hits, key=last_activity)
+
+
+def pin(name: str) -> str:
+    p = _find(name)
+    if p is None:
+        return f"I don't watch a project called '{name}'. Say 'list my coding projects' to see them."
+    store.kv_set("tm_pinned", str(p))
+    return f"The Coding card now always shows {p.name} ({p}). Say 'unpin the project' to go back to automatic."
+
+
+def unpin() -> str:
+    store.kv_delete("tm_pinned")
+    return "Automatic again: the Coding card shows the project you changed most recently."
+
+
+def forget(name: str) -> str:
+    """Stop watching a project (its folder and code are NOT touched)."""
+    p = _find(name)
+    if p is None:
+        return f"I don't watch a project called '{name}'."
+    hidden = json.loads(store.kv_get("tm_hidden") or "[]")
+    if str(p) not in hidden:
+        hidden.append(str(p))
+        store.kv_set("tm_hidden", json.dumps(hidden))
+    added = [x for x in json.loads(store.kv_get("tm_added") or "[]") if x != str(p)]
+    store.kv_set("tm_added", json.dumps(added))
+    if store.kv_get("tm_pinned") == str(p):
+        store.kv_delete("tm_pinned")
+    return f"I stopped watching {p.name}. Its folder and code are untouched. 'watch {p.name} again' brings it back."
+
+
+def unforget(name: str) -> str:
+    hidden = json.loads(store.kv_get("tm_hidden") or "[]")
+    key = name.strip().lower().replace(" ", "")
+    back = [h for h in hidden if key and key in Path(h).name.lower().replace(" ", "").replace("_", "").replace("-", "")]
+    if not back:
+        return f"{name} isn't on my 'not watched' list."
+    store.kv_set("tm_hidden", json.dumps([h for h in hidden if h not in back]))
+    return f"Watching {Path(back[0]).name} again."
+
+
+def overview() -> str:
+    """'list my coding projects': which one the Coding card shows and why, then all watched ones."""
+    ps = sorted(projects(), key=last_activity, reverse=True)
+    if not ps:
+        return "I'm not watching any coding project yet. Say 'protect my <name> project'."
+    try:
+        cur = resolve("")
+    except TMError:
+        cur = ps[0]
+    why = "you pinned it" if store.kv_get("tm_pinned") == str(cur) else "you changed it most recently"
+    lines = [f"💻 The Coding card shows {cur.name} ({why}).", f"I watch {len(ps)} git projects (newest first):"]
+    lines += [f"{i}. {p.name} — {p}" for i, p in enumerate(ps[:15], 1)]
+    if len(ps) > 15:
+        lines.append(f"…and {len(ps) - 15} more.")
+    lines.append("Say 'pin <name> project' to always show one, 'stop watching <name>' to hide one (code is never deleted).")
+    return "\n".join(lines)
+
+
 def resolve(project: str = "") -> Path:
     """A project folder from a loose name, or the project you touched most recently."""
     if project.strip():
@@ -122,6 +189,9 @@ def resolve(project: str = "") -> Path:
             return _proc.resolve_dir(project)
         except _proc.ProcError as e:
             raise TMError(str(e)) from None
+    pinned = store.kv_get("tm_pinned") or ""
+    if pinned and Path(pinned).is_dir():  # the user chose the project the Coding card shows
+        return Path(pinned)
     best, when = None, 0.0
     for p in projects():
         t = last_activity(p)

@@ -68,3 +68,25 @@ def test_already_read_marks_the_reading_list(monkeypatch):
 def test_ready_answers_cost_zero_tokens(q):
     i = fastpath.match(q)
     assert i and i.tool == "_say" and i.args["en"], q
+
+
+def test_coding_projects_list_pin_forget(tmp_path):
+    import json
+    from jarvis.core import store, timemachine as tm
+    for n in ("KURAMA", "civic-report", "Dummpy"):
+        (tmp_path / n).mkdir()
+    store.kv_set("tm_found", json.dumps([str(tmp_path / n) for n in ("KURAMA", "civic-report", "Dummpy")]))
+    assert fastpath.match("list my coding projects").args == {"action": "list"}
+    assert fastpath.match("pin the kurama project").args == {"action": "pin", "project": "kurama"}
+    assert fastpath.match("stop watching the dummpy project").args == {"action": "forget", "project": "dummpy"}
+    tm.pin("kurama")
+    assert tm.resolve("").name == "KURAMA"
+    assert tm.forget("dummpy").startswith("I stopped watching Dummpy") and (tmp_path / "Dummpy").is_dir()
+    assert [p.name for p in tm.projects()] == ["KURAMA", "civic-report"]
+    assert tm.unforget("dummpy") == "Watching Dummpy again."
+    assert "(you pinned it)" in tm.overview()
+
+
+def test_where_was_i_is_not_a_folder_path():
+    i = fastpath.match("where was I?")
+    assert i.tool == "where_was_i" and i.name != "where"  # the 'The full path is ...' template is for folders only

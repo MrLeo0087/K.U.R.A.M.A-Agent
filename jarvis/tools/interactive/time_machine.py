@@ -15,22 +15,31 @@ from jarvis.core.registry import tool
       description="Code time machine (automatic snapshots, even uncommitted): what changed since a time ('2 hours "
                   "ago', 'yesterday'), history of a file, restore a file as it was then, undo a restore, protect a "
                   "project, snapshot now.")
-def time_machine(action: Literal["changes", "history", "restore", "undo", "protect", "snapshot", "list"] = "changes",
+def time_machine(action: Literal["changes", "history", "restore", "undo", "protect", "snapshot", "list", "pin", "unpin",
+                                 "forget", "watch"] = "changes",
                  project: str = "", when: str = "1 hour ago", file: str = "") -> str:
     """Code time machine.
 
     Args:
         action: changes = diff since `when`; history = snapshots (of `file`); restore = put `file` back as it was at
             `when` (asks first); undo = undo the last restore; protect = start snapshotting `project`;
-            snapshot = save one now; list = protected projects.
+            snapshot = save one now; list = watched projects; pin = always show `project` on the Coding card;
+            unpin = automatic again; forget = stop watching `project` (code untouched); watch = watch it again.
         project: Project folder (loose names work); empty = the one you changed most recently.
         when: A time like "2 hours ago", "yesterday 18:00", "this morning", or a snapshot id.
         file: A file inside the project, e.g. "train.py" or "src/model.py".
     """
     try:
         if action == "list":
-            names = [f"{p.name} ({p})" for p in tm.projects()]
-            return "Protected projects:\n" + "\n".join(names) if names else "No project is protected yet."
+            return tm.overview()
+        if action == "pin":
+            return tm.pin(project)
+        if action == "unpin":
+            return tm.unpin()
+        if action == "forget":
+            return tm.forget(project)
+        if action == "watch":
+            return tm.unforget(project)
         if action == "undo":
             return tm.undo()
         p = tm.resolve(project)

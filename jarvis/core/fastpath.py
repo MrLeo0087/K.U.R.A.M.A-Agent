@@ -1031,7 +1031,7 @@ def _daily_intent(t: str) -> Intent | None:
     if m := _PORT.match(t):
         return Intent("doctor", "laptop_doctor", "system", {"action": "port", "target": m.group("p")})
     if m := _WHERE.match(t):
-        return Intent("where", "where_was_i", "git", {"project": m.group("p") or m.group("p2") or m.group("p3") or ""})
+        return Intent("code", "where_was_i", "git", {"project": m.group("p") or m.group("p2") or m.group("p3") or ""})
     if m := _CHANGED.match(t):
         w = (m.group("w") or "1 hour").strip()
         if re.fullmatch(r"(?:\d+|an?|one|two|few)\s+(?:min(?:ute)?s?|hours?|days?)", w, I):
@@ -2008,6 +2008,20 @@ def _goal_intent(t: str) -> Intent | None:
     from jarvis.core import goals
     low = t.strip(" .!?").lower()
     G = lambda a, **k: Intent("goals", "goals", "schedule", {"action": a, **k})  # noqa: E731
+    # the Coding card's projects: list / pin / unpin / stop watching (the code itself is never deleted)
+    if re.fullmatch(r"(?:show|list|what\s+are|which\s+are|give\s+me)?\s*(?:me\s+)?(?:all\s+)?(?:my\s+|the\s+)?(?:coding|code|git)\s+projects?"
+                    r"(?:\s+(?:list|you\s+watch|you\s+track))?|which\s+projects?\s+(?:do\s+you|are\s+you)\s+(?:watch|track)\w*", low, I):
+        return Intent("code", "time_machine", "git", {"action": "list"})
+    if m := re.fullmatch(r"(?:pin|focus\s+on|always\s+show|show\s+only)\s+(?:the\s+|my\s+)?(?P<p>.+?)\s+(?:project|repo)(?:\s+on\s+the\s+coding\s+card)?"
+                         r"|(?:my\s+)?main\s+(?:coding\s+)?project\s+is\s+(?P<p2>.+)", low, I):
+        return Intent("code", "time_machine", "git", {"action": "pin", "project": m.group("p") or m.group("p2")})
+    if re.fullmatch(r"unpin\s+(?:the\s+|my\s+)?(?:coding\s+)?project|(?:go\s+back\s+to\s+)?automatic\s+project", low, I):
+        return Intent("code", "time_machine", "git", {"action": "unpin"})
+    if m := re.fullmatch(r"(?:stop\s+(?:watching|tracking)|forget|hide|remove|delete)\s+(?:the\s+|my\s+)?(?P<p>.+?)\s+(?:project|repo)"
+                         r"(?:\s+from\s+(?:the\s+)?(?:coding(?:\s+card)?|list|kurama))?", low, I):
+        return Intent("code", "time_machine", "git", {"action": "forget", "project": m.group("p")})
+    if m := re.fullmatch(r"(?:watch|track)\s+(?:the\s+|my\s+)?(?P<p>.+?)\s+(?:project|repo)\s+again", low, I):
+        return Intent("code", "time_machine", "git", {"action": "watch", "project": m.group("p")})
     # the CODE work (what you're doing in your project): 'code work for today', 'code worker', 'what do I have to do
     # in my code', 'related to code' -> where was I (git changes, errors, next step)
     if len(low.split()) <= 20 and (re.search(r"\b(?:code|coding|programming)\s+(?:work(?:er)?s?|tasks?|jobs?|progress|to[\s-]?dos?)\b", low)
