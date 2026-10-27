@@ -517,7 +517,7 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
             "doctor", "env doctor", "environment doctor", "environment check", "my environment",
             "dev environment", "python version", "virtualenv", "project", "new project", "fastapi",
             "langgraph", "data science"),
-    "codequality": ("dependency", "dependencies", "dependency doctor", "dependency check", "outdated",
+    "codequality": ("go to definition", "find this function", "where is this function defined", "dependency", "dependencies", "dependency doctor", "dependency check", "outdated",
                     "outdated packages", "unpinned", "vulnerable", "vulnerability", "vulnerabilities", "cve",
                     "pip-audit", "secret scan", "scan for secrets", "secrets", "secret leak", "leaked key",
                     "leaked keys", "api key leak", "pre-commit", "precommit", "pre commit", "commit hook",
@@ -604,7 +604,7 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
            "explain an error/traceback and remember the fix, "
            "check a dataset (CSV/images) before training",
     "codequality": "dependency doctor (unpinned/outdated/vulnerable/unused), secrets scan, pre-commit gate, "
-                   "repo hygiene, AI code review of a diff/file/commit",
+                   "repo hygiene, AI code review of a diff/file/commit, go to a function's definition",
     "devutils": "notebook (.ipynb) to .py script, generate requirements.txt from imports, config file snapshots/diff",
     "web": "search the web (DuckDuckGo/SearXNG) incl. latest news, Wikipedia summaries, read a web page, watch a "
            "page and say when it changes",

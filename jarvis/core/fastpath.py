@@ -1442,6 +1442,35 @@ def code_tidy_intent(t: str) -> Intent | None:
     return None
 
 
+_NAV_OBJ = r"(?:function|func|method|class|definition|def|code|implementation|source)"
+
+
+def codenav_intent(t: str) -> Intent | None:
+    """'find this function' / 'go to definition' / 'take me to this function's code' / 'where is this function defined'
+    / 'show me the real code of calc_total' / '/def calc_total' -> code_nav (opens it in VS Code, 0 tokens)."""
+    if m := re.fullmatch(r"/(?:def|definition|goto|go|fn|func)(?:\s+(?P<n>[\w.]+))?", t, I):
+        return Intent("codenav", "code_nav", "codequality", {"action": "find", "name": m.group("n") or ""})
+    if len(t.split()) > 18:
+        return None
+    sel = r"(?:this|that|the\s+selected|selected|highlighted|the\s+highlighted|my\s+selected)"
+    verb = r"(?:find|show|open|go\s+to|goto|take\s+me\s+to|bring\s+me\s+to|jump\s+to|navigate\s+to|redirect\s+me\s+to|direct\s+me\s+to|get\s+me\s+to|search)"
+    lead = r"(?:please\s+|kurama\W+|can\s+you\s+|could\s+you\s+|hey\s+)*(?:(?:show|give)\s+me\s+)?"
+    if re.fullmatch(lead + r"(?:" + verb + r"\s+)?(?:the\s+)?definition(?:\s+of\s+" + sel + r"(?:\s+\w+)?)?(?:\s+please)?[\s.!?]*", t, I) \
+            or re.fullmatch(lead + verb + r"(?:\s+me)?\s+(?:the\s+)?(?:real\s+|actual\s+|original\s+|full\s+|main\s+)?(?:code|source|"
+                            r"definition|implementation)?\s*(?:of\s+|for\s+)?" + sel + r"(?:'s)?\s+" + _NAV_OBJ +
+                            r"(?:'s)?(?:\s+(?:code|source|definition|implementation))?(?:\s+(?:in\s+vs\s*code|for\s+me|please))*[\s.!?]*", t, I) \
+            or re.fullmatch(lead + r"where\s+(?:is|was|does)\s+" + sel + r"\s+" + _NAV_OBJ + r"\s+(?:defined|written|declared|"
+                            r"come\s+from|from|implemented|made|located)[\s.!?]*", t, I) \
+            or re.fullmatch(lead + r"(?:where\s+is\s+the\s+(?:code|definition)\s+of|what\s+is\s+the\s+(?:real|actual)\s+code\s+of)\s+"
+                            + sel + r"(?:\s+" + _NAV_OBJ + r")?[\s.!?]*", t, I):
+        return Intent("codenav", "code_nav", "codequality", {"action": "find", "name": ""})
+    if m := re.fullmatch(lead + r"(?:" + verb + r"\s+(?:me\s+)?(?:the\s+)?(?:real\s+|actual\s+)?(?:code\s+of\s+|definition\s+of\s+)?"
+                         r"(?:the\s+)?(?:function|method|class|def)\s+|where\s+is\s+(?:the\s+)?(?:function|method|class)\s+)"
+                         r"(?P<n>[A-Za-z_][\w.]*)(?:\(\))?(?:\s+(?:defined|function|method|class))?[\s.!?]*", t, I):
+        return Intent("codenav", "code_nav", "codequality", {"action": "find", "name": m.group("n")})
+    return None
+
+
 def assist_intent(t: str) -> Intent | None:
     """Highlighted text/code help, 0 tokens to route: explain / meaning / translate / fix code / write code / file."""
     from jarvis.core.assist import lang_of
@@ -2467,6 +2496,8 @@ def match(text: str) -> Intent | None:
         return Intent("say", "_say", "self", ans)
     if pi := plan_answer_intent(t):
         return pi
+    if cn := codenav_intent(t):
+        return cn
     if li := links_intent(t):
         return li
     if tn := todo_now_intent(t):
