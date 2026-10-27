@@ -51,7 +51,9 @@ def tmp_store(tmp_path, monkeypatch):
     from jarvis.core import coderun
     coderun._last_error.clear()
     from jarvis.core import music
-    monkeypatch.setattr(music, "_spawn", lambda cmd: False)  # never start a real player (no sound from tests)
+    monkeypatch.setattr(music, "launch", lambda cmds, pipe=False, env=None: [])  # never start a real player (no sound from tests)
+    monkeypatch.setattr(music, "_cache_dir", lambda: tmp_path)
+    music.PLAYER.queue = []
     from jarvis.core import modes
     modes._cache = (0.0, {})  # the power mode is read from each test's own DB
     yield store

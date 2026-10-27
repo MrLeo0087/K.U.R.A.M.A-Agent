@@ -235,9 +235,10 @@ def test_playlist(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "PLAYLISTS", {"lofi": "https://youtu.be/x", "Workout": str(tmp_path)})
     from jarvis.core import music
     started = []
-    monkeypatch.setattr(music, "_spawn", lambda cmd: started.append(cmd) or False)
+    monkeypatch.setattr(music, "launch", lambda cmds, pipe=False, env=None: started.append(cmds) or [])
+    monkeypatch.setattr(music, "expand", lambda url: [{"url": url, "id": "xxxxxx", "title": "", "duration": 0}])
     assert pl.playlist("lofi playlist").startswith("Playing your lofi playlist") and not opened  # sound only, no tab
-    assert started and started[-1][-1] == "https://youtu.be/x"
+    assert started and started[-1][0][-1] == "https://youtu.be/x"
     assert pl.playlist("my workout") == "Playing your Workout playlist." and spawned
     assert spawned[0][-1] == str(tmp_path)
     assert pl.playlist("jazz").startswith("error") and "lofi" in pl.playlist("")

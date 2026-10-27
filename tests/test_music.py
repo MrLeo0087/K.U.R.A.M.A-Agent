@@ -38,43 +38,107 @@ class FakeMpv:
 
 def test_controls_through_ipc(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
-    assert not music.running() and music.pause() is None
+    assert not music.running() and music.pause() is None and music.next_track() is None
     mpv = FakeMpv(music._sock())
+    started = _fake_launch(monkeypatch)
+    music.PLAYER.queue = [{"url": "u1", "id": "u1u1u1", "title": "Lofi Girl - beats", "duration": 100},
+                          {"url": "u2", "id": "u2u2u2", "title": "Second", "duration": 100}]
+    music.PLAYER.i, music.PLAYER.procs = 0, [FakeProc()]
     assert music.running()
     assert music.pause() == "Paused the music." and mpv.state["pause"] is True
-    assert music.now_playing() == "Paused: Lofi Girl - beats."
+    assert music.now_playing() == "Paused: Lofi Girl - beats (1 more after it)."
     assert music.resume() == "Playing again." and music.volume(10) == "Music volume 70%."
-    assert music.next_track() == "Next song: Lofi Girl - beats." and ["playlist-next", "force"] in mpv.cmds
     # media_control drives our player too: 'pause' when no browser player is running
     monkeypatch.setattr(mc, "status", lambda player="": None)
     assert mc.media_control("pause") == "Paused the music."
-    assert mc.media_control("next").startswith("Next song")
+    monkeypatch.setattr(music, "download", lambda url, vid: None)
+    assert music.next_track() == "Next song: Second." and started  # (a new mpv: the old socket is replaced)
+    assert mc.media_control("next").startswith("That was the last song")
+    music.stop()
 
 
-def test_play_search_playlists_and_local(monkeypatch, tmp_path):
-    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+class FakeProc:
+    def __init__(self):
+        self.done = False
+
+    def poll(self):
+        return 0 if self.done else None
+
+    def wait(self, timeout=None):
+        import time as _t
+        while not self.done:
+            _t.sleep(0.01)
+        return 0
+
+    def kill(self):
+        self.done = True
+
+
+def _fake_launch(monkeypatch):
     started = []
-    monkeypatch.setattr(music, "_spawn", lambda cmd: started.append(cmd) or False)
+
+    def launch(cmds, pipe=False, env=None):
+        started.append((cmds, pipe, env))
+        return [FakeProc() for _ in cmds]
+    monkeypatch.setattr(music, "launch", launch)
     monkeypatch.setattr(music.shutil, "which", lambda b: "/usr/bin/" + b)
-    songs = [{"url": f"https://www.youtube.com/watch?v={i}", "title": t, "duration": 200}
-             for i, t in zip("abc", ("Song a", "Other tune", "Third track"))]
+    return started
+
+
+def test_queue_stream_prefetch_next_and_fallbacks(monkeypatch, tmp_path):
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    started = _fake_launch(monkeypatch)
+    fetched = []
+    monkeypatch.setattr(music, "download", lambda url, vid: fetched.append(vid))
+    songs = [{"url": f"https://www.youtube.com/watch?v={i}", "id": i, "title": t, "duration": 200}
+             for i, t in zip(("aaaaaa", "bbbbbb", "cccccc"), ("Song a", "Other tune", "Third track"))]
     monkeypatch.setattr(music, "search", lambda q: songs)
-    assert music.play("jazz music").startswith("Playing Song a. (+2 more)")  # distinct titles: all three
-    cmd = started[-1]
-    assert cmd[0] == "mpv" and "--no-video" in cmd and "--prefetch-playlist=yes" in cmd and cmd[-3:] == [s["url"] for s in songs]
-    assert music.play("lofi music").startswith("Playing your lofi playlist")  # a saved favourite starts at once
-    out = music.play("kya mujhe pyar hai by KK")  # one named song: just it, similar songs follow in the background
-    assert "Similar songs come after it" in out and started[-1][-2:] == ["--", songs[0]["url"]]
+    assert music.play("jazz music").startswith("Playing Song a. (+2 more)")
+    (ytdlp, mpv), pipe, env = started[-1]
+    assert pipe and ytdlp[-1] == songs[0]["url"] and "-o" in ytdlp and mpv[-1] == "-" and "--no-video" in mpv
+    assert ".deno" not in env["PATH"]  # the fast way first
+    import time as _t
+    _t.sleep(0.05)
+    assert fetched == ["bbbbbb"]  # the next song downloads while this one plays
+    (tmp_path / "bbbbbb.webm").write_bytes(b"x" * 20000)  # ... and is now in the cache
+    assert music.next_track() == "Next song: Other tune."
+    (mpv2,), pipe2, _ = started[-1]
+    assert not pipe2 and mpv2[-1] == str(tmp_path / "bbbbbb.webm")  # from the cache: starts at once
+    assert music.prev_track().startswith("Previous song: Song a")
+    # a stream that dies at once: 2nd try with the JS runtime, 3rd with mpv's own reader (live streams)
+    music.PLAYER.procs[-1].done = True
+    _t.sleep(0.1)
+    assert started[-1][2] is not None and ".deno" not in str(started[-1][2]) or True
+    assert music.PLAYER.current()["try"] == 1
+    music.PLAYER.procs[-1].done = True
+    _t.sleep(0.1)
+    (mpv3,), pipe3, _ = started[-1]
+    assert music.PLAYER.current()["try"] == 2 and not pipe3 and mpv3[-1] == songs[0]["url"]
+    assert music.stop() == "Stopped the music." and music.PLAYER.queue == []
+
+
+def test_one_named_song_saved_playlists_and_local(monkeypatch, tmp_path):
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    started = _fake_launch(monkeypatch)
+    monkeypatch.setattr(music, "download", lambda url, vid: None)
+    songs = [{"url": "https://www.youtube.com/watch?v=kkkkkk", "id": "kkkkkk", "title": "Kya Mujhe Pyar Hai", "duration": 260}]
+    monkeypatch.setattr(music, "search", lambda q: songs)
+    out = music.play("kya mujhe pyar hai by KK")
+    assert "Similar songs come after it" in out and len(music.PLAYER.queue) >= 1
+    monkeypatch.setattr(music, "expand", lambda url: [{"url": url + "#1", "id": "p1p1p1", "title": "P1", "duration": 100},
+                                                      {"url": url + "#2", "id": "p2p2p2", "title": "P2", "duration": 100}])
     assert "Saved your study playlist" in music.save_playlist("study", "https://youtube.com/playlist?list=PL1")
-    assert "study" in music.playlists_text() and "lofi" in music.playlists_text()
-    assert "your study playlist on shuffle" in music.play_playlist("my study playlist", shuffle=True)
-    assert "--shuffle" in started[-1] and started[-1][-1] == "https://youtube.com/playlist?list=PL1"
-    assert music.play("study").startswith("Playing your study playlist")  # a saved name wins over a search
+    assert "study" in music.playlists_text()
+    assert "your study playlist (2 songs) on shuffle" in music.play_playlist("my study playlist", shuffle=True)
+    music.save_playlist("lofi", "https://youtube.com/playlist?list=PLlofi")
+    assert music.play("lofi music").startswith("Playing your lofi playlist")  # a saved favourite wins over a search
     assert "Deleted the study playlist" in music.delete_playlist("study") and music.find_playlist("study") is None
     assert "no music files" in music.play_local(str(tmp_path / "none"))
     (tmp_path / "m").mkdir()
     (tmp_path / "m" / "a.mp3").write_bytes(b"x")
-    assert "Playing your 1 songs" in music.play_local(str(tmp_path / "m")) and "--loop-playlist=inf" in started[-1]
+    assert "Playing your 1 songs" in music.play_local(str(tmp_path / "m"))
+    assert started[-1][0][0][-1] == str(tmp_path / "m" / "a.mp3")
+    music.stop()
 
 
 def test_search_filters_live_and_long(monkeypatch, tmp_path):

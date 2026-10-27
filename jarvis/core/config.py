@@ -945,9 +945,7 @@ LOCATION_MIN_MOVE_M = 120.0  # a fix closer than this to the last one is treated
 LOCATION_KEEP_DAYS = 60.0  # older points are pruned, so the table stays tiny
 FOCUS_CLOSE: tuple[str, ...] = ()  # apps focus_mode closes at start, e.g. ("discord", "telegram")
 MUSIC_VOLUME = int(os.getenv("KURAMA_MUSIC_VOLUME", "60"))  # mpv start volume for 'play lofi music'
-PLAYLISTS: dict[str, str] = {  # spoken name -> URL or local music folder
-    "lofi": "https://www.youtube.com/watch?v=jfKfPfyJRdk",
-}
+PLAYLISTS: dict[str, str] = {}  # spoken name -> URL or local music folder ('save this playlist as X' adds more)
 
 # --- P9b --- reminders / scheduled commands, RAM-aware jobs, resume
 SCHEDULER_INTERVAL_S = 15.0  # scheduler worker tick
