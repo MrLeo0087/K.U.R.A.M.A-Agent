@@ -377,7 +377,7 @@ def test_generate_image_job(monkeypatch, tmp_path):
     from jarvis.core import config, jobs
     from jarvis.tools.general import generate_image as gi
     monkeypatch.setattr(config, "OUTPUTS_DIR", tmp_path)
-    monkeypatch.setattr(gi, "fetch_image", lambda p, w, h: b"\x89PNG....")
+    monkeypatch.setattr(gi, "fetch_image", lambda p, w, h, **k: b"\x89PNG....")
 
     class Mgr:
         def submit(self, title, kind, fn, request="", lang="en"):

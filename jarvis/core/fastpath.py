@@ -778,7 +778,8 @@ def _days(m: re.Match, text: str) -> int:
 
 
 _IMAGE = re.compile(r"^(?:can you\s+|could you\s+)?(?:generate|create|make|draw|paint|design|render)\s+(?:me\s+)?"
-                    r"(?:an?\s+|the\s+)?(?:ai\s+)?(?:image|picture|photo|pic|drawing|painting|illustration|artwork)s?\s+"
+                    r"(?:an?\s+|the\s+)?(?:(?P<q>hd|high[\s-]quality|detailed|realistic|beautiful|nice|cool|cute|simple|4k)\s+)?(?:ai\s+)?"
+                    r"(?:image|picture|photo|pic|drawing|painting|illustration|artwork)s?\s+"
                     r"(?:of|about|showing|with|for)\s+(?P<p>.{3,})$", I)
 _DRAW = re.compile(r"^(?:can you\s+)?draw\s+(?:me\s+)?(?P<p>.{3,})$", I)
 
@@ -793,7 +794,28 @@ TG_TAIL = re.compile(r"[\s,]*(?:\b(?:and|then)\b\s*)?(?:also\s+)?(?:please\s+)?(
                      r"(?:to|in|on|via|through)\s+(?:my\s+)?(?:telegram|phone|mobile)\b.*$", I)
 
 
+_NWORD = {"two": 2, "three": 3, "four": 4, "2": 2, "3": 3, "4": 4, "a couple of": 2, "few": 3, "some": 3}
+_DETAIL = re.compile(r",?\s*\b(?:in\s+)?(?:high\s+quality|hq|hd|ultra\s+detailed|highly\s+detailed|very\s+detailed|detailed|best\s+quality|"
+                     r"better\s+quality)\b", I)
+
+
 def image_intent(t: str) -> Intent | None:
+    """+ '4 versions of a fox', 'same picture but at night', 'another version', 'make it more colorful' (right after a
+    picture), 'detailed / HD' -> the service improves the prompt."""
+    from jarvis.tools.general import generate_image as gi
+    if m := re.fullmatch(r"(?:please\s+|can\s+you\s+)?(?:make|draw|generate|create|give\s+me|show\s+me)\s+(?:me\s+)?(?P<n>2|3|4|two|three|four|a\s+couple\s+of|few|some)\s+"
+                         r"(?:different\s+)?(?:versions?|images?|pictures?|variations?|options?|designs?|photos?)\s+(?:of|for|showing|with)\s+(?P<p>.{3,})", t, I):
+        p = m.group("p").strip(" .,!?")
+        return Intent("image", "generate_image", "image", {"prompt": _DETAIL.sub("", p).strip(), "count": _NWORD[m.group("n").lower()],
+                                                           **({"detailed": True} if _DETAIL.search(p) else {})}, p)
+    if m := re.fullmatch(r"(?:please\s+)?(?:(?:make|draw|generate|give\s+me|show\s+me|create)\s+)?(?:the\s+|that\s+)?same\s+(?:picture|image|one|photo)\s+but\s+(?P<c>.+)", t, I):
+        return Intent("image", "generate_image", "image", {"prompt": m.group("c").strip(" .!"), "change_last": True}, "same picture")
+    if re.fullmatch(r"(?:please\s+)?(?:make|draw|generate|give\s+me|show\s+me|create|try)\s+(?:me\s+)?(?:another|a\s+new|a\s+different|one\s+more)"
+                    r"(?:\s+(?:version|one|variation|picture|image|try))?(?:\s+of\s+(?:it|that|this))?[\s.!]*", t, I) and gi.last_recent():
+        return Intent("image", "generate_image", "image", {"prompt": "another version", "change_last": True}, "another version")
+    if (m := re.fullmatch(r"(?:please\s+)?(?:now\s+)?make\s+(?:it|the\s+(?:picture|image))\s+(?P<c>(?:at|in|more|less|a\s+bit|darker|brighter|"
+                          r"colou?rful|bigger|smaller|with|without|look|night|day|sunset|winter|summer|rain).+)", t, I)) and gi.last_recent():
+        return Intent("image", "generate_image", "image", {"prompt": m.group("c").strip(" .!"), "change_last": True}, "change")
     wall = bool(WALL_TAIL.search(t))
     t = WALL_TAIL.sub("", t) if wall else t
     tg = bool(TG_TAIL.search(t))
@@ -802,7 +824,12 @@ def image_intent(t: str) -> Intent | None:
     if not m or re.search(r"\b(?:and|then)\s+(?:send|open|set)\b", t, I):  # multi-step: let the planner split it
         return None
     prompt = m.group("p").strip(" .,!?")
-    args = {"prompt": prompt, **({"set_as_wallpaper": True} if wall else {}), **({"send_to_telegram": True} if tg else {})}
+    if q := m.groupdict().get("q"):  # 'an HD image of', 'a realistic photo of': the quality/style belongs to the prompt
+        prompt = f"{prompt}, {q}"
+    detailed = bool(_DETAIL.search(prompt))
+    prompt = _DETAIL.sub("", prompt).strip(" ,") or prompt
+    args = {"prompt": prompt, **({"set_as_wallpaper": True} if wall else {}), **({"send_to_telegram": True} if tg else {}),
+            **({"detailed": True} if detailed else {})}
     return Intent("image", "generate_image", "image", args, prompt)
 
 
