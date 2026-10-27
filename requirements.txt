@@ -47,3 +47,4 @@ fpdf2==2.8.4
 uharfbuzz==0.53.3
 openpyxl==3.1.5
 nepali-datetime==1.0.8.5  # Bikram Sambat date conversion; pure python, no deps
+wn==1.1.1  # offline English dictionary (Open English WordNet in a local SQLite file under data/wordnet; pure python)

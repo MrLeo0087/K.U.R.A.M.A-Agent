@@ -386,6 +386,10 @@ def meaning(text: str, lang: str = "en") -> str:
     """A word / phrase -> a 1-2 line dictionary meaning (English by default, or in the language asked);
     a sentence -> what it means, briefly. Short on purpose: it stays in the chat."""
     out = LANGS.get(lang or "en", "English")
+    if (lang or "en") == "en" and len(text.split()) <= 3:
+        from jarvis.core import dictionary
+        if found := dictionary.lookup(text):  # offline WordNet: 0 tokens
+            return found
     if len(text.split()) <= 4:
         if (lang or "en") == "en":
             sys = ("Give the meaning of the user's word/phrase like a learner's dictionary, in simple English. Format: "

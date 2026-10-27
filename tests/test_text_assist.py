@@ -1,6 +1,6 @@
 import pytest
 
-from jarvis.core import assist, fastpath, rewrite
+from jarvis.core import assist, dictionary, fastpath, rewrite
 
 
 @pytest.fixture
@@ -24,11 +24,14 @@ def test_read_actions_leave_the_selection(desk):
     st, calls = desk
     st["sel"] = "The committee deferred its decision indefinitely."
     assert assist.run("explain", "what does this mean") == "[assist_explain]" and st["pasted"] is None
-    st["sel"] = "ubiquitous"
+    st["sel"] = "kubernetesy"  # not in the offline dictionary -> the AI's dictionary meaning
     assert assist.run("explain", "what does this mean") == "[assist_meaning]"  # one word -> dictionary meaning
     assert assist.run("translate", "translate this into nepali", "ne").startswith("[assist_translate]")
     assert st["pasted"] is None
-    assert assist.run("meaning", text="serendipity") == "[assist_meaning]"
+    assert assist.run("meaning", text="flibbertyx") == "[assist_meaning]"
+    if dictionary.available():  # a real English word: offline WordNet, 0 tokens
+        n = len(calls)
+        assert assist.run("meaning", text="serendipity").startswith("serendipity (noun)") and len(calls) == n
 
 
 def test_write_actions(desk, tmp_path, monkeypatch):
@@ -220,7 +223,7 @@ def test_any_way_of_asking_about_the_selection():
 
 def test_meaning_is_short_and_english_by_default(desk):
     st, calls = desk
-    st["sel"] = "result"
+    st["sel"] = "resultzz"
     assert assist.run("meaning", "what is the meaning of this word") == "[assist_meaning]"
     assert calls[-1] == ("assist_meaning", False)  # English: the fast model
     assist.run("meaning", "meaning of this word in nepali", "ne")
