@@ -8,7 +8,7 @@ You are continuing work on **KURAMA**, my personal always-on voice + text assist
   2. append one line to `PROGRESS.md`;
   3. `git commit` ending with `Co-Authored-By: <the model named in your system reminder> <noreply@anthropic.com>`;
   4. restart KURAMA.
-- Run the full suite (`venv/bin/python -m pytest -q`, ~740 tests, ~85 s) before telling me something is done. Show only failures.
+- Run the full suite (`venv/bin/python -m pytest -q`, ~915 tests, ~100 s) before telling me something is done. Show only failures.
 - Never install torch or TensorFlow, and pin versions. Secrets live only in `.env`: never print or commit them.
 - Token care: the Groq free tier is small. Prefer 0-token fast paths (regex) and local code; use 1 LLM call per request at most.
 - **Never drive my screen to test** (no xdotool clicks or typing, no opening windows). Use mocked or "fake desktop" tests and say clearly what wasn't tested live. Never run commands through the live API that do real things (I once got dictation started by a test). Reading is fine.
@@ -112,20 +112,17 @@ You are continuing work on **KURAMA**, my personal always-on voice + text assist
   If I report a problem, ask for exactly what I said and what happened. My pasted chat logs show route, tier, tokens and ms for each message, so use them.
 - **My own actions still open:** `kaggle.json`, optionally `sudo apt install libreoffice-writer`, "enable screen control" plus restarting Brave / VS Code (for AT-SPI clicks).
 
-## Where we stopped (2026-10-27)
-Last commit `4cacbbe` (selection help). Full suite 872 passed; routing eval 110/110 + 32/32 + 27/27 (the eval now uses a temp DB, so my live power mode can't skew it). KURAMA restarted. Details of every step are at the end of `PROGRESS.md` (read `tail -40`).
+## Where we stopped (2026-10-27, evening)
+Full suite ~915 passed; routing eval 110/110 + 32/32 + 27/27. KURAMA restarted. Details at the end of `PROGRESS.md`.
 
-Built/changed on 2026-10-26/27 (all 0 tokens unless noted):
-- **Three kinds of work, never mixed:** to-do = short tasks + reminders (the DEFAULT for "task/work/reminder"); long tasks (`goals` tool, `goals.xlsx`) only when I say long task / monthly / goal / countdown; code work only with code words. To-do: schedule/plan X at T, what's on today, remove by name or number, done N, move/rename, clear all, ✓/✕ buttons on the Work card (POST /api/v1/todo). The screen refreshes after every turn (`/dashboard?fresh=1`).
-- **Coding projects:** snapshots ONLY for projects I give ("watch the project at /path", "watch this project" = VS Code folder); "stop watching" shows the list; pin/unpin; "list my coding projects". My list is empty until I add one.
-- **Links store** (`saved_links`, `links.xlsx`): save the open page / highlighted link by name, give/open by name; "open X" checks saved links first.
-- **Page reading** (`page_summary`): "what is this page about" reads the tab open now (OCR if login wall), short answer + "Want a detailed overview?" (yes = workspace).
-- **Live search lists/rankings:** reads the numbered block of 4 pages, smart model copies ONE source, no gap filling (~4.6k tokens per ranking question).
-- **Selection help:** explain = plain practical words (smart model); new `summary` action; "this wood/road" = this word (the selection).
-- **Voice:** only English/Nepali/Hindi pass (`stt.not_ours`); talk mode never silently drops requests (2-min follow-up, ignored lines stay faded with a toast); typing dots animate.
-- **Ready answers** (`jarvis/core/templates.py`): small talk, Python project setup, venv, Colab setup.
-- **Notifications:** every alert goes to laptop AND Telegram; day summary at 22:00; goal messages 05:00-22:00.
-- **Screen:** new look (my wallpaper behind, flat cards, the old animated orb with KURAMA's fox face, Now & today left, weather card + Work + big Workspace right, balanced columns with a CPU+RAM graph). WebKit GPU compositing is OFF (it caused 100% CPU / freezes); a watchdog restarts a frozen page. To SEE the screen, read `~/.local/share/kurama/desktop.png` (the screen app saves it 8 s after a reload). `data/wp_probe.js` runs a read-only JS check inside the live page (answer in `data/wp_probe.out`).
-- Mic/voice code is the OLD one (my reverted experiment broke talk mode): don't change mic/voice/UI layout without asking me first.
+Built on 2026-10-27 (all 0 tokens unless noted):
+- **Slash commands** (`jarvis/core/slash.py`, one list): ~70 commands (/weather, /todo, /remind, /def, /args, /run, /ports, /spent, /money, /spending, /habits, /done, /brief, /chart, /diagram, /flow, /audio, /reel, /makevideo, /play, /pause...). Each maps to a fast-path phrase or a tool; typos fixed; `/list` on the desktop, Telegram `/list` (phone) + `/all` (everything) + its `/` menu; typing `/` in the chat box shows suggestions (`frontend/slash.js`, GET /api/v1/slash).
+- **Coding:** `code_nav` tool (codequality group): find (highlight a name -> VS Code opens its real definition, project or library), help (library help: real signature, call check with 'did you mean', arg docs; 1 call only for 'suggest'), run (run the highlighted code with the file's defs, 20 s/1 GB, 'fix it' after an error). Port check lives in `laptop_doctor` ('what is running on port 8000', 'free port 3000' asks first, never KURAMA).
+- **Money** (`expenses` tool, tracker group, `expenses.xlsx` Money/Budgets/Bills): add, reports by day/week/month/year and category (study = education, cloth = clothes), full breakdown with budgets, budgets with warnings, monthly bills reminded until 'paid X'. **Habits** (`habits` tool, `habits.xlsx`): add with target + reminder, check in, streaks, undo, delete.
+- **Morning brief** (`jarvis/core/brief.py` + `brief` worker): first unlock / wake / screen of the day after 04:00 -> weather, to-dos, long tasks, habits, money, bills; spoken + desktop + Telegram; 'morning brief' / '/brief' any time.
+- **Dashboard:** new Money & habits card (today/month, budget bar, 7-day bars, categories, bills due, last 3 expenses with ✕, habits with week dots + streak + ✓/↺). 'Now & today' shrinks to its title when quiet. Workspace plays audio/video (Audio tab).
+- **Offline dictionary** (`jarvis/core/dictionary.py`, wn==1.1.1, data/wordnet/wn.db 120 MB, git-ignored): English meanings 0 tokens; unknown words / Nepali meanings still use the AI. If data/wordnet is missing: `venv/bin/python -c "import wn; wn.config.data_directory='data/wordnet'; wn.download('oewn:2024')"`.
+- **Generation (image group = generate_image, make_chart, make_diagram, make_audio, make_video):** images with sizes/versions/'same picture but...'/HD; charts (Pillow) from my spending, CSV/XLSX/JSON files or data links incl. HTML tables (bar+pie / line+bar views); diagrams from a project's README only, flowcharts from steps, Python call graphs; MP3 from selection/file/link/last result (edge-tts); short videos (topic = 1 small call, own script or picture folder = 0) with ffmpeg.
+- **Removed:** auto_theme, config_diff. **RustDesk:** service kept alive by the scheduler; the owner must run once `sudo install -o root -g root -m 755 scripts/kurama-rustdesk.sh /usr/local/sbin/kurama-rustdesk && sudo systemctl enable --now rustdesk`.
 
-Still not tried on my real screen: link saving from Brave, page_summary on a real tab, Work card buttons, talk mode after the room-talk fix. Next, I'll tell you what to work on.
+Not tried on the real screen yet: code_nav (VS Code jump), run/library help on a real selection, slash suggestions in the chat box, Money & habits buttons, audio/video playback in the workspace, Telegram /all and menu. The 'music without the browser' (mpv) idea was explained but not approved: ask before building it.
