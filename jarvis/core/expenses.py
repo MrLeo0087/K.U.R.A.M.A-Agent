@@ -27,9 +27,12 @@ CATS = {  # category: words that point to it
     "bills": "bill|bills|electricity|light bill|water bill|internet|wifi|recharge|data pack|phone bill|mobile|ntc|ncell|"
              "subscription|netflix|spotify|youtube premium",
     "rent": "rent|room rent|house rent|kotha|bhada",
-    "shopping": "shopping|clothes|shirt|shoes|pant|jacket|amazon|daraz|bag|watch|gift",
+    "clothes": "clothes|cloth|clothing|shirt|shirts|t-shirt|tshirt|shoes|shoe|pant|pants|jeans|jacket|dress|kurta|"
+               "sari|saree|hoodie|sweater|socks|lugaa|kapada|kapda",
+    "shopping": "shopping|amazon|daraz|bag|watch|gift|cosmetics|perfume",
     "health": "health|medicine|medicines|doctor|hospital|pharmacy|clinic|gym|checkup|dawai|aushadhi",
-    "education": "education|book|books|course|fees|fee|tuition|college|school|exam|stationery|pen|notebook|udemy|class",
+    "education": "education|study|studies|studying|book|books|course|courses|fees|fee|tuition|college|school|university|"
+                 "exam|exams|stationery|pen|notebook|udemy|class|classes|coaching|padhai",
     "fun": "movie|movies|cinema|game|games|party|trip|travel|outing|concert|fun",
     "tech": "laptop|charger|mouse|keyboard|headphone|earphone|phone case|software|domain|hosting|server|cloud|ssd",
 }
@@ -72,6 +75,15 @@ def _amount(text: str) -> float | None:
         if v > 0:
             return v
     return None
+
+
+def resolve_category(word: str) -> str:
+    """'study' -> education, 'cloth' -> clothes, 'eating' -> food; '' when unknown."""
+    w = (word or "").strip().lower()
+    if w in CATS or w in ("income", "other", "total"):
+        return w
+    c = category_of(w)
+    return "" if c == "other" else c
 
 
 def category_of(text: str) -> str:
@@ -209,6 +221,38 @@ def report(period: str = "month", cat: str = "", now: datetime | None = None) ->
     if period == "month" and (lim := _budget(b, "total")):
         line += f" Budget: {total / lim:.0%} used, {money(max(0, lim - total))} left."
     return line
+
+
+def breakdown(period: str = "month", now: datetime | None = None) -> str:
+    """Every category with its share and budget, then the totals (the whole picture of the month/week/year)."""
+    today = (now or datetime.now()).date()
+    m, b, _ = _book()
+    a, z = span(period, today)
+    by = defaultdict(float)
+    for d, v, c, _n in _rows(m):
+        if a <= d <= z:
+            by[c] += v
+    word = PERIOD_WORDS.get(period, period)
+    if not by:
+        return f"No spending {word}."
+    total = sum(by.values())
+    lines = [f"Spending {word}, by category:"]
+    for c in sorted(by, key=lambda c: -by[c]):
+        lim = _budget(b, c) if period == "month" else None
+        lines.append(f"• {c}: {money(by[c])} ({by[c] / total:.0%})"
+                     + (f" — budget {money(lim)}, {by[c] / lim:.0%} used" + (" ⚠️" if by[c] > lim else "") if lim else ""))
+    if period == "month":  # budgets with nothing spent yet
+        for r in b:
+            c = (r.get("category") or "").lower()
+            if c and c != "total" and c not in by and (lim := _budget(b, c)):
+                lines.append(f"• {c}: {money(0)} — budget {money(lim)}, 0% used")
+    lines.append(f"Total: {money(total)}")
+    inc = _sum(m, period, today, kind="income")
+    if inc:
+        lines.append(f"Income: {money(inc)} · saved {money(inc - total)}")
+    if period == "month" and (lim := _budget(b, "total")):
+        lines.append(f"Monthly budget: {money(lim)} · {total / lim:.0%} used · {money(max(0, lim - total))} left")
+    return "\n".join(lines)
 
 
 def _cat_budget_line(m, b, cat, today, period) -> str:

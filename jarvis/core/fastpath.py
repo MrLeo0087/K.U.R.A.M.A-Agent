@@ -1528,7 +1528,7 @@ def tracker_intent(t: str) -> Intent | None:
     if m := re.fullmatch(r"(?:please\s+)?(?:set|make|change|keep)\s+(?:my\s+|the\s+)?(?:monthly\s+)?(?P<c>[a-z]+\s+)?budget(?:\s+for\s+(?P<c2>[a-z]+))?\s+(?:to|at|as)?\s*(?P<a>"
                          + _MONEY_AMT + r")(?:\s+(?:a|per|every)\s+month)?|my\s+(?:monthly\s+)?(?P<c3>[a-z]+\s+)?budget\s+is\s+(?P<a2>" + _MONEY_AMT + r")(?:\s+a\s+month)?", low, I):
         cat = (m.group("c") or m.group("c2") or m.group("c3") or "total").strip()
-        cat = "total" if cat in ("monthly", "total", "whole", "overall", "my") else cat
+        cat = "total" if cat in ("monthly", "total", "whole", "overall", "my") else (ex.resolve_category(cat) or cat)
         return money("budget", category=cat, amount=ex._amount(m.group("a") or m.group("a2")) or 0)
     if m := re.fullmatch(r"set\s+(?:my\s+)?(?:monthly\s+)?budget\s+(?:for\s+)?(?:(?P<c>[a-z]+)\s+)?(?:to\s+)?(?P<a>" + _MONEY_AMT + r")", low, I):
         return money("budget", category=m.group("c") or "total", amount=ex._amount(m.group("a")) or 0)
@@ -1538,13 +1538,16 @@ def tracker_intent(t: str) -> Intent | None:
         return money("delete", text=m.group("n"))
     if re.fullmatch(r"(?:no\W+)?(?:the\s+)?last\s+(?:one|expense|entry)\s+(?:was|is|should\s+be)\s+.+|(?:change|make)\s+(?:the\s+)?last\s+(?:one|expense|entry)\s+(?:to|into)\s+.+", low, I):
         return money("edit", text=t)
+    if re.search(r"\b(?:break\s*down|category[\s-]?wise|by\s+category|each\s+category|every\s+category|all\s+(?:the\s+)?categories|"
+                 r"per\s+category|whole\s+(?:budget|expenses?|spending)|full\s+(?:expense|spending|money)\s+report|where\s+(?:did|does)\s+"
+                 r"(?:my|all\s+my|the)\s+money\s+go)", low) and re.search(r"\b(?:spen[dt]|spending|expenses?|money|budget|kharcha|category|categories)\b", low):
+        return money("breakdown", period=_period(low))
     if re.search(r"\b(?:how\s+much|kati)\b.{0,30}\b(?:spen[dt]|spending|expense|kharcha|खर्च|kharch)", low) or re.fullmatch(
             r"(?:show\s+|give\s+|tell\s+)?(?:me\s+)?(?:my\s+|the\s+)?(?:total\s+)?(?:expense|expenses|spending|money|kharcha)\s+(?:report|summary|total|so\s+far|breakdown)"
             r"(?:\s+(?:for|of)\s+.+|\s+(?:today|yesterday|this\s+\w+|last\s+month))?|(?:monthly|weekly|yearly|daily)\s+(?:expense|spending|money)\s+report", low, I):
-        cat = next((c for c in ex.CATS if re.search(rf"\b(?:on|for)\s+{c}\b|\b{c}\b", low)), "")
-        if not cat and (mm := re.search(r"\bon\s+([a-z]+)", low)):
-            c2 = ex.category_of(mm.group(1))
-            cat = "" if c2 == "other" else c2
+        cat = next((c for c in ex.CATS if re.search(rf"\b{c}\b", low)), "")
+        if not cat and (mm := re.search(r"\b(?:on|for|in|of)\s+(?:my\s+|the\s+)?([a-z]+)", low)):
+            cat = ex.resolve_category(mm.group(1))
         return money("report", period=_period(low), category=cat)
     if re.fullmatch(r"(?:show|list|what\s+are|give\s+me)\s+(?:me\s+)?(?:my\s+|the\s+|all\s+)?(?:expenses|spendings?|transactions)(?:\s+(?:for\s+)?(?:today|yesterday|this\s+\w+|last\s+month))?", low, I):
         return money("list", period=_period(low, "today"))

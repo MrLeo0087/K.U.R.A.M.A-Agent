@@ -51,6 +51,8 @@ COMMANDS: tuple[Cmd, ...] = (
     Cmd("spent", "add an expense", "Day", "<amount> <what>", phrase="|spent {a}", aliases=("expense",)),
     Cmd("money", "spending report", "Day", "[today|week|month|year]",
         phrase="how much did I spend this month|how much did I spend {a}", aliases=("expenses",)),
+    Cmd("spending", "every category + budgets this month", "Day", "[week|month|year]",
+        phrase="spending breakdown by category this month|spending breakdown by category {a}", aliases=("categories",)),
     Cmd("budget", "set the monthly budget", "Day", "<amount> or <category> <amount>", phrase="|set budget {a}"),
     Cmd("habits", "my habits and streaks", "Day", phrase="my habits", aliases=("habit", "streaks")),
     Cmd("done", "check in a habit", "Day", "<habit>", phrase="|{a} done"),

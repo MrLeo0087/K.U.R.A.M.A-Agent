@@ -9,7 +9,7 @@ def test_expenses_add_report_budget_edit(monkeypatch):
     assert "Rs 500 for food" in ex.add("spent 500 on momo", NOW)
     assert "yesterday" in ex.add("paid 1,500 for internet bill yesterday", NOW)
     assert ex.add("got 20000 salary", NOW).startswith("Added income Rs 20,000")
-    assert "shopping" in ex.add("spent 2k on shoes", NOW)
+    assert "clothes" in ex.add("spent 2k on shoes", NOW)
     assert ex.add("bought nothing", NOW).startswith("How much")
     rep = ex.report("month", now=NOW)
     assert "Rs 4,000 this month" in rep and "Income Rs 20,000, saved Rs 16,000" in rep
@@ -21,7 +21,7 @@ def test_expenses_add_report_budget_edit(monkeypatch):
     assert "Deleted Rs 450" in ex.delete("last")
     assert "4." in ex.list_text("month", NOW)
     d = ex.dashboard(NOW)
-    assert d["month"] == 4000 and d["top"][0]["cat"] == "shopping" and len(d["last7"]) == 7
+    assert d["month"] == 4000 and d["top"][0]["cat"] == "clothes" and len(d["last7"]) == 7
 
 
 def test_bills_remind_once_and_pay(monkeypatch):
@@ -87,3 +87,20 @@ def test_brief_once_a_day_and_watch(monkeypatch):
     monkeypatch.setattr(config, "BRIEF", False)
     store.kv_set(brief.DONE_KEY, "")
     assert brief.deliver("unlock", NOW) is None
+
+
+def test_categories_synonyms_and_breakdown():
+    for t in ("spent 500 on momo", "spent 1200 on a shirt", "paid 3000 college fees", "got 30000 salary"):
+        ex.add(t, NOW)
+    ex.set_budget("education", 5000)
+    ex.set_budget("total", 20000)
+    assert ex.resolve_category("study") == "education" and ex.resolve_category("cloth") == "clothes"
+    assert "Rs 3,000 on education" in ex.report("month", "education", NOW)
+    b = ex.breakdown("month", NOW)
+    assert "• education: Rs 3,000" in b and "budget Rs 5,000, 60% used" in b and "• clothes: Rs 1,200" in b
+    assert "Total: Rs 4,700" in b and "Monthly budget: Rs 20,000" in b and "saved Rs 25,300" in b
+    m = fastpath.match
+    assert m("how much did I spend in study this month").args["category"] == "education"
+    assert m("how much I spend on cloth this month").args["category"] == "clothes"
+    assert m("show me the whole budget and expense").args == {"action": "breakdown", "period": "month"}
+    assert m("set my study budget to 6000").args["category"] == "education"
