@@ -57,3 +57,52 @@ def test_routes():
     assert fastpath.match("/def save_note").args["name"] == "save_note"
     assert fastpath.match("explain this function").tool == "text_assist"
     assert fastpath.match("find the file report.pdf").tool == "find_files"
+
+
+def _helpproj(tmp_path):
+    from pathlib import Path  # noqa: F401
+    (tmp_path / "util.py").write_text(
+        "def add(a, b, *, scale=1):\n    '''Add two numbers.\n\n    Args:\n        a (int): first.\n        b (int): second.\n"
+        "        scale: multiply by this.\n    '''\n    return (a + b) * scale\n")
+    main = tmp_path / "main.py"
+    main.write_text("import json\nfrom util import add\n")
+    return main
+
+
+def test_libhelp_checks_the_call_0_tokens(tmp_path, monkeypatch):
+    from jarvis.core import assist, libhelp
+    monkeypatch.setattr(assist, "_llm", lambda *a, **k: (_ for _ in ()).throw(AssertionError("no LLM")))
+    main = _helpproj(tmp_path)
+    out = libhelp.help_for("print('a', sepp='')", "", tmp_path, main)
+    assert "builtins.print" in out and "Did you mean `sep`?" in out
+    out = libhelp.help_for("json.dumps(x, indnt=2)", "", tmp_path, main)
+    assert "json.dumps" in out and "Did you mean `indent`?" in out
+    assert "✅" in libhelp.help_for("json.dumps(x, indent=2)", "is this correct", tmp_path, main)
+    out = libhelp.help_for("add(1)", "", tmp_path, main)  # project function: read from source, nothing imported
+    assert "Missing a required argument: 'b'" in out and "Required: a, b" in out and "`b`: second." in out
+    assert "✅" in libhelp.help_for("total = add(1, 2, scale=3)", "", tmp_path, main)
+
+
+def test_libhelp_suggest_and_unresolved_use_one_small_call(tmp_path, monkeypatch):
+    from jarvis.core import assist, libhelp
+    calls = []
+    monkeypatch.setattr(assist, "_llm", lambda system, user, **k: calls.append((user, k)) or "Use indent=2.")
+    main = _helpproj(tmp_path)
+    out = libhelp.help_for("json.dumps(x)", "suggest a better way", tmp_path, main)
+    assert out.endswith("Use indent=2.") and "Real signature of json.dumps" in calls[0][0] and not calls[0][1]["smart"]
+    assert libhelp.help_for("df.groupby('a').sum()", "", tmp_path, main) == "Use indent=2." and len(calls) == 2
+
+
+def test_param_docs_numpy_style():
+    from jarvis.core import libhelp
+    doc = "Read a file.\n\nParameters\n----------\nsep : str, default ','\n    The separator.\nheader : int\n    Row number.\n"
+    assert libhelp.param_docs(doc) == {"sep": "str, default ',' — The separator.", "header": "int — Row number."}
+
+
+def test_libhelp_routes():
+    for s in ("help me with this library", "what arguments does this function take", "is this correct syntax",
+              "did I use this function correctly", "/args"):
+        i = fastpath.match(s)
+        assert i and i.tool == "code_nav" and i.args["action"] == "help", s
+    assert fastpath.match("/args json.dumps").args["name"] == "json.dumps"
+    assert fastpath.match("how can I use this function").args["action"] == "use"

@@ -1445,11 +1445,32 @@ def code_tidy_intent(t: str) -> Intent | None:
 _NAV_OBJ = r"(?:function|func|method|class|definition|def|code|implementation|source)"
 
 
+def libhelp_ask(t: str) -> bool:
+    """'help me with this library', 'what arguments does this take', 'is this correct syntax', 'did I use this
+    function right', 'suggest a better way to call this' (about the highlighted code)."""
+    sel = r"(?:this|that|the\s+selected|selected|highlighted|my|it)"
+    return bool(re.search(
+        r"\bhelp\s+(?:me\s+)?(?:with\s+)?" + sel + r"\s+(?:library|module|package|function|method|call|syntax|api)\b|"
+        r"\bwhat\s+(?:are\s+the\s+|all\s+)?(?:arguments?|args|parameters?|params|options|inputs)\s+(?:does|do|of|for|in|can|this|that|it)\b|"
+        r"\b(?:arguments?|args|parameters?|params)\s+(?:of|for)\s+" + sel + r"\b|"
+        r"\bwhich\s+(?:arguments?|parameters?)\b|"
+        r"\bis\s+(?:this|that|my|it)\s+(?:the\s+)?(?:correct|right|valid|proper|good)\s+(?:syntax|way|call|usage|code)\b|"
+        r"\bis\s+(?:this|that|my|the)\s+(?:syntax|call|usage|function\s+call|code\s+line|line)\s+(?:correct|right|valid|ok|okay|fine)\b|"
+        r"\b(?:did|am)\s+i\s+(?:use|using|call|calling|write|writing)\s+(?:this|that|it)\s+(?:function\s+|library\s+|method\s+)?"
+        r"(?:correctly|right|properly|the\s+right\s+way)\b|"
+        r"\b(?:suggest|show)\s+(?:me\s+)?(?:a\s+)?(?:better|correct|right)\s+(?:way|syntax|call)\s+(?:to\s+(?:use|call|write)\s+)?" + sel + r"\b", t, I)) \
+        and not re.search(r"\b(?:command|terminal|cli|website|app|telegram|kurama)\b", t, I)
+
+
 def codenav_intent(t: str) -> Intent | None:
     """'find this function' / 'go to definition' / 'take me to this function's code' / 'where is this function defined'
     / 'show me the real code of calc_total' / '/def calc_total' -> code_nav (opens it in VS Code, 0 tokens)."""
     if m := re.fullmatch(r"/(?:def|definition|goto|go|fn|func)(?:\s+(?P<n>[\w.]+))?", t, I):
         return Intent("codenav", "code_nav", "codequality", {"action": "find", "name": m.group("n") or ""})
+    if m := re.fullmatch(r"/(?:args|lib|libhelp|syntax|params)(?:\s+(?P<n>.+))?", t, I):
+        return Intent("codenav", "code_nav", "codequality", {"action": "help", "name": (m.group("n") or "").strip(), "request": ""})
+    if len(t.split()) <= 30 and libhelp_ask(t):
+        return Intent("codenav", "code_nav", "codequality", {"action": "help", "name": "", "request": t})
     if len(t.split()) > 18:
         return None
     sel = r"(?:this|that|the\s+selected|selected|highlighted|the\s+highlighted|my\s+selected)"
