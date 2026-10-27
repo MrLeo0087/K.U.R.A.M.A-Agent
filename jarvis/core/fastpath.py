@@ -799,6 +799,32 @@ _DETAIL = re.compile(r",?\s*\b(?:in\s+)?(?:high\s+quality|hq|hd|ultra\s+detailed
                      r"better\s+quality)\b", I)
 
 
+def diagram_intent(t: str) -> Intent | None:
+    """'make a diagram of this project' / 'diagram of the kurama project' / 'flowchart: login, check password, open
+    the dashboard' / 'diagram of this code' / '/diagram' / '/flow steps' -> make_diagram (0 tokens)."""
+    def d(kind, target=""):
+        return Intent("diagram", "make_diagram", "image", {"kind": kind, "target": target})
+    if m := re.fullmatch(r"/(?:diagram|flow|flowchart|callgraph)(?:\s+(?P<a>.+))?", t, I):
+        cmd = t.split()[0].lower()
+        return d("flow" if cmd.startswith("/flow") else "code" if cmd == "/callgraph" else "project", (m.group("a") or "").strip())
+    if not re.search(r"\b(?:diagram|flow\s*chart|flow\s+diagram|mind\s*map|call\s+graph|architecture\s+(?:picture|diagram))\b", t, I) \
+            or len(t.split()) > 60 or re.search(r"\bwhat\s+is\s+an?\b", t, I):
+        return None
+    if m := re.search(r"\b(?:flow\s*chart|flow\s+diagram|diagram)\s*(?:of|for|showing)?\s*(?:these|the|my|this)?\s*(?:steps|process|flow)?\s*[:\-]\s*(?P<s>.+)", t, I):
+        return d("flow", m.group("s"))
+    if m := re.search(r"\b(?:flow\s*chart|flow\s+diagram)\s+(?:of|for)\s+(?P<s>.+(?:,|->|→|\bthen\b).+)", t, I):
+        return d("flow", m.group("s"))
+    if re.search(r"\b(?:this|my|the)\s+(?:code|file|script|module)\b|\bcall\s+graph\b|\bfunctions?\b", t, I):
+        p = re.search(r"([\w./~-]+\.py)\b", t)
+        return d("code", p.group(1) if p else "")
+    if m := re.search(r"\bproject\s+(?:at|in)\s+(?P<p>(?:~|/)\S+)|\b(?:the\s+|my\s+)(?P<n>[\w-]+)\s+project\b|(?P<q>(?:~|/)\S+)", t, I):
+        tgt = m.group("p") or m.group("q") or ("" if (m.group("n") or "").lower() in ("this", "current", "whole") else m.group("n") or "")
+        return d("project", tgt or "")
+    if re.search(r"\b(?:project|repo|repository|readme|app)\b", t, I):
+        return d("project")
+    return None
+
+
 def chart_intent(t: str) -> Intent | None:
     """'chart my expenses (this week)', 'pie chart of my spending', 'make a chart from sales.csv', 'draw a graph of
     population by district from https://...', '/chart <file|link>' -> make_chart (0 tokens to route)."""
@@ -2720,6 +2746,8 @@ def match(text: str) -> Intent | None:
         return po
     if cr := coderun_intent(t):
         return cr
+    if dg := diagram_intent(t):
+        return dg
     if ch := chart_intent(t):  # before the money words: 'chart my expenses' is a chart
         return ch
     if tr := tracker_intent(t):

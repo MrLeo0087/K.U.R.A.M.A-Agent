@@ -101,6 +101,11 @@ COMMANDS: tuple[Cmd, ...] = (
     Cmd("image", "make a picture", "Media", "<prompt>", phrase="generate an image of {a}", aliases=("img",)),
     Cmd("chart", "charts of my spending, a file or a data link", "Media", "[file|link]",
         phrase="chart my expenses this month|make a chart from {a}", aliases=("graph",)),
+    Cmd("diagram", "diagram of the VS Code project (from its README)", "Code", "[project]",
+        tool=("make_diagram", "image", {"kind": "project"}, "target")),
+    Cmd("flow", "flowchart of steps", "Code", "<step, step, step>", tool=("make_diagram", "image", {"kind": "flow"}, "target"),
+        aliases=("flowchart",)),
+    Cmd("callgraph", "who calls whom in the open Python file", "Code", tool=("make_diagram", "image", {"kind": "code"}, "target")),
     Cmd("download", "download a video / audio", "Media", "<link>", phrase="download this video|download {a}",
         aliases=("dl",)),
     # --- web & text ---
