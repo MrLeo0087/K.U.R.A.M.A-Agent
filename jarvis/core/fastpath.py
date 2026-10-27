@@ -464,6 +464,12 @@ SWITCHES = [  # (intent name, tool, group, args, patterns); first full match win
         r"(?:start|continue|keep) playing(?: it)?", r"play it(?: again| now)?", r"play(?: the| this| that)? (?:video|movie)(?: again| now)?",
         r"(?:music|song|video|movie)[\s.,]+(?:play|resume|continue)",
         _VID_NE + r" (?:chalau|chalaa|chalao|chalu gara|play gara|चलाउ|चलाऊ|चलाओ|चलाइदेउ|फेरि चलाउ)")),
+    ("media", "media_control", "media", {"action": "pause"}, _rx(  # slash forms (desktop + Telegram), 0 tokens
+        r"/(?:pause|stop[-_]?video|hold)(?:\s+(?:the\s+)?(?:video|music|song|it))?")),
+    ("media", "media_control", "media", {"action": "play"}, _rx(
+        r"/(?:play|resume|continue|unpause)(?:\s+(?:the\s+)?(?:video|music|song|it))?")),
+    ("media", "media_control", "media", {"action": "next"}, _rx(r"/(?:next|skip)(?:\s+(?:video|song|track))?")),
+    ("media", "media_control", "media", {"action": "previous"}, _rx(r"/(?:prev|previous|back)(?:\s+(?:video|song|track))?")),
     ("media", "media_control", "media", {"action": "next"}, _rx(
         r"(?:play |go to |skip to )?(?:the )?next " + _SONG, r"skip(?: this| the)? " + _SONG,
         r"(?:agla|agla wala|arko|aarko|अगला|अर्को) " + _SONG_HI)),

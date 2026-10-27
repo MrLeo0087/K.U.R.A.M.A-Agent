@@ -73,6 +73,10 @@ def youtube(query: str = "", action: Literal["play", "search", "pause", "next", 
         return {"pause": "Toggled play/pause on YouTube.", "next": "Next video on YouTube.",
                 "fullscreen": "Toggled YouTube full screen."}[action]
     query = query.strip()
+    if not query and action == "play":  # 'play' with nothing named = resume what's already there, not a new tab
+        from jarvis.tools.general import media_control as mc
+        if mc.status() is not None:
+            return mc.media_control("play")
     if not query:
         open_url._open("https://www.youtube.com")
         return "Opened YouTube."

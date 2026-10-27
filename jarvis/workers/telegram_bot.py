@@ -46,6 +46,10 @@ HELP = (
     "copy: <text> — put text on the laptop's clipboard\n"
     "/clip — get the laptop's clipboard\n"
     "Send a file/photo — saved on the laptop (caption 'to <folder>' picks the folder)\n"
+    "\n🎬 Video & music (on the laptop)\n"
+    "/play — play / continue the video or song\n"
+    "/pause — pause it\n"
+    "/next · /prev — next / previous track\n"
     "\n🖥 Remote desktop\n"
     "/control — turn on RustDesk (password works 15 min)\n"
     "/control off — kill the password now\n"
@@ -65,7 +69,7 @@ MENU = (("list", "all commands"), ("status", "what the laptop is doing"), ("batt
         ("ram", "RAM / CPU / disk"), ("screen", "screenshot"), ("camera", "camera photo"), ("where", "laptop location"),
         ("mute", "pause alerts: /mute ram 20"), ("unmute", "turn alerts back on"), ("notifications", "which alerts are on / paused"),
         ("guard", "anti-theft on/off"), ("track", "lost mode on/off"), ("clip", "laptop clipboard"),
-        ("jobs", "background jobs"), ("control", "remote desktop"), ("lock", "block risky actions"),
+        ("jobs", "background jobs"), ("play", "play / continue the video"), ("pause", "pause the video"), ("control", "remote desktop"), ("lock", "block risky actions"),
         ("stop", "stop a stuck task"), ("clearchat", "clear this chat"))
 # the same commands in plain words (0 tokens): "what is my notification status" = /notifications ...
 _W = r"^\s*(?:please\s+|kurama\W+|can\s+you\s+|hey\s+)*"

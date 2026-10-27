@@ -345,6 +345,10 @@ POSITIVE = {
     "play the video": ("media_control", {"action": "play"}),
     "keep playing": ("media_control", {"action": "play"}),
     "भिडियो चलाउ": ("media_control", {"action": "play"}),
+    "/play": ("media_control", {"action": "play"}),  # Telegram: '/play' had opened YouTube
+    "/pause video": ("media_control", {"action": "pause"}),
+    "/continue": ("media_control", {"action": "play"}),
+    "/next": ("media_control", {"action": "next"}),
     "अगला गाना": ("media_control", {"action": "next"}),
     "brightness up": ("brightness", {"action": "up"}),
     "brightness down": ("brightness", {"action": "down"}),
@@ -437,3 +441,14 @@ def test_media_pause_hits_every_player_and_no_player_is_explained(desk):
     out = media_control("play")
     assert fastpath.render(fastpath.Intent("media", "media_control", "media", {"action": "play"}, "media"),
                            True, out, "en").startswith("Nothing is playing")
+
+
+def test_youtube_play_without_name_resumes_instead_of_new_tab(desk, monkeypatch):
+    from jarvis.tools.general import open_url
+    from jarvis.tools.general.youtube import youtube
+    opened = []
+    monkeypatch.setattr(open_url, "_open", opened.append)
+    desk.player = "Paused"
+    assert youtube(action="play") == "playing" and not opened
+    desk.player = None
+    assert youtube(action="play") == "Opened YouTube." and opened
