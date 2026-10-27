@@ -1364,6 +1364,7 @@ function renderNow(items, classes) {
   const n = items.length, first = items[0], nextChip = chips.find((c) => c.next || c.at) || chips[0];
   $("today-count").textContent = n ? `${n} running` : chips.length ? `${chips.length} today` : "all quiet";
   if (!n && !chips.length) ul.innerHTML = '<li class="empty">Nothing running right now.</li>';
+  $("today").classList.toggle("quiet", !n && !chips.length); // nothing to show: just the title line (room for the other cards)
 }
 // Money & habits card: today / month (+ budget), 7-day bars, top categories, habits with their week and a ✓ button
 function renderTracker(t) {
@@ -1391,6 +1392,7 @@ function renderTracker(t) {
   const done = hs.filter((h) => h.done).length;
   $("track-pill").textContent = hs.length ? `habits ${done}/${hs.length}` : "";
   const ul = $("habit-list");
+  $("track").classList.toggle("empty-track", !hs.length && !m.month && !(m.recent || []).length);
   if (!hs.length && !m.month) {
     ul.innerHTML = `<li class="empty">Say “spent 500 on food” or “add a habit: drink water 8 glasses a day”.</li>`;
     return;
