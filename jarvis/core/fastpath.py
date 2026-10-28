@@ -1491,6 +1491,9 @@ def fresh_intent(t: str) -> Intent | None:
     return Intent("live", "live_search", "web", {"query": t, "kind": "auto"})
 
 
+_LIVE_SPORT_MIX = re.compile(r"\b(?:match|game|khel|score|result|natija|नतिजा)\b", I)
+_MIX_ASK = re.compile(r"\b(?:k|ke|kya|kasto|kesto|kati)\s+(?:vayo|bhayo|bhaye|hua|huwa|cha|xa)\b|\b(?:jityo|haryo|jita|hara)\b|"
+                      r"\b(?:aja|aaja|aaj|hijo|kal)\b.*\b(?:ko|ka|ki)\b", I)
 _NOT_TEAM = re.compile(r"^(?:my|the|this|that|it|your|our|test|tests|training|model|exam|search|regex|file|files|"
                        r"find|open|close|install|launch|start|run|compare|best|perfect|exact|a|an|pattern|string|"
                        r"build|code|job|jobs|download|backup|query)\b", I)
@@ -2089,6 +2092,19 @@ def everyday_intent(t: str) -> Intent | None:
     return None
 
 
+_WS_READ = re.compile(r"\b(?:summar\w*|sumar\w*|sumamr\w*|read|what|result|tell|says?|explain|answer|check|k\s+cha|ke\s+hai|kya\s+hai)\b", I)
+_WS_NOT = re.compile(r"\b(?:audio|mp3|speech|launch|open|start|create|switch|coding|study|close)\b", I)
+
+
+def workspace_read_intent(t: str) -> Intent | None:
+    """'from workspace, give me summary .. what is result' / 'what does the workspace say' / 'read the previous
+    workspace item' -> read_workspace; a short item is answered straight away, a long one goes to the LLM."""
+    if not re.search(r"\bwork\s?space\b", t, I) or not _WS_READ.search(t) or _WS_NOT.search(t):
+        return None
+    item = 2 if re.search(r"\b(?:previous|before|second|earlier|older)\b", t, I) else 1
+    return Intent("wsread", "read_workspace", "self", {"item": item})
+
+
 def live_intent(t: str) -> Intent | None:
     """'what is the result of today inter miami match', 'barcelona score', 'did real madrid win', 'news about Nepal'."""
     if _LIVE_PRICE.match(t) and not re.search(r"\b(?:my|your|this|that|ticket|plan|interest)\b|\d+(?:\.\d+)?\s*"
@@ -2102,6 +2118,11 @@ def live_intent(t: str) -> Intent | None:
     for rx in _LIVE_SPORT:
         if (m := rx.match(t)) and (team := m.group("t").strip(" ,?")) and not _NOT_TEAM.match(team) \
                 and len(team.split()) <= 6:
+            return Intent("live", "live_search", "web", {"query": t, "kind": "sports"})
+    if _LIVE_SPORT_MIX.search(t) and _MIX_ASK.search(t):  # 'aja arsenal ko match ko result k vayo'
+        from jarvis.core import live
+        team = live.team_query(t)
+        if team and len(team.split()) <= 3 and not _NOT_TEAM.match(team):
             return Intent("live", "live_search", "web", {"query": t, "kind": "sports"})
     return None
 
@@ -2908,6 +2929,8 @@ def match(text: str) -> Intent | None:
         return sl
     if si := _self_intent(t):
         return si
+    if wr := workspace_read_intent(t):
+        return wr
     from jarvis.core import templates
     if ans := templates.match(t):  # small talk + setup guides: a ready answer, 0 tokens
         return Intent("say", "_say", "self", ans)
@@ -3324,13 +3347,24 @@ def try_answer(text: str, lang: str | None = None, confirm=None, mode: str = "te
     if m := re.match(r"Still working after \d+ s, so this keeps running in the background as job #(\d+)", output or ""):
         answer = safety.BACKGROUND_SAID.format(id=m.group(1))  # that note is for the AI; the user gets a sentence
         return FastResult(answer, intent, ok, int((time.monotonic() - t0) * 1000), [], started)
+    direct = False  # a short answer that belongs in the chat, never the workspace
+    if ok and intent.name == "wsread":
+        from jarvis.core import workspace
+        b = workspace.brief(output.partition("\n")[2])
+        if b is None:
+            return None  # long item: the LLM path reads it (read_workspace) and summarizes
+        output, direct = b, True
     answer = render(intent, ok, output, lang or "en")
+    if ok and intent.name == "live" and intent.args.get("kind") != "news":
+        from jarvis.core import workspace  # scores, prices: the answer itself in the chat, not "it's in the workspace"
+        if b := workspace.brief(answer):
+            answer, direct = b, True
     published = [intent.args.pop("_published")] if "_published" in intent.args else []
     if published and ok:
         from jarvis.core import workspace  # the tool already saved the full text: one short line in the chat
         if workspace.too_long(answer):
             answer = workspace.short_line(answer, lang or "en")
-    if ok and not published and not intent.tool.startswith("_") and (ctx or {}).get("channel") != "telegram":
+    if ok and not direct and not published and not intent.tool.startswith("_") and (ctx or {}).get("channel") != "telegram":
         from jarvis.core import workspace  # long answers: one line in the chat, the full text in the workspace
         answer, path = workspace.to_workspace(intent.label or text[:60] or intent.name, answer, lang or "en")
         if path is not None:

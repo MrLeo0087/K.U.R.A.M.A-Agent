@@ -125,6 +125,17 @@ TEXT_ONLY = "Sorry, I can't use that kind of message."
 PICK = re.compile(r"^\s*(?:send\s+)?(?:(?:no\.?|number|file)\s*)?(\d{1,2}|all|both)\s*[.!]?\s*$", re.I)
 
 
+# instant commands: answered at once, even while a slow reply (an AI turn, a confirm) is still running
+FAST_CMDS = ("/screen", "/clip", "/camera", "/photo", "/where", "/locate", "/find", "/status", "/jobs", "/stop")
+
+
+def is_fast(text: str) -> bool:
+    t = (text or "").strip()
+    if not t.startswith("/"):
+        t = natural_command(t) or ""
+    return t.split()[0].split("@")[0].lower() in FAST_CMDS if t.startswith("/") else False
+
+
 class TelegramBot(Worker):
     name = "telegram_bot"
     interval_s = 5.0
@@ -187,7 +198,28 @@ class TelegramBot(Worker):
             if stop.wait(4):  # Telegram clears "typing…" after ~5 s, so refresh a little sooner
                 break
 
-    def reply_with_typing(self, text: str, reply: dict | None = None) -> str:
+    def _watch_while(self, worker: threading.Thread, deadline: float) -> None:
+        """While a slow reply runs, keep reading the chat: /screen, /stop... are answered at once, everything else
+        waits in the backlog. Never polls while confirm() is waiting for its yes/no (it holds the lock)."""
+        while worker.is_alive() and time.monotonic() < deadline and not self.stopping:
+            if not self._confirm_lock.acquire(blocking=False):
+                worker.join(0.5)
+                continue
+            try:
+                updates = self.poll(timeout=1)
+            except RuntimeError:
+                updates = []
+            finally:
+                self._confirm_lock.release()
+            for u in updates:
+                msg = self._own_message(u)
+                if msg is not None and is_fast(msg.get("text") or ""):
+                    self.handle(u, watch=False)
+                else:
+                    self._backlog.append(u)
+            worker.join(0.05)
+
+    def reply_with_typing(self, text: str, reply: dict | None = None, watch: bool = True) -> str:
         """Answer `text` while "typing…" shows, but never hang forever: a reply that takes longer than
         config.TELEGRAM_ANSWER_TIMEOUT_S is given up on (so "typing…" can't run for an hour)."""
         stop = threading.Event()
@@ -203,7 +235,9 @@ class TelegramBot(Worker):
 
         worker = threading.Thread(target=run, name="tg-answer", daemon=True)
         worker.start()
-        worker.join(config.TELEGRAM_ANSWER_TIMEOUT_S)
+        if watch:
+            self._watch_while(worker, time.monotonic() + config.TELEGRAM_ANSWER_TIMEOUT_S)
+        worker.join(config.TELEGRAM_ANSWER_TIMEOUT_S if not watch else 0.1)
         stop.set()
         if worker.is_alive():  # still running after the timeout: don't wait, tell the user
             try:
@@ -260,10 +294,12 @@ class TelegramBot(Worker):
                 break
             self.handle(u)
 
-    def handle(self, update: dict) -> None:
+    def handle(self, update: dict, watch: bool = True) -> None:
         msg = self._own_message(update)
         if msg is None:
             return
+        if (lag := time.time() - int(msg.get("date") or time.time())) > 5:
+            self.log.info("message picked up %.0f s after it was sent", lag)
         if msg.get("location"):  # a shared pin or a live-location update from the phone -> the phone's trail
             from jarvis.core import locationlog
             loc = msg["location"]
@@ -307,7 +343,7 @@ class TelegramBot(Worker):
             if telesec.verify_pin(text.strip().lstrip("/")):
                 pending, self._pending_risky = self._pending_risky, None
                 self.send("PIN accepted.")
-                self.send(self.reply_with_typing(pending))
+                self.send(self.reply_with_typing(pending, watch=watch))
             else:
                 self.send("Wrong PIN. The action was not run.")
             return
@@ -319,7 +355,7 @@ class TelegramBot(Worker):
             self._pending_risky = text  # the next PIN runs it
             self.send(gated)
             return
-        self.send(self.reply_with_typing(text, msg.get("reply_to_message")))
+        self.send(self.reply_with_typing(text, msg.get("reply_to_message"), watch=watch))
 
     @staticmethod
     def quoted(reply: dict | None) -> str:

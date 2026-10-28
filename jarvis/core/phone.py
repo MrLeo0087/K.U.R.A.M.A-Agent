@@ -4,12 +4,15 @@ laptop comes back on request.
 """
 from __future__ import annotations
 
+import logging
 import re
 import subprocess
 import time
 from pathlib import Path
 
 from jarvis.core import config, notify
+
+log = logging.getLogger("jarvis.phone")
 
 FILE_URL = "https://api.telegram.org/file/bot{token}/{path}"
 # "copy: some text" / "copy this: ..." from the phone puts the text on the laptop's clipboard
@@ -177,6 +180,22 @@ def resend_last() -> str:
     return out
 
 
+def small_jpeg(png: Path, width: int = 1600) -> Path:
+    """A phone-sized JPEG next to the PNG (a few times smaller: uploads and opens much faster); the PNG on failure."""
+    try:
+        from PIL import Image
+        out = png.with_suffix(".jpg")
+        with Image.open(png) as im:
+            im = im.convert("RGB")
+            if im.width > width:
+                im = im.resize((width, round(im.height * width / im.width)))
+            im.save(out, "JPEG", quality=80, optimize=True)
+        return out
+    except Exception as e:  # noqa: BLE001 - Pillow missing or a bad file: send the PNG
+        log.warning("screenshot jpeg failed: %s", e)
+        return png
+
+
 def screenshot_to_phone() -> str:
     from jarvis.tools.general.screenshot import screenshot
     from jarvis.tools.general.send_file_telegram import deliver
@@ -184,7 +203,7 @@ def screenshot_to_phone() -> str:
     m = re.search(r"(/\S+\.png)", out)
     if not m:
         return out
-    r = deliver(Path(m.group(1)), f"Your laptop screen at {time.strftime('%H:%M')}")
+    r = deliver(small_jpeg(Path(m.group(1))), f"Your laptop screen at {time.strftime('%H:%M')}")
     if not r.startswith("error"):
         remember_sent(m.group(1))
     return r

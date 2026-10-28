@@ -27,7 +27,12 @@ _STOP = re.compile(r"\b(?:what(?:'s| is| was)?|who|did|does|do|is|was|the|a|an|o
                    r"yesterday'?s?|last|latest|recent|current|live|now|right|score|scores|result|results|match|matches|"
                    r"game|games|fixture|fixtures|next|upcoming|when|won|win|wins|lose|lost|play|playing|plays|"
                    r"tell|me|give|show|check|update|final|full|time|ft|vs|versus|against|between|and|how|team|"
-                   r"football|soccer|basketball|cricket|kick ?off|schedule|please|kurama|happened|goal|goals)\b", re.I)
+                   r"football|soccer|basketball|cricket|kick ?off|schedule|please|kurama|happened|goal|goals|"
+                   # Roman Nepali / Hindi fillers: 'aja arsenal ko match ko result k vayo'
+                   r"aja|aaja|aaj|aj|hijo|kal|ko|ka|ki|ke|k|kya|kasto|kesto|vayo|bhayo|bhaye|hua|huwa|tyo|yo|ma|ni|"
+                   r"hai|ho|cha|xa|thiyo|kun|jityo|haryo|jita|hara|khel|kheleko|khela|"
+                   r"jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|"
+                   r"oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|\d{1,4}(?:st|nd|rd|th)?)\b", re.I)
 
 
 def _cached(key: tuple, ttl: float, fn):

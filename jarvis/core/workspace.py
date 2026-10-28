@@ -163,3 +163,42 @@ def offer(name: str, text: str) -> str:
     if not phone:
         shelf.append(str(path.relative_to(Path(config.OUTPUTS_DIR))))  # the dashboard opens it in the Workspace
     return NOTES[("phone" if phone else "dash", full)].format(n=len(text.splitlines()))
+
+
+# --- reading the workspace back: 'from the workspace, what is the result?' ----------------------------------------
+def items(n: int = 8) -> list[Path]:
+    """The newest saved results (answers/ + results/), newest first: what the Workspace card shows."""
+    root = Path(config.OUTPUTS_DIR)
+    files = [p for d in ("answers", "results") if (root / d).is_dir() for p in (root / d).glob("*.md")]
+    return sorted(files, key=lambda p: p.stat().st_mtime, reverse=True)[:n]
+
+
+def read(index: int = 1) -> tuple[str, str] | None:
+    """(title, body) of the index-th newest workspace item (1 = the latest), or None."""
+    files = items(max(1, index))
+    if len(files) < index:
+        return None
+    try:
+        text = files[index - 1].read_text(encoding="utf-8", errors="replace").strip()
+    except OSError:
+        return None
+    first, _, body = text.partition("\n")
+    if first.startswith("# "):
+        return first[2:].strip(), body.strip()
+    return files[index - 1].stem, text
+
+
+def brief(text: str, limit: int | None = None) -> str | None:
+    """A short multi-line result as one chat paragraph ('Arsenal: Last result: X 1-1 Arsenal. Next: ...'), or None
+    when it is too long for the chat (then it stays in the workspace)."""
+    lines = [ln.strip(" -*•#") for ln in (text or "").strip().splitlines() if ln.strip(" -*•#")]
+    if not lines:
+        return None
+    src = [ln for ln in lines if re.match(r"^\(?sources?:", ln, re.I)]
+    lines = [ln for ln in lines if ln not in src]
+    if len(lines) > 1 and lines[0].endswith(":"):  # 'Arsenal (ESPN, live data as of 4:34 PM):' -> 'Arsenal:'
+        lines[0] = re.sub(r"\s*\([^)]*\)\s*:$", ":", lines[0])
+    out = " ".join(ln if ln.endswith(":") or re.search(r"[.!?।]$", ln) else ln + "." for ln in lines)
+    if src:
+        out += "\n" + src[0]
+    return out if len(out) <= (limit or config.LIVE_CHAT_MAX_CHARS) else None

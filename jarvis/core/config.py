@@ -243,6 +243,7 @@ OCR_VISION = os.getenv("KURAMA_OCR_VISION", "1").lower() not in ("0", "false", "
 # a dashboard answer longer than this goes to the workspace in full; the chat gets one short line
 CHAT_MAX_CHARS = int(os.getenv("KURAMA_CHAT_MAX_CHARS", "380"))
 CHAT_MAX_LINES = int(os.getenv("KURAMA_CHAT_MAX_LINES", "3"))
+LIVE_CHAT_MAX_CHARS = 600  # live answers (scores, prices) up to this many chars stay in the chat
 WORKSPACE_MIN_LINES = 40  # only big results go to the Workspace (simple answers stay in the chat)
 WORKSPACE_MIN_CHARS = 4000
 WORKSPACE_SHOW_ALL = ("list_folder", "training")  # results the user wants to see in full, to pick from
@@ -447,7 +448,8 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
              "stuck", "don't know how", "dont know how", "no idea", "guide me", "what should i do", "how do i",
              "how can i", "suggest", "your data", "you store", "you save", "your output", "your memory",
              "your limitation", "your limits", "how do you work", "your architecture", "how are you built",
-             "change your name", "call yourself", "your password", "आफ्नो बारेमा", "तिम्रो नाम", "तुम्हारा नाम"),
+             "change your name", "call yourself", "your password", "from workspace", "from the workspace",
+             "in workspace", "in the workspace", "on the workspace", "workspace ma", "workspace me", "आफ्नो बारेमा", "तिम्रो नाम", "तुम्हारा नाम"),
     "study": ("note for", "study note", "my notes", "notes from", "record the lecture", "record this lecture",
               "record the class", "record this class", "lecture", "transcript", "stop the recording", "stop recording",
               "timetable", "time table", "class schedule", "next class", "my classes", "quiz", "flashcard", "revise"),
@@ -628,7 +630,7 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
     "daily": "file format conversion (pdf, md, images, audio/video, tables), calculator, unit and currency conversion, disk space cleaner (ML caches, old checkpoints, old venvs, "
              "duplicates, trash)",
     "self": "about the assistant itself (abilities, outputs/data locations, limits, how it works), which tool "
-            "fits a task, guidance when the user is stuck, change the assistant's name",
+            "fits a task, guidance when the user is stuck, change the assistant's name, read the workspace",
 }
 # Tiny glosses for the request_tools meta-tool (sent on every unmatched turn, so each word costs):
 # "" = the group name says it all.
