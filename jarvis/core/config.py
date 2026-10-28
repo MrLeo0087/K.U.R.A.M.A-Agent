@@ -91,6 +91,7 @@ TYPO_FIXES: dict[str, str] = {
     "foler": "folder", "fodler": "folder", "folde": "folder", "summarise": "summarize",
 }
 STT_FIXES: dict[str, str] = {
+    r"\b(?:set|shat|shot|sut)\s+down\s+(?:the\s+)?(?:letter|ladder|laptop|leptop)\b": "shut down the laptop",
     r"\b(better|good|more|clean|simple|clear)\s+(?:end|an|in)\s+detail(?:ed)?\b": r"\1 and detailed",
     r"\b(this|the|my|better|python|selected|selective|that|whole|most|mouse|simple|clean|detail|detailed|good|new|"
     r"improved)\s+coat\b": r"\1 code",

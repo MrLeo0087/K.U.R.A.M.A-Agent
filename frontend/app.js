@@ -544,8 +544,14 @@ async function sendChat(text, { voice = false, lang = null, speak = false, ambie
   const split = speak ? new SentenceSplitter() : null;
   const hint = lang && lang !== "auto" ? lang : S.lang !== "auto" ? S.lang : null;
   updateState();
+  // a turn that goes silent (no event for 90 s, no yes/no card waiting) is stopped, never dots forever
+  let lastEv = Date.now(), stalled = false;
+  const watchdog = setInterval(() => {
+    if (!openConfirm && Date.now() - lastEv > 90000) { stalled = true; ctrl.abort(); }
+  }, 5000);
   try {
     for await (const ev of api.chat(text, { mode: voice ? "voice" : "text", lang: hint, signal: ctrl.signal, ambient })) {
+      lastEv = Date.now();
       switch (ev.type) {
         case "delta":
           bot.append(ev.text);
@@ -590,7 +596,7 @@ async function sendChat(text, { voice = false, lang = null, speak = false, ambie
       }
     }
   } catch (e) {
-    if (e.name === "AbortError") bot.note("Stopped.");
+    if (e.name === "AbortError") bot.note(stalled ? "That took too long, so I stopped it. Please say it again." : "Stopped.");
     else {
       bot.error(e.status === 401 ? "The API needs a token (open settings)." : "Can't reach KURAMA: " + e.message);
       flashError();
@@ -598,6 +604,7 @@ async function sendChat(text, { voice = false, lang = null, speak = false, ambie
       setConn(false);
     }
   } finally {
+    clearInterval(watchdog);
     busy = false;
     chatCtrl = null;
     pendingConfirm = null;

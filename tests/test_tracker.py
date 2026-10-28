@@ -124,3 +124,13 @@ def test_several_items_in_one_sentence_and_dates():
     m = fastpath.match
     assert m("how much did I spend from Oct 1 to Oct 15").args["period"] == "range:2026-10-01:2026-10-15"
     assert m("show my expenses on October 20").args == {"action": "list", "period": "range:2026-10-20:2026-10-20"}
+
+
+def test_this_month_is_only_a_time_not_long_tasks():
+    m = fastpath.match
+    for s in ("Can you tell me about my spending money this month?", "what is expecsive in this month",
+              "What is my total budget for this month?", "Give me the monthly report of the expensive."):
+        assert m(s).tool == "expenses", s
+    assert getattr(m("what is the weather this month"), "tool", "") != "goals"
+    assert m("what do I have to do this month").tool == "goals" and m("show my long tasks").tool == "goals"
+    assert m("What is my expensive food?").args["category"] == "food"

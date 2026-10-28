@@ -1726,6 +1726,16 @@ def tracker_intent(t: str) -> Intent | None:
                  r"per\s+category|whole\s+(?:budget|expenses?|spending)|full\s+(?:expense|spending|money)\s+report|where\s+(?:did|does)\s+"
                  r"(?:my|all\s+my|the)\s+money\s+go)", low) and re.search(r"\b(?:spen[dt]|spending|expenses?|money|budget|kharcha|category|categories)\b", low):
         return money("breakdown", period=_money_period(low))
+    if len(low.split()) <= 16 and re.search(r"\b(?:what\s+is|what'?s|tell\s+me|show|how\s+much\s+is)\b.{0,25}\b(?:my\s+)?(?:total\s+|monthly\s+|this\s+month'?s?\s+)?budget\b", low) \
+            and not re.search(r"\b(?:set|make|change|is\s+\d)", low):
+        return money("report", period=_money_period(low))  # the report ends with the budget used / left
+    if len(low.split()) <= 18 and re.search(r"\b(?:tell\s+me|show|what|give|how)\b", low) and re.search(
+            r"\b(?:my\s+)?(?:spending(?:\s+money)?|expenses?|expensive|expenc\w*|expecs\w*|money\s+spent)\b", low) \
+            and re.search(r"\b(?:my|this\s+month|this\s+week|this\s+year|today|monthly|report|in\s+this|so\s+far)\b", low) \
+            and not re.search(r"\b(?:most\s+expensive|expensive\s+(?:phone|laptop|car|house|city|country))\b", low) \
+            and not re.match(r"(?:show|list|give\s+me)\s+(?:me\s+)?(?:my\s+|the\s+|all\s+)?(?:expenses|spendings?|transactions)\b", low):
+        cat = next((c for c in ex.CATS if re.search(rf"\b{c}\b", low)), "")
+        return money("report", period=_money_period(low), category=cat)
     if re.search(r"\b(?:how\s+much|kati)\b.{0,30}\b(?:spen[dt]|spending|expense|kharcha|खर्च|kharch)", low) or re.fullmatch(
             r"(?:show\s+|give\s+|tell\s+)?(?:me\s+)?(?:my\s+|the\s+)?(?:total\s+)?(?:expense|expenses|spending|money|kharcha)\s+(?:report|summary|total|so\s+far|breakdown)"
             r"(?:\s+(?:for|of)\s+.+|\s+(?:today|yesterday|this\s+\w+|last\s+month))?|(?:monthly|weekly|yearly|daily)\s+(?:expense|spending|money)\s+report", low, I):
@@ -2505,6 +2515,8 @@ def _goal_name(low: str, raw: str) -> str:
     return re.sub(r"\s*long[\s-]?(?:term\s+)?task$", "", n, flags=I) or "Goal"
 
 
+_MONEYISH = re.compile(r"\b(?:spen[dt]|spending|expens\w*|expenc\w*|expecs\w*|money|budget|cost|costs|paid|rupees?|rs|"
+                       r"income|salary|savings?|saved|kharcha|bills?)\b|खर्च", I)
 _LONG_WORDS = re.compile(r"\b(?:long[\s-]?(?:term\s+)?(?:tasks?|works?|workers?|projects?)|goals?|monthly|countdowns?|"
                          r"(?:this|my|the|for\s+(?:the|my|this))\s+month)\b", I)
 
@@ -2578,9 +2590,13 @@ def _goal_intent(t: str) -> Intent | None:
     if re.fullmatch(r"(?:please\s+)?(?:show|list|see|open|check|tell\s+me|what\s+are|what'?s|give\s+me)?\s*(?:me\s+)?(?:all\s+)?"
                     r"(?:my\s+|the\s+)?(?:goals?|long[\s-]?(?:term\s+)?tasks?|countdowns?)(?:\s+list)?", low, I):
         return G("list")
-    if re.search(r"\b(?:this|my|the|for\s+(?:the|my|this))\s+month\b|\bmonthly\s+(?:tasks?|work|goals?)\b|\blong[\s-]?(?:term\s+)?(?:tasks?|work(?:ers?)?|projects?)\b", low) \
-            and re.search(r"\b(?:what|which|show|list|tell|any|have\s+to|need\s+to|running)\b", low) and len(low.split()) <= 18 \
-            and not goals.end_in(low):
+    # 'this month' is only a time: it means the long tasks only next to work words ('what do I have to do this month',
+    # 'my tasks for the month'), never with money, weather, news... ('my spending this month' is the money tracker)
+    month_work = re.search(r"\b(?:this|my|the|for\s+(?:the|my|this))\s+month\b", low) and re.search(
+        r"\b(?:tasks?|works?|to\s+do|doing|plans?|planned|goals?|projects?|targets?|to[\s-]?dos?|deadlines?)\b", low)
+    long_words = re.search(r"\bmonthly\s+(?:tasks?|work|goals?|targets?)\b|\blong[\s-]?(?:term\s+)?(?:tasks?|work(?:ers?)?|projects?)\b", low)
+    if (month_work or long_words) and re.search(r"\b(?:what|which|show|list|tell|any|have\s+to|need\s+to|running)\b", low) \
+            and len(low.split()) <= 18 and not goals.end_in(low) and not _MONEYISH.search(low):
         return G("list")
     # the whole Work card: 'what is in my working list right now? what project?', 'what am I working on'
     if len(low.split()) <= 22 and re.search(r"\b(?:what|show|tell|list|give|which|see|check)\b", low) and re.search(
@@ -3346,8 +3362,9 @@ REMIND_CANCEL = _rx(r"(?:cancel|delete|remove|stop) (?:the )?(?:reminder|schedul
 
 # --- laptop control + clock (0 tokens) ---
 _DEV = r"(?:\s+(?:the|my|this))?\s*(?:laptop|computer|pc|system|machine|device)"
-_SHUTDOWN = re.compile(r"^(?:shut\s*down|power\s*off)(?:" + _DEV + r")?(?:\s+now)?$|^(?:turn|switch)\s+off" + _DEV + r"(?:\s+now)?$", I)
-_RESTART = re.compile(r"^(?:restart|reboot)(?:" + _DEV + r")?(?:\s+now)?$", I)
+_WHEN_NOW = r"(?:\s+(?:now|right\s+now|for\s+now|for\s+today|please|immediately))*"
+_SHUTDOWN = re.compile(r"^(?:shut\s*down|power\s*off)(?:" + _DEV + r")?" + _WHEN_NOW + r"$|^(?:turn|switch)\s+off" + _DEV + _WHEN_NOW + r"$", I)
+_RESTART = re.compile(r"^(?:restart|reboot)(?:" + _DEV + r")?" + _WHEN_NOW + r"$", I)
 _SUSPEND = re.compile(r"^(?:(?:sleep|suspend|hibernate)" + _DEV + r"|suspend|put" + _DEV + r"\s+to\s+sleep|"
                       r"make" + _DEV + r"\s+sleep)(?:\s+now)?$", I)
 _LOGOUT = re.compile(r"^(?:log\s*out|logout|sign\s*out)(?:\s+(?:of\s+)?(?:the|my)?\s*(?:session|account|laptop|computer))?$", I)
