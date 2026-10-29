@@ -3448,6 +3448,8 @@ def render(intent: Intent, ok: bool, output: str, lang: str) -> str:
             return _say("no_player", lang, "")
         if intent.name in ("open", "search"):
             return _say("open_fail", lang, intent.label.split("|")[0])
+        if out.startswith("The user declined"):  # you said no: that's not a failure
+            return {"en": "Okay, I didn't do it.", "hi": "ठीक है, नहीं किया।", "ne": "ठिक छ, गरिनँ।"}.get(lang, "Okay, I didn't do it.")
         return _say("failed", lang, re.sub(r"^error:\s*", "", out))
     if intent.name == "time" and (m := _TIME_OUT.match(out)):
         where, h12, ampm = m.group("where"), m.group("h12"), m.group("ampm")
