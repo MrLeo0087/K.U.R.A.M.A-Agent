@@ -1219,3 +1219,38 @@ audio.ws-media { background: transparent; }
 .mdlg-rows li.empty { display: block; color: var(--muted); }
 .mdlg-rows .tb { width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.03); color: var(--muted); padding: 0; }
 .mdlg-rows .tb:hover { color: var(--danger); border-color: rgba(255, 93, 93, 0.4); }
+
+/* ---------- minimal layout (default; ⊞ in the bar switches to the full dashboard) ---------- */
+.topbar { display: none; }
+body.minimal .topbar { display: flex; position: fixed; top: 0; left: 0; right: 0; z-index: 6; height: 48px; padding: 0 168px 0 22px;
+  align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); background: rgba(6, 7, 11, 0.55); backdrop-filter: blur(6px); }
+.tb-time { display: flex; align-items: baseline; gap: 10px; }
+.tb-time b { font-family: var(--mono); font-weight: 400; font-size: 17px; letter-spacing: 0.04em; }
+.tb-time small { color: var(--muted); font-size: 12px; letter-spacing: 0.06em; }
+.tb-items { display: flex; align-items: center; gap: 6px; }
+.tb-chip { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 15px;
+  border: 1px solid var(--line); background: rgba(255, 255, 255, 0.03); color: var(--muted); font-size: 12.5px; cursor: pointer;
+  transition: color 0.2s, border-color 0.2s, background 0.2s; }
+.tb-chip:hover, .tb-chip[aria-pressed="true"] { color: var(--text); border-color: rgba(255, 122, 26, 0.45); background: rgba(255, 122, 26, 0.08); }
+.tb-chip svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.tb-chip span:empty { display: none; }
+.tb-chip.hot span { color: var(--accent-2); }
+.tb-chip .dot { position: absolute; top: 4px; right: 4px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+body.minimal .power { top: 10px; }
+body.minimal .mode-pill { top: 12px; right: 52px; }
+body.minimal .layout { display: block; max-width: 820px; margin: 0 auto; padding: 72px 20px 24px; height: 100%; }
+body.minimal .col.left { display: none; }
+body.minimal .center { height: 100%; display: flex; flex-direction: column; }
+body.minimal .core { flex: 0 0 auto; padding: 10px 0 18px; }
+body.minimal .orb { width: min(200px, 22vh); }
+body.minimal .tagline, body.minimal #suggest, body.minimal #btn-info, body.minimal .welcome .suggest { display: none !important; }
+body.minimal .chat { flex: 1 1 auto; min-height: 0; width: 100%; }
+body.minimal .messages { height: auto; flex: 1 1 auto; min-height: 0; }
+body.minimal:not([data-mode="conv"]) #m-mute { display: none; } /* the mic-mute switch only matters in talk mode */
+/* the workspace: a panel that slides in from the right (opens by itself when a new result arrives) */
+body.minimal .col.right { position: fixed; top: 48px; right: 0; bottom: 0; width: min(440px, 92vw); z-index: 5; padding: 14px;
+  display: flex; flex-direction: column; gap: 0; background: rgba(8, 9, 14, 0.94); border-left: 1px solid var(--line);
+  transform: translateX(102%); transition: transform 0.35s var(--ease); animation: none; }
+body.minimal.ws-open .col.right { transform: none; box-shadow: -20px 0 50px rgba(0, 0, 0, 0.45); }
+body.minimal .col.right > :not(#ws) { display: none; }
+body.minimal .col.right #ws { flex: 1 1 auto; min-height: 0; margin: 0; }

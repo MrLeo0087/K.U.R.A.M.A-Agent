@@ -21,6 +21,25 @@
 
   <button id="btn-mode" class="mode-pill mini-off" type="button" title="KURAMA mode: how much of KURAMA runs (RAM, AI, helpers)" aria-label="KURAMA mode"><i aria-hidden="true"></i><span id="mode-name">Mode</span></button>
 
+  <!-- minimal layout (default): one slim bar; every card is one click away (the full dashboard: ⊞) -->
+  <nav id="topbar" class="topbar mini-off" aria-label="KURAMA bar">
+    <span class="tb-time"><b id="tb-time">--:--</b><small id="tb-date"></small></span>
+    <span class="tb-items">
+      <button type="button" class="tb-chip" id="tb-todo" data-sheet="work" title="To-do list" aria-label="To-do list">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l4 4 8-9"/><path d="M14 17h6M14 13h6"/></svg><span id="tb-todo-n">0</span></button>
+      <button type="button" class="tb-chip" id="tb-rem" data-sheet="now" title="Reminders, alarms and timers today" aria-label="Reminders">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15zM10 20a2 2 0 0 0 4 0"/></svg><span id="tb-rem-n">0</span></button>
+      <button type="button" class="tb-chip" id="tb-wx" data-sheet="weather" title="Weather" aria-label="Weather">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18h10a4 4 0 0 0 0-8 6 6 0 0 0-11.5 1.5A3.3 3.3 0 0 0 7 18z"/></svg><span id="tb-wx-t">--°</span></button>
+      <button type="button" class="tb-chip" id="tb-laptop" data-sheet="laptop" title="Laptop: Wi-Fi, Bluetooth, battery…" aria-label="Laptop">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="11" rx="1.5"/><path d="M2 19h20"/></svg></button>
+      <button type="button" class="tb-chip" id="tb-ws" title="Workspace: pictures, documents, results" aria-label="Workspace">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11"/></svg><i class="dot" hidden></i></button>
+      <button type="button" class="tb-chip" id="tb-full" title="Show the full dashboard" aria-label="Full dashboard">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></button>
+    </span>
+  </nav>
+
   <div class="layout">
     <!-- left: clock, processes, KURAMA -->
     <section class="col left" aria-label="Clock, today, system and laptop">

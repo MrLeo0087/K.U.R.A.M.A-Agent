@@ -249,7 +249,8 @@ WORKSPACE_MIN_CHARS = 4000
 WORKSPACE_SHOW_ALL = ("list_folder", "training")  # results the user wants to see in full, to pick from
 TOOL_OUTPUT_FULL_CHARS = 3500  # the user asked for everything ("the whole list"): the LLM gets this much
 WORKSPACE_SKIP_TOOLS = ("read_webpage", "search_knowledge", "ask_knowledge", "recall_session", "jobs",
-                        "about_me", "write_document", "skills", "find_capability")
+                        "about_me", "write_document", "skills", "find_capability",
+                        "todo", "schedules", "read_later")  # lists with their own views never clutter the workspace
 # A tool still running after this many seconds keeps going as a background job; the user can keep talking and
 # is told when it's done (0 = off)
 TOOL_BACKGROUND_AFTER_S = float(os.getenv("KURAMA_TOOL_BG_AFTER_S", "6"))

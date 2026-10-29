@@ -943,6 +943,8 @@ async function loadWeather() {
   const ok = !!it && !it.error && it.temp_c != null;
   $("wx-place").textContent = (it?.place || "Nepalgunj");
   if (ok) tweenTo("wx-temp", it.temp_c, 0); else $("wx-temp").textContent = "--";
+  $("tb-wx-t").textContent = ok ? `${Math.round(it.temp_c)}°` : "--°";
+  $("tb-wx").title = ok ? `${it.place || "Weather"}: ${it.desc || ""}` : "Weather";
   $("wx-desc").textContent = ok ? it.desc || "" : "unavailable";
   $("wx-sub").textContent = ok ? `Feels ${Math.round(it.feels_c)}° · ${Math.round(it.humidity)}% · ${Math.round(it.wind_kmh)} km/h` : "";
   const k = ok ? wxKind(it) : "cloud", ic = $("wx-icon");
@@ -1104,6 +1106,7 @@ function wsShown() { return ws.items.filter((x) => ws.tab === "all" || x.type ==
 
 function wsAdd(item, show) {
   if (ws.seen.has(item.key)) return;
+  if (show && ws.loaded) wsPanel(true); // minimal layout: a NEW result slides the workspace in
   ws.seen.add(item.key);
   item.type = wsType(item);
   ws.items.unshift(item);
@@ -1329,6 +1332,10 @@ function renderWork(w) {
     l.reminders && `<b>${l.reminders}</b> reminder${l.reminders > 1 ? "s" : ""}`, l.read && `<b>${l.read}</b> to read`].filter(Boolean);
   $("list-line").innerHTML = parts.length ? parts.join(" · ") : (gs.length ? "" : 'Nothing yet: say “add finish the report to my to-do, due Friday”.');
   $("todo-items").innerHTML = (w.items || []).map((r) => todoLi(r)).join("");
+  $("tb-todo-n").textContent = l.todo || "";
+  $("tb-todo").classList.toggle("hot", !!(l.overdue || l.today));
+  $("tb-todo").title = l.todo ? `To-do: ${l.todo}${l.today ? `, ${l.today} today` : ""}${l.overdue ? `, ${l.overdue} overdue` : ""}` : "To-do list";
+  $("tb-rem-n").textContent = l.reminders || "";
   $("work-pill").textContent = gs.length ? `${gs.length} long task${gs.length > 1 ? "s" : ""}` : "";
 }
 function todoLi(r) { // one to-do: ❗ for high priority, due/overdue, 🔔 when it has a linked reminder, ✓ done, ✕ delete
@@ -1759,6 +1766,8 @@ function tick() {
   $("clock-ap").textContent = parts[1] || "";
   $("clock-s").textContent = String(now.getSeconds()).padStart(2, "0");
   $("date").textContent = now.toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" });
+  $("tb-time").textContent = `${hh}:${mm ?? ""}${parts[1] ? " " + parts[1] : ""}`;
+  $("tb-date").textContent = now.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
   renderTodayLive();
   clockTimer = setTimeout(tick, 1000 - (Date.now() % 1000) + 5);
 }
@@ -2505,3 +2514,24 @@ if (params.get("debug") === "1" && params.get("demo") === "1") { // static sampl
   c.confirm({ id: "demo", prompt: "Delete ~/Pictures/old-screens (42 files)?" });
   c.finish();
 }
+
+// ---------- minimal layout: the slim bar (default) or the full dashboard (⊞), remembered per browser ----------
+const LAYOUT_KEY = "kurama.layout";
+function setLayout(full) {
+  document.body.classList.toggle("minimal", !full && !MINI);
+  $("tb-full").setAttribute("aria-pressed", String(!!full));
+  try { localStorage.setItem(LAYOUT_KEY, full ? "full" : "minimal"); } catch { /* private mode */ }
+}
+function wsPanel(open) { // the workspace slides in/out (minimal layout only)
+  if (!document.body.classList.contains("minimal")) return;
+  document.body.classList.toggle("ws-open", open);
+  $("tb-ws").setAttribute("aria-pressed", String(open));
+  $("tb-ws").querySelector(".dot").hidden = true;
+}
+let savedLayout = "minimal";
+try { savedLayout = localStorage.getItem(LAYOUT_KEY) || "minimal"; } catch { /* private mode */ }
+setLayout(savedLayout === "full");
+$("tb-full").onclick = () => setLayout(document.body.classList.contains("minimal"));
+$("tb-ws").onclick = () => wsPanel(!document.body.classList.contains("ws-open"));
+for (const b of document.querySelectorAll(".tb-chip[data-sheet]")) b.onclick = () => openSheet(b.dataset.sheet);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && document.body.classList.contains("ws-open") && !document.querySelector("dialog[open]")) wsPanel(false); });
