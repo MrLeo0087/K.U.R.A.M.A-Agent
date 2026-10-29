@@ -23,8 +23,8 @@ def write_file(path: str, content: str = "", overwrite: bool = False) -> str:
     if p.is_dir():
         return f"error: {p} is a folder"
     if p.exists():
-        if not overwrite:
-            return f"error: {p} already exists; ask the user, then call again with overwrite=true"
+        # one yes/no box (the old "ask the user, then call again with overwrite=true" looped: the general files
+        # tool can't pass overwrite, so every "yes" asked again)
         if not safety.ask(f"Should I overwrite the existing file {p}?"):
             return "The user declined: the file was not overwritten."
     elif not _files.ask_outside(p, "write the file"):

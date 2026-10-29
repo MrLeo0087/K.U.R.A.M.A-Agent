@@ -14,7 +14,9 @@ def _assist(kind: str):
 
 TABLE = {
     "explain": _assist("explain"), "meaning": _assist("meaning"), "translate": _assist("translate"),
-    "improve": _assist("improve"), "summary": _assist("summary"), "reply": _assist("reply"), "code": _assist("code"),
+    "improve": _assist("improve"),
+    "edit_code": Act("text_assist", lambda a: {"action": "improve",
+                                               "request": f"{a.get('request') or 'improve it'} in this file"}), "summary": _assist("summary"), "reply": _assist("reply"), "code": _assist("code"),
     "read_screen": Act("read_text", lambda a: {"source": a.get("request") if a.get("request") in ("area", "window", "screen") else "screen"}),
     "clipboard": Act("clipboard", lambda a: {"action": "history", "query": a.get("request", "")}),
     "copy": Act("clipboard", lambda a: {"action": "write", "text": a.get("request", "")}),
@@ -24,10 +26,12 @@ TABLE = {
 
 
 @tool(group="core", safety="safe",
-      description="The selected text / screen: explain, meaning, translate, improve (fix wording), summary, reply, code "
+      description="The selected text / screen: edit_code (change the code in the file open in VS Code as asked: "
+                  "'rename the columns to a,b,c,d', 'add a loop'; shows the change, replaces on yes, Ctrl+Z / backup), "
+                  "explain, meaning, translate, improve (fix wording), summary, reply, code "
                   "(write code for it); read_screen (OCR); clipboard (what was copied, history); copy; dictate (start/stop "
                   "typing by voice); qr (scan a QR code).")
-def text(action: Literal["explain", "meaning", "translate", "improve", "summary", "reply", "code", "read_screen", "clipboard",
+def text(action: Literal["edit_code", "explain", "meaning", "translate", "improve", "summary", "reply", "code", "read_screen", "clipboard",
                          "copy", "dictate", "qr"], request: str = "", lang: str = "") -> str:
     """Selected text and screen.
 

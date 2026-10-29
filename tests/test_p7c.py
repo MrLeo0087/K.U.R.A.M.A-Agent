@@ -88,8 +88,8 @@ def test_write_file_new_overwrite_and_parents(roots):
     f = roots / "demo" / "main.py"
     res, asked = ex("write_file", {"path": str(f), "content": "print('hello')\n"})
     assert res.ok and f.read_text() == "print('hello')\n" and asked == []
-    res, _ = ex("write_file", {"path": str(f), "content": "x"})
-    assert "already exists" in res.output and f.read_text().startswith("print")
+    res, asked = ex("write_file", {"path": str(f), "content": "x"}, answers=(False,))  # one yes/no box, no loop
+    assert "declined" in res.output and len(asked) == 1 and f.read_text().startswith("print")
     res, asked = ex("write_file", {"path": str(f), "content": "x", "overwrite": True}, answers=(False,))
     assert "declined" in res.output and len(asked) == 1
     res, asked = ex("write_file", {"path": str(f), "content": "x", "overwrite": True}, answers=(True,))
