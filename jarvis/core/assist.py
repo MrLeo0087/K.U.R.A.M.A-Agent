@@ -608,6 +608,24 @@ def retry_active() -> bool:
     return bool(_retry) and time.time() < _retry.get("expires", 0)
 
 
+def stage_file_change(f: Path, old: str, new: str) -> str:
+    """A whole-file change that waits for 'yes' like a selection change (apply_pending_code writes it, backup kept).
+    Returns what the change adds, for the question ('+12 lines: def search(...)')."""
+    import difflib
+    import time
+    wid, _ = rewrite.target_window()
+    title = rewrite._window_name(wid) if wid else ""
+    _pending.clear()
+    _pending.update(old=old, new=new, lead="", file=str(f), wid=wid, term=False, title=title, whole=True,
+                    expires=time.time() + config.ASSIST_PENDING_TTL_S)
+    added = [ln[1:] for ln in difflib.unified_diff(old.splitlines(), new.splitlines(), lineterm="", n=0)
+             if ln.startswith("+") and not ln.startswith("+++") and ln[1:].strip()]
+    gone = sum(1 for ln in difflib.unified_diff(old.splitlines(), new.splitlines(), lineterm="", n=0)
+               if ln.startswith("-") and not ln.startswith("---") and ln[1:].strip())
+    first = next((ln.strip() for ln in added if ln.strip().startswith(("def ", "class ", "async def "))), "")
+    return (f"+{len(added)} lines" + (f", {gone} changed" if gone else "") + (f" ({first[:60]})" if first else ""))
+
+
 def pending_code_active() -> bool:
     import time
     return bool(_pending) and time.time() < _pending.get("expires", 0)
@@ -691,6 +709,14 @@ def apply_pending_code() -> str:
         return "No code change is waiting (it expires after a few minutes)."
     p = dict(_pending)
     _pending.clear()
+    if p.get("whole"):  # a whole-file change (complete / write code into the file): the file on disk, backup kept
+        from jarvis.tools.general.code_to_file import _backup, _dirty_note
+        f = Path(p["file"])
+        cur = f.read_text(errors="replace") if f.is_file() else ""
+        if cur.strip():
+            _backup(f, cur)
+        f.write_text(p["new"], encoding="utf-8")
+        return f"Added to {f.name}." + _dirty_note(f)
     lead = p.get("lead", "")
     f = Path(p["file"]) if p["file"] else None
     dirty = p["title"].lstrip().startswith(("●", "•"))  # unsaved edits in the editor: don't write the file under it
@@ -823,6 +849,10 @@ def run(action: str, request: str = "", lang: str = "", replace: bool = False, p
         rewrite._xclip(["-selection", "clipboard"], out)
         return out + "\n(Copied: paste it in the chat.)"
     g = rewrite.grab()
+    if isinstance(g, str) and action in ("complete", "improve") and open_file_in_editor() is not None:
+        # nothing highlighted, but a file is open: complete / change the whole file (only what's missing is added)
+        from jarvis.tools.general.code_to_file import start_edit
+        return start_edit(request or ("complete the code" if action == "complete" else "improve the code"))
     if isinstance(g, str):
         import time
         _retry.clear()

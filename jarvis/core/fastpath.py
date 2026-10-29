@@ -3089,6 +3089,11 @@ def to_file_intent(text: str) -> Intent | None:
     on this path /x/test.py' or 'write the generated code in the open file'. The tool writes into the file open in
     VS Code (or the path): it generates from the description, or uses the last code request's code."""
     t = " ".join((text or "").split())
+    if re.search(r"\b(?:complete|finish)\b", t, I) and re.search(r"\b[\w-]+\.(?:py|js|ts)\b|\b(?:code|function|file|"
+                                                                  r"class|method)\b", t, I) and len(t) < 300:
+        from jarvis.core import context
+        if not context.snapshot()["selection"] and context.editor_open():  # selected code: assist completes that
+            return Intent("tofile", "code_to_file", "clipboard", {"request": t})
     if not (_CODE_ASK.search(t) and _CODE_WORD.search(t) and _INTO_FILE.search(t)):
         return _TO_FILE.fullmatch(t.strip(" .!?")) and Intent("tofile", "code_to_file", "clipboard", {"request": t}) or None
     p = re.search(r"(?<!\w)(/[^\s]+\.\w{1,5})\b", t)
