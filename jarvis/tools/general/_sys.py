@@ -18,6 +18,7 @@ INSTALL = {
     "xdotool": "sudo apt install xdotool", "gnome-screenshot": "sudo apt install gnome-screenshot",
     "scrot": "sudo apt install scrot", "xclip": "sudo apt install xclip",
     "loginctl": "it ships with systemd", "systemctl": "it ships with systemd",
+    "shutdown": "it ships with systemd",  # scheduled shutdown (shutdown_timer)
     "gnome-screensaver-command": "sudo apt install gnome-screensaver",
     "xdg-screensaver": "sudo apt install xdg-utils",
     # P9a

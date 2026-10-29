@@ -84,3 +84,8 @@ def test_under_a_minute_kuramas_own_timer_does_it(monkeypatch):
     monkeypatch.setattr(st, "_now_later", lambda secs, kind: later.append((secs, kind)))
     monkeypatch.setattr(st.safety, "ask", lambda p: True)
     assert "in 3 seconds" in st.shutdown_timer("set", "3s") and later == [(3.0, "shutdown")]
+
+
+def test_the_shutdown_command_is_allowed_but_still_blocked_in_tests():
+    assert _sys.need("shutdown")
+    assert _sys.power_blocked(["shutdown", "-P", "+90"])
