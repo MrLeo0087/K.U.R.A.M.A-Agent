@@ -1,0 +1,200 @@
+{"id": 1, "text": "Hello Kurama, how are you?", "expect": "chat", "args": {}, "channel": "laptop"}
+{"id": 2, "text": "Hello, how are you and what are you doing bro?", "expect": "chat", "args": {}, "channel": "laptop"}
+{"id": 3, "text": "say hi in 3 words", "expect": "chat", "args": {}, "channel": "laptop"}
+{"id": 4, "text": "Just got home", "expect": "chat", "args": {}, "channel": "telegram"}
+{"id": 5, "text": "I still love you.", "expect": "chat", "args": {}, "channel": "laptop"}
+{"id": 6, "text": "Sorry, I was too loud.", "expect": "chat", "args": {}, "channel": "laptop"}
+{"id": 7, "text": "Well, I want to make some Langchain project, but I do not have the idea that what kind of project I can build", "expect": "chat", "args": {}, "channel": "laptop"}
+{"id": 8, "text": "give me nepali word for learning", "expect": "chat", "args": {}, "channel": "laptop"}
+{"id": 9, "text": "Tell me about yourself something.", "expect": "self.about", "args": {}, "channel": "voice"}
+{"id": 10, "text": "What the fuck are you doing?", "expect": "chat", "args": {}, "channel": "laptop"}
+{"id": 11, "text": "Zilbaogi.", "expect": "clarify", "args": {}, "channel": "laptop"}
+{"id": 12, "text": "Chitum musumlaigu.", "expect": "clarify", "args": {}, "channel": "laptop"}
+{"id": 13, "text": "Plus the Blev.", "expect": "clarify", "args": {}, "channel": "laptop"}
+{"id": 14, "text": "Oly, Japan, Ma, Mousim, Gusto, Zoh.", "expect": "clarify", "args": {}, "channel": "laptop"}
+{"id": 15, "text": "E aí, se é, Raul, Wari.", "expect": "clarify", "args": {}, "channel": "laptop"}
+{"id": 16, "text": "Продолжение следует...", "expect": "clarify", "args": {}, "channel": "laptop"}
+{"id": 17, "text": "Uh... Uh...", "expect": "clarify", "args": {}, "channel": "laptop"}
+{"id": 18, "text": "Hawaare", "expect": "chat", "args": {}, "channel": "laptop"}
+{"id": 19, "text": "Kau!", "expect": "clarify", "args": {}, "channel": "voice"}
+{"id": 20, "text": "Q&A", "expect": "clarify", "args": {}, "channel": "voice"}
+{"id": 21, "text": "What is time right now?", "expect": "time", "args": {}, "channel": "laptop"}
+{"id": 22, "text": "what time is it ?", "expect": "time", "args": {}, "channel": "laptop"}
+{"id": 23, "text": "tell me date", "expect": "date", "args": {}, "channel": "laptop"}
+{"id": 24, "text": "And what is the date today?", "expect": "date", "args": {}, "channel": "laptop"}
+{"id": 25, "text": "Tell me what is the day today?", "expect": "date", "args": {}, "channel": "laptop"}
+{"id": 26, "text": "What is the weather today in Kathmandu?", "expect": "weather", "args": {"place": "Kathmandu"}, "channel": "laptop"}
+{"id": 27, "text": "So, I am wondering how the weather is in Japan now.", "expect": "weather", "args": {"place": "Japan"}, "channel": "laptop"}
+{"id": 28, "text": "do I need an umbrella in kathmandu today", "expect": "weather", "args": {"place": "kathmandu"}, "channel": "laptop"}
+{"id": 29, "text": "Can you tell me what is the weather in Nepal currently?", "expect": "weather", "args": {"place": "Nepal"}, "channel": "laptop"}
+{"id": 30, "text": "उसे के तुम बता सकती हो अभी जैपान में टाइम क्या हुआ है?", "expect": "time", "args": {}, "channel": "laptop"}
+{"id": 31, "text": "show my to-do list", "expect": "todo.list", "args": {}, "channel": "laptop"}
+{"id": 32, "text": "Give me my list of tasks.", "expect": "todo.list", "args": {}, "channel": "laptop"}
+{"id": 33, "text": "Is there anything in my ToDo?", "expect": "todo.list", "args": {}, "channel": "laptop"}
+{"id": 34, "text": "Is there any tax for me today?", "expect": "todo.list", "args": {}, "channel": "laptop"}
+{"id": 35, "text": "what do I have to do today", "expect": "todo.list", "args": {}, "channel": "laptop"}
+{"id": 36, "text": "What's on today?", "expect": "day.today", "args": {}, "channel": "laptop"}
+{"id": 37, "text": "add buy milk to my to-do list #shopping tomorrow 5 pm", "expect": "todo.add", "args": {"task": "buy milk"}, "channel": "laptop"}
+{"id": 38, "text": "add finish the report to my to-do list, it's urgent", "expect": "todo.add", "args": {"task": "finish the report"}, "channel": "laptop"}
+{"id": 39, "text": "Remove all the tasks for me.", "expect": "todo.clear", "args": {}, "channel": "laptop"}
+{"id": 40, "text": "Okay, remove the second task from my list of tasks.", "expect": "todo.delete", "args": {"item": "2"}, "channel": "laptop"}
+{"id": 41, "text": "done 2", "expect": "todo.done", "args": {"item": "2"}, "channel": "laptop"}
+{"id": 42, "text": "mark 3 as complete", "expect": "todo.done", "args": {"item": "3"}, "channel": "laptop"}
+{"id": 43, "text": "set remiander for 3:02 PM of today for reading book", "expect": "reminder.add", "args": {}, "channel": "laptop"}
+{"id": 44, "text": "Also set the reminder for tomorrow 6 am for walking.", "expect": "reminder.add", "args": {}, "channel": "laptop"}
+{"id": 45, "text": "Also, I want you to schedule a tax for 2.20pm of today for working.", "expect": "reminder.add", "args": {}, "channel": "laptop"}
+{"id": 46, "text": "Okay, schedule a work for 11.41pm for reading the book.", "expect": "reminder.add", "args": {}, "channel": "laptop"}
+{"id": 47, "text": "remind me to call mom at 5 pm", "expect": "reminder.add", "args": {}, "channel": "laptop"}
+{"id": 48, "text": "Is there any reminder for me today?", "expect": "reminder.list", "args": {}, "channel": "laptop"}
+{"id": 49, "text": "what is my reminder today", "expect": "reminder.list", "args": {}, "channel": "laptop"}
+{"id": 50, "text": "Set alram for 1:53pm", "expect": "alarm.set", "args": {}, "channel": "telegram"}
+{"id": 51, "text": "set an alarm for 6 am", "expect": "alarm.set", "args": {}, "channel": "laptop"}
+{"id": 52, "text": "set timer of 1 min", "expect": "timer.set", "args": {}, "channel": "laptop"}
+{"id": 53, "text": "Actually, see the alarm there, ring in the 4 minutes.", "expect": "timer.set", "args": {}, "channel": "laptop"}
+{"id": 54, "text": "Set 1 min timer and when it complere .. say me telegram", "expect": "timer.set", "args": {}, "channel": "telegram"}
+{"id": 55, "text": "Start or stopwatch now.", "expect": "stopwatch", "args": {"action": "start"}, "channel": "laptop"}
+{"id": 56, "text": "Can you start the Stobas now?", "expect": "stopwatch", "args": {"action": "start"}, "channel": "laptop"}
+{"id": 57, "text": "Okay, now stop the stopwatch.", "expect": "stopwatch", "args": {"action": "stop"}, "channel": "laptop"}
+{"id": 58, "text": "Reset the stopwatch and start again.", "expect": "stopwatch", "args": {"action": "reset"}, "channel": "laptop"}
+{"id": 59, "text": "open Brave browser in my laptop", "expect": "open.app", "args": {}, "channel": "laptop"}
+{"id": 60, "text": "Open Extension Manager.", "expect": "open.app", "args": {}, "channel": "voice"}
+{"id": 61, "text": "open youtube", "expect": "open.site", "args": {}, "channel": "laptop"}
+{"id": 62, "text": "So, can you open the YouTube?", "expect": "open.site", "args": {}, "channel": "laptop"}
+{"id": 63, "text": "Okay, now open the Facebook and YouTube in my breath.", "expect": "open.site", "args": {}, "channel": "laptop"}
+{"id": 64, "text": "Ok, now open the Youtube, Facebook and SoFiScore website.", "expect": "open.site", "args": {}, "channel": "laptop"}
+{"id": 65, "text": "Open project1 in laptop on file manager", "expect": "open.folder", "args": {}, "channel": "telegram"}
+{"id": 66, "text": "Now open tara in laptop", "expect": "open.folder", "args": {}, "channel": "telegram"}
+{"id": 67, "text": "Close brave", "expect": "close.app", "args": {}, "channel": "telegram"}
+{"id": 68, "text": "I say that close the Brave browser that open in my laptop.", "expect": "close.app", "args": {}, "channel": "laptop"}
+{"id": 69, "text": "Kill brave", "expect": "kill.app", "args": {}, "channel": "telegram"}
+{"id": 70, "text": "Can you minimize the VS Code?", "expect": "window", "args": {}, "channel": "laptop"}
+{"id": 71, "text": "send hello to my telegram", "expect": "telegram.message", "args": {}, "channel": "laptop"}
+{"id": 72, "text": "Send what are you doing to my telegram.", "expect": "telegram.message", "args": {}, "channel": "laptop"}
+{"id": 73, "text": "Can you send this file to the telegram? /media/leo/Project1/Tara/OCR_CODE/EasyOCR/Nchat_ML/EasyOCR_Finetune/train.py", "expect": "telegram.file", "args": {}, "channel": "laptop"}
+{"id": 74, "text": "Can you look for naruto.jpg image in my laptop and send me ?", "expect": "telegram.find_send", "args": {}, "channel": "telegram"}
+{"id": 75, "text": "Send me tools.py file from laptop", "expect": "telegram.find_send", "args": {}, "channel": "telegram"}
+{"id": 76, "text": "send this photo to telegram", "expect": "telegram.result", "args": {}, "channel": "laptop"}
+{"id": 77, "text": "Generate image of futuristic car and get it on telegram", "expect": "image.generate", "args": {"send_to_telegram": true}, "channel": "telegram"}
+{"id": 78, "text": "Give me list of file in Tara folder", "expect": "files.list", "args": {}, "channel": "telegram"}
+{"id": 79, "text": "List of final rag", "expect": "files.list", "args": {}, "channel": "telegram"}
+{"id": 80, "text": "Is there clz project folder", "expect": "files.find", "args": {}, "channel": "telegram"}
+{"id": 81, "text": "Can you source tool.py file in my entire laptop?", "expect": "files.find", "args": {}, "channel": "laptop"}
+{"id": 82, "text": "search for main.py in project1 then tara folder", "expect": "files.find", "args": {}, "channel": "laptop"}
+{"id": 83, "text": "Find final rag folder in laptop", "expect": "files.find", "args": {}, "channel": "telegram"}
+{"id": 84, "text": "Can you create a new folder in my home directory called NayaFolder?", "expect": "files.mkdir", "args": {}, "channel": "voice"}
+{"id": 85, "text": "organize download folder", "expect": "files.organize", "args": {}, "channel": "laptop"}
+{"id": 86, "text": "my downloads folder is a mess, fix it", "expect": "files.organize", "args": {}, "channel": "laptop"}
+{"id": 87, "text": "Okay, remove this project from my laptop currently.", "expect": "files.delete", "args": {}, "channel": "telegram"}
+{"id": 88, "text": "Listen to music, buddy.", "expect": "media.play", "args": {}, "channel": "laptop"}
+{"id": 89, "text": "play arijit sing some", "expect": "media.play", "args": {}, "channel": "laptop"}
+{"id": 90, "text": "next", "expect": "media.control", "args": {}, "channel": "laptop"}
+{"id": 91, "text": "The next song.", "expect": "media.control", "args": {}, "channel": "laptop"}
+{"id": 92, "text": "Play", "expect": "media.control", "args": {}, "channel": "telegram"}
+{"id": 93, "text": "increase volume", "expect": "volume", "args": {}, "channel": "laptop"}
+{"id": 94, "text": "Can you increase the volume by 30?", "expect": "volume", "args": {}, "channel": "laptop"}
+{"id": 95, "text": "Can you tell me what is the sound volume value of my laptop currently?", "expect": "volume", "args": {}, "channel": "voice"}
+{"id": 96, "text": "stop audio", "expect": "volume", "args": {}, "channel": "laptop"}
+{"id": 97, "text": "increase brightness", "expect": "brightness", "args": {}, "channel": "laptop"}
+{"id": 98, "text": "Set the laptop brightness in 1%.", "expect": "brightness", "args": {}, "channel": "laptop"}
+{"id": 99, "text": "Sit the brightness at 1%.", "expect": "brightness", "args": {}, "channel": "laptop"}
+{"id": 100, "text": "Take the screenshot of my display.", "expect": "screenshot", "args": {}, "channel": "laptop"}
+{"id": 101, "text": "Give me screenshot of my laptop", "expect": "screenshot", "args": {}, "channel": "telegram"}
+{"id": 102, "text": "Read this screen, Kurama.", "expect": "screen.read", "args": {}, "channel": "laptop"}
+{"id": 103, "text": "What is writing on the screen?", "expect": "screen.read", "args": {}, "channel": "laptop"}
+{"id": 104, "text": "look the screen and tell me what this website is about and what is showing ?", "expect": "web.read", "args": {}, "channel": "laptop"}
+{"id": 105, "text": "Can you turn off the Bluetooth of my laptop?", "expect": "laptop.toggle", "args": {"setting": "bluetooth"}, "channel": "laptop"}
+{"id": 106, "text": "PON UP THE BLUETOOTH BRO", "expect": "laptop.toggle", "args": {"setting": "bluetooth"}, "channel": "laptop"}
+{"id": 107, "text": "Tone of the Bluetooth", "expect": "laptop.toggle", "args": {"setting": "bluetooth"}, "channel": "laptop"}
+{"id": 108, "text": "Can you give me my Bluetooth status that Bluetooth is on or off?", "expect": "laptop.toggle", "args": {"setting": "bluetooth"}, "channel": "laptop"}
+{"id": 109, "text": "turn off wifi", "expect": "laptop.toggle", "args": {"setting": "wifi"}, "channel": "laptop"}
+{"id": 110, "text": "Enable the night light of my laptop.", "expect": "night_light", "args": {}, "channel": "laptop"}
+{"id": 111, "text": "Disable the night light.", "expect": "night_light", "args": {}, "channel": "laptop"}
+{"id": 112, "text": "Can you enable the dark mode?", "expect": "theme", "args": {}, "channel": "voice"}
+{"id": 113, "text": "Can you enable the light mode of my laptop?", "expect": "theme", "args": {}, "channel": "voice"}
+{"id": 114, "text": "I mean, I want you to change my wallpaper.", "expect": "wallpaper", "args": {}, "channel": "voice"}
+{"id": 115, "text": "Shut down the laptop.", "expect": "power.shutdown", "args": {}, "channel": "laptop"}
+{"id": 116, "text": "Laptop shutdown", "expect": "power.shutdown", "args": {}, "channel": "telegram"}
+{"id": 117, "text": "restart this laptop", "expect": "power.restart", "args": {}, "channel": "laptop"}
+{"id": 118, "text": "Sleep laptop", "expect": "power.sleep", "args": {}, "channel": "telegram"}
+{"id": 119, "text": "Slip my laptop.", "expect": "power.sleep", "args": {}, "channel": "laptop"}
+{"id": 120, "text": "Tell me the battery percentage.", "expect": "battery", "args": {}, "channel": "laptop"}
+{"id": 121, "text": "What is my battery status", "expect": "battery", "args": {}, "channel": "telegram"}
+{"id": 122, "text": "Check ram of my laptop", "expect": "system.status", "args": {}, "channel": "telegram"}
+{"id": 123, "text": "What's going on with my laptop like RAM, CPU, just tell me.", "expect": "system.status", "args": {}, "channel": "voice"}
+{"id": 124, "text": "Which process take most ram memery ?", "expect": "system.status", "args": {}, "channel": "telegram"}
+{"id": 125, "text": "Who use most memory?", "expect": "system.status", "args": {}, "channel": "telegram"}
+{"id": 126, "text": "my laptop is crawling, everything is slow", "expect": "system.status", "args": {}, "channel": "laptop"}
+{"id": 127, "text": "internet speed test", "expect": "system.internet", "args": {}, "channel": "laptop"}
+{"id": 128, "text": "wifi connected but nothing opens", "expect": "system.internet", "args": {}, "channel": "laptop"}
+{"id": 129, "text": "empty the trash", "expect": "system.disk", "args": {}, "channel": "laptop"}
+{"id": 130, "text": "my disk is almost full", "expect": "system.disk", "args": {}, "channel": "laptop"}
+{"id": 131, "text": "what is result of recent arsenal match ?", "expect": "web.live", "args": {}, "channel": "laptop"}
+{"id": 132, "text": "Tell.me today man united match", "expect": "web.live", "args": {}, "channel": "telegram"}
+{"id": 133, "text": "What is today inter miami match result", "expect": "web.live", "args": {}, "channel": "telegram"}
+{"id": 134, "text": "who are top 10 ranking for ballon dior 2026 .. give me top 10 ranking", "expect": "web.live", "args": {}, "channel": "laptop"}
+{"id": 135, "text": "latest news about AI", "expect": "web.news", "args": {}, "channel": "laptop"}
+{"id": 136, "text": "Can you search for recent Barcelona football match in Google and give me the result.", "expect": "web.live", "args": {}, "channel": "voice"}
+{"id": 137, "text": "लुम्बिनीका सभामुख तुलाराम घर्तीसहित ५ जनाविरुद्ध जालसाजी मुद्दा दायर भएको हो र ?", "expect": "web.live", "args": {}, "channel": "laptop"}
+{"id": 138, "text": "Can you generate the image of a man?", "expect": "image.generate", "args": {}, "channel": "laptop"}
+{"id": 139, "text": "Generate an image of a misty hill in oil-paint style and send it to Telegram", "expect": "image.generate", "args": {"send_to_telegram": true}, "channel": "laptop"}
+{"id": 140, "text": "Can you generate a long essay about the Nepal in detail and send that essay in my telegram", "expect": "writing.job", "args": {}, "channel": "voice"}
+{"id": 141, "text": "Make the audio of this selected sentence.", "expect": "audio.make", "args": {}, "channel": "laptop"}
+{"id": 142, "text": "make pie chart of my spend and budget", "expect": "chart.make", "args": {}, "channel": "laptop"}
+{"id": 143, "text": "Explain this code service that I select.", "expect": "text.selected", "args": {}, "channel": "laptop"}
+{"id": 144, "text": "what is meaning of this sentence", "expect": "text.selected", "args": {}, "channel": "laptop"}
+{"id": 145, "text": "Can you fix this sentence and make it look better?", "expect": "text.selected", "args": {}, "channel": "laptop"}
+{"id": 146, "text": "KURAMA, convert this text into Nepali.", "expect": "text.selected", "args": {}, "channel": "laptop"}
+{"id": 147, "text": "i keep getting KeyError: 'label' in my dataloader", "expect": "code.fix", "args": {}, "channel": "laptop"}
+{"id": 148, "text": "where was I", "expect": "code.where", "args": {}, "channel": "laptop"}
+{"id": 149, "text": "what did I change in the last hour", "expect": "code.changes", "args": {}, "channel": "laptop"}
+{"id": 150, "text": "What is the git status of this project?", "expect": "code.git", "args": {}, "channel": "voice"}
+{"id": 151, "text": "What i copy.recently", "expect": "clipboard", "args": {}, "channel": "telegram"}
+{"id": 152, "text": "what is copy yesterday", "expect": "clipboard", "args": {}, "channel": "laptop"}
+{"id": 153, "text": "Copy the area that I select.", "expect": "clipboard", "args": {}, "channel": "laptop"}
+{"id": 154, "text": "dictate", "expect": "dictate", "args": {}, "channel": "laptop"}
+{"id": 155, "text": "stop dictation", "expect": "dictate", "args": {}, "channel": "laptop"}
+{"id": 156, "text": "What is my name?", "expect": "memory.recall", "args": {}, "channel": "voice"}
+{"id": 157, "text": "Can you tell me what do you know about me?", "expect": "memory.recall", "args": {}, "channel": "voice"}
+{"id": 158, "text": "Remember that I am living in Nepalgunj, Baanke, Nepal.", "expect": "memory.remember", "args": {}, "channel": "voice"}
+{"id": 159, "text": "Actually I want you to remove all the remember note.", "expect": "memory.forget", "args": {}, "channel": "voice"}
+{"id": 160, "text": "What we are talking yesterday ?", "expect": "memory.session", "args": {}, "channel": "telegram"}
+{"id": 161, "text": "Give me the phone number for Narayan Choula.", "expect": "contacts", "args": {}, "channel": "laptop"}
+{"id": 162, "text": "Give me phone number of narayan", "expect": "contacts", "args": {}, "channel": "telegram"}
+{"id": 163, "text": "Give me the monthly report of the expensive.", "expect": "money", "args": {}, "channel": "laptop"}
+{"id": 164, "text": "How much rupees i spend ?", "expect": "money", "args": {}, "channel": "telegram"}
+{"id": 165, "text": "What is my total budget for spending?", "expect": "money", "args": {}, "channel": "laptop"}
+{"id": 166, "text": "add my habit of drink water 5 liter dairly", "expect": "habits", "args": {}, "channel": "laptop"}
+{"id": 167, "text": "i complete 5 liter water", "expect": "habits", "args": {}, "channel": "laptop"}
+{"id": 168, "text": "show my long tasks", "expect": "goals", "args": {}, "channel": "laptop"}
+{"id": 169, "text": "save this link at read later", "expect": "readlater.add", "args": {}, "channel": "laptop"}
+{"id": 170, "text": "give me list from my read later", "expect": "readlater.list", "args": {}, "channel": "laptop"}
+{"id": 171, "text": "save this link in link store for groq activity dashboard", "expect": "links", "args": {}, "channel": "laptop"}
+{"id": 172, "text": "give me link of dead shot", "expect": "links", "args": {}, "channel": "laptop"}
+{"id": 173, "text": "find my phone", "expect": "phone.find", "args": {}, "channel": "laptop"}
+{"id": 174, "text": "show my phone location history", "expect": "phone.location", "args": {}, "channel": "laptop"}
+{"id": 175, "text": "Give me location of laptop", "expect": "laptop.location", "args": {}, "channel": "telegram"}
+{"id": 176, "text": "Stop tracking laptop", "expect": "laptop.location", "args": {}, "channel": "telegram"}
+{"id": 177, "text": "/control laptop", "expect": "remote", "args": {}, "channel": "telegram"}
+{"id": 178, "text": "Stop remote desktop", "expect": "remote", "args": {}, "channel": "telegram"}
+{"id": 179, "text": "turn on gesture control", "expect": "gesture", "args": {}, "channel": "laptop"}
+{"id": 180, "text": "Disable Media Jexor Control System.", "expect": "gesture", "args": {}, "channel": "laptop"}
+{"id": 181, "text": "how is my training going", "expect": "training", "args": {}, "channel": "laptop"}
+{"id": 182, "text": "Is there any traning happening?", "expect": "training", "args": {}, "channel": "telegram"}
+{"id": 183, "text": "summarize today", "expect": "day.summary", "args": {}, "channel": "laptop"}
+{"id": 184, "text": "How many token did i use today ?", "expect": "tokens", "args": {}, "channel": "telegram"}
+{"id": 185, "text": "What is 18% of 2500", "expect": "calculate", "args": {}, "channel": "laptop"}
+{"id": 186, "text": "what is my battery health", "expect": "battery", "args": {}, "channel": "laptop"}
+{"id": 187, "text": "अहिले कति बज्यो", "expect": "time", "args": {}, "channel": "voice"}
+{"id": 188, "text": "kitne baje hain", "expect": "time", "args": {}, "channel": "voice"}
+{"id": 189, "text": "आज काठमाडौंको मौसम कस्तो छ?", "expect": "weather", "args": {}, "channel": "voice"}
+{"id": 190, "text": "youtube kholo", "expect": "open.site", "args": {}, "channel": "voice"}
+{"id": 191, "text": "volume badhao", "expect": "volume", "args": {}, "channel": "voice"}
+{"id": 192, "text": "mujhe kal subah 6 baje utha dena", "expect": "alarm.set", "args": {}, "channel": "voice"}
+{"id": 193, "text": "gana bajau", "expect": "media.play", "args": {}, "channel": "voice"}
+{"id": 194, "text": "Open youtbe and increases brightness of laptop by 60", "expect": "multi", "args": {}, "channel": "telegram", "all": ["open.site", "brightness"]}
+{"id": 195, "text": "write a 1000-word essay about Nepal and open YouTube", "expect": "multi", "args": {}, "channel": "laptop", "all": ["writing.job", "open.site"]}
+{"id": 196, "text": "turn off bluetooth and set a timer for 5 minutes", "expect": "multi", "args": {}, "channel": "laptop", "all": ["laptop.toggle", "timer.set"]}
+{"id": 197, "text": "add buy eggs to my to-do list and remind me to call mom at 6 pm", "expect": "multi", "args": {}, "channel": "laptop", "all": ["todo.add", "reminder.add"]}
+{"id": 198, "text": "what's the weather in Pokhara and what time is it", "expect": "multi", "args": {}, "channel": "laptop", "all": ["weather", "time"]}
+{"id": 199, "text": "take a screenshot and send it to my telegram", "expect": "multi", "args": {}, "channel": "laptop", "all": ["screenshot", "telegram.result"]}
+{"id": 200, "text": "close brave and open vs code", "expect": "multi", "args": {}, "channel": "laptop", "all": ["close.app", "open.app"]}
