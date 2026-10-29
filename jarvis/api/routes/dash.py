@@ -378,6 +378,17 @@ def forecast(place: str) -> dict:
     return {"place": place.split(",")[0], "hours": hours, "days": days, "sun": sun}
 
 
+@router.post("/context/tab", summary="The browser extension: the tab open right now (url, title)")
+async def context_tab(request: Request):
+    from jarvis.core import browsertab
+    d = await request.json()
+    url = str(d.get("url") or "")
+    if url and not url.startswith(("http://", "https://")):  # brave://, file://, new tab: no page to talk about
+        url = ""
+    await run_in_threadpool(browsertab.put, url, str(d.get("title") or ""), str(d.get("browser") or ""))
+    return {"ok": True}
+
+
 @router.post("/downloads/{wid}/{action}", summary="Download bar buttons: pause, resume or delete (0 tokens)")
 async def download_control(wid: int, action: str):
     from jarvis.core import ytdl

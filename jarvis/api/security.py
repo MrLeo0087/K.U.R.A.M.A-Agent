@@ -18,7 +18,8 @@ from urllib.parse import parse_qs, urlsplit
 
 from jarvis.api.settings import Settings
 
-OPEN_PATHS = ("/api/v1/health",)
+OPEN_PATHS = ("/api/v1/health", "/api/v1/context/tab")  # tab: the browser extension (no token)
+EXT_PATHS = ("/api/v1/context/tab",)  # browser-extension origins may call these
 RAW_BODY_PATHS = ("/api/v1/stt",)
 _SIMPLE_TYPES = ("text/plain", "application/x-www-form-urlencoded", "multipart/form-data")
 
@@ -63,7 +64,8 @@ class Guard:
             return await self.app(scope, receive, send)
         origin = headers.get("origin", "").rstrip("/")
         if origin and "*" not in self.origins and origin not in self.origins \
-                and urlsplit(origin).netloc.lower() != host.lower():
+                and urlsplit(origin).netloc.lower() != host.lower() \
+                and not (path in EXT_PATHS and origin.startswith(("chrome-extension://", "moz-extension://"))):
             return await self._deny(send, 403, "origin not allowed")
         method = scope.get("method", "GET")
         if method == "OPTIONS":

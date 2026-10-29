@@ -60,23 +60,27 @@ TABLE = {
     "notebook_to_py": Act("notebook_to_script", lambda a: {"path": _notebook(a)}),
     "check_deps": Act("dependency_doctor", lambda a: {"repo": _project(a)}),
     "review": Act("review_code", lambda a: {"path": a.get("path", "")}),
+    "find_code": Act("code_nav", lambda a: {"action": "find", "name": a.get("text", "")}),
+    "code_help": Act("code_nav", lambda a: {"action": "help", "name": "", "request": a.get("text", "")}),
     "training": Act("training", lambda a: {"action": a.get("text", "status") if a.get("text") in ("status", "stop", "watch") else "status"}),
 }
 
 
 @tool(group="core", safety="safe",
-      description="Coding help: fix_error (explain an error/traceback), run_tests, where_was_i, changes (what changed "
+      description="Coding help: find_code (where a function/class/variable is defined in the project open in VS "
+                  "Code, opens it there; NOT a file search), code_help (a function's or library's arguments/docs, is "
+                  "my call right), fix_error (explain an error/traceback), run_tests, where_was_i, changes (what changed "
                   "lately), git (status/log/diff), commit, new_project, env (check / install a package), requirements (make "
                   "requirements.txt from imports), notebook_to_py (.ipynb -> .py), check_deps (missing/unpinned/outdated "
                   "packages), review, training "
                   "(ML training / Colab status).")
-def code(action: Literal["fix_error", "run_tests", "where_was_i", "changes", "git", "commit", "new_project", "env",
+def code(action: Literal["find_code", "code_help", "fix_error", "run_tests", "where_was_i", "changes", "git", "commit", "new_project", "env",
                          "requirements", "notebook_to_py", "check_deps", "review", "training"], text: str = "", path: str = "") -> str:
     """Coding.
 
     Args:
         action: What to do.
-        text: The error text / commit message / project name / package to install / 'last hour' / git: status, log, diff.
+        text: The function/class name (find_code; empty = the one highlighted in VS Code) / the question (code_help) / the error text / commit message / project name / package to install / 'last hour' / git: status, log, diff.
         path: The project folder or file (empty = the one open in VS Code).
     """
     return run(TABLE, {"action": action, "text": text, "path": path})

@@ -1,0 +1,9 @@
+{
+  "manifest_version": 3,
+  "name": "KURAMA tab link",
+  "version": "1.0",
+  "description": "Tells KURAMA (on this laptop only) which tab is open, so 'save this link' and 'download this video' know the page.",
+  "permissions": ["tabs"],
+  "host_permissions": ["http://127.0.0.1:8000/*"],
+  "background": { "service_worker": "background.js" }
+}

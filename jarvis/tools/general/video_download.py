@@ -11,16 +11,28 @@ def video_download(source: str = "", quality: str = "", audio: bool = False, pla
     """Download a video.
 
     Args:
-        source: The video/playlist link, or words to search YouTube for (empty = a link on the clipboard).
+        source: The video/playlist link, or words to search YouTube for (empty = the video open in the browser).
         quality: 1080p, 720p, 4k ... (empty or "best" = 1080p; "extra high" / "max" = the highest there is).
         audio: True = MP3 audio only.
         playlist: True = the whole playlist.
     """
     from jarvis.core import ytdl
     if not source.strip() or source.strip().lower() in ("this", "this video", "it", "that"):
-        from jarvis.tools.general import _sys
-        clip = _sys.clip_get().strip()
-        if not ytdl._URL.match(clip):
-            return "error: give a link (or copy the video link first)"
-        source = clip
+        source = this_video()
+        if not source:
+            return "error: open the video in your browser (or give its link), then ask again"
     return ytdl.start(source, quality, audio, playlist)
+
+
+def this_video() -> str:
+    """'Download this video': the tab open in the browser (extension), else a selected link / the page found by the
+    browser's history, else a link on the clipboard."""
+    from jarvis.core import browsertab, links, ytdl
+    if tab := browsertab.get():
+        return tab[0]
+    found = links.find_link()
+    if not isinstance(found, str) and found[0].startswith("http"):
+        return found[0]
+    from jarvis.tools.general import _sys
+    clip = _sys.clip_get().strip()
+    return clip if ytdl._URL.match(clip) else ""

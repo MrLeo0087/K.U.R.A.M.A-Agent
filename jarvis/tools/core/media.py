@@ -22,14 +22,16 @@ TABLE = {
 
 
 @tool(group="core", safety="safe",
-      description="Music and video: play a song, artist or playlist (sound only), pause, resume, next, previous, stop, "
-                  "what's playing, play on YouTube, hand-gesture media control on/off, download a video.")
+      description="Music and video: play = KURAMA's own music player (sound only; a song, artist, playlist or a "
+                  "YouTube link: 'play this song/link' means this), pause, resume, next, previous, stop, what's playing, "
+                  "youtube = open the video in the browser (only to WATCH it or when the browser is asked for), "
+                  "hand-gesture media control on/off, download a video.")
 def media(action: Literal["play", "pause", "resume", "next", "previous", "stop", "playing", "youtube", "gesture", "download"],
           query: str = "") -> str:
     """Music and video.
 
     Args:
         action: play, pause, resume, next, previous, stop, playing, youtube, gesture, download.
-        query: Song / artist / playlist / video to play, a video link to download, or on/off for gesture.
+        query: Song / artist / playlist / YouTube link to play, a video link to download, or on/off for gesture.
     """
     return run(TABLE, {"action": action, "query": query})

@@ -24,7 +24,7 @@ TABLE = {
 
 
 @tool(group="core", safety="safe",
-      description="Files and folders anywhere on the laptop: list a folder, find files by name, read, write, make a "
+      description="Files and folders anywhere on the laptop: list a folder, find files by their NAME (not code inside them), read, write, make a "
                   "folder, move, copy, delete (to trash, asks first), organize a messy folder, convert a file, lock a folder.")
 def files(action: Literal["list", "find", "read", "write", "mkdir", "move", "copy", "delete", "organize", "convert", "lock"],
           path: str = "", query: str = "", to: str = "", text: str = "") -> str:

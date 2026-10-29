@@ -78,7 +78,11 @@ def _history(name: str, limit: int = 300) -> list[tuple[str, str]]:
 
 
 def current_page(window_title: str) -> tuple[str, str] | None:
-    """(url, title) of the page open in the browser window with this title."""
+    """(url, title) of the page open in the browser: the extension's live tab first, else the history entry whose
+    title is the browser window's."""
+    from jarvis.core import browsertab
+    if tab := browsertab.get():
+        return tab
     b = _browser_of(window_title)
     if not b:
         return None
