@@ -1,3 +1,7 @@
+import os
+
+os.environ["KURAMA_TESTING"] = "1"  # set before anything runs and never removed: _sys refuses power commands
+
 import pytest
 
 from jarvis.core import config, jobs, llm, ratelimit, store

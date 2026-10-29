@@ -6,9 +6,11 @@ touches the real volume, brightness, screen lock or clipboard.
 """
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
+from pathlib import Path
 
 INSTALL = {
     "pactl": "sudo apt install pulseaudio-utils", "playerctl": "sudo apt install playerctl",
@@ -45,7 +47,20 @@ def need(binary: str) -> str:
     return path
 
 
+_POWER = {"poweroff", "reboot", "suspend", "hibernate", "halt", "shutdown", "terminate-session", "terminate-user",
+          "kill-session", "kill-user", "lock-session", "lock-sessions"}
+
+
+def power_blocked(argv: list[str]) -> bool:
+    """While testing (KURAMA_TESTING, set by tests/conftest.py and never removed), no command may power off,
+    reboot, suspend or end the session — a test's leftover thread once outlived its mock and REALLY did."""
+    return bool(os.environ.get("KURAMA_TESTING")) and bool(
+        set(map(str, argv)) & _POWER or Path(str(argv[0])).name in ("shutdown", "reboot", "poweroff", "gnome-session-quit"))
+
+
 def _exec(argv: list[str], timeout: float, input_text: str | None, capture: bool) -> subprocess.CompletedProcess:
+    if power_blocked(argv):
+        raise SysError(f"power command blocked while testing: {' '.join(map(str, argv))}")
     out = subprocess.PIPE if capture else subprocess.DEVNULL
     kw: dict = {"input": input_text} if input_text is not None else {"stdin": subprocess.DEVNULL}
     return subprocess.run(argv, stdout=out, stderr=out, text=True, timeout=timeout, **kw)

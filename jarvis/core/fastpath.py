@@ -3109,9 +3109,46 @@ def to_file_intent(text: str) -> Intent | None:
     return Intent("tofile", "code_to_file", "clipboard", {"request": t, "path": p.group(1) if p else ""})
 
 
+# The everyday laptop commands, said as the WHOLE request (typos ok: "shutodwn"): 0 tokens, never the AI.
+# Power ones still ask yes/no (their tools are `confirm`).
+_DAILY: list[tuple[tuple[str, ...], Intent]] = [
+    (("shutdown", "shut down", "power off", "turn off"), Intent("control", "power_off", "power", {"action": "shutdown"})),
+    (("restart", "reboot"), Intent("control", "power_off", "power", {"action": "restart"})),
+    (("log out", "logout", "sign out"), Intent("control", "power_off", "power", {"action": "logout"})),
+    (("sleep", "suspend", "go to sleep laptop"), Intent("sleep", "suspend_computer", "power", {})),
+    (("lock", "lock screen", "lock the screen"), Intent("lock", "lock_screen", "system", {})),
+    (("time", "what time is it", "what is the time"), Intent("time", "get_time", "general", {})),
+    (("date", "what is the date", "today date"), Intent("date", "get_date", "general", {})),
+    (("weather", "what is the weather"), Intent("weather", "weather", "web", {})),
+    (("battery", "battery status", "battery percentage"), Intent("battery", "battery_status", "system", {})),
+    (("ram", "ram usage", "memory usage"), Intent("cleanup", "cleanup", "system", {"action": "ram"})),
+    (("laptop status", "system status", "laptop health", "pc status"), Intent("doctor", "laptop_doctor", "system", {"action": "check"})),
+    (("wifi speed", "internet speed", "speed test", "net speed"), Intent("internet", "internet_doctor", "system", {"action": "speed"})),
+    (("internet", "is internet working", "check internet"), Intent("internet", "internet_doctor", "system", {"action": "check"})),
+]
+_FILLER = re.compile(r"\b(?:please|pls|now|the|my|this|laptop|computer|pc|system|kurama|hey|ok|okay|can\s+you|do|a)\b", I)
+
+
+def daily_intent(text: str) -> Intent | None:
+    """'shutodwn', 'shutdown laptop', 'wifi speed', 'ram' ...: the whole request (fillers aside) is one of the
+    everyday commands, allowing a typo or two."""
+    import difflib
+    t = re.sub(r"[^\w\s]", " ", (text or "").lower())
+    core = " ".join(_FILLER.sub(" ", t).split()) or " ".join(t.split())
+    if not core or len(core) > 30:
+        return None
+    names = {n: it for ns, it in _DAILY for n in ns}
+    hit = names.get(core) or names.get(" ".join(t.split()))
+    if hit is None and len(core) >= 5:
+        close = difflib.get_close_matches(core, list(names), n=1, cutoff=0.79 if len(core) >= 6 else 0.84)
+        hit = names[close[0]] if close and abs(len(close[0]) - len(core)) <= 2 else None  # a typo, not another word
+    return Intent(hit.name, hit.tool, hit.group, dict(hit.args)) if hit else None
+
+
 def match(text: str) -> Intent | None:
     """The single high-confidence intent for text whose meaning agrees (meaning_ok), or None."""
-    it = link_play_intent(text) or clean_intent(text) or to_file_intent(text) or _code_not_file(_match(text))
+    it = link_play_intent(text) or clean_intent(text) or to_file_intent(text) or _code_not_file(_match(text)) \
+        or daily_intent(text)
     return it if it is None or meaning_ok(text, it) else None
 
 

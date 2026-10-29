@@ -102,18 +102,33 @@ def context() -> dict:
     return _CTX.get()
 
 
-def ask(prompt: str) -> bool:
-    """Ask the user from inside a tool (the caller's confirm hook); no hook or an error means no."""
-    ctx = _CTX.get()
-    fn = ctx.get("confirm") or deny_all
-    ctx["asking"] = ctx.get("asking", 0) + 1  # time spent waiting for the user's yes/no is not "slow tool" time
+_asking = [0]  # yes/no questions waiting right now, in ANY tool thread (nested hub calls have their own _CTX)
+_asking_lock = threading.Lock()
+
+
+def _wait_for_user(fn: Callable[[str], bool], prompt: str) -> bool:
+    """Ask, and while the user hasn't answered, no tool counts as slow (it is never moved to the background:
+    a turn that ended under an open yes/no card turned the user's 'Yes' into 'declined')."""
+    with _asking_lock:
+        _asking[0] += 1
     try:
         return bool(fn(prompt))
     except Exception as e:
         log.warning("confirmation failed: %s", e)
         return False
     finally:
-        ctx["asking"] -= 1
+        with _asking_lock:
+            _asking[0] -= 1
+
+
+def asking_now() -> bool:
+    return _asking[0] > 0
+
+
+def ask(prompt: str) -> bool:
+    """Ask the user from inside a tool (the caller's confirm hook); no hook or an error means no."""
+    ctx = _CTX.get()
+    return _wait_for_user(ctx.get("confirm") or deny_all, prompt)
 
 
 def describe(tool: registry.BaseTool, args: dict) -> str:
@@ -161,12 +176,7 @@ def execute(name: str, args: Any = None, confirm: ConfirmFn | None = None,
         return done(ToolResult(False, f"Refused: {name} is blocked by the safety policy.",
                                "blocked"), "blocked", "blocked", clean)
     if level == "confirm":
-        ask = confirm or deny_all
-        try:
-            approved = bool(ask(describe(tool, clean)))
-        except Exception as e:
-            log.warning("confirmation failed: %s", e)
-            approved = False
+        approved = _wait_for_user(confirm or deny_all, describe(tool, clean))
         if not approved:
             return done(ToolResult(False, f"The user declined: {name} was not run.", "denied"),
                         "denied", "confirm", clean)
@@ -207,7 +217,7 @@ def _call_or_background(reg: registry.Registry, name: str, clean: Any, ctx: dict
     live = _CTX.get()  # the same dict the tool thread sees: it says when the tool is waiting on the user
     busy = 0.0
     while not finished.wait(0.25):
-        if not live.get("asking"):
+        if not live.get("asking") and not asking_now():
             busy += 0.25
         if busy >= wait:
             break
