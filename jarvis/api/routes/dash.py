@@ -378,6 +378,12 @@ def forecast(place: str) -> dict:
     return {"place": place.split(",")[0], "hours": hours, "days": days, "sun": sun}
 
 
+@router.get("/downloads", summary="Running downloads (videos and files) with progress, for the download bars")
+async def downloads():
+    from jarvis.core import automation
+    return {"items": await run_in_threadpool(automation.live_downloads)}
+
+
 @router.get("/weather/full", summary="Hourly + 6-day forecast and sun times for the weather card")
 async def weather_full(place: str = ""):
     from jarvis.core import config

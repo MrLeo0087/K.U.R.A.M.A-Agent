@@ -108,12 +108,67 @@ def check_download(w: dict) -> None:
                       source="downloads")
 
 
+_WGET_TICK = re.compile(r"(\d+)%\s+([\d.,]+)([KMG]?)\s+(\S+)\s*$")
+_UNITS = {"": 1, "K": 1e3, "M": 1e6, "G": 1e9}
+
+
+def _wget_progress(w: dict) -> dict:
+    """done/total bytes, speed, eta of a download-manager job (file size + wget's own log)."""
+    st = w["state"]
+    path = Path(st.get("path") or Path(st["folder"]) / w["label"])
+    out = {"done": path.stat().st_size if path.exists() else 0, "total": 0, "speed": 0, "eta": 0}
+    logf = Path(config.DATA_DIR) / "runs" / f"dl-{w['id']}.log"
+    try:
+        with open(logf, "rb") as f:
+            head = f.read(4000).decode(errors="replace")
+            f.seek(max(0, logf.stat().st_size - 300))
+            tail = f.read().decode(errors="replace").strip().splitlines()
+    except OSError:
+        return out
+    if m := re.search(r"Length: (\d+)", head):
+        out["total"] = int(m.group(1))
+    if tail and (m := _WGET_TICK.search(tail[-1])):
+        out["speed"] = float(m.group(2).replace(",", ".")) * _UNITS[m.group(3)]
+        eta = m.group(4)
+        out["eta"] = sum(int(n) * {"h": 3600, "m": 60, "s": 1}[u] for n, u in re.findall(r"(\d+)([hms])", eta))
+    return out
+
+
+def live_downloads(recent_s: float = 120) -> list[dict]:
+    """Every running download (videos and files) plus the ones that ended in the last 2 min: the UI's bars."""
+    from jarvis.core import ytdl
+    items = []
+    for w in store.watches_list(None, 30):
+        if w["kind"] not in ("dl", "ytdl") or (w["status"] != "active" and
+                                               time.time() - float(w.get("finished") or 0) > recent_s):
+            continue
+        st = w["state"]
+        if w["kind"] == "ytdl":
+            p = {k: st.get(k) or 0 for k in ("done", "total", "speed", "eta")}
+            title, part, sub = st.get("title") or w["label"], st.get("part", "video"), ytdl.progress_text(st)
+        else:
+            p, title, part = _wget_progress(w), w["label"], "file"
+            sub = ytdl.progress_text({**p, "part": "file"}) if st.get("pid") else \
+                datetime.fromtimestamp(st["start_at"]).strftime("starts %H:%M")
+        if w["status"] != "active":
+            sub = w["status"] + (f": {w['result']}" if w.get("result") else "")
+        items.append({"id": w["id"], "kind": w["kind"], "title": title, "part": part, "status": w["status"],
+                      "sub": sub, "frac": round(p["done"] / p["total"], 3) if p["total"] else None, **p})
+    return items
+
+
 def downloads_text() -> str:
-    rows = [w for w in store.watches_list() if w["kind"] == "dl"][:8]
+    rows = [w for w in store.watches_list() if w["kind"] in ("dl", "ytdl")][:8]
     if not rows:
         return "No downloads."
     out = []
     for w in rows:
+        if w["kind"] == "ytdl":
+            from jarvis.core import ytdl
+            st = w["state"]
+            out.append(f"#{w['id']} {st.get('title') or w['label']}: " +
+                       (ytdl.progress_text(st) if w["status"] == "active" else f"{w['status']} {w.get('result') or ''}"))
+            continue
         st = w["state"]
         path = Path(st.get("path") or Path(st["folder"]) / w["label"])
         mb = path.stat().st_size / 1e6 if path.exists() else 0

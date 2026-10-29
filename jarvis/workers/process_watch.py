@@ -343,6 +343,13 @@ class ProcessWatcher(Worker):
         from jarvis.core import automation
         automation.check_download(w)
 
+    def check_ytdl(self, w: dict) -> None:
+        """A video download whose reader thread died with KURAMA (restart): close it so its bar doesn't hang."""
+        st = w["state"]
+        if Path(f"/proc/{st.get('pid', 0)}").exists() or time.time() - float(st.get("updated") or 0) < 60:
+            return
+        store.watch_update(w["id"], status="stopped", finished=time.time(), result="stopped (KURAMA restarted)")
+
     # ---------- websites ----------
     def check_web(self, w: dict) -> None:
         from jarvis.core import webwatch

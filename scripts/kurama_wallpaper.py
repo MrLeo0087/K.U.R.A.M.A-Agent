@@ -30,6 +30,8 @@ import contextlib
 import json
 import math
 import os
+import signal
+import subprocess
 import sys
 import threading
 import time
@@ -57,7 +59,10 @@ DEFAULT_URL = os.getenv("KURAMA_UI_URL", f"http://127.0.0.1:{PORT}/?lowpower=0&w
 CHECK_MS = 2000
 STATE_FILE = Path(__file__).resolve().parent.parent / "data" / "mini.json"  # minimized? + button position
 BUBBLE = 56  # floating button size (px)
-PANEL_W, PANEL_H = 400, 600  # mini chat panel
+PANEL_W, PANEL_H = 400, 600  # mini chat panel (default size; a resized panel remembers its size)
+PANEL_MIN_W, PANEL_MIN_H = 300, 260
+MINI_HOTKEY = os.getenv("KURAMA_MINI_HOTKEY", "<Super>s")  # opens / hides the mini chat (GNOME shortcut; '' = none)
+BUSY_STATES = ("listening", "capturing", "thinking", "speaking")  # closing the panel now keeps it alive
 WS_W, WS_H = 480, 620  # mini workspace window
 PANEL_KEEP_S = 180  # a hidden panel is closed after this long (frees its page); reopening restores the chat
 CAPTION_W = 340  # reply caption next to the button while talking with the panel closed
@@ -491,8 +496,17 @@ class Wallpaper:
             self.restore()
         elif msg == "hide" and self.mini:
             self.mini.hide_panel()
-        elif self.mini and msg.startswith(("talk:", "state:", "caption:", "ws:")):  # only the mini panel sends these
+        elif self.mini and msg.startswith(("talk:", "state:", "caption:", "ws:", "resize:")):  # only the mini panel sends these
             self.mini.on_page(msg)
+
+    def toggle_mini(self):
+        """Super+S: open the mini chat (minimizing the big dashboard first if it's up), or hide it."""
+        if self.mini is None:
+            self.minimize()
+            GLib.timeout_add(700, lambda: self.mini is not None and self.mini.show_panel() and False)
+        else:
+            self.mini.toggle_panel()
+        return True  # keep the signal handler
 
     def minimize(self):
         """Mini mode: the big dashboard is switched OFF (its page unloaded, its window hidden; the desktop shows the
@@ -635,6 +649,7 @@ class Mini:
         self.reaper = 0  # timer that closes the hidden panel
         self.hover = False
         self.talking = False  # the panel's page is in talk mode
+        self.size_timer = 0
         self.ghost = False  # panel "closed" but still alive (invisible, click-through) so talk mode keeps going
         self.state = "idle"  # voice state shown by the ring while ghosted
         self.caption = None  # Caption window, made on first use
@@ -681,16 +696,22 @@ class Mini:
             if not self.talking and self.wp.wake is not None:
                 self.wp.wake.arm()  # conversation over: the backend listens for "KURAMA / wake up" again
             if not self.talking and self.ghost:  # talk mode ended while closed: really hide now
-                self.panel.hide()
-                self.unghost()
-                run_js(self.view, "window.kuramaMiniShown && window.kuramaMiniShown(false)")
-                if not self.reaper:
-                    self.reaper = GLib.timeout_add_seconds(PANEL_KEEP_S, self.drop_panel)
-                self.bubble.queue_draw()
+                self.end_ghost()
         elif kind == "state":
             if rest != self.state:
                 self.state = rest
                 self.bubble.queue_draw()
+            if self.ghost and not self.talking and rest not in BUSY_STATES:
+                # closed while a reply was on its way (any mode): it's done; wait a moment (the reply's caption
+                # arrives right after, or it starts speaking), then really hide, keeping the caption up
+                GLib.timeout_add(1500, self.end_ghost_if_idle)
+        elif kind == "resize" and self.panel is not None:  # the page's edge was dragged: let the WM resize it
+            edge = {"n": Gdk.WindowEdge.NORTH, "s": Gdk.WindowEdge.SOUTH, "e": Gdk.WindowEdge.EAST,
+                    "w": Gdk.WindowEdge.WEST, "ne": Gdk.WindowEdge.NORTH_EAST, "nw": Gdk.WindowEdge.NORTH_WEST,
+                    "se": Gdk.WindowEdge.SOUTH_EAST, "sw": Gdk.WindowEdge.SOUTH_WEST}.get(rest)
+            if edge is not None:
+                _, x, y = Gdk.Display.get_default().get_default_seat().get_pointer().get_position()
+                self.panel.begin_resize_drag(edge, 1, x, y, Gtk.get_current_event_time())
         elif kind == "ws":  # the panel asks for its workspace window (button, or a finished job with a result)
             self.open_ws(focus=rest != "quiet")
         elif kind == "caption" and self.ghost:
@@ -811,7 +832,11 @@ class Mini:
         p.set_skip_pager_hint(True)
         p.set_keep_above(True)
         p.stick()
-        p.set_default_size(PANEL_W, min(PANEL_H, workarea().height - 40))
+        wa = workarea()
+        p.set_size_request(PANEL_MIN_W, PANEL_MIN_H)
+        p.set_default_size(min(int(self.wp.state.get("panel_w") or PANEL_W), wa.width - 40),
+                           min(int(self.wp.state.get("panel_h") or PANEL_H), wa.height - 40))
+        p.connect("configure-event", self.on_configure)
         p.connect("delete-event", lambda *_: self.hide_panel() or True)
         v = self.view = WebKit2.WebView(web_context=self.wp.ctx, user_content_manager=self.wp.ucm)
         v.set_settings(self.wp.settings)
@@ -849,7 +874,8 @@ class Mini:
         self.bubble.queue_draw()
 
     def hide_panel(self) -> None:
-        if self.open and self.talking:  # talk mode: keep the page alive, just invisible and click-through
+        if self.open and (self.talking or self.state in BUSY_STATES):
+            # talk mode, or a reply still on its way: keep the page alive, just invisible and click-through
             run_js(self.view, "window.kuramaMiniShown && window.kuramaMiniShown(false, true)")
             self.ghost = True
             self.panel.set_opacity(0)
@@ -862,7 +888,7 @@ class Mini:
                 self.reaper = GLib.timeout_add_seconds(PANEL_KEEP_S, self.drop_panel)
         self.bubble.queue_draw()
 
-    def unghost(self) -> None:
+    def unghost(self, hide_caption: bool = True) -> None:
         if not self.ghost or self.panel is None:
             self.ghost = False
             return
@@ -871,8 +897,41 @@ class Mini:
         self.panel.input_shape_combine_region(None)  # clickable again (the Gdk call refuses None)
         self.panel.set_opacity(1)
         self.panel.set_keep_above(True)
-        if self.caption is not None:
+        if hide_caption and self.caption is not None:
             self.caption.hide()
+
+    def end_ghost(self, keep_caption: bool = False) -> None:
+        """The closed-but-alive panel has nothing left to do: hide it for real (its page stops the mic, saves the chat)."""
+        self.panel.hide()
+        self.unghost(hide_caption=not keep_caption)
+        run_js(self.view, "window.kuramaMiniShown && window.kuramaMiniShown(false)")
+        if not self.reaper:
+            self.reaper = GLib.timeout_add_seconds(PANEL_KEEP_S, self.drop_panel)
+        self.bubble.queue_draw()
+
+    def end_ghost_if_idle(self):
+        if self.ghost and not self.talking and self.state not in BUSY_STATES and self.panel is not None:
+            self.end_ghost(keep_caption=True)
+        return False
+
+    def toggle_panel(self) -> None:
+        self.hide_panel() if self.open else self.show_panel()
+
+    def on_configure(self, win, _ev):
+        """Remember the panel's size (saved 1 s after the last resize)."""
+        if self.size_timer:
+            GLib.source_remove(self.size_timer)
+
+        def save():
+            self.size_timer = 0
+            if self.panel is not None and self.panel.get_visible() and not self.ghost:
+                w, h = self.panel.get_size()
+                if (w, h) != (self.wp.state.get("panel_w"), self.wp.state.get("panel_h")):
+                    self.wp.state["panel_w"], self.wp.state["panel_h"] = w, h
+                    save_state(self.wp.state)
+            return False
+        self.size_timer = GLib.timeout_add(1000, save)
+        return False
 
     def drop_panel(self):
         """Hidden for a while: close the panel's page (~45 MB); the next click reopens it with the chat restored."""
@@ -1013,6 +1072,36 @@ class Caption:
         return False
 
 
+def install_hotkey() -> None:
+    """GNOME shortcut MINI_HOTKEY (Super+S) -> SIGUSR1 to this script = open / hide the mini chat. Once; idempotent.
+    GNOME gives Super+S to its quick-settings menu: that binding is taken off (the top-bar menu still works)."""
+    if not MINI_HOTKEY or "GNOME" not in os.getenv("XDG_CURRENT_DESKTOP", "").upper():
+        return
+    base = "org.gnome.settings-daemon.plugins.media-keys"
+    path = "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/kurama-mini/"
+    key = f"{base}.custom-keybinding:{path}"
+
+    def gs(*args: str) -> str:
+        r = subprocess.run(["gsettings", *args], capture_output=True, text=True, timeout=5)
+        return r.stdout.strip()
+    try:
+        if gs("get", key, "binding") == repr(MINI_HOTKEY):
+            return
+        quick = gs("get", "org.gnome.shell.keybindings", "toggle-quick-settings")
+        if MINI_HOTKEY.lower() in quick.lower():
+            gs("set", "org.gnome.shell.keybindings", "toggle-quick-settings", "[]")
+        paths = gs("get", base, "custom-keybindings").replace("@as ", "")
+        lst = json.loads(paths.replace("'", '"')) if paths.startswith("[") else []
+        if path not in lst:
+            gs("set", base, "custom-keybindings", json.dumps(lst + [path]).replace('"', "'"))
+        gs("set", key, "name", "KURAMA mini chat")
+        gs("set", key, "command", "pkill -USR1 -f kurama_wallpaper.py")
+        gs("set", key, "binding", MINI_HOTKEY)
+        note(f"shortcut {MINI_HOTKEY} opens / hides the mini chat")
+    except (OSError, subprocess.SubprocessError, ValueError) as e:
+        note(f"couldn't set the {MINI_HOTKEY} shortcut: {e}")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="KURAMA live wallpaper (GTK + WebKit)")
     ap.add_argument("--window", action="store_true", help="normal window instead of wallpaper (testing)")
@@ -1021,7 +1110,9 @@ def main() -> int:
     if not Gdk.Display.get_default():
         print("no display (needs an X11 session)", file=sys.stderr)
         return 1
-    Wallpaper(a.url, a.window)
+    wp = Wallpaper(a.url, a.window)
+    GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGUSR1, wp.toggle_mini)
+    threading.Thread(target=install_hotkey, daemon=True).start()
     Gtk.main()
     return 0
 

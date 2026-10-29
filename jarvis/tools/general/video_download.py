@@ -12,7 +12,7 @@ def video_download(source: str = "", quality: str = "", audio: bool = False, pla
 
     Args:
         source: The video/playlist link, or words to search YouTube for (empty = a link on the clipboard).
-        quality: 1080p, 720p, 4k, hd ... (empty = best available).
+        quality: 1080p, 720p, 4k ... (empty or "best" = 1080p; "extra high" / "max" = the highest there is).
         audio: True = MP3 audio only.
         playlist: True = the whole playlist.
     """

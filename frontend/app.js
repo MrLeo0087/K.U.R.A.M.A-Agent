@@ -590,6 +590,7 @@ async function sendChat(text, { voice = false, lang = null, speak = false, ambie
           if (MINI && ev.workspace?.length) openWorkspace(false); // the long answer went there: show it (no focus steal)
           setTimeout(loadToday, 600); // a reminder / alarm / timer may have changed
           setTimeout(loadOutputs, 800); // a tool may have just saved a file (long results go to the workspace)
+          setTimeout(loadDownloads, 1200); // a download may have just started: show its bar
           setTimeout(loadWall, 1500);
           if (/\bname\b/i.test(text)) setTimeout(loadName, 500); // "change your name to ..."
           break;
@@ -2537,3 +2538,53 @@ $("btn-minimal").onclick = () => setLayout(false);
 $("tb-ws").onclick = () => wsPanel(!document.body.classList.contains("ws-open"));
 for (const b of document.querySelectorAll(".tb-chip[data-sheet]")) b.onclick = () => openSheet(b.dataset.sheet);
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && document.body.classList.contains("ws-open") && !document.querySelector("dialog[open]")) wsPanel(false); });
+
+// ---------- downloads: one live bar per download (main UI, mini chat, workspace window); minimize or dock it ----------
+let dlTimer = 0, dlKey = "";
+const dlPref = (k, v) => { try { if (v === undefined) return localStorage.getItem("kurama.dl." + k); localStorage.setItem("kurama.dl." + k, v); } catch { /* private window */ } return null; };
+async function loadDownloads() {
+  clearTimeout(dlTimer); dlTimer = 0;
+  let items = null;
+  try { items = (await api.downloads()).items || []; } catch { /* offline: keep the last bars */ }
+  if (items) renderDownloads(items);
+  if (document.hidden) return; // visibilitychange starts it again
+  dlTimer = setTimeout(loadDownloads, items?.some((d) => d.status === "active") ? 2000 : 20000);
+}
+function renderDownloads(items) {
+  const key = JSON.stringify(items);
+  if (key === dlKey) return;
+  dlKey = key;
+  const tray = $("dl-tray");
+  tray.hidden = !items.length;
+  if (!items.length) return;
+  const live = items.filter((d) => d.status === "active");
+  const pct = (d) => (d.frac != null ? Math.round(d.frac * 100) + "%" : "");
+  $("dl-sum").textContent = live.length ? `${live.length} downloading${live.length === 1 && live[0].frac != null ? " · " + pct(live[0]) : ""}` : "Downloads finished";
+  $("dl-list").innerHTML = items.map((d) => `<li class="dl-${esc(d.status)}"><div class="ell" title="${esc(d.title)}">${esc(d.title)}</div>
+    <div class="gbar"><i style="width:${d.status === "done" ? 100 : Math.max(2, Math.round((d.frac || 0) * 100))}%"></i></div>
+    <div class="s ell" title="${esc(d.sub)}">${esc(d.sub)}</div></li>`).join("");
+}
+function dockDownloads(inWs) {
+  const tray = $("dl-tray"), ws = $("ws");
+  if (inWs && ws && !MINI) ws.querySelector(".card-title").after(tray); else document.body.append(tray);
+  tray.classList.toggle("docked", inWs && !MINI);
+  dlPref("dock", inWs ? "1" : "0");
+}
+$("dl-min").onclick = () => { const m = !$("dl-tray").classList.contains("min"); $("dl-tray").classList.toggle("min", m); dlPref("min", m ? "1" : "0"); };
+$("dl-dock").onclick = () => dockDownloads(!$("dl-tray").classList.contains("docked"));
+$("dl-tray").classList.toggle("min", dlPref("min") === "1");
+dockDownloads(dlPref("dock") === "1");
+document.addEventListener("visibilitychange", () => { if (!document.hidden) loadDownloads(); });
+loadDownloads();
+
+// mini chat: its window has no frame, so dragging the page's edge resizes it (the host remembers the size)
+if (MINI && !WSONLY) {
+  const EDGE = 6, CUR = { n: "ns", s: "ns", e: "ew", w: "ew", ne: "nesw", sw: "nesw", nw: "nwse", se: "nwse" };
+  const edgeAt = (e) => (e.clientY < EDGE ? "n" : e.clientY > innerHeight - EDGE ? "s" : "") + (e.clientX < EDGE ? "w" : e.clientX > innerWidth - EDGE ? "e" : "");
+  let cur = "";
+  document.addEventListener("mousemove", (e) => {
+    const ed = edgeAt(e);
+    if (ed !== cur) { cur = ed; document.documentElement.style.cursor = ed ? CUR[ed] + "-resize" : ""; }
+  }, { passive: true });
+  document.addEventListener("mousedown", (e) => { const ed = e.button === 0 && edgeAt(e); if (ed && hostSay("resize:" + ed)) e.preventDefault(); }, true);
+}
