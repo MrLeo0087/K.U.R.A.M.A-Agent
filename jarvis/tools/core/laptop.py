@@ -43,9 +43,10 @@ TABLE = {
     "screen_off": Act("laptop_toggle", lambda a: {"setting": "screen", "state": "off"}),
     "battery": Act("battery_status"),
     "health": Act("laptop_doctor", lambda a: {"action": "check"}),
-    "free_ram": Act("laptop_doctor", lambda a: {"action": "free_ram"}),
+    "free_ram": Act("cleanup", lambda a: {"action": "ram"}),
+    "clean_kurama": Act("cleanup", lambda a: {"action": "kurama"}),
     "internet": Act("internet_doctor", lambda a: {"action": a.get("value", "check")}),
-    "clean_disk": Act("disk_cleaner", lambda a: {"action": a.get("value", "scan")}),
+    "clean_disk": Act("cleanup", lambda a: {"action": "storage"}),
     "focus": Act("focus_mode", lambda a: {"minutes": int(re.search(r"\d+", a.get("value", "25")).group(0)) if re.search(r"\d+", a.get("value", "25")) else 25}),
     "lock": Act("lock_screen"),
     "sleep": Act("suspend_computer"),
@@ -57,11 +58,11 @@ TABLE = {
 
 @tool(group="core", safety="safe",
       description="Laptop settings and health: volume, brightness, wifi, bluetooth, airplane, power mode, night light, "
-                  "theme, do-not-disturb, wallpaper, screenshot, screen off, battery, health (RAM/CPU/top apps), free RAM, "
-                  "internet check, clean disk, focus session, lock, sleep, shutdown, restart, log out.")
+                  "theme, do-not-disturb, wallpaper, screenshot, screen off, battery, health (RAM/CPU/top apps), free RAM (clean / optimize RAM: top RAM+CPU apps), "
+                  "internet check, clean disk (clean storage: safe caches), clean_kurama (KURAMA's own caches), focus session, lock, sleep, shutdown, restart, log out.")
 def laptop(action: Literal["volume", "brightness", "wifi", "bluetooth", "airplane", "power_mode", "night_light", "theme",
                            "dnd", "wallpaper", "screenshot", "screen_off", "battery", "health", "free_ram", "internet",
-                           "clean_disk", "focus", "lock", "sleep", "shutdown", "restart", "logout"],
+                           "clean_disk", "clean_kurama", "focus", "lock", "sleep", "shutdown", "restart", "logout"],
            value: str = "") -> str:
     """Laptop control.
 

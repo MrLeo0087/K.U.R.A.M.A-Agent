@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import threading
 import time
 from typing import Any
@@ -143,9 +144,13 @@ def _judge(turn: dict) -> None:
     try:
         recent = turn["ts"] - prev["ts"] < config.LEARN_WINDOW_S
         if recent and is_correction(turn["text"]):
+            # the right action that FAILED ("I couldn't find...") is a bug to fix, not a wrong choice to unlearn
+            failed = any(re.match(r"\W*(?:error|i couldn'?t|i can'?t|sorry|i'm sorry)", str(t.get("result") or ""), re.I)
+                         for t in prev["tools"])
+            neg = "" if failed else prev.get("intent") or ""
             if area := _area(turn["tools"]):
-                add(prev["text"], area, prev.get("intent") or "", "correction")
-            elif prev.get("path") == "fastpath" and prev.get("intent"):
+                add(prev["text"], area, neg, "correction")
+            elif prev.get("path") == "fastpath" and neg:
                 add(prev["text"], "", prev["intent"], "correction")
         elif prev.get("path") == "ai" and (area := _area(prev["tools"])):
             add(prev["text"], area, "", "worked")

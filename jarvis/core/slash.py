@@ -67,6 +67,8 @@ COMMANDS: tuple[Cmd, ...] = (
     Cmd("doctor", "why is my laptop slow", "Laptop", phrase="why is my laptop slow", aliases=("slow",)),
     Cmd("ram", "RAM / CPU check", "Laptop", tool=("laptop_doctor", "system", {"action": "check"}, "")),
     Cmd("freeram", "free RAM (stops idle notebooks, asks first)", "Laptop", phrase="free up some ram"),
+    Cmd("clean", "clean RAM / storage / KURAMA (safe, offline)", "Laptop", hint="ram|storage|kurama",
+        tool=("cleanup", "system", {"action": "ram"}, "action")),
     Cmd("ports", "programs using ports", "Laptop", "[port]", phrase="show my open ports|what is running on port {a}",
         aliases=("port",)),
     Cmd("screenshot", "take a screenshot", "Laptop", phrase="take a screenshot", aliases=("ss", "screen")),

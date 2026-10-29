@@ -3052,9 +3052,28 @@ def link_play_intent(text: str) -> Intent | None:
     return Intent("music", "music", "media", {"action": "url", "query": m.group(0)})
 
 
+_CLEAN_ASK = re.compile(r"(?:please\s+)?(?:can\s+you\s+)?(?:clean|clear|optimi[sz]e|free|boost|speed\s+up|tidy)(?:\s+up)?"
+                    r"(?:\s+(?:my|the|your|all))?\s+(?P<w>ram|memory|storage|disk(?:\s+space)?|space|drive|cache|caches|"
+                    r"kurama|yourself|kurama'?s?\s+cache)(?:\s+(?:please|now|too))?", I)
+
+
+def clean_intent(text: str) -> Intent | None:
+    """'clean my RAM' / 'optimize ram' / 'clean my storage' / 'clean KURAMA' as the WHOLE request: the safe cleanup."""
+    t = " ".join((text or "").split()).strip(" .!?")
+    if sl := re.fullmatch(r"/clean(?:\s+(\S+))?", t, I):  # before the name is stripped as a wake word
+        from jarvis.core import cleanup
+        return Intent("cleanup", "cleanup", "system", {"action": cleanup.word(sl.group(1) or "ram")})
+    m = _CLEAN_ASK.fullmatch(t)
+    if not m:
+        return None
+    w = m.group("w").lower()
+    action = "ram" if w in ("ram", "memory") else "kurama" if w.startswith(("kurama", "yourself")) else "storage"
+    return Intent("cleanup", "cleanup", "system", {"action": action})
+
+
 def match(text: str) -> Intent | None:
     """The single high-confidence intent for text whose meaning agrees (meaning_ok), or None."""
-    it = link_play_intent(text) or _code_not_file(_match(text))
+    it = link_play_intent(text) or clean_intent(text) or _code_not_file(_match(text))
     return it if it is None or meaning_ok(text, it) else None
 
 
