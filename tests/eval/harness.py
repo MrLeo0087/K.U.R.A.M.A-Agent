@@ -29,6 +29,8 @@ OUT_DIR = ROOT / "data" / "eval"
 
 # today's tool -> intent (tools whose intent depends on an argument are handled in intent_of)
 TOOL_INTENT = {
+    "video_download": "media.download", "cleanup": "system.cleanup", "code_nav": "code.find",
+    "code_to_file": "code.to_file",
     "get_time": "time", "get_date": "date", "weather": "weather",
     "add_reminder": "reminder.add", "set_alarm": "alarm.set", "set_timer": "timer.set", "stopwatch": "stopwatch",
     "open_app": "open.app", "open_url": "open.site", "open_folder": "open.folder", "close_app": "close.app",

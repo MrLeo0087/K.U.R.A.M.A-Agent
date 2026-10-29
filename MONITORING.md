@@ -81,20 +81,68 @@ for r in c.execute("SELECT id, path, tokens, ms, text, answer FROM traces WHERE 
 EOF
 ```
 
-## How to fix what the report finds
+## How to fix what the report finds (rules: fix the CLASS of problem, never one sentence)
+
+The owner's standing rule: no cheap per-query fixes. A fix must work for every way of saying the thing and for
+every tool of that kind, not just the sentence in the trace.
+
+1. **Find the class.** Group the bad traces: is it routing (wrong area / tool not offered), the AI's choice
+   (wrong action / argument), a tool bug, missing context, or cost? One class = one fix.
+2. **Prefer meaning over words.** In this order: the tool's description and arguments (the AI decides by
+   meaning) → semantic router examples (`config.ROUTER_EXAMPLES`) → the context line (`jarvis/core/context.py`)
+   → learning (`data/learned.json` fills itself from corrections). A new regex shortcut in `fastpath.py` is the
+   LAST resort and only for a WHOLE-request command whose wording is fixed (`/clean ram`, "<link> play this").
+   Never add a "if word X appears do Y" rule (CLAUDE.md).
+3. **Prove it is general.** Add 3+ different phrasings of the case to `tests/eval/cases.jsonl` (not just the one
+   from the trace), a unit test for the mechanism, run the related tests, the full suite, and the scorecard
+   (`venv/bin/python -m tests.eval.harness`; `--ai` runs the real agent and costs tokens). For a live check, send
+   it through the API: `curl -sN -X POST http://127.0.0.1:8000/api/v1/chat -H 'Content-Type: application/json'
+   -d '{"text":"..."}'`.
+4. `scripts/trace_report.py --mark-fixed`, update `PROGRESS.md` and the Fix history below, commit, restart
+   (`scripts/kurama-power.sh off; scripts/kurama-power.sh on`).
 
 | Problem | Where to fix it |
 |---|---|
-| A common phrase goes to the AI | add a shortcut in `jarvis/core/fastpath.py` (and a case in `tests/eval/cases.jsonl`) |
-| Speech-to-text heard a word wrong | `config.STT_FIXES` |
-| The router picked the wrong area | `config.ROUTER_RULES` / `config.CORE_COVERS`, examples for the semantic router in `config` |
+| The router picked the wrong area | examples for the semantic router (`config.ROUTER_EXAMPLES`), `config.CORE_COVERS`; `config.ROUTER_RULES` only adds candidates now |
 | The AI picked the wrong action / argument | the general tool's description and args in `jarvis/tools/core/<tool>.py` |
+| "this / it / the code / this page" misunderstood | `jarvis/core/context.py` (VS Code file + selection, browser tab via `browser_ext/`) |
+| A shortcut fired on the wrong meaning | `fastpath.meaning_ok` (meaning gate) / learned vetoes; fix the pattern only if it is a fixed command |
+| Speech-to-text heard a word wrong | `config.STT_FIXES` |
 | A tool failed | the specialised tool in `jarvis/tools/{general,interactive,external}/` |
-| Slow or expensive | check `llm` in the trace: planner / router / summary calls that could be skipped, a big tier where the fast one would do |
+| Slow or expensive | `llm` in the trace: planner / router / summary calls that could be skipped, a big tier where the fast one would do; long work belongs in a background job (`jobs.get_manager().submit`) |
 
-After a fix: add a test, run the related tests and the scorecard (then `--mark-fixed`, so the next report only shows what happened after the fixes) (`venv/bin/python -m tests.eval.harness`; add `--ai`
-for the full agent, which costs tokens), update `PROGRESS.md`, commit.
+## How KURAMA works now (after the 2026-10-30 fixes)
+
+- **Routing:** meaning first (`semantic.py`, warm model) + learned wordings (`learn.py`, `data/learned.json`);
+  word rules only add candidates or stand in while the model loads. Shortcuts run only if the meaning agrees.
+- **Learning:** each turn is judged when the next one arrives (a correction by meaning within 2 min teaches the
+  right area and vetoes the wrong shortcut; a correction after a FAILED action does not veto it).
+- **Context:** the VS Code file + selected code, or the browser tab, go into the prompt as one short line.
+- **Code workflow:** `code_to_file` (generate / complete / put code into the open file): Python files get a
+  patch (only changed or new functions, applied in place), a blank file is written at once, every other change
+  waits for a typed "yes" (backup in `data/backups/`); long generation runs as a background job. Selected code:
+  the assist flow (improve / complete the selection, "Should I replace it?"). VS Code auto-save is on.
+- **Honesty:** no "done" when every tool failed or was refused (`agent.honest`); no retries after a "no" or on
+  emoji; garbled "… … …" streams replaced.
+- **Downloads:** yt-dlp with live progress (`ytdl.py`), 1080p default, cookie retry for the bot check, bars +
+  library in the workspace (`/api/v1/downloads`, `/api/v1/videos`).
+- **Audio:** the echo canceller runs only while a page records the mic (`devaudio.mic_use`); music ducks only in
+  voice / talk mode.
+- **Cleanup:** `/clean ram | storage | kurama` (`jarvis/core/cleanup.py`).
+
+## Known shortcuts that are still word patterns (replace them by meaning when touched)
+
+These were added on 2026-10-30 to make urgent cases work; each is a whole-request pattern, but they are the first
+candidates to turn into meaning-based intents (examples + the meaning gate) if a report shows them misfiring:
+`fastpath.link_play_intent` (YouTube link + "play this"), `fastpath.clean_intent` ("clean my RAM / storage /
+KURAMA"), `fastpath.to_file_intent` (code + "in this file / path", "complete <file/function>", "replace it" after
+code in the chat), `fastpath._code_not_file` ("where is this function" -> code search), the "this video now" source
+rule in `video_dl_intent`, and the filler-word list in `tools/general/video_download.py`.
 
 ## Fix history
 
 - 2026-10-30: the first report's problems (wrong tools, downloads, open tab / code / small talk, honest replies, mic/sound) were fixed; see PROGRESS.md (FIX 1-5). Reports start after this (`traces_fixed_at`).
+- 2026-10-30 (later): downloads (progress, pause/resume/delete, library, cookies, speed), laptop alerts beside the
+  mini button, Ctrl+Alt+K, resizable mini chat, music links in KURAMA's player, cleanup tool, mic/echo canceller only
+  while recording, context line (VS Code + browser tab), code workflow (patches, typed yes, background jobs, no
+  overwrite loop), passwords masked in traces. 14 eval cases added (scorecard: 64% instant at 100%, router 92%).
