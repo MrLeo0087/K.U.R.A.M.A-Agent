@@ -13,6 +13,7 @@ from __future__ import annotations
 import contextvars
 import json
 import logging
+import re
 import sqlite3
 import threading
 import time
@@ -117,6 +118,20 @@ def _j(v: Any) -> str:
     return json.dumps(v, ensure_ascii=False, default=str) if v else ""
 
 
+_PASSWORD = re.compile(r"(pass\S*\s*(?:is\s+|=\s*|:\s*)?)\S+", re.I)  # also typos: 'passeord is X'
+
+
+def redact(text: str) -> str:
+    """No passwords in the improvement data: 'password is X' -> 'password is [hidden]'; a bare unlock try -> hidden."""
+    try:
+        from jarvis.core import selfknow
+        if selfknow.looks_like_password_try(text or ""):
+            return "[password]"
+    except Exception:  # noqa: BLE001
+        pass
+    return _PASSWORD.sub(r"\1[hidden]", text or "")
+
+
 def end(tr: dict | None, answer: str = "", last: dict | None = None, error: str = "") -> None:
     """Write the trace row. Never raises: monitoring must not break a reply."""
     if tr is None or tr["done"]:
@@ -145,21 +160,21 @@ def end(tr: dict | None, answer: str = "", last: dict | None = None, error: str 
         tout = sum(x["out"] for x in tr["llm"])
         outcomes = {t.get("outcome") for t in tools}
         row = (tr["id"], tr["ts"], time.strftime("%Y-%m-%d", time.localtime(tr["ts"])), tr["channel"] or "",
-               tr["mode"] or "", (tr["text"] or "")[:2000], path,
+               tr["mode"] or "", redact(tr["text"] or "")[:2000], path,
                last.get("fastpath") or (real[0]["name"] if real else ""),
                getattr(route, "method", "") or "", _j(getattr(route, "groups", None)), _j(last.get("tools_sent")),
                _j(tools), _j(last.get("plan")), last.get("tier") or "", len(tr["llm"]), tin, tout, tin + tout,
                _j(tr["llm"]), int(bool(last.get("meta_retry"))),
                int(any(t.get("safety") == "confirm" for t in tools) or "denied" in outcomes or bool(last.get("denied"))),
                int("denied" in outcomes or bool(last.get("denied"))), _j(last.get("jobs")),
-               (answer or "")[:2000], int((time.monotonic() - tr["t0"]) * 1000), (error or "")[:500])
+               redact(answer or "")[:2000], int((time.monotonic() - tr["t0"]) * 1000), (error or "")[:500])
         with _lock:
             db = _db()
             db.execute(f"INSERT OR REPLACE INTO traces VALUES ({','.join('?' * len(row))})", row)
             _prune(db)
         if not error:
             from jarvis.core import learn
-            learn.on_turn({"text": tr["text"] or "", "ts": tr["ts"], "path": path, "intent": row[7], "tools": tools})
+            learn.on_turn({"text": row[5], "ts": tr["ts"], "path": path, "intent": row[7], "tools": tools})
     except Exception as e:
         log.warning("trace write failed: %s", e)
 

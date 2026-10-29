@@ -317,6 +317,9 @@ def is_multi(text: str) -> bool:
             re.match(r"\s*(?:open|play|send|search|close|start|launch)\b", c, re.I)
             for c in clauses[1:-1] if not is_tail(c)):
         return False  # "draw X (and set it as my wallpaper) (and send it to Telegram)" is ONE generate_image call
+    if len(text.split()) > 30 and sum(1 for c in clauses if is_command(" ".join(c.split()[:3]))) < 2:
+        return False  # a long description / complaint ("the telegram said it failed and the file has no sound"):
+        # ONE request to understand, not several tasks (one was split into 4 tasks, 12 AI calls, 16k tokens)
     return sum(1 for c in clauses if is_command(c)) >= 2
 
 

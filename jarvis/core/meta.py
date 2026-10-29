@@ -45,6 +45,18 @@ def looks_like_refusal(text: str) -> bool:
     return bool(_REFUSAL.search((text or "")[:240].replace("\u2019", "'")))  # curly apostrophes too
 
 
+_DONE = re.compile(r"\b(?:i'?ve|i have)\s+(?:now\s+|just\s+)?(?:removed|deleted|downloaded|moved|renamed|installed|"
+                   r"stopped|killed|uploaded|copied|replaced|fixed|connected|unlocked)\b|"
+                   r"\b(?:has|have)\s+been\s+(?:removed|deleted|saved|sent|opened|downloaded|started|created|installed|"
+                   r"moved|renamed|stopped|replaced|uploaded|turned\s+(?:on|off))\b", re.I)
+
+
+def claims(text: str) -> bool:
+    """The answer says an action was done ("I've opened...", "Sure, playing...", "the link has been removed")."""
+    t = (text or "")[:240].replace("\u2019", "'")
+    return bool(_CLAIM.search(t) or _DONE.search(t))
+
+
 def needs_tool(text: str) -> bool:
     """A tool-less answer that refuses, or claims an action no tool did: retried once with request_tools."""
     t = (text or "")[:240].replace("\u2019", "'")

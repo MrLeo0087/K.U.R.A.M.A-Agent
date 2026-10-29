@@ -347,7 +347,10 @@ class Agent:
             msg = AIMessage(content=reply.text, tool_calls=calls, invalid_tool_calls=bad)
             return {"messages": msgs + [msg], "pending": calls + bad}
         answer = reply.text.strip() or (TOO_MANY_ROUNDS if ai.tool_calls else NO_ANSWER)
-        if hold and not last_round and meta.needs_tool(answer):
+        answer = honest(answer, msgs)
+        if hold and not last_round and meta.needs_tool(answer) and not self.last.get("denied") and (
+                meta.claims(answer) or worth_retry(state["user_text"])):
+            # (never after a "no" to a yes/no question; a refusal to small talk / an emoji isn't worth a retry)
             log.info("tool-less refusal, retrying once with %s: %r", meta.NAME, answer[:80])
             self._log_meta(state["user_text"], [])
             self.last["meta_retry"] = True
@@ -781,16 +784,24 @@ class Agent:
             for kind, chunk in self.graph.stream(state, self._config(),
                                                  stream_mode=["custom", "values"]):
                 if kind == "custom":
-                    if not chunk:
-                        continue
+                    chunk = _ZW.sub("", chunk or "")
+                    if not chunk or (_DOTS.fullmatch(chunk) and _DOTS.search("".join(parts[-2:]) + "$")):
+                        continue  # a run of "… … …" (the model stalling): at most one
                     parts.append(chunk)
                     yield chunk
                 else:
                     final = chunk
             answer = (final or {}).get("answer") or ""
-            if answer and not "".join(parts).strip():  # nothing streamed (template/fallback text): emit it whole
+            said = "".join(parts)
+            if answer and not said.strip():  # nothing streamed (template/fallback text): emit it whole
                 parts.append(answer)
                 yield answer
+            elif said and (garbled(said) or (answer.startswith(HONEST) and answer not in said)):
+                fix = answer if answer.startswith(HONEST) else last_result((final or {}).get("messages") or [])
+                if final is not None:
+                    final["answer"] = fix
+                parts.append("\n" + fix)
+                yield "\n" + fix
         finally:
             if final is None or not final.get("answer"):
                 abort.set()  # stopped early (barge-in / error): tell the graph thread to quit
@@ -811,6 +822,40 @@ def get_agent() -> Agent:
 
 def warm() -> None:
     get_agent().warm()
+
+
+_ZW = re.compile("[\u200b-\u200d\u2060\ufeff]")
+_DOTS = re.compile(r"[\s.\u2026]*(?:\.\.\.|\u2026)[\s.\u2026]*")
+HONEST = ("I didn't do it", "That didn't work")
+
+
+def garbled(text: str) -> bool:
+    """A streamed reply that is mostly '… … …' with hardly a word in it."""
+    return len(re.findall(r"[^\W\d_]{2,}", text)) <= 2 and len(re.findall(r"\.\.\.|\u2026", text)) >= 3
+
+
+def last_result(msgs: list) -> str:
+    """Instead of a garbled reply: what the last tool said (or a plain 'Done.')."""
+    for m in reversed(msgs):
+        if isinstance(m, ToolMessage) and m.name != meta.NAME and str(m.content).strip():
+            return str(m.content).strip()[:300]
+    return "Done."
+
+
+def worth_retry(text: str) -> bool:
+    """A refusal to an emoji, "ok", "not good" or small talk is fine as it is (a retry cost up to 4k tokens)."""
+    return len(re.findall(r"[^\W\d_]{2,}", text or "")) >= 3 and not router.is_small_talk(text)
+
+
+def honest(answer: str, msgs: list) -> str:
+    """The AI says it did something, but every tool it ran this turn failed or was refused: say so instead."""
+    results = [str(m.content) for m in msgs if isinstance(m, ToolMessage) and m.name != meta.NAME]
+    if not results or not meta.claims(answer) or any(not r.startswith(("error", "The user declined", "The user already"))
+                                                       for r in results):
+        return answer
+    why = results[-1]
+    return ("I didn't do it: you said no." if why.startswith("The user") else
+            f"That didn't work: {why[6:].strip()[:200]}")
 
 
 def run(user_text: str, mode: str = "text", lang: str | None = None) -> str:

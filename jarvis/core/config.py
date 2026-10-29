@@ -254,7 +254,7 @@ CORE_COVERS: dict[str, tuple[str, ...]] = {
     "code": ("dev", "git", "codequality", "watch", "devutils"),
     "life": ("tracker", "study", "usage", "schedule"),
     "kurama": ("self", "usage", "jobs", "telegram", "toolsmith"),
-    "run_command": ("dev", "system", "files", "automation", "toolsmith"),
+    "run_command": ("dev", "toolsmith"),  # only for coding / a command you ask for (system questions have tools)
     "run_python": ("daily", "dev", "toolsmith"),
 }
 TOOL_OUTPUT_MAX_CHARS = 800  # tool results are truncated to this before going back to the LLM
@@ -388,6 +388,7 @@ ROUTER_EXAMPLES: dict[str, tuple[str, ...]] = {
             "what did I change since it was working", "give me my file as it was two hours ago",
             "undo my changes to this file", "where was I", "what was I working on", "resume my project"),
     "dev": ("run the test suite", "start a new python project", "check my python setup and venv",
+            "run this command in the terminal", "execute ls -la in my home folder", "run a shell command",
             "what does this error mean", "fix this traceback", "why does my code crash with this exception",
             "I fixed that error by", "check my dataset for problems before training", "is my data balanced"),
     "codequality": ("review my code changes", "scan the repo for leaked passwords", "check my dependencies"),
