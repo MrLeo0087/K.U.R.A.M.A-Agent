@@ -54,6 +54,12 @@ def test_shutdown_later_schedules_ubuntu_shutdown_after_a_yes(monkeypatch, tmp_p
                        ("restart the computer after 2 hours", "after 2 hours", "restart"), ("shutdown at 11 pm", "at 11 pm", "shutdown")):
         i = fastpath.match(t)
         assert i.tool == "shutdown_timer" and i.args == {"action": "set", "when": w, "kind": kind}, t
+    for t, w in (("shutdown 2hrs", "2hrs"), ("shutdown after 3s", "after 3s"), ("turn off pc in 4min", "in 4min")):
+        assert fastpath.match(t).args["when"] == w, t
+    secs = st_secs = __import__("jarvis.tools.general.shutdown_timer", fromlist=["x"]).seconds_from
+    assert secs("3s") == 3 and secs("4min") == 240 and secs("2hrs") == 7200 and secs("1h 30m") == 5400
+    assert secs("after 90 minutes") == 5400 and secs("half an hour") == 1800 and 0 < secs("at 11 pm") < 86400
+    assert fastpath.match("shutdown now").tool == "power_off" and fastpath.match("shutdown laptop").tool == "power_off"
     assert fastpath.match("cancel shutdown").args == {"action": "cancel"}
     assert fastpath.match("when will the laptop shut down").args == {"action": "status"}
     assert fastpath.match("shutdown").tool == "power_off"  # right now: still the normal shutdown
@@ -70,3 +76,11 @@ def test_shutdown_later_schedules_ubuntu_shutdown_after_a_yes(monkeypatch, tmp_p
     monkeypatch.setattr(st, "SCHEDULED", f)
     assert "shut down at" in st.shutdown_timer("status")
     assert st.shutdown_timer("cancel").startswith("Cancelled") and ran[-1] == ["shutdown", "-c"]
+
+
+def test_under_a_minute_kuramas_own_timer_does_it(monkeypatch):
+    from jarvis.tools.general import shutdown_timer as st
+    later = []
+    monkeypatch.setattr(st, "_now_later", lambda secs, kind: later.append((secs, kind)))
+    monkeypatch.setattr(st.safety, "ask", lambda p: True)
+    assert "in 3 seconds" in st.shutdown_timer("set", "3s") and later == [(3.0, "shutdown")]

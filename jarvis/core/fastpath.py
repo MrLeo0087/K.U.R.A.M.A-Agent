@@ -3130,7 +3130,7 @@ _FILLER = re.compile(r"\b(?:please|pls|now|the|my|this|laptop|computer|pc|system
 
 
 _LATER = re.compile(r"(?:please\s+)?(?P<k>shut\s*down|shutdown|turn\s+off|power\s+off|switch\s+off|restart|reboot)"
-                    r"(?:\s+(?:the|my))?(?:\s+(?:laptop|computer|pc|system))?\s+(?P<w>(?:after|in|at|within)\s+.+)", I)
+                    r"(?:\s+(?:the|my))?(?:\s+(?:laptop|computer|pc|system))?\s+(?P<w>(?:(?:after|in|at|within)\s+)?.+)", I)
 _CANCEL_OFF = re.compile(r"(?:please\s+)?(?:cancel|stop|abort|don'?t|do\s+not)\s+(?:the\s+)?(?:scheduled\s+)?"
                          r"(?:shut\s*down|shutdown|restart|reboot|power\s+off)(?:\s+(?:timer|the\s+laptop|laptop))?", I)
 _WHEN_OFF = re.compile(r"when\s+(?:will|is)\s+(?:the\s+|my\s+)?(?:laptop|computer|pc|it)\s+(?:going\s+to\s+)?"
@@ -3142,7 +3142,7 @@ def shutdown_later_intent(text: str) -> Intent | None:
     """'shutdown after 90 min' / 'restart the laptop in 2 hours' / 'cancel shutdown' / 'when will the laptop shut
     down': Ubuntu's scheduled shutdown (asks first)."""
     t = " ".join((text or "").split()).strip(" .!?")
-    if m := _LATER.fullmatch(t):
+    if (m := _LATER.fullmatch(t)) and re.search(r"\d|half|an?\s+hour", m.group("w"), I):
         kind = "restart" if m.group("k").lower() in ("restart", "reboot") else "shutdown"
         return Intent("shutdown_timer", "shutdown_timer", "power", {"action": "set", "when": m.group("w"), "kind": kind})
     if _CANCEL_OFF.fullmatch(t):
