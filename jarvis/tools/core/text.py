@@ -8,6 +8,13 @@ from jarvis.core.registry import tool
 from jarvis.tools.core._hub import Act, run
 
 
+def _edit_request(a: dict) -> str:
+    """The selected code when something is selected in VS Code, else the whole open file."""
+    from jarvis.core import context
+    req = (a.get("request") or "improve it").strip()
+    return f"{req} (code)" if context.snapshot()["selection"] else f"{req} in this file"
+
+
 def _assist(kind: str):
     return Act("text_assist", lambda a: {"action": kind, "request": a.get("request", ""), "lang": a.get("lang", "")})
 
@@ -15,8 +22,7 @@ def _assist(kind: str):
 TABLE = {
     "explain": _assist("explain"), "meaning": _assist("meaning"), "translate": _assist("translate"),
     "improve": _assist("improve"),
-    "edit_code": Act("text_assist", lambda a: {"action": "improve",
-                                               "request": f"{a.get('request') or 'improve it'} in this file"}), "summary": _assist("summary"), "reply": _assist("reply"), "code": _assist("code"),
+    "edit_code": Act("text_assist", lambda a: {"action": "improve", "request": _edit_request(a)}), "summary": _assist("summary"), "reply": _assist("reply"), "code": _assist("code"),
     "read_screen": Act("read_text", lambda a: {"source": a.get("request") if a.get("request") in ("area", "window", "screen") else "screen"}),
     "clipboard": Act("clipboard", lambda a: {"action": "history", "query": a.get("request", "")}),
     "copy": Act("clipboard", lambda a: {"action": "write", "text": a.get("request", "")}),

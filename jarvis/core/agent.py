@@ -286,6 +286,12 @@ class Agent:
             r = router.Route(prev, "followup", r.reasoning, r.latency_ms)
         if r.groups:
             self._prev_groups = (list(r.groups), time.time())
+        try:  # code is open in VS Code: the code-editing tool is always offered (the context line says what's open)
+            from jarvis.core import context
+            if self.channel != "telegram" and context.editor_open() and "clipboard" not in r.groups:
+                r = router.Route(["clipboard", *r.groups][: config.ROUTER_MAX_GROUPS], r.method, r.reasoning, r.latency_ms)
+        except Exception as e:  # noqa: BLE001
+            log.warning("editor context failed: %s", e)
         tools: list[Any] = registry.schemas_for(r.groups) if r.groups else []
         tier = "smart" if (len(r.groups) > 1 or r.reasoning or modes.ai_level() == "best") else "fast"
         if tier == "fast" and not tools and state.get("mode") == "voice":
@@ -538,6 +544,12 @@ class Agent:
             other = self._other_channel(user_text)  # laptop <-> Telegram: one KURAMA, one conversation
             if other:
                 system += " " + other
+        try:
+            from jarvis.core import context  # what is open: the VS Code file + its selection, or the browser tab
+            if (ctx := context.line()) and self.channel != "telegram":
+                system += " " + ctx
+        except Exception as e:  # noqa: BLE001
+            log.warning("context line failed: %s", e)
         return [SystemMessage(content=system), *recent, HumanMessage(content=user_text)]
 
     # --- sessions + profile (P7) ---
