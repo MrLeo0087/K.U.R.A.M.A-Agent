@@ -1254,3 +1254,11 @@ body.minimal .col.right { position: fixed; top: 48px; right: 0; bottom: 0; width
 body.minimal.ws-open .col.right { transform: none; box-shadow: -20px 0 50px rgba(0, 0, 0, 0.45); }
 body.minimal .col.right > :not(#ws) { display: none; }
 body.minimal .col.right #ws { flex: 1 1 auto; min-height: 0; margin: 0; }
+
+/* full dashboard: one button back to the clean layout (next to the mode pill) */
+.to-minimal { position: fixed; top: 12px; right: 150px; z-index: 6; display: inline-flex; align-items: center; gap: 6px; height: 26px;
+  padding: 0 10px; border-radius: 13px; border: 1px solid var(--line); background: rgba(10, 11, 16, 0.6); color: var(--muted);
+  font-size: 12px; cursor: pointer; }
+.to-minimal:hover { color: var(--text); border-color: rgba(255, 122, 26, 0.45); }
+.to-minimal svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+body.minimal .to-minimal { display: none; }

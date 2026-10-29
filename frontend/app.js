@@ -2532,6 +2532,7 @@ let savedLayout = "minimal";
 try { savedLayout = localStorage.getItem(LAYOUT_KEY) || "minimal"; } catch { /* private mode */ }
 setLayout(savedLayout === "full");
 $("tb-full").onclick = () => setLayout(document.body.classList.contains("minimal"));
+$("btn-minimal").onclick = () => setLayout(false);
 $("tb-ws").onclick = () => wsPanel(!document.body.classList.contains("ws-open"));
 for (const b of document.querySelectorAll(".tb-chip[data-sheet]")) b.onclick = () => openSheet(b.dataset.sheet);
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && document.body.classList.contains("ws-open") && !document.querySelector("dialog[open]")) wsPanel(false); });
