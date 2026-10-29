@@ -22,6 +22,34 @@ OUTLINE_PROMPT = ("Plan a {what} for the user's request. Return a short title an
                   "section headings, all in {lang}.")
 SECTION_PROMPT = ("You are a skilled writer. Write in {lang}. Output only the body of the requested "
                   "section as Markdown paragraphs: no heading, no preamble, no closing remarks.")
+MULTI_FILE = re.compile(r"\b(?:project|app|application|website|game|files|several\s+modules|full[- ]stack)\b", re.I)
+FILE_PROMPT = ("You are an expert programmer. Write the COMPLETE, working code file that is asked for: imports, type "
+               "hints, docstrings, error handling and logging when asked, and a short `if __name__ == \"__main__\":` "
+               "example when it helps. Reply with ONE Markdown fenced code block and nothing else: no explanation, "
+               "no headings, no text before or after.")
+
+
+def code_only(text: str) -> str:
+    """The code inside Markdown fences (joined), or the text itself when it has none."""
+    blocks = re.findall(r"```[\w+.-]*\n(.*?)```", text or "", re.S)
+    return ("\n\n".join(b.rstrip() for b in blocks) if blocks else (text or "")).strip() + "\n"
+
+
+def _write_one_file(ctx, request: str) -> str:
+    """'Write a Python module that...': ONE call writes the whole file, saved as code only (no essay sections)."""
+    ctx.progress("writing the code")
+    m = re.search(r"\b([\w-]+\.(py|js|ts|sh|go|rs|java|cpp|c|rb|php|html|css|sql))\b", request)
+    ext = m.group(2) if m else "py"
+    path = output_path(ctx.job.title).with_suffix("." + ext)
+    reply = llm.chat([{"role": "system", "content": FILE_PROMPT}, {"role": "user", "content": request}],
+                     tier=config.WRITER_TIER, purpose=ctx.purpose("code"), max_tokens=config.CODE_FILE_MAX_TOKENS,
+                     priority="background")
+    path.write_text(code_only(str(reply)), encoding="utf-8")
+    ctx.set_output(path)
+    ctx.progress(f"done ({len(path.read_text(encoding='utf-8').splitlines())} lines)")
+    return str(path)
+
+
 CODE_PROMPT = ("You are an expert programmer. Write the requested part of the code: complete, working, "
                "with short comments, in Markdown fenced code blocks plus a one-line explanation. "
                "No heading, no preamble.")
@@ -81,6 +109,8 @@ def _outline(ctx, request: str, n: int, lang: str, kind: str) -> Outline:
 def run(ctx, request: str, lang: str = "en", kind: str = "write") -> str:
     """Job body (ctx: jobs.JobContext). Returns the output file path."""
     lang = lang if lang in LANG_NAMES else planner.detect_lang(request)
+    if kind == "code" and not MULTI_FILE.search(request):
+        return _write_one_file(ctx, request)
     words = min(planner.target_words(request) or config.WRITER_DEFAULT_WORDS, config.WRITER_MAX_WORDS)
     n, max_tok = plan_sections(words, lang)
     ctx.progress(f"outlining ({n} sections, ~{words} words)")

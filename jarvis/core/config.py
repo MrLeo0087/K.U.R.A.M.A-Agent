@@ -810,6 +810,7 @@ ORGANIZE_MAX_IMAGES = 8  # pictures captioned by the vision model per run (~600 
 VIDEO_DIR = os.getenv("KURAMA_VIDEO_DIR", "~/Videos/KURAMA")  # video/audio downloads (yt-dlp)
 BROWSER_TAB_TTL_S = 6 * 3600  # the browser extension's "open tab" counts this long (a closed browser says so itself)
 CONTEXT = os.getenv("KURAMA_CONTEXT", "1").lower() not in ("0", "false", "no", "off")  # tell the AI what is open (VS Code file + selection, browser tab)
+CODE_FILE_MAX_TOKENS = 4000  # one generated code file (a module with logging/tests fits)
 EC_LINGER_S = 30  # the echo canceller stays this long after the mic is released (no flapping between turns)
 VIDEO_COOKIES_BROWSER = os.getenv("KURAMA_COOKIES_BROWSER", "brave")  # YouTube "not a bot" check: retry once with this browser's cookies (read locally by yt-dlp; "" = never)
 VIDEO_CONNECTIONS = 6  # parallel connections per video download (YouTube throttles each one)

@@ -3071,9 +3071,26 @@ def clean_intent(text: str) -> Intent | None:
     return Intent("cleanup", "cleanup", "system", {"action": action})
 
 
+_TO_FILE = re.compile(r"(?:please\s+)?(?:write|put|paste|insert|save|add|copy|replace)\s+(?:this|the|that|it|your|all)?\s*"
+                      r"(?:new\s+|generated\s+|whole\s+)?(?:code|script|module|it)?\s*(?:in|into|to|on|inside|at)\s+"
+                      r"(?:the\s+|my\s+|this\s+)?(?:open(?:ed)?\s+|oopen\s+|current\s+)?(?:file|path|vs\s*code|editor)?\s*"
+                      r"(?P<p>[\w./~-]+\.\w{1,5}|/\S+)?\s*(?:file)?\s*(?:\.\.?\s*)?(?:(?:only|just)\s+(?:the\s+)?code)?", I)
+
+
+def to_file_intent(text: str) -> Intent | None:
+    """'write this code in the open file (test.py) only code' / 'write on this path /x/test.py' as the WHOLE request:
+    the code KURAMA just wrote goes into that file (only the code)."""
+    t = " ".join((text or "").split()).strip(" .!?")
+    m = _TO_FILE.fullmatch(t)
+    if not m or not re.search(r"\b(?:file|path|vs\s*code|editor|code)\b|/|\.\w{1,5}\b", t, I):
+        return None
+    p = m.group("p") or ""
+    return Intent("tofile", "code_to_file", "clipboard", {"path": p if "/" in p else ""})
+
+
 def match(text: str) -> Intent | None:
     """The single high-confidence intent for text whose meaning agrees (meaning_ok), or None."""
-    it = link_play_intent(text) or clean_intent(text) or _code_not_file(_match(text))
+    it = link_play_intent(text) or clean_intent(text) or to_file_intent(text) or _code_not_file(_match(text))
     return it if it is None or meaning_ok(text, it) else None
 
 
