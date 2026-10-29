@@ -12,7 +12,6 @@ from jarvis.core import config, fastpath, greeting, llm, registry, router, safet
 from jarvis.tools.general import _apps, _sys, open_url
 from jarvis.tools.general.brightness import brightness
 from jarvis.tools.general.clipboard_history import clipboard_history
-from jarvis.tools.general.launch_workspace import launch_workspace
 from jarvis.tools.general.list_windows import list_windows
 from jarvis.tools.general.lock_screen import lock_screen
 from jarvis.tools.general.media_control import media_control
@@ -111,7 +110,7 @@ def desk(monkeypatch, tmp_path):
 NEW = {"audio": ("audio", "safe"),
        "media_control": ("media", "safe"), "brightness": ("display", "safe"),
        "window": ("windows", "safe"),
-       "launch_workspace": ("apps", "safe"), "lock_screen": ("power", "safe"),
+       "lock_screen": ("power", "safe"),
        "suspend_computer": ("power", "confirm"), "power_off": ("power", "confirm"),
        "screenshot": ("screen", "safe"), "clipboard": ("clipboard", "safe")}
 
@@ -230,22 +229,6 @@ def test_list_windows(monkeypatch):
 
 
 # --- workspace ---
-def test_launch_workspace(monkeypatch):
-    apps = {"vs code": {"id": "code", "name": "Visual Studio Code"},
-            "terminal": {"id": "org.gnome.Terminal", "name": "Terminal"}}
-    launched, opened = [], []
-    monkeypatch.setattr(_apps, "find_app", lambda n: (apps.get(n), 100) if n in apps else (None, 0))
-    monkeypatch.setattr(_apps, "launch", lambda e: launched.append(e["id"]))
-    monkeypatch.setattr(open_url, "_open", opened.append)
-    out = launch_workspace("coding workspace")
-    assert out == "started the coding workspace: Visual Studio Code, Terminal, https://github.com"
-    assert launched == ["code", "org.gnome.Terminal"] and opened == ["https://github.com"]
-    assert "could not open: text editor" in launch_workspace("studdy")
-    assert launch_workspace("list").startswith("workspaces: coding")
-    assert launch_workspace("gaming").startswith("error: no workspace")
-
-
-# --- power ---
 def test_lock_screen_with_fallback(desk):
     assert lock_screen() == "screen locked" and desk.ran("loginctl", "lock-session")
     desk.fail.add("loginctl")
@@ -431,7 +414,7 @@ def test_set_theme_keeps_custom_theme_family(monkeypatch):
 
 
 def test_yes_no_understands_run_it_and_refusal_variants():
-    from jarvis.core import meta, safety, fastpath
+    from jarvis.core import fastpath, meta, safety
     assert safety.parse_yes_no("Just run it.") is True and safety.parse_yes_no("haan karo") is True
     assert safety.parse_yes_no("hmm maybe") is None and safety.parse_yes_no("no, don't") is False
     assert meta.looks_like_refusal("I don't currently have a tool to directly change the system theme.")
@@ -447,7 +430,6 @@ def test_media_pause_hits_every_player_and_no_player_is_explained(desk):
 
 
 def test_youtube_play_without_name_resumes_instead_of_new_tab(desk, monkeypatch):
-    from jarvis.tools.general import open_url
     from jarvis.tools.general.youtube import youtube
     opened = []
     monkeypatch.setattr(open_url, "_open", opened.append)
@@ -458,8 +440,8 @@ def test_youtube_play_without_name_resumes_instead_of_new_tab(desk, monkeypatch)
 
 
 def test_volume_above_100_with_over_amplification(desk, monkeypatch):
-    from jarvis.tools.general import volume as vol
     from jarvis.core import fastpath
+    from jarvis.tools.general import volume as vol
     monkeypatch.setattr(vol, "max_level", lambda: 150)
     assert vol.volume("set", 130) == "volume 130%"
     assert vol.volume("set", 180) == "The most is 150%."

@@ -1087,8 +1087,6 @@ _WEBWATCH = re.compile(r"^(?:watch|monitor|keep an eye on|track|tell me when|tel
                        r"(?P<w>.+?))?$", I)
 
 
-_DATASET = re.compile(r"^(?:check|inspect|analy[sz]e|look at|examine|validate)\s+(?:my |the |this )?(?:data(?:set)?|"
-                      r"csv|images?)\s+(?:at |in |file |folder )?(?P<p>\S.*?)(?: (?:before|for) training)?$", I)
 
 
 _INSTALL = re.compile(r"^(?:please )?(?:pip )?install (?:the )?(?:package |module |library )?(?P<p>[\w.\-\[\]=<>]+)"
@@ -1253,8 +1251,6 @@ def _daily_intent(t: str) -> Intent | None:
         if pkg and pkg.lower() not in ("app", "the"):
             return Intent("install", "python_env", "dev", {"action": "install", "package": pkg,
                                                            "folder": m.group("f") or "."})
-    if m := _DATASET.match(t):
-        return Intent("dataset", "check_dataset", "dev", {"path": m.group("p").strip(" '\"")})
     if m := _WEBWATCH.match(t):
         return Intent("webwatch", "web_watch", "web", {"action": "add", "url": m.group("url"),
                                                         "word": (m.group("w") or "").strip(" '\"")})

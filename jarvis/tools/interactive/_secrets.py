@@ -1,4 +1,4 @@
-"""Shared secret detection for secrets_audit, precommit_gate and review_code (not a tool).
+"""Shared secret detection for review_code (not a tool).
 
 Regexes for well-known key formats plus an entropy check for generic `password = "..."` style
 assignments. Findings carry only a masked preview (first 4 chars + ****); raw values never leave

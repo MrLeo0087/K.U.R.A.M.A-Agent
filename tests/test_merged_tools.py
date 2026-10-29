@@ -8,8 +8,8 @@ from jarvis.tools.interactive import git_change as gc_mod
 
 RETIRED = ("volume", "mute_audio", "mic_mute", "read_clipboard", "write_clipboard", "clipboard_history", "list_jobs",
            "job_result", "cancel_job", "resume_job", "list_skills", "use_skill", "delete_skill", "list_schedules",
-           "cancel_schedule", "git_status", "git_log", "git_diff_summary", "git_commit", "git_branch", "precommit_gate",
-           "repo_hygiene", "secrets_audit", "focus_app", "list_windows", "snap_window",
+           "cancel_schedule", "git_status", "git_log", "git_diff_summary", "git_commit", "git_branch",
+           "focus_app", "list_windows", "snap_window",
            "convert_currency", "find_and_send", "playlist", "focus_timer")
 
 

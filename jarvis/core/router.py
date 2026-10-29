@@ -128,8 +128,7 @@ _GIT_ACTION = re.compile(r"\b(?:git (?:status|log|diff)|branch|checkout|(?<!-)(?
                          r"the changes|my changes|everything|all)|and commit|then commit)\b", re.I)
 
 
-# "generate/create/make a requirements.txt", "requirements banao": devutils (generate_requirements), while
-# other "requirements" phrasings (check/outdated/pinned) stay with codequality's dependency_doctor (P8b).
+# "generate/create/make a requirements.txt", "requirements banao": devutils.
 _GEN_REQ = re.compile(
     r"\b(?:generate|create|make|write|build|produce|regenerate|auto-?generate)\s+(?:(?:a|an|the|new|my|me|fresh|"
     r"pinned|proper|updated)\s+){0,3}requirements\b|\brequirements(?:\.txt)?(?:\s+(?:file|फाइल))?\s+(?:banao|"
