@@ -44,3 +44,29 @@ def test_everyday_laptop_commands_are_instant_even_with_typos():
     for t in ("restaurant", "shut up", "slep well", "lock the door", "time to study", "ramayan"):
         i = fastpath.match(t)
         assert i is None or i.tool not in ("power_off", "suspend_computer", "lock_screen"), (t, i)
+
+
+def test_shutdown_later_schedules_ubuntu_shutdown_after_a_yes(monkeypatch, tmp_path):
+    from jarvis.core import fastpath
+    from jarvis.tools.general import shutdown_timer as st
+    for t, w, kind in (("shutdown after 2 min", "after 2 min", "shutdown"), ("shut down the laptop in 1 hour", "in 1 hour", "shutdown"),
+                       ("turn off laptop after 90 minutes", "after 90 minutes", "shutdown"),
+                       ("restart the computer after 2 hours", "after 2 hours", "restart"), ("shutdown at 11 pm", "at 11 pm", "shutdown")):
+        i = fastpath.match(t)
+        assert i.tool == "shutdown_timer" and i.args == {"action": "set", "when": w, "kind": kind}, t
+    assert fastpath.match("cancel shutdown").args == {"action": "cancel"}
+    assert fastpath.match("when will the laptop shut down").args == {"action": "status"}
+    assert fastpath.match("shutdown").tool == "power_off"  # right now: still the normal shutdown
+    ran = []
+    monkeypatch.setattr(st._sys, "run", lambda argv, **k: ran.append(argv) or "")
+    monkeypatch.setattr(st, "_warn_later", lambda *a: None)
+    monkeypatch.setattr(st.safety, "ask", lambda p: False)
+    assert st.shutdown_timer("set", "after 90 minutes") == "Okay, I didn't schedule it." and ran == []
+    monkeypatch.setattr(st.safety, "ask", lambda p: True)
+    out = st.shutdown_timer("set", "after 90 minutes")
+    assert ran == [["shutdown", "-P", "+90"]] and "in 90 min" in out
+    f = tmp_path / "scheduled"
+    f.write_text(f"USEC={int((time.time() + 5400) * 1e6)}\nMODE=poweroff\n")
+    monkeypatch.setattr(st, "SCHEDULED", f)
+    assert "shut down at" in st.shutdown_timer("status")
+    assert st.shutdown_timer("cancel").startswith("Cancelled") and ran[-1] == ["shutdown", "-c"]

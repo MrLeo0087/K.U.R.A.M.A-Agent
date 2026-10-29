@@ -53,16 +53,21 @@ TABLE = {
     "shutdown": Act("power_off", lambda a: {"action": "shutdown"}),
     "restart": Act("power_off", lambda a: {"action": "restart"}),
     "logout": Act("power_off", lambda a: {"action": "logout"}),
+    "shutdown_later": Act("shutdown_timer", lambda a: {"action": "cancel" if a.get("value") == "cancel" else
+                                                      "status" if a.get("value") == "status" else "set",
+                                                      "when": a.get("value", "")}),
 }
 
 
 @tool(group="core", safety="safe",
       description="Laptop settings and health: volume, brightness, wifi, bluetooth, airplane, power mode, night light, "
                   "theme, do-not-disturb, wallpaper, screenshot, screen off, battery, health (RAM/CPU/top apps), free RAM (clean / optimize RAM: top RAM+CPU apps), "
-                  "internet check, clean disk (clean storage: safe caches), clean_kurama (KURAMA's own caches), focus session, lock, sleep, shutdown, restart, log out.")
+                  "internet check, clean disk (clean storage: safe caches), clean_kurama (KURAMA's own caches), focus session, lock, sleep, shutdown, restart, log out, shutdown_later (value = 'after 90 min' / 'in 2 hours' "
+                  "/ 'at 11 pm', or cancel / status).")
 def laptop(action: Literal["volume", "brightness", "wifi", "bluetooth", "airplane", "power_mode", "night_light", "theme",
                            "dnd", "wallpaper", "screenshot", "screen_off", "battery", "health", "free_ram", "internet",
-                           "clean_disk", "clean_kurama", "focus", "lock", "sleep", "shutdown", "restart", "logout"],
+                           "clean_disk", "clean_kurama", "focus", "lock", "sleep", "shutdown", "restart", "logout",
+                           "shutdown_later"],
            value: str = "") -> str:
     """Laptop control.
 

@@ -3129,6 +3129,29 @@ _DAILY: list[tuple[tuple[str, ...], Intent]] = [
 _FILLER = re.compile(r"\b(?:please|pls|now|the|my|this|laptop|computer|pc|system|kurama|hey|ok|okay|can\s+you|do|a)\b", I)
 
 
+_LATER = re.compile(r"(?:please\s+)?(?P<k>shut\s*down|shutdown|turn\s+off|power\s+off|switch\s+off|restart|reboot)"
+                    r"(?:\s+(?:the|my))?(?:\s+(?:laptop|computer|pc|system))?\s+(?P<w>(?:after|in|at|within)\s+.+)", I)
+_CANCEL_OFF = re.compile(r"(?:please\s+)?(?:cancel|stop|abort|don'?t|do\s+not)\s+(?:the\s+)?(?:scheduled\s+)?"
+                         r"(?:shut\s*down|shutdown|restart|reboot|power\s+off)(?:\s+(?:timer|the\s+laptop|laptop))?", I)
+_WHEN_OFF = re.compile(r"when\s+(?:will|is)\s+(?:the\s+|my\s+)?(?:laptop|computer|pc|it)\s+(?:going\s+to\s+)?"
+                       r"(?:shut\s*down|shutdown|restart|turn\s+off)|(?:is\s+)?(?:a\s+)?shutdown\s+(?:timer\s+)?"
+                       r"(?:set|scheduled|timer)", I)
+
+
+def shutdown_later_intent(text: str) -> Intent | None:
+    """'shutdown after 90 min' / 'restart the laptop in 2 hours' / 'cancel shutdown' / 'when will the laptop shut
+    down': Ubuntu's scheduled shutdown (asks first)."""
+    t = " ".join((text or "").split()).strip(" .!?")
+    if m := _LATER.fullmatch(t):
+        kind = "restart" if m.group("k").lower() in ("restart", "reboot") else "shutdown"
+        return Intent("shutdown_timer", "shutdown_timer", "power", {"action": "set", "when": m.group("w"), "kind": kind})
+    if _CANCEL_OFF.fullmatch(t):
+        return Intent("shutdown_timer", "shutdown_timer", "power", {"action": "cancel"})
+    if _WHEN_OFF.fullmatch(t):
+        return Intent("shutdown_timer", "shutdown_timer", "power", {"action": "status"})
+    return None
+
+
 def daily_intent(text: str) -> Intent | None:
     """'shutodwn', 'shutdown laptop', 'wifi speed', 'ram' ...: the whole request (fillers aside) is one of the
     everyday commands, allowing a typo or two."""
@@ -3147,8 +3170,8 @@ def daily_intent(text: str) -> Intent | None:
 
 def match(text: str) -> Intent | None:
     """The single high-confidence intent for text whose meaning agrees (meaning_ok), or None."""
-    it = link_play_intent(text) or clean_intent(text) or to_file_intent(text) or _code_not_file(_match(text)) \
-        or daily_intent(text)
+    it = link_play_intent(text) or clean_intent(text) or shutdown_later_intent(text) or to_file_intent(text) \
+        or _code_not_file(_match(text)) or daily_intent(text)
     return it if it is None or meaning_ok(text, it) else None
 
 
