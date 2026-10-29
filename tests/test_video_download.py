@@ -66,3 +66,16 @@ def test_plain_file_links_go_to_the_download_manager(monkeypatch):
     monkeypatch.setattr(automation, "queue", lambda url, *a: queued.append(url) or "Download #1")
     assert ytdl.start("https://example.com/cat.jpg") == "Download #1" and queued == ["https://example.com/cat.jpg"]
     assert not ytdl.is_plain_file("https://www.youtube.com/watch?v=abc")
+
+
+def test_bot_check_retries_with_browser_cookies_and_plain_errors(monkeypatch, tmp_path):
+    bot = "ERROR: [youtube] x: Sign in to confirm you're not a bot. See  https://github.com/yt-dlp/yt-dlp/wiki/FAQ"
+    assert "signed-in browser" in ytdl.friendly_error(bot) and "github" not in ytdl.friendly_error(bot)
+    assert ytdl.friendly_error("ERROR: Unsupported URL: https://x.y") == "That site isn't supported for video download."
+    logf = tmp_path / "y.log"
+    logf.write_text(bot)
+    monkeypatch.setattr(ytdl.config, "VIDEO_COOKIES_BROWSER", "brave")
+    assert ytdl._cookie_retry(logf, ["yt", "https://youtu.be/x"])
+    assert not ytdl._cookie_retry(logf, ["yt", "--cookies-from-browser", "brave", "https://youtu.be/x"])
+    monkeypatch.setattr(ytdl.config, "VIDEO_COOKIES_BROWSER", "")
+    assert not ytdl._cookie_retry(logf, ["yt", "https://youtu.be/x"])

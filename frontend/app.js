@@ -2539,14 +2539,23 @@ $("tb-ws").onclick = () => wsPanel(!document.body.classList.contains("ws-open"))
 for (const b of document.querySelectorAll(".tb-chip[data-sheet]")) b.onclick = () => openSheet(b.dataset.sheet);
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && document.body.classList.contains("ws-open") && !document.querySelector("dialog[open]")) wsPanel(false); });
 
-// ---------- downloads: one live bar per download (main UI, mini chat, workspace window); minimize or dock it ----------
-let dlTimer = 0, dlKey = "";
+// ---------- downloads: one live bar per download, inside the workspace (main UI and mini's workspace window) ----------
+// The mini chat itself shows no bars: a new download opens mini's workspace window instead.
+let dlTimer = 0, dlKey = "", dlSeen = null;
+const DL_HERE = !MINI || WSONLY;
 const dlPref = (k, v) => { try { if (v === undefined) return localStorage.getItem("kurama.dl." + k); localStorage.setItem("kurama.dl." + k, v); } catch { /* private window */ } return null; };
 async function loadDownloads() {
   clearTimeout(dlTimer); dlTimer = 0;
   let items = null;
   try { items = (await api.downloads()).items || []; } catch { /* offline: keep the last bars */ }
-  if (items) renderDownloads(items);
+  if (items) {
+    const live = items.filter((d) => d.status === "active").map((d) => d.id);
+    if (dlSeen && live.some((id) => !dlSeen.has(id))) { // a new download started: show the workspace with its bar
+      if (MINI && !WSONLY) hostSay("ws:quiet"); else if (!MINI && document.body.classList.contains("minimal")) wsPanel(true);
+    }
+    dlSeen = new Set(live);
+    if (DL_HERE) renderDownloads(items);
+  }
   if (document.hidden) return; // visibilitychange starts it again
   dlTimer = setTimeout(loadDownloads, items?.some((d) => d.status === "active") ? 2000 : 20000);
 }
@@ -2559,21 +2568,15 @@ function renderDownloads(items) {
   if (!items.length) return;
   const live = items.filter((d) => d.status === "active");
   const pct = (d) => (d.frac != null ? Math.round(d.frac * 100) + "%" : "");
-  $("dl-sum").textContent = live.length ? `${live.length} downloading${live.length === 1 && live[0].frac != null ? " · " + pct(live[0]) : ""}` : "Downloads finished";
-  $("dl-list").innerHTML = items.map((d) => `<li class="dl-${esc(d.status)}"><div class="ell" title="${esc(d.title)}">${esc(d.title)}</div>
+  $("dl-sum").textContent = live.length ? `Downloads · ${live.length} running${live.length === 1 && live[0].frac != null ? " · " + pct(live[0]) : ""}` : "Downloads · finished";
+  $("dl-list").innerHTML = items.map((d) => `<li class="dl-${esc(d.status)}"><div class="dl-row"><span class="ell" title="${esc(d.title)}">${esc(d.title)}</span><b>${d.status === "active" ? pct(d) : ""}</b></div>
     <div class="gbar"><i style="width:${d.status === "done" ? 100 : Math.max(2, Math.round((d.frac || 0) * 100))}%"></i></div>
-    <div class="s ell" title="${esc(d.sub)}">${esc(d.sub)}</div></li>`).join("");
+    <div class="s" title="${esc(d.sub)}">${esc(d.sub)}</div></li>`).join("");
 }
-function dockDownloads(inWs) {
-  const tray = $("dl-tray"), ws = $("ws");
-  if (inWs && ws && !MINI) ws.querySelector(".card-title").after(tray); else document.body.append(tray);
-  tray.classList.toggle("docked", inWs && !MINI);
-  dlPref("dock", inWs ? "1" : "0");
-}
+if (WSONLY) $("mws-body").before($("dl-tray")); // its place: the top of the workspace
+else if (!MINI) $("ws")?.querySelector(".card-title")?.after($("dl-tray"));
 $("dl-min").onclick = () => { const m = !$("dl-tray").classList.contains("min"); $("dl-tray").classList.toggle("min", m); dlPref("min", m ? "1" : "0"); };
-$("dl-dock").onclick = () => dockDownloads(!$("dl-tray").classList.contains("docked"));
 $("dl-tray").classList.toggle("min", dlPref("min") === "1");
-dockDownloads(dlPref("dock") === "1");
 document.addEventListener("visibilitychange", () => { if (!document.hidden) loadDownloads(); });
 loadDownloads();
 

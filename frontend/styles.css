@@ -1263,18 +1263,18 @@ body.minimal .col.right #ws { flex: 1 1 auto; min-height: 0; margin: 0; }
 .to-minimal svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; }
 body.minimal .to-minimal { display: none; }
 
-/* downloads: floating bars (bottom right; top of the mini chat), or docked in the workspace card */
-.dl-tray { position: fixed; right: 16px; bottom: 96px; z-index: 40; width: min(320px, calc(100vw - 32px)); padding: 8px 10px;
-  background: var(--card); border: 1px solid var(--card-border); border-radius: 12px; backdrop-filter: blur(10px); font-size: 12px; }
-.dl-tray.docked { position: static; width: auto; margin: 6px 0; backdrop-filter: none; }
-body.mini .dl-tray { left: 8px; right: 8px; top: 8px; bottom: auto; width: auto; }
-.dl-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-.dl-sum { flex: 1; text-align: left; border: 0; background: transparent; color: var(--accent-2); font: inherit; cursor: pointer; padding: 2px 0; }
-.dl-head .icon-btn { width: 24px; height: 24px; }
-.dl-list { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 8px; max-height: 40vh; overflow-y: auto; }
+/* downloads: one bar per download at the top of the workspace (main UI, mini's workspace window) */
+.dl-tray { margin: 6px 0 8px; padding: 8px 10px; border: 1px solid var(--card-border); border-radius: 10px; background: rgba(255, 255, 255, 0.02); font-size: 12px; }
+.dl-sum { display: flex; width: 100%; align-items: center; gap: 6px; border: 0; background: transparent; color: var(--accent-2); font: inherit; cursor: pointer; padding: 0; }
+.dl-sum span { flex: 1; text-align: left; }
+.dl-chev { font-style: normal; color: var(--muted); transition: transform 0.2s; }
+.dl-tray.min .dl-chev { transform: rotate(-90deg); }
+.dl-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 10px; max-height: 32vh; overflow-y: auto; }
 .dl-tray.min .dl-list { display: none; }
-.dl-list .gbar { height: 4px; margin: 4px 0 2px; border-radius: 2px; background: var(--line); overflow: hidden; }
-.dl-list .gbar i { display: block; height: 100%; background: var(--accent); transition: width 0.6s; }
-.dl-list .s { color: var(--muted); }
+.dl-row { display: flex; gap: 8px; align-items: baseline; }
+.dl-row .ell { flex: 1; min-width: 0; }
+.dl-row b { color: var(--accent-2); font-weight: 600; }
+.dl-list .gbar { height: 4px; margin: 4px 0 3px; }
+.dl-list .s { color: var(--muted); overflow-wrap: anywhere; }
 .dl-failed .gbar i, .dl-stopped .gbar i { background: #c0453a; }
 .dl-done .gbar i { background: #3fb67a; }

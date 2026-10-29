@@ -131,7 +131,29 @@ def parse_progress(line: str, st: dict) -> bool:
     return True
 
 
-def _follow(p: subprocess.Popen, wid: int, st: dict, what: str, logf: Path) -> None:
+def friendly_error(log_text: str) -> str:
+    """The last yt-dlp ERROR line in plain words (no FAQ links)."""
+    errs = [ln for ln in log_text.splitlines() if ln.startswith("ERROR")] or log_text.strip().splitlines()[-1:] or [""]
+    e = errs[-1]
+    if "not a bot" in e or "Sign in to confirm" in e:
+        return ("YouTube wants a signed-in browser: open youtube.com in "
+                f"{config.VIDEO_COOKIES_BROWSER or 'your browser'} once (signed in), then ask again.")
+    if "Private video" in e or "members-only" in e.lower():
+        return "That video is private or members-only."
+    if "Unsupported URL" in e:
+        return "That site isn't supported for video download."
+    e = re.sub(r"https?://\S+", "", e.replace("ERROR:", "")).strip()
+    return re.sub(r"\s+", " ", e)[:200] or "yt-dlp stopped"
+
+
+def _cookie_retry(logf: Path, argv: list[str]) -> bool:
+    """YouTube's 'confirm you're not a bot': try once more with the owner's browser cookies (read locally by yt-dlp)."""
+    text = logf.read_text(errors="replace") if logf.exists() else ""
+    return bool(config.VIDEO_COOKIES_BROWSER) and "--cookies-from-browser" not in argv and \
+        ("not a bot" in text or "Sign in to confirm" in text)
+
+
+def _follow(p: subprocess.Popen, wid: int, st: dict, what: str, logf: Path, argv: list[str] | None = None) -> None:
     files, last = [], 0.0
     with open(logf, "w") as lf:
         for line in p.stdout or ():
@@ -147,6 +169,17 @@ def _follow(p: subprocess.Popen, wid: int, st: dict, what: str, logf: Path) -> N
             elif line:
                 lf.write(line + "\n")
     rc = p.wait()
+    if rc != 0 and argv and _cookie_retry(logf, argv):
+        argv = [*argv[:-1], "--cookies-from-browser", config.VIDEO_COOKIES_BROWSER, argv[-1]]
+        try:
+            p = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                                 text=True, start_new_session=True)
+        except OSError:
+            pass
+        else:
+            st.update(pid=p.pid, updated=time.time())
+            store.watch_update(wid, state=st)
+            return _follow(p, wid, st, what, logf, argv)
     if rc == 0 and files:
         size = sum(Path(f).stat().st_size for f in files if Path(f).exists())
         names = ", ".join(Path(f).name for f in files[:3]) + (f" and {len(files) - 3} more" if len(files) > 3 else "")
@@ -155,8 +188,7 @@ def _follow(p: subprocess.Popen, wid: int, st: dict, what: str, logf: Path) -> N
         notify.notify(f"Downloaded {what}", f"{names}\n{size / 1e6:.0f} MB in {out_dir()}", level="info",
                       source="downloads", telegram=True)
     else:
-        tail = logf.read_text(errors="replace").strip().splitlines()[-3:] if logf.exists() else []
-        err = "\n".join(tail)[-500:] or f"yt-dlp exit {rc}"
+        err = friendly_error(logf.read_text(errors="replace")) if logf.exists() else f"yt-dlp exit {rc}"
         st["updated"] = time.time()
         store.watch_update(wid, status="failed", finished=time.time(), result=err[-200:], state=st)
         notify.notify(f"Download failed: {what}", err, level="warning", source="downloads", telegram=True)
@@ -192,8 +224,9 @@ def start(source: str, quality: str = "", audio: bool = False, playlist: bool = 
         return "error: ffmpeg is needed to join HD video and sound: sudo apt install ffmpeg"
     logf = Path(config.DATA_DIR) / "runs" / f"ytdl-{int(time.time())}.log"
     logf.parent.mkdir(parents=True, exist_ok=True)
+    argv = [*_ytdlp(), *build_args(source, quality, audio, playlist)]
     try:
-        p = subprocess.Popen([*_ytdlp(), *build_args(source, quality, audio, playlist)], stdout=subprocess.PIPE,
+        p = subprocess.Popen(argv, stdout=subprocess.PIPE,
                              stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, text=True, start_new_session=True)
     except OSError as e:
         return f"error: couldn't start yt-dlp ({e})"
@@ -202,6 +235,6 @@ def start(source: str, quality: str = "", audio: bool = False, playlist: bool = 
     st = {"pid": p.pid, "what": what, "part": "audio" if audio else "video", "started": time.time(),
           "updated": time.time(), "pgid": os.getpgid(p.pid)}
     wid = store.watch_add("ytdl", source, source[:80], "", st)
-    threading.Thread(target=_follow, args=(p, wid, st, what, logf), daemon=True).start()
+    threading.Thread(target=_follow, args=(p, wid, st, what, logf, argv), daemon=True).start()
     kind = "playlist" if playlist else what
     return f"Downloading the {kind} in the background into {out_dir()}; the progress bar shows how it's going."

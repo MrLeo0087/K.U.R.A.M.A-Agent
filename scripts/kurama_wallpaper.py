@@ -61,7 +61,8 @@ STATE_FILE = Path(__file__).resolve().parent.parent / "data" / "mini.json"  # mi
 BUBBLE = 56  # floating button size (px)
 PANEL_W, PANEL_H = 400, 600  # mini chat panel (default size; a resized panel remembers its size)
 PANEL_MIN_W, PANEL_MIN_H = 300, 260
-MINI_HOTKEY = os.getenv("KURAMA_MINI_HOTKEY", "<Super>s")  # opens / hides the mini chat (GNOME shortcut; '' = none)
+MINI_HOTKEY = os.getenv("KURAMA_MINI_HOTKEY", "<Control><Alt>k")  # opens / hides the mini chat (GNOME shortcut; '' = none)
+PID_FILE = STATE_FILE.with_name("wallpaper.pid")  # the shortcut signals this process (SIGUSR1)
 BUSY_STATES = ("listening", "capturing", "thinking", "speaking")  # closing the panel now keeps it alive
 WS_W, WS_H = 480, 620  # mini workspace window
 PANEL_KEEP_S = 180  # a hidden panel is closed after this long (frees its page); reopening restores the chat
@@ -1074,7 +1075,7 @@ class Caption:
 
 def install_hotkey() -> None:
     """GNOME shortcut MINI_HOTKEY (Super+S) -> SIGUSR1 to this script = open / hide the mini chat. Once; idempotent.
-    GNOME gives Super+S to its quick-settings menu: that binding is taken off (the top-bar menu still works)."""
+    (Super+S was tried first: GNOME keeps it; its quick-settings binding is given back.)"""
     if not MINI_HOTKEY or "GNOME" not in os.getenv("XDG_CURRENT_DESKTOP", "").upper():
         return
     base = "org.gnome.settings-daemon.plugins.media-keys"
@@ -1087,15 +1088,14 @@ def install_hotkey() -> None:
     try:
         if gs("get", key, "binding") == repr(MINI_HOTKEY):
             return
-        quick = gs("get", "org.gnome.shell.keybindings", "toggle-quick-settings")
-        if MINI_HOTKEY.lower() in quick.lower():
-            gs("set", "org.gnome.shell.keybindings", "toggle-quick-settings", "[]")
+        if gs("get", "org.gnome.shell.keybindings", "toggle-quick-settings") == "@as []":
+            gs("set", "org.gnome.shell.keybindings", "toggle-quick-settings", "['<Super>s']")
         paths = gs("get", base, "custom-keybindings").replace("@as ", "")
         lst = json.loads(paths.replace("'", '"')) if paths.startswith("[") else []
         if path not in lst:
             gs("set", base, "custom-keybindings", json.dumps(lst + [path]).replace('"', "'"))
         gs("set", key, "name", "KURAMA mini chat")
-        gs("set", key, "command", "pkill -USR1 -f kurama_wallpaper.py")
+        gs("set", key, "command", f"sh -c 'kill -USR1 $(cat {PID_FILE})'")
         gs("set", key, "binding", MINI_HOTKEY)
         note(f"shortcut {MINI_HOTKEY} opens / hides the mini chat")
     except (OSError, subprocess.SubprocessError, ValueError) as e:
@@ -1112,6 +1112,8 @@ def main() -> int:
         return 1
     wp = Wallpaper(a.url, a.window)
     GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGUSR1, wp.toggle_mini)
+    with contextlib.suppress(OSError):
+        PID_FILE.write_text(str(os.getpid()))
     threading.Thread(target=install_hotkey, daemon=True).start()
     Gtk.main()
     return 0
