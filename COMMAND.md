@@ -440,11 +440,11 @@ Live answers, search, web pages, saved links, read-later.
 
 Help inside VS Code and around your projects.
 
-#### `code`: Coding help: fix_error (explain an error/traceback), run_tests, where_was_i, changes (what changed lately), git (status/log/diff), commit, new_project, env (check / install a package), review, training (ML training / Colab status).
+#### `code`: Coding help: fix_error (explain an error/traceback), run_tests, where_was_i, changes (what changed lately), git (status/log/diff), commit, new_project, env (check / install a package), requirements (make requirements.txt from imports), notebook_to_py (.ipynb -> .py), check_deps (missing/unpinned/outdated packages), review, training (ML training / Colab status).
 - **Safety:** runs at once
 - **What it understands:** `action`: What to do.
   - `text`: The error text / commit message / project name / package to install / 'last hour' / git: status, log, diff.
-  - `path`: The project folder or file (empty = the current project).
+  - `path`: The project folder or file (empty = the one open in VS Code).
 
 ### Music & video (1)
 

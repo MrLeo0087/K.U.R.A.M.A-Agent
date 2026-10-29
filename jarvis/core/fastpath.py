@@ -745,8 +745,32 @@ _WHERE_LAPTOP = re.compile(r"^(?:please\s+|kurama\W+)*(?:(?:give|tell|show|send)
                            r"(?:(?:current\s+|live\s+)?location\s+of\s+(?:my\s+|the\s+)?laptop|(?:my\s+)?laptop(?:'s)?\s+location|"
                            r"where\s+is\s+my\s+laptop)(?:\s+(?:please|now))?\s*[.!?]*$", I)
 
+_REQS = re.compile(r"^(?:please\s+|kurama\W+)*(?:generate|create|make|write|build)\s+(?:(?:a|the|new|my|me)\s+)*requirements?"
+                   r"(?:\.txt)?(?:\s+file)?(?:\s+(?:for|of|in)\s+(?P<p>.+?))?[\s.!]*$|^requirements?(?:\.txt)?\s+(?:banao|bana\s+do|banau)[\s.!]*$", I)
+_NB2PY = re.compile(r"^(?:please\s+|kurama\W+)*(?:convert|change|turn|export)\s+(?P<p>.+?\.ipynb|(?:this|the|my)\s+notebook|"
+                    r"(?:this|the|my)\s+ipynb)\s+(?:in)?to\s+(?:a\s+)?(?:\.?py|python)(?:\s+(?:script|file))?[\s.!]*$", I)
+_DEPS = re.compile(r"^(?:please\s+|kurama\W+)*(?:check|scan|audit|diagnose)\s+(?:the\s+|my\s+)?(?:dependencies|dependency|"
+                   r"requirements|packages)(?:\s+(?:for|of|in)\s+(?P<p>.+?))?[\s.!?]*$", I)
+
+
+def coding_intent(t: str) -> Intent | None:
+    """'generate requirements.txt (for <project>)', 'convert this notebook to python', 'check dependencies' -> 0 tokens;
+    no project named = the one open in VS Code."""
+    from jarvis.tools.core.code import _notebook, _project
+    if m := _REQS.match(t):
+        return Intent("devutils", "generate_requirements", "devutils", {"path": _project({"path": m.group("p") or ""})})
+    if m := _NB2PY.match(t):
+        p = m.group("p")
+        return Intent("devutils", "notebook_to_script", "devutils", {"path": _notebook({"path": "" if "notebook" in p.lower() or
+                                                                                                 p.lower().endswith(" ipynb") else p})})
+    if m := _DEPS.match(t):
+        return Intent("deps", "dependency_doctor", "codequality", {"repo": _project({"path": m.group("p") or ""})})
+    return None
+
 
 def _p7_intent(t: str) -> Intent | None:
+    if ci := coding_intent(t):
+        return ci
     if _STOP_TRACK.match(t) and not _mute_minutes(t):  # lost mode is what sends location: switch it off
         return Intent("guard", "laptop_guard", "power", {"action": "track_off"})
     if _WHERE_LAPTOP.match(t):

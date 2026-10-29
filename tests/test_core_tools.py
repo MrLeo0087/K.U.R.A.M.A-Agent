@@ -59,3 +59,15 @@ def test_run_command_asks_every_time_and_refuses_dangerous_ones(core, tmp_path):
     assert not safety.execute("run_command", {"command": "ls"}, confirm=lambda p: False).ok
     out = safety.execute("run_python", {"code": "print(6*7)"}, confirm=lambda p: True).output
     assert out == "42"
+
+
+def test_code_tool_uses_the_vs_code_project(monkeypatch, tmp_path):
+    from jarvis.core import timemachine
+    from jarvis.tools.core import code
+    from jarvis.tools.core._hub import resolve
+    (tmp_path / "a.ipynb").write_text("{}")
+    monkeypatch.setattr(timemachine, "vscode_folder", lambda: tmp_path)
+    assert resolve(code.TABLE, {"action": "requirements"}) == ("generate_requirements", {"path": str(tmp_path)})
+    assert resolve(code.TABLE, {"action": "check_deps", "path": "this project"}) == ("dependency_doctor", {"repo": str(tmp_path)})
+    assert resolve(code.TABLE, {"action": "requirements", "path": "~/x"})[1] == {"path": "~/x"}
+    assert resolve(code.TABLE, {"action": "notebook_to_py"}) == ("notebook_to_script", {"path": str(tmp_path / "a.ipynb")})

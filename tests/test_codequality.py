@@ -5,7 +5,7 @@ import subprocess
 import pytest
 
 from jarvis.core import jobs, llm, meta, registry, router
-from jarvis.tools.interactive import review_code
+from jarvis.tools.interactive import dependency_doctor, review_code
 
 G = "gsk_" + "Q7xLm9TzR2vWb8NcK4pYh6JdF3sA1eU"
 A = "AKIA" + "Z7Q2LM4XPB9RT6KD"
@@ -38,7 +38,7 @@ def no_raw(text):
 
 def test_registered_safe_and_small_group():
     tools = {t.name: t for t in registry.schemas_for(["codequality"])}
-    assert set(tools) == {"review_code", "code_tidy", "code_nav"}
+    assert set(tools) == {"dependency_doctor", "review_code", "code_tidy", "code_nav"}
     assert all(registry.safety_of(t) == "safe" for t in tools.values())
 
 
@@ -99,3 +99,30 @@ def test_review_code_many_files_runs_in_background(repo, monkeypatch):
     assert 1 <= len(seen) <= review_code.BG_MAX_CALLS
 
 
+def test_dependency_doctor(tmp_path, monkeypatch):
+    proj = tmp_path / "app"
+    proj.mkdir()
+    (proj / "requirements.txt").write_text("requests==2.32.0\nflask\nrequests>=2\nnumpy==2.0.0  # math\n"
+                                           "torch==2.4.0\nghostpkg==1.0\n-r other.txt\n")
+    (proj / "pyproject.toml").write_text('[project]\nname="app"\ndependencies=["rich>=13"]\n')
+    (proj / "main.py").write_text("import requests\nfrom flask import Flask\nimport rich\n")
+    installed = {"requests": "2.32.0", "flask": "3.0", "numpy": "2.0.0", "torch": "2.4.0", "rich": "13.0",
+                 "nvidia-cudnn-cu12": "9.0"}
+    pkgmap = {"requests": ["requests"], "flask": ["Flask"], "numpy": ["numpy"], "torch": ["torch"], "rich": ["rich"]}
+    monkeypatch.setattr(dependency_doctor, "probe_env", lambda py: (installed, pkgmap))
+    monkeypatch.setattr(dependency_doctor, "outdated", lambda py: {"numpy": ("2.0.0", "2.5.0")})
+    monkeypatch.setattr(dependency_doctor, "audit", lambda root, py, files: ["requests 2.32.0 (GHSA-x)"])
+    out = dependency_doctor.dependency_doctor(str(proj))
+    assert "6 deps in requirements.txt, pyproject.toml" in out
+    assert "unpinned: flask, requests, rich" in out and "duplicates: requests (conflicting specs" in out
+    assert "missing from venv: ghostpkg" in out and "never imported (maybe transitive/CLI): numpy, torch" in out
+    assert "outdated: numpy 2.0.0->2.5.0" in out and "vulnerable: requests 2.32.0 (GHSA-x)" in out
+    assert "torch/GPU baggage installed: nvidia-cudnn-cu12, torch (declared!)" in out and len(out) <= 800
+    assert "no requirements" in dependency_doctor.dependency_doctor(str(tmp_path))
+
+
+def test_dependency_doctor_outdated_handles_failure(monkeypatch):
+    def boom(*a, **k):
+        raise dependency_doctor._proc.ProcError("python3 timed out after 25s")
+    monkeypatch.setattr(dependency_doctor._proc, "run", boom)
+    assert dependency_doctor.outdated("python3").startswith("skipped")
