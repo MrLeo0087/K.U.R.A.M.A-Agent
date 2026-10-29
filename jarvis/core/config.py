@@ -144,6 +144,10 @@ DATA_DIR = Path(os.getenv("JARVIS_DATA_DIR", str(ROOT / "data")))
 DB_PATH = DATA_DIR / "jarvis.db"
 STT_LOG = DATA_DIR / "logs" / "stt.log"  # one line per recognition (what was heard, confidence)
 LOG_DIR = DATA_DIR / "logs"
+# Request traces for improving KURAMA (MONITORING.md): one row per request; kept when KURAMA is reset
+TRACING = os.getenv("KURAMA_TRACING", "1").lower() not in ("0", "false", "no", "off")
+TRACE_DB = Path(os.getenv("KURAMA_TRACE_DB", str(DATA_DIR / "traces.db")))
+TRACE_KEEP_DAYS = int(os.getenv("KURAMA_TRACE_KEEP_DAYS", "90"))
 
 # --- daily token budgets (self-imposed, ~90% of Groq free-tier TPD) ---
 DAILY_TOKEN_BUDGET: dict[str, int] = {

@@ -25,6 +25,7 @@ This is the one page to read when you forget something. It covers:
 | Turn on | `scripts/kurama-power.sh on`, or **Super+K** |
 | Turn off (frees all RAM/CPU) | `scripts/kurama-power.sh off`, or the power button on the screen |
 | Is it running? | `scripts/kurama-power.sh status` |
+| Restart (after changing code) | `scripts/kurama-power.sh off && scripts/kurama-power.sh on` |
 
 When KURAMA is on, it runs by itself all day. You don't have to start anything else.
 - **The dashboard** sits behind your desktop windows. Minimize it and it becomes a small floating button.
@@ -359,7 +360,7 @@ In talk mode KURAMA sleeps until you say **"hey KURAMA"** / **"wake up KURAMA"**
 | Making things | "make a reel about …", "make 4 versions of …", "make an audio of this" for revision on the go |
 | Night | "summarize my day", "token usage", "sleep now" (KURAMA), or "shut down the laptop" (asks yes/no) |
 
-**When KURAMA gets something wrong:** paste the chat log to Claude Code. Each line shows the route, tokens and time, so the exact cause can be found and fixed.
+**When KURAMA gets something wrong:** just keep using it (say "no, I meant…" to correct it). Every request is traced; after a week, paste the prompt from [MONITORING.md](MONITORING.md) into Claude Code and it finds and fixes the problems.
 
 ---
 

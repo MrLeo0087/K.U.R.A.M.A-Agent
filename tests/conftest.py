@@ -7,6 +7,7 @@ from jarvis.core import config, jobs, llm, ratelimit, store
 def tmp_store(tmp_path, monkeypatch):
     store.init(tmp_path / "test.db")
     monkeypatch.setattr(config, "OUTPUTS_DIR", tmp_path / "outputs")
+    monkeypatch.setattr(config, "TRACE_DB", tmp_path / "traces.db")  # never the real traces
     monkeypatch.setattr(config, "JOBS_NOTIFY", False)  # never pop desktop notifications in tests
     monkeypatch.setattr(config, "TELEGRAM_BOT_TOKEN", "")  # never message the real phone from a test
     monkeypatch.setattr(config, "NOTIFY_DESKTOP", False)

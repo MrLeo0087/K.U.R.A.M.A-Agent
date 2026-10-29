@@ -164,6 +164,9 @@ def log_llm(model: str, purpose: str, prompt_tokens: int, completion_tokens: int
             latency_ms: int, ok: bool, error: str = "", estimated: bool = False,
             audio_s: float = 0.0) -> None:
     p, c = int(prompt_tokens or 0), int(completion_tokens or 0)
+    if purpose != "stt":
+        from jarvis.core import trace
+        trace.on_llm(model, purpose, p, c, latency_ms, ok, error)
     _exec("INSERT INTO llm_calls(ts,model,purpose,prompt_tokens,completion_tokens,total_tokens,"
           "latency_ms,ok,error,estimated,audio_s) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
           (time.time(), model, purpose, p, c, p + c, int(latency_ms), int(bool(ok)),
@@ -173,6 +176,8 @@ def log_llm(model: str, purpose: str, prompt_tokens: int, completion_tokens: int
 def log_tool(tool: str, args: Any, ok: bool, latency_ms: int, safety: str = "safe",
              error: str = "", outcome: str = "", result: str = "") -> None:
     """Action log. outcome: allowed | denied | blocked | error (empty for legacy callers)."""
+    from jarvis.core import trace
+    trace.on_tool(tool, args, ok, latency_ms, outcome, result or error, safety)
     _exec("INSERT INTO tool_calls(ts,tool,args,ok,latency_ms,safety,error,outcome,result) "
           "VALUES (?,?,?,?,?,?,?,?,?)",
           (time.time(), tool, json.dumps(args, default=str)[:2000], int(bool(ok)),

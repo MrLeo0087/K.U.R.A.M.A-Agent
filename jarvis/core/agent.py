@@ -33,7 +33,7 @@ from typing import Annotated, Any, Callable, Iterator, TypedDict
 from langchain_core.messages import (AIMessage, BaseMessage, HumanMessage, SystemMessage,
                                      ToolMessage)
 
-from jarvis.core import (config, fastpath, identity, selfknow, jobs, llm, meta, notify, planner, profile, registry, router,
+from jarvis.core import (config, fastpath, identity, selfknow, jobs, llm, meta, notify, planner, profile, registry, router, trace,
                          modes, safety, store, workspace)
 
 log = logging.getLogger("jarvis.agent")
@@ -715,6 +715,18 @@ class Agent:
         return {"recursion_limit": 2 * config.AGENT_MAX_TOOL_ROUNDS + 6}
 
     def run(self, user_text: str, mode: str = "text", lang: str | None = None) -> str:
+        tr = trace.begin(user_text, mode, getattr(self, "channel", "") or "", enabled=self.persist)
+        answer, error = "", ""
+        try:
+            answer = self._run(user_text, mode, lang)
+            return answer
+        except Exception as e:
+            error = f"{type(e).__name__}: {e}"
+            raise
+        finally:
+            trace.end(tr, answer, self.last, error)
+
+    def _run(self, user_text: str, mode: str, lang: str | None) -> str:
         self._begin_turn(user_text)
         fast = self._fast(user_text, lang, mode)
         if fast is not None:
@@ -727,6 +739,7 @@ class Agent:
             answer = final.get("answer") or NO_ANSWER
         except llm.LLMError as e:
             log.warning("agent run failed: %s", e)
+            self.last["error"] = str(e)[:300]
             answer = ("Sorry, my AI service is busy or rate-limited right now — please try again in a few seconds."
                       if any(w in str(e).lower() for w in ("rate", "429", "busy", "quota", "budget"))
                       else "Sorry, something went wrong on my side. Please try again.")
@@ -735,6 +748,21 @@ class Agent:
 
     def stream(self, user_text: str, mode: str = "text", lang: str | None = None) -> Iterator[str]:
         """Yield answer text deltas. Tool rounds (and confirmations) happen before the first one."""
+        tr = trace.begin(user_text, mode, getattr(self, "channel", "") or "", enabled=self.persist)
+        parts: list[str] = []
+        error = ""
+        try:
+            for chunk in self._stream(user_text, mode, lang):
+                parts.append(chunk)
+                yield chunk
+                trace.resume(tr)
+        except Exception as e:
+            error = f"{type(e).__name__}: {e}"
+            raise
+        finally:
+            trace.end(tr, "".join(parts), self.last, error or ("stopped early" if not parts else ""))
+
+    def _stream(self, user_text: str, mode: str, lang: str | None) -> Iterator[str]:
         self._begin_turn(user_text)
         fast = self._fast(user_text, lang, mode)
         if fast is not None:

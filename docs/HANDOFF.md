@@ -2,6 +2,11 @@
 
 Read this, then CLAUDE.md (hard rules) and the tail of PROGRESS.md. Don't re-explore the repo; grep for what you need.
 
+**v2 (2026-10-29):** the AI sees 17 general tools (`jarvis/tools/core/`) that call the specialised tools; to-dos are
+their own table; Reset KURAMA is a factory reset. Every request is traced in `data/traces.db`: read `MONITORING.md`
+for the data and the report. User guide: `COMMAND.md`. Scorecard: `venv/bin/python -m tests.eval.harness`.
+Some details below predate v2 (test counts, tool counts); trust the code and PROGRESS.md.
+
 ## What it is
 KURAMA (formerly Jarvis; the user-facing name is changeable, default KURAMA, never "Jarvis" in UI/replies) is an
 always-on personal voice/text assistant on the owner's laptop. It runs on Ubuntu 24.04 on X11 (an Acer Aspire A14),
