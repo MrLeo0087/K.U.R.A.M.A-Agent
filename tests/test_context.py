@@ -49,11 +49,19 @@ def test_write_code_into_the_open_file_like_an_editor(monkeypatch, tmp_path):
          "\n\ngenerate code and write in this test.py file")
     i = fastpath.match(t)
     assert i.tool == "code_to_file" and not planner.is_multi(t)
-    out = ctf.code_to_file(**i.args)
+    from jarvis.core import jobs
+
+    class Ctx:
+        def progress(self, t): seen["said"] = t
+        def check(self): pass
+    monkeypatch.setattr(jobs, "get_manager", lambda: type("M", (), {"submit": lambda self, title, kind, fn: fn(Ctx())})())
+    monkeypatch.setattr(config, "OUTPUTS_DIR", tmp_path / "out")
+    assert "Writing the code into test.py" in ctf.code_to_file(**i.args)  # a background job: the reply never hangs
+    out = seen["said"]
     assert "Wrote 5 lines" in out and f.read_text().startswith("import pandas as pd") and "Sure" not in f.read_text()
     assert asked == [] and "reads a CSV in chunks" in seen["prompt"]  # blank file: written without a question
     ctf.code_to_file(request="add a main block that calls it in this file")  # a change to existing code
-    assert len(asked) == 1 and list((tmp_path / "backups").iterdir())  # one yes, old version kept
+    assert "backed up" in seen["said"] and list((tmp_path / "backups").iterdir())  # old version kept
     assert "async def process_large_csv" in seen["prompt"]  # the AI saw the file's current code
 
 

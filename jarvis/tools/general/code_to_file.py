@@ -65,6 +65,38 @@ def generate(request: str, target: Path, old: str) -> str:
     return code_only(str(reply))
 
 
+def _backup(target: Path, old: str) -> None:
+    backup = Path(config.DATA_DIR) / "backups" / f"{target.name}.{time.strftime('%Y%m%d-%H%M%S')}"
+    backup.parent.mkdir(parents=True, exist_ok=True)
+    backup.write_text(old, encoding="utf-8")
+
+
+def _start_job(spec: str, target: Path) -> str:
+    """Generate in the background, then write the file (you asked for this file; the old version is backed up)."""
+    from jarvis.core import jobs
+
+    def run(ctx) -> str | None:
+        ctx.progress(f"writing the code for {target.name}")
+        old = target.read_text(errors="replace") if target.is_file() else ""
+        body = generate(spec, target, old)
+        ctx.check()
+        if not body.strip():
+            ctx.progress("» No code came back; nothing changed.")
+            return None
+        if old.strip():
+            _backup(target, old)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(body, encoding="utf-8")
+        copy = Path(config.OUTPUTS_DIR) / "code" / f"{target.stem}-{time.strftime('%H%M%S')}{target.suffix or '.txt'}"
+        copy.parent.mkdir(parents=True, exist_ok=True)
+        copy.write_text(body, encoding="utf-8")
+        ctx.progress(f"» Wrote {len(body.splitlines())} lines of code into {target.name}"
+                     + (" (the old version is backed up)." if old.strip() else "."))
+        return str(copy)
+    jobs.get_manager().submit(f"Write code into {target.name}", "code", run)
+    return f"Writing the code into {target.name}… I'll tell you when it's there (about 20 seconds)."
+
+
 def _target(path: str) -> Path | None:
     from jarvis.core import assist, context
     if path.strip():
@@ -95,21 +127,16 @@ def code_to_file(request: str = "", path: str = "", code: str = "") -> str:
     target = Path(target)
     old = target.read_text(errors="replace") if target.is_file() else ""
     spec = _spec(request) or ("" if code.strip() else _last_spec())
-    if code.strip():
-        body = code_only(code)
-    elif spec:
-        body = generate(spec, target, old)
-    else:
-        body = latest_code()
+    if spec and not code.strip():  # writing a whole file takes 10-40 s: a background job, never a stuck reply
+        return _start_job(spec, target)
+    body = code_only(code) if code.strip() else latest_code()
     if not body.strip():
         return "error: tell me what the code should do (or ask me to write the code first)"
     if old.strip() and old.strip() != body.strip():
         if not safety.ask(f"Write the new code into {target.name}? ({len(body.splitlines())} lines; "
                           f"the old version is backed up)"):
             return "The user declined: the file was not changed."
-        backup = Path(config.DATA_DIR) / "backups" / f"{target.name}.{time.strftime('%Y%m%d-%H%M%S')}"
-        backup.parent.mkdir(parents=True, exist_ok=True)
-        backup.write_text(old, encoding="utf-8")
+        _backup(target, old)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(body, encoding="utf-8")
     return f"Wrote {len(body.splitlines())} lines of code into {target.name}; VS Code shows it now."
