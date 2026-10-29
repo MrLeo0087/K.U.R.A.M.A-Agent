@@ -242,19 +242,100 @@ def actions_of(schema: dict) -> list[str]:
     return out
 
 
+# The 17 general tools the AI sees (v2): example sentences, by hand
+CORE_EXAMPLES: dict[str, list[str]] = {
+    "apps": ["open VS Code", "open youtube and facebook", "open the tara folder", "close Brave", "kill the frozen app",
+             "snap this window left", "press ctrl+t", "install VLC"],
+    "laptop": ["volume 40", "brightness up", "turn off bluetooth", "dark mode", "night light on", "do not disturb on",
+               "battery", "why is my laptop slow", "free up some ram", "check my internet", "take a screenshot",
+               "next wallpaper", "lock the screen", "shut down the laptop"],
+    "files": ["find my resume pdf", "what's in my downloads", "read notes.txt", "make a folder called notes on the desktop",
+              "move report.pdf to Documents", "delete this file", "organize my downloads", "convert report.docx to pdf",
+              "lock the private folder"],
+    "telegram": ["send naruto.jpg to my telegram", "find tools.py and send it to me", "send this photo",
+                 "message me on telegram: leaving now", "send the last result to my phone"],
+    "schedule": ["remind me to call mom at 5 pm", "alarm at 6 am", "timer 10 minutes", "start the stopwatch",
+                 "what are my reminders", "move the call reminder to 7 pm", "cancel the 6 am alarm"],
+    "todo": ["add buy milk to my to-do #shopping tomorrow", "add finish the report, it's urgent", "show my to-do list",
+             "what do I have to do today", "done 2", "delete the bank task", "clear finished to-dos"],
+    "media": ["play lofi music", "play kya mujhe pyar hai by KK", "next", "pause", "what song is this", "stop the music",
+              "play despacito on youtube", "download this video in 720p", "gesture control on"],
+    "web": ["latest news about Nepal", "gold price today", "arsenal score", "search the web for python asyncio",
+            "what is this page about", "wikipedia Mount Everest", "watch this page for the word 'result'"],
+    "info": ["what time is it in Tokyo", "what's the date today", "weather in Pokhara tomorrow", "15% of 2400",
+             "convert 100 usd to npr", "what's Ram's number", "where is my phone", "where is my laptop"],
+    "memory": ["remember that my exam is on Nov 25", "what do you know about me", "forget that",
+               "what did we talk about yesterday", "save this link as facebook", "open my facebook link",
+               "save this to read later", "what do my notes say about stacks"],
+    "create": ["generate an image of a red panda", "make a phone wallpaper of Everest at night",
+               "write a 1000-word essay about Nepal", "make an audio of this", "chart my expenses",
+               "make a diagram of this project", "make a short video about the Himalayas"],
+    "text": ["explain this", "meaning of this word", "translate this to Nepali", "improve this text", "summary of this",
+             "what should I reply to my friend", "read the text on the screen", "what did I copy 10 minutes ago",
+             "start dictation", "scan the QR code"],
+    "code": ["what does this error mean", "run the tests", "where was I", "what changed in the last hour", "git status",
+             "commit my changes", "generate requirements.txt", "convert this notebook to python", "check dependencies",
+             "review my code", "how's training"],
+    "life": ["spent 200 on momo and 50 on tea", "how much did I spend this month", "set my food budget to 8000",
+             "add a habit: drink water", "exercise done", "my habits", "show my long tasks", "show my timetable",
+             "note for DSA: stacks are LIFO", "start a quiz on DSA", "record this lecture", "summarize my day",
+             "token usage"],
+    "kurama": ["what can you do", "do you have a tool for renaming photos", "change your name to Jarvis", "low RAM mode",
+               "show my jobs", "clear the chat", "mute RAM alerts for 20 minutes", "make a tool that counts words in a file"],
+    "run_command": ["run the command du -sh ~/Downloads", "how big is my home folder", "list the files in /tmp with sizes"],
+    "run_python": ["use python to count the lines in all .py files here", "write and run code that sums column B of sales.csv"],
+}
+
+
+def core_block() -> list[str]:
+    """Part 8a: the 17 general tools the AI chooses from, with what each one does underneath."""
+    import importlib
+
+    from jarvis.core import config
+    from jarvis.tools.core._hub import Act
+    R.REGISTRY._ensure()
+    out = [f"### 8a. The {len(config.CORE_COVERS)} tools the AI chooses from", "",
+           "Each one takes an **action** and a few words, and hands the work to the specialised tools in 8b.", ""]
+    for n in config.CORE_COVERS:
+        t = R.REGISTRY.tools.get(n)
+        if t is None:
+            continue
+        schema = R.schema_of(t)
+        safety = {"safe": "runs at once (anything risky underneath still asks)", "confirm": "asks first, every time"}.get(
+            R.safety_of(t), R.safety_of(t))
+        out += [f"#### `{n}`", "", schema["function"]["description"].strip(), "", f"- **Safety:** {safety}"]
+        table = getattr(importlib.import_module(f"jarvis.tools.core.{n}"), "TABLE", None)
+        if table:
+            out.append("- **Actions:** " + ", ".join(
+                f"`{k}`" + (f" → {v.tool}" if isinstance(v, Act) else "") for k, v in table.items()))
+        if ex := CORE_EXAMPLES.get(n):
+            out.append("- **Say:** " + " · ".join(f"“{e}”" for e in ex))
+        out.append("")
+    return out
+
+
 def build() -> str:
-    tools = {t.name: (g, t) for g in R.REGISTRY.groups() for t in R.REGISTRY.schemas_for([g])}
-    lines = [START, "", f"## 8. Every tool in detail ({len(tools)} tools)", "",
-             "Generated from the tools themselves by `scripts/gen_tool_guide.py`.",
+    from jarvis.core import config
+    core = core_block()
+    was, config.CORE_TOOLS = config.CORE_TOOLS, False  # 8b: the specialised tools underneath
+    try:
+        tools = {t.name: (g, t) for g in R.REGISTRY.groups() for t in R.REGISTRY.schemas_for([g]) if g != "core"}
+    finally:
+        config.CORE_TOOLS = was
+    lines = [START, "", "## 8. Every tool in detail", "",
+             "Generated from the tools themselves by `scripts/gen_tool_guide.py` (rerun it after changing tools).",
              "- **Runs at once** means it just does it. **Asks first** means it waits for your yes.",
-             "- Under **What it understands** are the settings the AI fills in from your words. You never type them.",
-             "- The **Say** lines are examples. Your own words work too.", ""]
+             "- The **Say** lines are examples. Your own words work too (English, Nepali, Hindi).", ""]
+    lines += core
+    lines += [f"### 8b. The {len(tools)} specialised tools underneath", "",
+              "The AI never sees these directly; the 17 tools above and the instant shortcuts use them. "
+              "Under **What it understands** are the settings filled in from your words.", ""]
     seen: set[str] = set()
     for title, groups, about in AREAS:
         names = [n for n, (g, _) in sorted(tools.items()) if g in groups]
         if not names:
             continue
-        lines += [f"### {title} ({len(names)})", "", about, ""]
+        lines += [f"#### {title} ({len(names)})", "", about, ""]
         for n in names:
             seen.add(n)
             _, t = tools[n]
@@ -262,7 +343,7 @@ def build() -> str:
             desc = schema["function"]["description"].strip()
             ex, tip = EXAMPLES.get(n, ([], ""))
             safety = {"safe": "runs at once", "confirm": "asks first", "blocked": "blocked"}.get(R.safety_of(t), R.safety_of(t))
-            lines.append(f"#### `{n}`: {desc}")
+            lines.append(f"##### `{n}`: {desc}")
             lines.append(f"- **Safety:** {safety}")
             acts = actions_of(schema)
             if acts:
@@ -275,7 +356,7 @@ def build() -> str:
             lines.append("")
     rest = sorted(set(tools) - seen)
     if rest:  # a new group nobody placed yet
-        lines += ["### Other", ""] + [f"- `{n}`: {R.schema_of(tools[n][1])['function']['description']}" for n in rest] + [""]
+        lines += ["#### Other", ""] + [f"- `{n}`: {R.schema_of(tools[n][1])['function']['description']}" for n in rest] + [""]
     lines.append(END)
     return "\n".join(lines)
 
@@ -289,8 +370,10 @@ def main() -> int:
     else:
         text = text.rstrip() + "\n\n---\n\n" + block + "\n"
     path.write_text(text)
-    missing = [n for g in R.REGISTRY.groups() for n in (t.name for t in R.REGISTRY.schemas_for([g])) if n not in EXAMPLES]
-    print(f"COMMAND.md: {block.count('#### ')} tools written" + (f"; no examples yet for: {', '.join(missing)}" if missing else ""))
+    from jarvis.core import config
+    missing = sorted({n for n, t in R.REGISTRY.tools.items() if R.group_of(t) != "core" and n not in EXAMPLES})
+    missing += [n for n in config.CORE_COVERS if n not in CORE_EXAMPLES]
+    print(f"COMMAND.md: {block.count('##### ')} tools written" + (f"; no examples yet for: {', '.join(missing)}" if missing else ""))
     return 0
 
 
