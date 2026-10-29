@@ -89,3 +89,16 @@ def test_under_a_minute_kuramas_own_timer_does_it(monkeypatch):
 def test_the_shutdown_command_is_allowed_but_still_blocked_in_tests():
     assert _sys.need("shutdown")
     assert _sys.power_blocked(["shutdown", "-P", "+90"])
+
+
+def test_slash_shutdown_now_later_cancel_status():
+    from jarvis.core import fastpath
+    assert fastpath.match("/shutdown").tool == "power_off"
+    assert fastpath.match("/restart").args == {"action": "restart"}
+    i = fastpath.match("/shutdown 30min")
+    assert i.tool == "shutdown_timer" and i.args == {"action": "set", "when": "30min", "kind": "shutdown"}
+    assert fastpath.match("/shutdown 2hrs").args["when"] == "2hrs"
+    assert fastpath.match("/shutdown at 11 pm").args["when"] == "at 11 pm"
+    assert fastpath.match("/restart 1hr").args == {"action": "set", "when": "1hr", "kind": "restart"}
+    assert fastpath.match("/shutdown cancel").args == {"action": "cancel"}
+    assert fastpath.match("/shutdown status").args == {"action": "status"}

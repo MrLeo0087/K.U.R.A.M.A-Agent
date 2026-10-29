@@ -3132,8 +3132,9 @@ _FILLER = re.compile(r"\b(?:please|pls|now|the|my|this|laptop|computer|pc|system
 _LATER = re.compile(r"(?:please\s+)?(?P<k>shut\s*down|shutdown|turn\s+off|power\s+off|switch\s+off|restart|reboot)"
                     r"(?:\s+(?:the|my))?(?:\s+(?:laptop|computer|pc|system))?\s+(?P<w>(?:(?:after|in|at|within)\s+)?.+)", I)
 _CANCEL_OFF = re.compile(r"(?:please\s+)?(?:cancel|stop|abort|don'?t|do\s+not)\s+(?:the\s+)?(?:scheduled\s+)?"
-                         r"(?:shut\s*down|shutdown|restart|reboot|power\s+off)(?:\s+(?:timer|the\s+laptop|laptop))?", I)
-_WHEN_OFF = re.compile(r"when\s+(?:will|is)\s+(?:the\s+|my\s+)?(?:laptop|computer|pc|it)\s+(?:going\s+to\s+)?"
+                         r"(?:shut\s*down|shutdown|restart|reboot|power\s+off)(?:\s+(?:timer|the\s+laptop|laptop))?|"
+                         r"(?:shut\s*down|shutdown|restart|reboot)\s+(?:cancel|stop|off)", I)  # '/shutdown cancel'
+_WHEN_OFF = re.compile(r"(?:shut\s*down|shutdown|restart|reboot)\s+(?:status|time\s+left|when)|when\s+(?:will|is)\s+(?:the\s+|my\s+)?(?:laptop|computer|pc|it)\s+(?:going\s+to\s+)?"
                        r"(?:shut\s*down|shutdown|restart|turn\s+off)|(?:is\s+)?(?:a\s+)?shutdown\s+(?:timer\s+)?"
                        r"(?:set|scheduled|timer)", I)
 
