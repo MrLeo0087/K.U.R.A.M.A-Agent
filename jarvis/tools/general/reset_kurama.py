@@ -8,7 +8,7 @@ from jarvis.core.registry import tool
 
 @tool(group="self", safety="safe",
       description="Clear/reset KURAMA: 'chat' = forget this conversation; 'recent' = chat + reminders/alarms/timers "
-                  "+ caches; 'all' = also wipe learned personal facts and start brand new. Password and settings are kept.")
+                  "+ caches; 'all' = factory reset, a brand-new KURAMA (asks first). Password and settings are kept.")
 def reset_kurama(level: Literal["chat", "recent", "all"] = "chat") -> str:
     """Clear or reset.
 
@@ -17,6 +17,9 @@ def reset_kurama(level: Literal["chat", "recent", "all"] = "chat") -> str:
     """
     from jarvis.core import reset
     if level == "all":
+        from jarvis.core import safety
+        if not safety.ask("Reset KURAMA completely? Every chat, fact, reminder, to-do and result is wiped (a backup is kept)."):
+            return "OK, nothing was reset."
         return reset.reset_all()
     if level == "recent":
         return reset.clear_recent()

@@ -461,6 +461,9 @@ class TelegramBot(Worker):
                 return reset.clear_chat(self._agent) if "chat" in cmd or cmd == "/new" else reset.clear_recent(self._agent)
             if cmd in ("/reset", "/wipe"):
                 from jarvis.core import reset
+                if "yes" not in text.lower().split():
+                    return ("This wipes EVERYTHING: every chat, fact, reminder, to-do and result (a backup is kept). "
+                            f"Send '{cmd} yes' to do it.")
                 return reset.reset_all(self._agent)
             if cmd in ("/all", "/commands", "/command", "/kurama"):
                 from jarvis.core import slash

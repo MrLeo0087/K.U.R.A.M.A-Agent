@@ -2340,7 +2340,7 @@ $("btn-settings").onclick = () => openSettings();
 for (const b of document.querySelectorAll("[data-reset]")) {
   b.onclick = async () => {
     const level = b.dataset.reset;
-    if (level === "all" && !confirm("Reset KURAMA? This wipes reminders, caches and learned facts and starts fresh. Your password and settings are kept.")) return;
+    if (level === "all" && !confirm("Reset KURAMA to brand new?\n\nEvery chat, fact, reminder, to-do, alert, result and personal sheet is wiped (a backup copy is kept). Your password and settings stay.")) return;
     b.disabled = true;
     try {
       const r = await api.reset(level);
@@ -2348,6 +2348,7 @@ for (const b of document.querySelectorAll("[data-reset]")) {
       player.stop(); if (busy) abortChat();
       toast(r.message || "Done.");
       $("settings").close();
+      if (level !== "chat") setTimeout(() => location.reload(), 1500); // every card shows the empty state
     } catch { toast("Couldn't do that right now."); }
     finally { b.disabled = false; }
   };
