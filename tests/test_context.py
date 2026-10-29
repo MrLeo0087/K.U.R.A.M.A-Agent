@@ -92,3 +92,19 @@ def test_only_where_words_mean_no_description():
     assert ctf._spec("write generate code on this path /media/leo/x/test.py") == ""
     assert ctf._spec("write this code in oopen file test.py .. only code") == ""
     assert ctf._spec("add a main block that calls it in this file")
+
+
+def test_replace_it_after_code_in_the_chat_goes_into_the_open_file(monkeypatch, tmp_path):
+    from jarvis.core import fastpath
+    from jarvis.tools.general import code_to_file as ctf
+    f = tmp_path / "test.py"
+    f.write_text("x = 1\n")
+    monkeypatch.setattr(assist, "open_file_in_editor", lambda: f)
+    monkeypatch.setattr(context, "_primary", lambda: "")
+    monkeypatch.setattr(context, "_cache", (0.0, {}))
+    monkeypatch.setattr(assist, "_pending", {})
+    monkeypatch.setattr(ctf, "latest_code", lambda: "def search():\n    return []\n")
+    i = fastpath.match("replace it")
+    assert i.tool == "code_to_file" and i.args == {"request": ""}
+    assert "Should I add it?" in ctf.code_to_file(**i.args) and f.read_text() == "x = 1\n"
+    assert fastpath.match("replace it").tool == "text_assist"  # now a change waits: 'replace it' = yes, apply it
