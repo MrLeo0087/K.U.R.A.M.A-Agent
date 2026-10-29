@@ -65,6 +65,20 @@ def generate(request: str, target: Path, old: str) -> str:
     return code_only(str(reply))
 
 
+def _dirty_note(target: Path) -> str:
+    """VS Code never reloads a file that has unsaved edits (● in its tab): say how to see the new code."""
+    try:
+        from jarvis.core import rewrite
+        wid, _ = rewrite.target_window()
+        title = rewrite._window_name(wid) if wid else ""
+    except Exception:  # noqa: BLE001
+        return ""
+    if title.lstrip().startswith(("●", "•")) and target.name in title:
+        return (f" VS Code still shows your unsaved version of {target.name}: press Ctrl+Shift+P, type "
+                f"'Revert File' and Enter to see the new code.")
+    return ""
+
+
 def _backup(target: Path, old: str) -> None:
     backup = Path(config.DATA_DIR) / "backups" / f"{target.name}.{time.strftime('%Y%m%d-%H%M%S')}"
     backup.parent.mkdir(parents=True, exist_ok=True)
@@ -91,7 +105,7 @@ def _start_job(spec: str, target: Path) -> str:
         copy.parent.mkdir(parents=True, exist_ok=True)
         copy.write_text(body, encoding="utf-8")
         ctx.progress(f"» Wrote {len(body.splitlines())} lines of code into {target.name}"
-                     + (" (the old version is backed up)." if old.strip() else "."))
+                     + (" (the old version is backed up)." if old.strip() else ".") + _dirty_note(target))
         return str(copy)
     jobs.get_manager().submit(f"Write code into {target.name}", "code", run)
     return f"Writing the code into {target.name}… I'll tell you when it's there (about 20 seconds)."
@@ -126,10 +140,12 @@ def code_to_file(request: str = "", path: str = "", code: str = "") -> str:
         return "error: open the file in VS Code (or give its full path), then ask again"
     target = Path(target)
     old = target.read_text(errors="replace") if target.is_file() else ""
-    spec = _spec(request) or ("" if code.strip() else _last_spec())
-    if spec and not code.strip():  # writing a whole file takes 10-40 s: a background job, never a stuck reply
-        return _start_job(spec, target)
-    body = code_only(code) if code.strip() else latest_code()
+    spec = _spec(request)
+    body = code_only(code) if code.strip() else "" if spec else latest_code()  # "put it in test.py": the code we have
+    if not body.strip() and not code.strip():
+        spec = spec or _last_spec()
+        if spec:  # writing a whole file takes 10-40 s: a background job, never a stuck reply
+            return _start_job(spec, target)
     if not body.strip():
         return "error: tell me what the code should do (or ask me to write the code first)"
     if old.strip() and old.strip() != body.strip():
@@ -139,4 +155,4 @@ def code_to_file(request: str = "", path: str = "", code: str = "") -> str:
         _backup(target, old)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(body, encoding="utf-8")
-    return f"Wrote {len(body.splitlines())} lines of code into {target.name}; VS Code shows it now."
+    return f"Wrote {len(body.splitlines())} lines of code into {target.name}." + _dirty_note(target)
