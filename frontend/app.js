@@ -2541,7 +2541,7 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape" && document
 
 // ---------- downloads: one live bar per download, inside the workspace (main UI and mini's workspace window) ----------
 // The mini chat itself shows no bars: a new download opens mini's workspace window instead.
-let dlTimer = 0, dlKey = "", dlSeen = null;
+let dlTimer = 0, dlKey = "", dlSeen = null, dlTab = "run", dlLib = [], dlRun = [];
 const DL_HERE = !MINI || WSONLY;
 const dlPref = (k, v) => { try { if (v === undefined) return localStorage.getItem("kurama.dl." + k); localStorage.setItem("kurama.dl." + k, v); } catch { /* private window */ } return null; };
 async function loadDownloads() {
@@ -2553,6 +2553,7 @@ async function loadDownloads() {
     if (dlSeen && live.some((id) => !dlSeen.has(id))) { // a new download started: show the workspace with its bar
       if (MINI && !WSONLY) hostSay("ws:quiet"); else if (!MINI && document.body.classList.contains("minimal")) wsPanel(true);
     }
+    if (DL_HERE && dlSeen && [...dlSeen].some((id) => !live.includes(id))) loadVideos(); // one finished: the library grew
     dlSeen = new Set(live);
     if (DL_HERE) renderDownloads(items);
   }
@@ -2563,12 +2564,14 @@ function renderDownloads(items) {
   const key = JSON.stringify(items);
   if (key === dlKey) return;
   dlKey = key;
+  dlRun = items;
   const tray = $("dl-tray");
-  tray.hidden = !items.length;
-  if (!items.length) return;
+  tray.hidden = !items.length && !dlLib.length;
   const live = items.filter((d) => d.status === "active");
   const pct = (d) => (d.frac != null ? Math.round(d.frac * 100) + "%" : "");
-  $("dl-sum").textContent = live.length ? `Downloads · ${live.length} running${live.length === 1 && live[0].frac != null ? " · " + pct(live[0]) : ""}` : "Downloads · finished";
+  $("dl-sum").textContent = live.length ? `Downloads · ${live.length} running${live.length === 1 && live[0].frac != null ? " · " + pct(live[0]) : ""}` : "Downloads";
+  if (!items.length) $("dl-list").innerHTML = '<li class="s">Nothing downloading. Say "download this video".</li>';
+  if (!items.length) return;
   $("dl-list").innerHTML = items.map((d) => `<li class="dl-${esc(d.status)}"><div class="dl-row"><span class="ell" title="${esc(d.title)}">${esc(d.title)}</span><b>${d.status === "active" ? pct(d) : ""}</b>${d.kind === "ytdl" ? `<span class="dl-btns">${d.status === "active" ? `<button type="button" class="dl-btn" data-dl="pause" data-id="${d.id}">Pause</button>` : ["paused", "failed", "stopped"].includes(d.status) ? `<button type="button" class="dl-btn" data-dl="resume" data-id="${d.id}">Resume</button>` : ""}<button type="button" class="dl-btn bad" data-dl="delete" data-id="${d.id}" title="${d.status === "done" ? "Remove from the list (the video stays)" : "Stop and delete the partial file"}">${d.status === "done" ? "Remove" : "Delete"}</button></span>` : ""}</div>
     <div class="gbar"><i style="width:${d.status === "done" ? 100 : Math.max(2, Math.round((d.frac || 0) * 100))}%"></i></div>
     <div class="s" title="${esc(d.sub)}">${esc(d.sub)}</div></li>`).join("");
@@ -2582,6 +2585,47 @@ $("dl-list").onclick = async (e) => {
   try { await api.downloadControl(b.dataset.id, b.dataset.dl); } catch (err) { toast?.(err.message || "Couldn't do that"); }
   dlKey = ""; loadDownloads();
 };
+// the library: every downloaded video, by day; remove one, a day's, or all (to the Trash)
+const fmtVid = (b) => (b >= 1e9 ? (b / 1e9).toFixed(1) + " GB" : Math.round(b / 1e6) + " MB");
+async function loadVideos() {
+  try { const r = await api.videos(); dlLib = r.items || []; } catch { return; }
+  renderVideos();
+  $("dl-tray").hidden = !dlRun.length && !dlLib.length;
+}
+function renderVideos() {
+  const total = dlLib.reduce((a, v) => a + v.size, 0);
+  $("dl-libsum").textContent = dlLib.length ? `${dlLib.length} file${dlLib.length > 1 ? "s" : ""} · ${fmtVid(total)}` : "No downloaded videos.";
+  $("dl-clear").hidden = !dlLib.length;
+  const days = [...new Set(dlLib.map((v) => v.day))];
+  $("dl-libl").innerHTML = days.map((day) => {
+    const vs = dlLib.filter((v) => v.day === day);
+    return `<div class="dl-day"><span>${esc(day)} · ${fmtVid(vs.reduce((a, v) => a + v.size, 0))}</span><button type="button" class="dl-btn bad" data-vday="${esc(day)}">Clear ${esc(day.toLowerCase() === "today" ? "today" : "day")}</button></div>
+      <ul class="dl-list">${vs.map((v) => `<li><div class="dl-row"><span class="ell" title="${esc(v.name)}">${esc(v.name.replace(/\.[^.]+$/, ""))}</span><span class="s">${fmtVid(v.size)}</span>
+        <span class="dl-btns"><button type="button" class="dl-btn bad" data-vrm="${esc(v.name)}">Remove</button></span></div></li>`).join("")}</ul>`;
+  }).join("");
+}
+async function removeVideos(body, ask) {
+  if (ask && !confirm(ask)) return;
+  try { const r = await api.videosRemove(body); toast(r.text); } catch (err) { toast(err.message || "Couldn't remove it"); }
+  loadVideos();
+}
+$("dl-libl").onclick = (e) => {
+  const b = e.target.closest("[data-vrm],[data-vday]");
+  if (!b) return;
+  if (b.dataset.vrm) return removeVideos({ names: [b.dataset.vrm] });
+  const names = dlLib.filter((v) => v.day === b.dataset.vday).map((v) => v.name);
+  removeVideos({ names }, `Move ${names.length} video${names.length > 1 ? "s" : ""} from ${b.dataset.vday} to the Trash?`);
+};
+$("dl-clear").onclick = () => removeVideos({ all: true }, `Move all ${dlLib.length} downloaded videos to the Trash?`);
+for (const b of document.querySelectorAll("[data-dlt]")) b.onclick = () => {
+  dlTab = b.dataset.dlt;
+  for (const x of document.querySelectorAll("[data-dlt]")) x.classList.toggle("on", x === b);
+  $("dl-list").hidden = dlTab !== "run";
+  $("dl-lib").hidden = dlTab !== "lib";
+  $("dl-tray").classList.remove("min");
+  if (dlTab === "lib") loadVideos();
+};
+if (DL_HERE) loadVideos();
 $("dl-min").onclick = () => { const m = !$("dl-tray").classList.contains("min"); $("dl-tray").classList.toggle("min", m); dlPref("min", m ? "1" : "0"); };
 $("dl-tray").classList.toggle("min", dlPref("min") === "1");
 document.addEventListener("visibilitychange", () => { if (!document.hidden) loadDownloads(); });

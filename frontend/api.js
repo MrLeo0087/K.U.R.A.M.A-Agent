@@ -40,6 +40,8 @@ export class Api {
   health() { return this.request("/api/v1/health"); }
   status() { return this.request("/api/v1/status"); }
   downloads() { return this.request("/api/v1/downloads"); }
+  videos() { return this.request("/api/v1/videos"); }
+  videosRemove(body) { return this.request("/api/v1/videos/remove", { method: "POST", body }); }
   downloadControl(id, action) { return this.request(`/api/v1/downloads/${id}/${action}`, { method: "POST", body: {} }); }
   confirm(id, yes) { return this.request("/api/v1/confirm", { method: "POST", body: { id, yes } }); }
   tools() { return this.request("/api/v1/tools"); }

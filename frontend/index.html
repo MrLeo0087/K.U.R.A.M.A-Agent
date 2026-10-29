@@ -379,8 +379,13 @@
   </dialog>
 
   <div id="dl-tray" class="dl-tray" hidden aria-label="Downloads">
-    <button id="dl-min" class="dl-sum" type="button" title="Minimize / show the downloads">⇣ <span id="dl-sum"></span><i class="dl-chev">▾</i></button>
+    <div class="dl-head"><button id="dl-min" class="dl-sum" type="button" title="Minimize / show the downloads">⇣ <span id="dl-sum"></span><i class="dl-chev">▾</i></button>
+      <span class="dl-tabs" role="tablist"><button type="button" data-dlt="run" class="on">Running</button><button type="button" data-dlt="lib">Library</button></span></div>
     <ul id="dl-list" class="dl-list"></ul>
+    <div id="dl-lib" class="dl-lib" hidden>
+      <div class="dl-libhead"><span id="dl-libsum" class="s"></span><button id="dl-clear" type="button" class="dl-btn bad">Clear all</button></div>
+      <div id="dl-libl" class="dl-list"></div>
+    </div>
   </div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <div id="debug" class="debug" hidden></div>

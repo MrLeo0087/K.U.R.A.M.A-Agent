@@ -400,6 +400,23 @@ async def download_control(wid: int, action: str):
     return {"ok": True, "text": out}
 
 
+@router.get("/videos", summary="Downloaded videos/audio (newest first, with a day label) for the downloads library")
+async def videos():
+    from jarvis.core import ytdl
+    items = await run_in_threadpool(ytdl.library)
+    return {"items": items, "folder": str(ytdl.out_dir()), "total": sum(i["size"] for i in items)}
+
+
+@router.post("/videos/remove", summary="Move downloaded videos to the Trash: {names: [...]} or {all: true}")
+async def videos_remove(request: Request):
+    from jarvis.core import ytdl
+    d = await request.json()
+    names = None if d.get("all") is True else [str(n) for n in d.get("names") or []]
+    if names == []:
+        raise HTTPException(400, "give names or all: true")
+    return {"ok": True, "text": await run_in_threadpool(ytdl.remove, names)}
+
+
 @router.get("/alerts/new", summary="Alerts newer than ?after=<id> (mini KURAMA shows them beside its button)")
 async def alerts_new(after: int = 0):
     from jarvis.core import store

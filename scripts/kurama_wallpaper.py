@@ -665,6 +665,7 @@ class Mini:
         self.hover = False
         self.talking = False  # the panel's page is in talk mode
         self.size_timer = 0
+        self.anim, self.phase = 0, 0.0  # the busy animation's timer and step
         self.ghost = False  # panel "closed" but still alive (invisible, click-through) so talk mode keeps going
         self.state = "idle"  # voice state shown by the ring while ghosted
         self.caption = None  # Caption window, made on first use
@@ -720,6 +721,7 @@ class Mini:
             if rest != self.state:
                 self.state = rest
                 self.bubble.queue_draw()
+                self.animate(rest in BUSY_STATES)
             if self.ghost and not self.talking and rest not in BUSY_STATES:
                 # closed while a reply was on its way (any mode): it's done; wait a moment (the reply's caption
                 # arrives right after, or it starts speaking), then really hide, keeping the caption up
@@ -750,8 +752,10 @@ class Mini:
         cr.arc(c, c, c - 1, 0, 2 * math.pi)
         cr.set_source_rgba(0.035, 0.037, 0.06, 0.94)
         cr.fill()
+        busy = self.state in BUSY_STATES
+        pulse = 0.5 + 0.5 * math.sin(self.phase) if busy else 0.0  # thinking / speaking: a soft breathing glow
         glow = cairo.RadialGradient(c, c, c * 0.3, c, c, c)
-        glow.add_color_stop_rgba(0, 1, 0.43, 0.08, 0.38 if self.hover or self.open else 0.22)
+        glow.add_color_stop_rgba(0, 1, 0.43, 0.08, (0.38 if self.hover or self.open else 0.22) + 0.2 * pulse)
         glow.add_color_stop_rgba(1, 1, 0.43, 0.08, 0)
         cr.arc(c, c, c - 1, 0, 2 * math.pi)
         cr.set_source(glow)
@@ -763,15 +767,29 @@ class Mini:
         cr.arc(c, c, c * 0.36, 0, 2 * math.pi)
         cr.set_source(core)
         cr.fill()
-        ring = RING.get(self.state) if self.ghost else None
+        ring = RING.get(self.state) if self.ghost or busy else None
         cr.set_line_width(2.4 if ring else 1.6)
-        cr.set_dash([] if ring else [c * 0.62, c * 0.22])
+        cr.set_dash([c * 0.9, c * 0.3] if busy else [] if ring else [c * 0.62, c * 0.22], self.phase * c * 0.6)
         if ring:
             cr.set_source_rgba(*ring, 1)
         else:
             cr.set_source_rgba(1, 0.48, 0.1, 1 if self.hover or self.open else 0.7)
         cr.arc(c, c, c - 4, -math.pi / 2, 1.5 * math.pi)
         cr.stroke()
+        return True
+
+    def animate(self, on: bool) -> None:
+        """While thinking / speaking: redraw the button ~20 times a second (stops when idle: no CPU at rest)."""
+        if on and not self.anim:
+            self.anim = GLib.timeout_add(50, self._tick)
+        elif not on and self.anim:
+            GLib.source_remove(self.anim)
+            self.anim = 0
+            self.bubble.queue_draw()
+
+    def _tick(self) -> bool:
+        self.phase = (self.phase + 0.16) % (2 * math.pi * 10)
+        self.bubble.queue_draw()
         return True
 
     def set_hover(self, on: bool) -> None:
@@ -913,6 +931,7 @@ class Mini:
             return
         self.ghost = False
         self.state = "idle"
+        self.animate(False)
         self.panel.input_shape_combine_region(None)  # clickable again (the Gdk call refuses None)
         self.panel.set_opacity(1)
         self.panel.set_keep_above(True)
@@ -1031,6 +1050,7 @@ class Mini:
 
     def close(self) -> None:
         GLib.source_remove(self.alert_timer)
+        self.animate(False)
         if self.ws is not None:
             self.ws.destroy()
         if self.reaper:

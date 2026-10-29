@@ -280,6 +280,39 @@ def progress_text(st: dict) -> str:
     return " · ".join(bits)
 
 
+_MEDIA = {".mp4", ".mkv", ".webm", ".mp3", ".m4a", ".opus", ".mov"}
+
+
+def library() -> list[dict]:
+    """Every finished video/audio in the downloads folder (playlists' subfolders too), newest first."""
+    from datetime import date, datetime
+    root, out = out_dir(), []
+    for f in root.rglob("*"):
+        if f.suffix.lower() not in _MEDIA or not f.is_file() or re.search(r"\.f[\w-]+\.\w+$", f.name):
+            continue  # .part / separate video-only and sound-only tracks are not finished downloads
+        st = f.stat()
+        d = datetime.fromtimestamp(st.st_mtime).date()
+        day = "Today" if d == date.today() else "Yesterday" if (date.today() - d).days == 1 else d.strftime("%d %b %Y")
+        out.append({"name": str(f.relative_to(root)), "size": st.st_size, "mtime": st.st_mtime, "day": day})
+    return sorted(out, key=lambda x: x["mtime"], reverse=True)
+
+
+def remove(names: list[str] | None = None) -> str:
+    """Move downloaded videos to the Trash (names relative to the downloads folder; None = all of them)."""
+    root = out_dir().resolve()
+    targets = [root / x["name"] for x in library()] if names is None else [(root / n).resolve() for n in names]
+    done = 0
+    for f in targets:
+        if root not in f.parents or not f.is_file():  # never outside the downloads folder
+            continue
+        try:
+            subprocess.run(["gio", "trash", str(f)], check=True, capture_output=True, timeout=30)
+            done += 1
+        except (OSError, subprocess.SubprocessError) as e:
+            log.warning("couldn't trash %s: %s", f, e)
+    return f"Moved {done} video{'s' if done != 1 else ''} to the Trash."
+
+
 def start(source: str, quality: str = "", audio: bool = False, playlist: bool = False) -> str:
     source, quality = split_source(source, quality)
     if not source:
