@@ -303,6 +303,9 @@ _ONE_EDIT = re.compile(r"\b(?:this|the|my)\s+(?:selected|selective|highlighted|w
 
 def is_multi(text: str) -> bool:
     """Cheap multi-intent flag: a separator plus at least two command-like clauses."""
+    from jarvis.core import fastpath
+    if fastpath.to_file_intent(text):  # "<code description, with ands> ... write it in this file": ONE request
+        return False
     if "Traceback (most recent call last)" in text or re.search(r"^\s*File \"[^\"]+\", line \d+", text, re.M):
         return False  # a pasted traceback is one thing to explain, not several tasks
     if _ONE_EDIT.search(text):

@@ -3077,15 +3077,22 @@ _TO_FILE = re.compile(r"(?:please\s+)?(?:write|put|paste|insert|save|add|copy|re
                       r"(?P<p>[\w./~-]+\.\w{1,5}|/\S+)?\s*(?:file)?\s*(?:\.\.?\s*)?(?:(?:only|just)\s+(?:the\s+)?code)?", I)
 
 
+_CODE_ASK = re.compile(r"\b(?:write|writ|generate|create|make|put|paste|insert|add|save|copy|replace|implement|code)\b", I)
+_CODE_WORD = re.compile(r"\b(?:code|codes|function|module|script|class|program|it)\b", I)
+_INTO_FILE = re.compile(r"\b(?:in|into|to|on|inside)\s+(?:the\s+|this\s+|my\s+|that\s+)?(?:open(?:ed)?\s+|oopen\s+|"
+                        r"current\s+)?(?:file|path|vs\s*code|editor)\b|\b(?:in|into|to|on)\s+(?:this\s+|the\s+)?"
+                        r"(?:path\s+)?(?:/\S+|[\w-]+\.(?:py|js|ts|sh|go|rs|java|cpp|c|rb|php|html|css|sql))\b", I)
+
+
 def to_file_intent(text: str) -> Intent | None:
-    """'write this code in the open file (test.py) only code' / 'write on this path /x/test.py' as the WHOLE request:
-    the code KURAMA just wrote goes into that file (only the code)."""
-    t = " ".join((text or "").split()).strip(" .!?")
-    m = _TO_FILE.fullmatch(t)
-    if not m or not re.search(r"\b(?:file|path|vs\s*code|editor|code)\b|/|\.\w{1,5}\b", t, I):
-        return None
-    p = m.group("p") or ""
-    return Intent("tofile", "code_to_file", "clipboard", {"path": p if "/" in p else ""})
+    """Code into a file, like an editor assistant: '<what the code should do> ... write it in this file / test.py /
+    on this path /x/test.py' or 'write the generated code in the open file'. The tool writes into the file open in
+    VS Code (or the path): it generates from the description, or uses the last code request's code."""
+    t = " ".join((text or "").split())
+    if not (_CODE_ASK.search(t) and _CODE_WORD.search(t) and _INTO_FILE.search(t)):
+        return _TO_FILE.fullmatch(t.strip(" .!?")) and Intent("tofile", "code_to_file", "clipboard", {"request": t}) or None
+    p = re.search(r"(?<!\w)(/[^\s]+\.\w{1,5})\b", t)
+    return Intent("tofile", "code_to_file", "clipboard", {"request": t, "path": p.group(1) if p else ""})
 
 
 def match(text: str) -> Intent | None:

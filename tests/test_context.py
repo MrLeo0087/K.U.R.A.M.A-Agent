@@ -30,25 +30,31 @@ def test_text_highlighted_elsewhere_is_not_taken_as_the_selection(monkeypatch, t
     assert text._edit_request({"request": "add a loop"}) == "add a loop in this file"
 
 
-def test_generated_code_goes_into_the_open_file_only_code(monkeypatch, tmp_path):
-    from jarvis.core import fastpath, safety
+def test_write_code_into_the_open_file_like_an_editor(monkeypatch, tmp_path):
+    from jarvis.core import fastpath, llm, planner, safety
     from jarvis.tools.general import code_to_file as ctf
-    out = tmp_path / "outputs"
-    out.mkdir()
-    (out / "20261030-batch.md").write_text("# Batch\n\nSome long text.\n\n```python\nimport pandas as pd\nprint(1)\n```\nMore text.\n")
-    monkeypatch.setattr(config, "OUTPUTS_DIR", out)
     monkeypatch.setattr(config, "DATA_DIR", tmp_path)
     f = tmp_path / "test.py"
-    f.write_text("old = 1\n")
+    f.write_text("")  # a blank file is fine
     monkeypatch.setattr(assist, "open_file_in_editor", lambda: f)
     monkeypatch.setattr(context, "_primary", lambda: "")
     monkeypatch.setattr(context, "_cache", (0.0, {}))
-    monkeypatch.setattr(safety, "ask", lambda prompt: True)
-    i = fastpath.match("write this code in oopen file test.py .. only code")
-    assert i.tool == "code_to_file" and i.args == {"path": ""}
-    assert "Wrote 2 lines" in ctf.code_to_file()
-    assert f.read_text() == "import pandas as pd\nprint(1)\n"  # only the code, no essay text
-    assert list((tmp_path / "backups").iterdir())  # the old version is kept
+    seen = {}
+    monkeypatch.setattr(llm, "chat", lambda msgs, **k: seen.update(prompt=msgs[-1]["content"], n=seen.get("n", 0) + 1) or
+                        "Sure!\n```python\nimport pandas as pd\n\n\nasync def process_large_csv(p: str) -> None:\n    ..."
+                        + "\n" * (seen["n"] - 1) + "#\n```\nDone.")
+    asked = []
+    monkeypatch.setattr(safety, "ask", lambda prompt: asked.append(prompt) or True)
+    t = ("Write a module using pandas and asyncio that reads a CSV in chunks, strips whitespace, and writes parquet."
+         "\n\ngenerate code and write in this test.py file")
+    i = fastpath.match(t)
+    assert i.tool == "code_to_file" and not planner.is_multi(t)
+    out = ctf.code_to_file(**i.args)
+    assert "Wrote 5 lines" in out and f.read_text().startswith("import pandas as pd") and "Sure" not in f.read_text()
+    assert asked == [] and "reads a CSV in chunks" in seen["prompt"]  # blank file: written without a question
+    ctf.code_to_file(request="add a main block that calls it in this file")  # a change to existing code
+    assert len(asked) == 1 and list((tmp_path / "backups").iterdir())  # one yes, old version kept
+    assert "async def process_large_csv" in seen["prompt"]  # the AI saw the file's current code
 
 
 def test_a_single_module_request_is_written_as_one_code_file(monkeypatch, tmp_path):
@@ -66,3 +72,10 @@ def test_a_single_module_request_is_written_as_one_code_file(monkeypatch, tmp_pa
     ctx = Ctx()
     p = writer.run(ctx, "Write a complete Python module named batch_cleaner.py using pandas", kind="code")
     assert p.endswith(".py") and open(p).read() == "def f():\n    return 1\n"
+
+
+def test_only_where_words_mean_no_description():
+    from jarvis.tools.general import code_to_file as ctf
+    assert ctf._spec("write generate code on this path /media/leo/x/test.py") == ""
+    assert ctf._spec("write this code in oopen file test.py .. only code") == ""
+    assert ctf._spec("add a main block that calls it in this file")

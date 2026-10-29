@@ -61,7 +61,7 @@ def line() -> str:
                    " to change it use text edit_code."
         else:
             txt += " 'this code/file' means it; to change it use text edit_code."
-        txt += " To put code you wrote into it: text code_to_file."
+        txt += " To write code into it (generate + write, like an editor): text code_to_file with the user's words."
         return txt
     if s["tab"]:
         return f"Open in the browser: {s['tab'][1][:80]} ({s['tab'][0][:100]}) — 'this page/link/video' means it."

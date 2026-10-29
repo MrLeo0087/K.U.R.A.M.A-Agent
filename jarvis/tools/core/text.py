@@ -23,8 +23,7 @@ TABLE = {
     "explain": _assist("explain"), "meaning": _assist("meaning"), "translate": _assist("translate"),
     "improve": _assist("improve"),
     "edit_code": Act("text_assist", lambda a: {"action": "improve", "request": _edit_request(a)}),
-    "code_to_file": Act("code_to_file", lambda a: {"path": a.get("request", "") if "/" in a.get("request", "") or
-                                                   a.get("request", "").endswith(".py") else ""}), "summary": _assist("summary"), "reply": _assist("reply"), "code": _assist("code"),
+    "code_to_file": Act("code_to_file", lambda a: {"request": a.get("request", "")}), "summary": _assist("summary"), "reply": _assist("reply"), "code": _assist("code"),
     "read_screen": Act("read_text", lambda a: {"source": a.get("request") if a.get("request") in ("area", "window", "screen") else "screen"}),
     "clipboard": Act("clipboard", lambda a: {"action": "history", "query": a.get("request", "")}),
     "copy": Act("clipboard", lambda a: {"action": "write", "text": a.get("request", "")}),
@@ -34,8 +33,8 @@ TABLE = {
 
 
 @tool(group="core", safety="safe",
-      description="The selected text / screen: code_to_file (write the code KURAMA just generated into the file open "
-                  "in VS Code, or the path in request; only code), edit_code (change the code in the file open in VS Code as asked: "
+      description="The selected text / screen: code_to_file (write code into the file open in VS Code: request = the "
+                  "user's words, what the code should do and/or the path; it generates, reads the file, replaces after a yes), edit_code (change the code in the file open in VS Code as asked: "
                   "'rename the columns to a,b,c,d', 'add a loop'; shows the change, replaces on yes, Ctrl+Z / backup), "
                   "explain, meaning, translate, improve (fix wording), summary, reply, code "
                   "(write code for it); read_screen (OCR); clipboard (what was copied, history); copy; dictate (start/stop "
