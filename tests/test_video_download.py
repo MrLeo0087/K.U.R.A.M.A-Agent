@@ -145,3 +145,17 @@ def test_where_is_this_function_goes_to_the_code_not_the_file_search():
         i = fastpath.match(t)
         assert i.tool == "code_nav" and i.args == {"action": "find", "name": name}, t
     assert fastpath.match("where is my report.pdf").tool == "find_files"
+
+
+def test_a_youtube_link_plus_play_goes_to_kuramas_music_player(monkeypatch):
+    url = "https://www.youtube.com/watch?v=Kylm5L2mVzY&list=RDKylm5L2mVzY&start_radio=1"
+    for t in (f"{url}\n\nplay this song in your music player", f"{url} play this in music player", f"play {url}"):
+        i = fastpath.match(t)
+        assert i.tool == "music" and i.args == {"action": "url", "query": url}, t
+    assert fastpath.link_play_intent(f"{url} what is this song about") is None
+    from jarvis.core import music
+    started = []
+    monkeypatch.setattr(music, "_ok", lambda: None)
+    monkeypatch.setattr(music.PLAYER, "start", lambda items: started.extend(items))
+    assert music.play(url).startswith("Playing this song")  # a link is played, not searched for
+    assert started[0]["url"] == "https://www.youtube.com/watch?v=Kylm5L2mVzY"  # the radio mix -> the song itself

@@ -354,6 +354,8 @@ def _ok() -> str | None:
 def play(query: str, shuffle: bool = False) -> str:
     """A song / artist / mood. A saved playlist with that name wins ('play study')."""
     q = (query or "").strip() or "relaxing music"
+    if re.match(r"https?://", q):  # a link: play it (searching YouTube for a link's text finds nothing)
+        return play_url(q, shuffle)
     if hit := find_playlist(q):
         return play_playlist(hit[0], shuffle)
     if err := _ok():
@@ -380,6 +382,9 @@ def play_url(url: str, shuffle: bool = False, label: str = "") -> str:
         return err
     what = label or ("this playlist" if "list=" in url else "this")
     if re.search(r"youtube\.com|youtu\.be", url):
+        if re.search(r"[?&]list=RD", url) and (v := re.search(r"[?&]v=([\w-]{6,})", url)):
+            url = f"https://www.youtube.com/watch?v={v.group(1)}"  # a "radio" mix: the song itself, similar ones follow
+            what = label or "this song"
         items = expand(url)
         if not items:
             return "I couldn't read that playlist (private, or no internet?)."

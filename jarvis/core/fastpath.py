@@ -3034,9 +3034,27 @@ def _code_not_file(it: Intent | None) -> Intent | None:
     return Intent("codenav", "code_nav", "codequality", {"action": "find", "name": name})
 
 
+_LINK = re.compile(r"https?://(?:www\.|m\.|music\.)?(?:youtube\.com|youtu\.be)/\S+", I)
+_PLAY_LINK = re.compile(r"(?:please\s+)?(?:play|listen\s+to|start)(?:\s+(?:this|it|that))?(?:\s+(?:song|music|track|"
+                        r"video|audio))?(?:\s+(?:only|just))?(?:\s+(?:in|on|with|using)\s+(?:your|the|my|kurama'?s?)?\s*"
+                        r"(?:own\s+)?(?:music\s+)?player)?(?:\s+(?:please|now))?", I)
+
+
+def link_play_intent(text: str) -> Intent | None:
+    """A YouTube link + 'play this (song) (in your music player)' as the WHOLE request: KURAMA's own player
+    (sound only), never the browser. The link keeps its exact letters (video ids are case-sensitive)."""
+    m = _LINK.search(text or "")
+    if not m:
+        return None
+    rest = " ".join((text[:m.start()] + " " + text[m.end():]).split()).strip(" .,!?")
+    if not rest or not _PLAY_LINK.fullmatch(rest):
+        return None
+    return Intent("music", "music", "media", {"action": "url", "query": m.group(0)})
+
+
 def match(text: str) -> Intent | None:
     """The single high-confidence intent for text whose meaning agrees (meaning_ok), or None."""
-    it = _code_not_file(_match(text))
+    it = link_play_intent(text) or _code_not_file(_match(text))
     return it if it is None or meaning_ok(text, it) else None
 
 
