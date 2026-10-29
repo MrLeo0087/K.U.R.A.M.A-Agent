@@ -139,8 +139,8 @@ def live_downloads(recent_s: float = 120) -> list[dict]:
     from jarvis.core import ytdl
     items = []
     for w in store.watches_list(None, 30):
-        if w["kind"] not in ("dl", "ytdl") or (w["status"] != "active" and
-                                               time.time() - float(w.get("finished") or 0) > recent_s):
+        if w["kind"] not in ("dl", "ytdl") or w["status"] == "removed" or (
+                w["status"] not in ("active", "paused") and time.time() - float(w.get("finished") or 0) > recent_s):
             continue
         st = w["state"]
         if w["kind"] == "ytdl":
@@ -150,7 +150,9 @@ def live_downloads(recent_s: float = 120) -> list[dict]:
             p, title, part = _wget_progress(w), w["label"], "file"
             sub = ytdl.progress_text({**p, "part": "file"}) if st.get("pid") else \
                 datetime.fromtimestamp(st["start_at"]).strftime("starts %H:%M")
-        if w["status"] != "active":
+        if w["status"] == "paused":
+            sub = "paused · " + sub
+        elif w["status"] != "active":
             sub = w["status"] + (f": {w['result']}" if w.get("result") else "")
         items.append({"id": w["id"], "kind": w["kind"], "title": title, "part": part, "status": w["status"],
                       "sub": sub, "frac": round(p["done"] / p["total"], 3) if p["total"] else None, **p})

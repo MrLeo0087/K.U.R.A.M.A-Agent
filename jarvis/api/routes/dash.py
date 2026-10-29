@@ -12,7 +12,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -376,6 +376,17 @@ def forecast(place: str) -> dict:
              "desc": _geo.describe(dl["weather_code"][i])} for i in range(len(dl.get("time") or []))]
     sun = {"rise": (dl.get("sunrise") or [""])[0][11:16], "set": (dl.get("sunset") or [""])[0][11:16]}
     return {"place": place.split(",")[0], "hours": hours, "days": days, "sun": sun}
+
+
+@router.post("/downloads/{wid}/{action}", summary="Download bar buttons: pause, resume or delete (0 tokens)")
+async def download_control(wid: int, action: str):
+    from jarvis.core import ytdl
+    if action not in ("pause", "resume", "delete"):
+        raise HTTPException(400, "action must be pause, resume or delete")
+    out = await run_in_threadpool(ytdl.control, wid, action)
+    if out.startswith("error"):
+        raise HTTPException(400, out[7:])
+    return {"ok": True, "text": out}
 
 
 @router.get("/alerts/new", summary="Alerts newer than ?after=<id> (mini KURAMA shows them beside its button)")

@@ -1278,3 +1278,5 @@ body.minimal .to-minimal { display: none; }
 .dl-list .s { color: var(--muted); overflow-wrap: anywhere; }
 .dl-failed .gbar i, .dl-stopped .gbar i { background: #c0453a; }
 .dl-done .gbar i { background: #3fb67a; }
+.dl-btns { display: inline-flex; gap: 2px; } .dl-btns .icon-btn { width: 22px; height: 22px; font-size: 11px; }
+.dl-paused .gbar i { background: var(--muted); }

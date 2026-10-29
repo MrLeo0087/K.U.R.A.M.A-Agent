@@ -7,10 +7,12 @@ Quality: nothing / "best" = 1080p (config.VIDEO_DEFAULT_HEIGHT); "extra high" / 
 """
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import threading
@@ -28,9 +30,9 @@ _FILE_EXT = re.compile(r"\.(jpe?g|png|gif|webp|bmp|svg|pdf|zip|rar|7z|tar|gz|tgz
                        r"pptx?|csv|json|txt|epub|mp3|wav|flac|m4a|mp4|mkv|webm|avi|mov)$", re.I)
 _VIDEO_SITES = re.compile(r"youtube\.com|youtu\.be|vimeo\.com|facebook\.com|fb\.watch|instagram\.com|tiktok\.com|"
                           r"x\.com|twitter\.com|dailymotion\.com|reddit\.com|twitch\.tv|soundcloud\.com", re.I)
-# one line per progress tick (merged with stderr in one pipe); the title is last because it has spaces
-_TPL = ("download:KP %(progress.downloaded_bytes)s %(progress.total_bytes)s %(progress.total_bytes_estimate)s "
-        "%(progress.speed)s %(progress.eta)s %(info.vcodec)s %(info.title)s")
+# one tab-separated line per progress tick (merged with stderr in one pipe)
+_TPL = ("download:KP\t%(progress.downloaded_bytes)s\t%(progress.total_bytes)s\t%(progress.total_bytes_estimate)s\t"
+        "%(progress.speed)s\t%(progress.eta)s\t%(info.vcodec)s\t%(progress.tmpfilename)s\t%(info.title)s")
 
 
 def out_dir() -> Path:
@@ -118,7 +120,7 @@ def _num(s: str) -> float:
 
 def parse_progress(line: str, st: dict) -> bool:
     """Fold one 'KP ...' line into the watch state (parts: video, then sound). False = not a progress line."""
-    parts = line.split(" ", 7)
+    parts = line.split("\t", 8)
     if len(parts) < 7 or parts[0] != "KP":
         return False
     done, total, est, speed, eta = (_num(x) for x in parts[1:6])
@@ -128,8 +130,10 @@ def parse_progress(line: str, st: dict) -> bool:
         st["before"] = st.get("before", 0) + st.get("cur_total", 0)
     st.update(part=part, cur=done, cur_total=total, speed=speed, eta=eta,
               done=st.get("before", 0) + done, total=st.get("before", 0) + total)
-    if len(parts) > 7 and parts[7] != "NA":
-        st["title"] = parts[7][:120]
+    if len(parts) > 7 and parts[7] not in ("NA", ""):
+        st["tmp"] = parts[7]
+    if len(parts) > 8 and parts[8] != "NA":
+        st["title"] = parts[8][:120]
     return True
 
 
@@ -171,6 +175,9 @@ def _follow(p: subprocess.Popen, wid: int, st: dict, what: str, logf: Path, argv
             elif line:
                 lf.write(line + "\n")
     rc = p.wait()
+    now = store.watch_get(wid)
+    if now and now["status"] != "active":  # paused or deleted from the download bars: not a failure
+        return
     if rc != 0 and argv and _cookie_retry(logf, argv):
         argv = [*argv[:-1], "--cookies-from-browser", config.VIDEO_COOKIES_BROWSER, argv[-1]]
         try:
@@ -196,8 +203,68 @@ def _follow(p: subprocess.Popen, wid: int, st: dict, what: str, logf: Path, argv
         notify.notify(f"Download failed: {what}", err, level="warning", source="downloads", telegram=True)
 
 
-def _running(url: str) -> dict | None:
-    return next((w for w in store.watches_list(("active",)) if w["kind"] == "ytdl" and w["target"] == url), None)
+def _running(url: str, statuses: tuple[str, ...] = ("active",)) -> dict | None:
+    return next((w for w in store.watches_list(statuses) if w["kind"] == "ytdl" and w["target"] == url), None)
+
+
+def _launch(wid: int, st: dict, argv: list[str]) -> str:
+    logf = Path(config.DATA_DIR) / "runs" / f"ytdl-{int(time.time())}.log"
+    logf.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        p = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                             text=True, start_new_session=True)
+    except OSError as e:
+        return f"error: couldn't start yt-dlp ({e})"
+    st.update(pid=p.pid, pgid=os.getpgid(p.pid), updated=time.time(), argv=argv, before=0, cur=0, cur_total=0)
+    st.pop("part", None)
+    store.watch_update(wid, status="active", state=st)
+    threading.Thread(target=_follow, args=(p, wid, st, st.get("what", "video"), logf, argv), daemon=True).start()
+    return ""
+
+
+def _stop(st: dict) -> None:
+    with contextlib.suppress(OSError, ProcessLookupError):
+        os.killpg(int(st.get("pgid") or st.get("pid") or 0), signal.SIGTERM)
+
+
+def partial_files(st: dict) -> list[Path]:
+    """yt-dlp's leftovers of one download (.part, .ytdl, fragments, the separate video / sound tracks)."""
+    tmp = Path(st.get("tmp") or "")
+    if not tmp.name:
+        return []
+    stem = re.split(r"\.f[\w-]+\.\w+(?:\.part)?$|\.\w+\.part$|\.part$", tmp.name)[0]
+    return [f for f in tmp.parent.glob(glob_escape(stem) + ".*")
+            if re.search(r"\.part|\.ytdl$|\.f[\w-]+\.\w+$|\.temp\.", f.name)]
+
+
+def glob_escape(s: str) -> str:
+    return re.sub(r"([\[\]*?])", r"[\1]", s)
+
+
+def control(wid: int, action: str) -> str:
+    """The download bars' buttons: pause / resume a download, or delete it — a running or paused one also loses
+    its partial files; a finished one only leaves the list (the video stays)."""
+    w = store.watch_get(wid)
+    if not w or w["kind"] != "ytdl":
+        return "error: no such download"
+    st = w["state"]
+    if action == "pause" and w["status"] == "active":
+        store.watch_update(wid, status="paused", state=st)
+        _stop(st)
+        return "Paused."
+    if action == "resume" and w["status"] in ("paused", "failed", "stopped"):
+        return _launch(wid, st, st.get("argv") or [*_ytdlp(), *build_args(w["target"])]) or "Resumed."
+    if action == "delete":
+        unfinished = w["status"] in ("active", "paused", "failed", "stopped")
+        store.watch_update(wid, status="removed", finished=time.time(), state=st)
+        if unfinished:
+            _stop(st)
+            time.sleep(0.5)  # let yt-dlp let go of its files
+            for f in partial_files(st):
+                with contextlib.suppress(OSError):
+                    f.unlink()
+        return "Deleted the download and its partial files." if unfinished else "Removed from the list."
+    return f"error: can't {action} a download that is {w['status']}"
 
 
 def progress_text(st: dict) -> str:
@@ -222,21 +289,17 @@ def start(source: str, quality: str = "", audio: bool = False, playlist: bool = 
         return automation.queue(source)
     if w := _running(source):
         return f"Already downloading that: {progress_text(w['state'])}."
+    if w := _running(source, ("paused",)):
+        return _launch(w["id"], w["state"], w["state"].get("argv") or [*_ytdlp(), *build_args(source)]) or \
+            "Resuming that download where it stopped."
     if not audio and not shutil.which("ffmpeg"):
         return "error: ffmpeg is needed to join HD video and sound: sudo apt install ffmpeg"
-    logf = Path(config.DATA_DIR) / "runs" / f"ytdl-{int(time.time())}.log"
-    logf.parent.mkdir(parents=True, exist_ok=True)
-    argv = [*_ytdlp(), *build_args(source, quality, audio, playlist)]
-    try:
-        p = subprocess.Popen(argv, stdout=subprocess.PIPE,
-                             stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, text=True, start_new_session=True)
-    except OSError as e:
-        return f"error: couldn't start yt-dlp ({e})"
     h = height_of(quality)
     what = "audio" if audio else (f"{h}p video" if h else "video (highest quality)")
-    st = {"pid": p.pid, "what": what, "part": "audio" if audio else "video", "started": time.time(),
-          "updated": time.time(), "pgid": os.getpgid(p.pid)}
+    st = {"what": what, "started": time.time()}
     wid = store.watch_add("ytdl", source, source[:80], "", st)
-    threading.Thread(target=_follow, args=(p, wid, st, what, logf, argv), daemon=True).start()
+    if err := _launch(wid, st, [*_ytdlp(), *build_args(source, quality, audio, playlist)]):
+        store.watch_update(wid, status="failed", finished=time.time(), result=err)
+        return err
     kind = "playlist" if playlist else what
     return f"Downloading the {kind} in the background into {out_dir()}; the progress bar shows how it's going."

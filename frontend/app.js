@@ -2569,12 +2569,19 @@ function renderDownloads(items) {
   const live = items.filter((d) => d.status === "active");
   const pct = (d) => (d.frac != null ? Math.round(d.frac * 100) + "%" : "");
   $("dl-sum").textContent = live.length ? `Downloads · ${live.length} running${live.length === 1 && live[0].frac != null ? " · " + pct(live[0]) : ""}` : "Downloads · finished";
-  $("dl-list").innerHTML = items.map((d) => `<li class="dl-${esc(d.status)}"><div class="dl-row"><span class="ell" title="${esc(d.title)}">${esc(d.title)}</span><b>${d.status === "active" ? pct(d) : ""}</b></div>
+  $("dl-list").innerHTML = items.map((d) => `<li class="dl-${esc(d.status)}"><div class="dl-row"><span class="ell" title="${esc(d.title)}">${esc(d.title)}</span><b>${d.status === "active" ? pct(d) : ""}</b>${d.kind === "ytdl" ? `<span class="dl-btns">${d.status === "active" ? `<button type="button" class="icon-btn" data-dl="pause" data-id="${d.id}" title="Pause">⏸</button>` : ["paused", "failed", "stopped"].includes(d.status) ? `<button type="button" class="icon-btn" data-dl="resume" data-id="${d.id}" title="Resume">▶</button>` : ""}<button type="button" class="icon-btn" data-dl="delete" data-id="${d.id}" title="${d.status === "done" ? "Remove from the list (the video stays)" : "Delete the download and its partial file"}">✕</button></span>` : ""}</div>
     <div class="gbar"><i style="width:${d.status === "done" ? 100 : Math.max(2, Math.round((d.frac || 0) * 100))}%"></i></div>
     <div class="s" title="${esc(d.sub)}">${esc(d.sub)}</div></li>`).join("");
 }
 if (WSONLY) $("mws-body").before($("dl-tray")); // its place: the top of the workspace
 else if (!MINI) $("ws")?.querySelector(".card-title")?.after($("dl-tray"));
+$("dl-list").onclick = async (e) => {
+  const b = e.target.closest("[data-dl]");
+  if (!b) return;
+  b.disabled = true;
+  try { await api.downloadControl(b.dataset.id, b.dataset.dl); } catch (err) { toast?.(err.message || "Couldn't do that"); }
+  dlKey = ""; loadDownloads();
+};
 $("dl-min").onclick = () => { const m = !$("dl-tray").classList.contains("min"); $("dl-tray").classList.toggle("min", m); dlPref("min", m ? "1" : "0"); };
 $("dl-tray").classList.toggle("min", dlPref("min") === "1");
 document.addEventListener("visibilitychange", () => { if (!document.hidden) loadDownloads(); });

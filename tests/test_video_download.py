@@ -29,10 +29,11 @@ def test_fastpath_video_vs_file():
 def test_progress_parsing():
     st = {}
     assert not ytdl.parse_progress("[youtube] x: Downloading webpage", st)
-    assert ytdl.parse_progress("KP 50000000 100000000 NA 2000000 25 avc1 My Song", st)
+    assert ytdl.parse_progress("KP\t50000000\t100000000\tNA\t2000000\t25\tavc1\t/v/My_Song [1080p].f399.mp4.part\tMy Song", st)
     assert st["part"] == "video" and st["done"] == 50e6 and st["total"] == 100e6 and st["title"] == "My Song"
-    ytdl.parse_progress("KP 100000000 100000000 NA 0 0 avc1 My Song", st)
-    ytdl.parse_progress("KP 1000000 5000000 NA 1000000 4 none My Song", st)  # the sound part starts
+    assert st["tmp"].endswith(".f399.mp4.part")
+    ytdl.parse_progress("KP\t100000000\t100000000\tNA\t0\t0\tavc1\tNA\tMy Song", st)
+    ytdl.parse_progress("KP\t1000000\t5000000\tNA\t1000000\t4\tnone\tNA\tMy Song", st)  # the sound part starts
     assert st["part"] == "sound" and st["done"] == 101e6 and st["total"] == 105e6
     assert ytdl.progress_text(st).startswith("sound 96%")
 
@@ -49,6 +50,8 @@ def test_start_tracks_progress_and_skips_duplicates(monkeypatch, tmp_path):
     monkeypatch.setattr(ytdl.config, "DATA_DIR", str(tmp_path))
     monkeypatch.setattr(ytdl.subprocess, "Popen", lambda argv, **k: started.append(argv) or P())
     monkeypatch.setattr(ytdl.os, "getpgid", lambda pid: pid)
+    monkeypatch.setattr(ytdl.os, "killpg", lambda *a: None)
+    monkeypatch.setattr(ytdl.time, "sleep", lambda s: None)
     monkeypatch.setattr(ytdl.threading, "Thread", lambda **k: type("T", (), {"start": lambda self: None})())
     out = ytdl.start("https://youtu.be/x", "720p")
     assert "background" in out and "yt_dlp" in started[0]
@@ -79,3 +82,32 @@ def test_bot_check_retries_with_browser_cookies_and_plain_errors(monkeypatch, tm
     assert not ytdl._cookie_retry(logf, ["yt", "--cookies-from-browser", "brave", "https://youtu.be/x"])
     monkeypatch.setattr(ytdl.config, "VIDEO_COOKIES_BROWSER", "")
     assert not ytdl._cookie_retry(logf, ["yt", "https://youtu.be/x"])
+
+
+def test_pause_resume_and_delete(monkeypatch, tmp_path):
+    class P:
+        pid = 77
+        stdout = None
+    killed = []
+    monkeypatch.setattr(ytdl.config, "VIDEO_DIR", str(tmp_path))
+    monkeypatch.setattr(ytdl.config, "DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(ytdl.subprocess, "Popen", lambda argv, **k: P())
+    monkeypatch.setattr(ytdl.os, "getpgid", lambda pid: pid)
+    monkeypatch.setattr(ytdl.os, "killpg", lambda pg, sig: killed.append(pg))
+    monkeypatch.setattr(ytdl.time, "sleep", lambda s: None)
+    monkeypatch.setattr(ytdl.threading, "Thread", lambda **k: type("T", (), {"start": lambda self: None})())
+    ytdl.start("https://youtu.be/p")
+    wid = next(w["id"] for w in store.watches_list(("active",)) if w["kind"] == "ytdl")
+    part = tmp_path / "Song [1080p].f399.mp4.part"
+    part.write_text("x")
+    keep = tmp_path / "Other.mp4"
+    keep.write_text("x")
+    w = store.watch_get(wid)
+    w["state"]["tmp"] = str(part)
+    store.watch_update(wid, state=w["state"])
+    assert ytdl.control(wid, "pause") == "Paused." and killed == [77]
+    assert next(d for d in automation.live_downloads() if d["id"] == wid)["status"] == "paused"
+    assert ytdl.control(wid, "resume") == "Resumed." and store.watch_get(wid)["status"] == "active"
+    assert "partial" in ytdl.control(wid, "delete")
+    assert not part.exists() and keep.exists()  # only this download's leftovers go
+    assert all(d["id"] != wid for d in automation.live_downloads())
