@@ -91,6 +91,7 @@ TYPO_FIXES: dict[str, str] = {
     "foler": "folder", "fodler": "folder", "folde": "folder", "summarise": "summarize",
 }
 STT_FIXES: dict[str, str] = {
+    r"\b(?:stobas|stopbus|stop\s+was|stop\s+watts?|stopwach)\b": "stopwatch",
     r"\b(?:set|shat|shot|sut)\s+down\s+(?:the\s+)?(?:letter|ladder|laptop|leptop)\b": "shut down the laptop",
     r"\b(better|good|more|clean|simple|clear)\s+(?:end|an|in)\s+detail(?:ed)?\b": r"\1 and detailed",
     r"\b(this|the|my|better|python|selected|selective|that|whole|most|mouse|simple|clean|detail|detailed|good|new|"
@@ -118,6 +119,8 @@ STT_FIXES: dict[str, str] = {
     r"^\s*(?:wariyo|warriyo|huarion|hu\s?ar\s?yu|who\s?r\s?u)\s*[?.!]*\s*$": "Who are you?",
     r"\bslip\b(?=\s+(?:my|the|this|now|mode|kurama|laptop|computer)\b|\s*[.!?]*$)": "sleep",  # "slip my laptop"
     r"^\s*hut\s+down\b": "shut down",
+    r"^\s*(?:done|mark)\s+(?:too|to)\s*[.!]*$": "done 2",  # Whisper writes 'done 2' as 'Done too.'
+    r"^(mark\s+\d{1,2})\s+is\s+(done|complete(?:d)?|finished)": r"\1 as \2",
     r"\bsit\b(?=\s+(?:the\s+|my\s+|a\s+)?(?:brightness|volume|timer|alarm|reminder|wallpaper)\b)": "set",  # "sit the brightness"
     r"\b(start|stop|reset|pause)\s+(?:or|our|a|uh)\s+stopwatch\b": r"\1 the stopwatch",
     r"\b(?:remiander|remainder|reminer|remindar)\b(?!\s+of\b)": "reminder",
@@ -226,7 +229,30 @@ HOTKEY_PTT = os.getenv("JARVIS_HOTKEY", "<ctrl>+<alt>+j")  # press to talk (togg
 VOICE_MAX_TOKENS = 200
 
 # --- agent (P3) ---
-TOOL_PACKAGES = ("interactive", "general", "external")  # jarvis/tools/<pkg>/<one file per tool>
+TOOL_PACKAGES = ("core", "interactive", "general", "external")  # jarvis/tools/<pkg>/<one file per tool>
+# v2: the AI only sees the general tools in jarvis/tools/core (group "core"); the router still picks the old groups and
+# each group is served by the general tool(s) covering it. Groups no general tool covers fall back to their old tools.
+CORE_TOOLS = os.getenv("KURAMA_CORE_TOOLS", "1").lower() not in ("0", "false", "no", "off")
+CORE_MAX_TOOLS = 3  # general tools sent per request (each ~200-300 tokens)
+CORE_COVERS: dict[str, tuple[str, ...]] = {
+    "apps": ("apps", "browser", "windows"),
+    "laptop": ("audio", "display", "desktop", "power", "system", "screen"),
+    "files": ("files", "filesearch", "daily"),
+    "telegram": ("telegram",),
+    "schedule": ("schedule", "clock"),
+    "todo": ("todo",),
+    "media": ("media",),
+    "web": ("web", "browser"),
+    "info": ("general", "weather", "daily", "memory", "system", "power"),
+    "memory": ("memory", "knowledge", "browser", "self"),
+    "create": ("image", "jobs", "tracker"),
+    "text": ("clipboard", "screen", "windows", "devutils"),
+    "code": ("dev", "git", "codequality", "watch", "devutils"),
+    "life": ("tracker", "study", "usage", "schedule"),
+    "kurama": ("self", "usage", "jobs", "telegram", "toolsmith"),
+    "run_command": ("dev", "system", "files", "automation", "toolsmith"),
+    "run_python": ("daily", "dev", "toolsmith"),
+}
 TOOL_OUTPUT_MAX_CHARS = 800  # tool results are truncated to this before going back to the LLM
 # Workspace card: tool results with this many lines (or longer than TOOL_OUTPUT_MAX_CHARS) are shown there in full
 # Simple actions answer themselves with the fast path's templates: no second LLM call just to say "done"

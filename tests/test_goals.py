@@ -216,7 +216,7 @@ def test_owner_log_midnight_todo(sent, monkeypatch):
     """Owner's 12:02 AM log: 'What's on today?' said 'no timetable', 'remove all the tasks' / 'remove the review 30 day
     study plan' were AI claims with no tool (the item stayed on screen), 'schedule the task' lost its follow-up."""
     from jarvis.core import todos
-    from jarvis.tools.general.todo import todo
+    from jarvis.tools.core.todo import todo
     todos.add("Review 30-day exam plan", "today 9 pm")
     todos.add("Buy milk")
     goals.add("Exam", "in 30 days")
@@ -248,7 +248,7 @@ def test_short_tasks_win_over_long_tasks(sent):
     """Owner's 12:17 AM log: 'remove the review 30 day exam plan' deleted the long task 'Exam'; 'remove the second
     task' and '... from your task from the To-Do' failed. Task / work / to-do = the to-do list unless long words are said."""
     from jarvis.core import todos
-    from jarvis.tools.general.todo import todo
+    from jarvis.tools.core.todo import todo
     todos.add("Reading the book", "in 2 hours")
     todos.add("Review 30-day exam plan", "in 5 hours")
     goals.add("Exam", "in 30 days")

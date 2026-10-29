@@ -7,7 +7,7 @@ from typing import Literal
 from jarvis.core.registry import tool
 
 
-@tool(group="todo", safety="safe",
+@tool(group="core", safety="safe",
       description="The user's to-do list (tasks to do, with optional due date, priority, tag): add, list, today, done, "
                   "delete, edit, clear. A to-do does not ring; use 'remind' only if the user also wants an alert.")
 def todo(action: Literal["add", "list", "today", "done", "delete", "edit", "clear"] = "list", task: str = "",

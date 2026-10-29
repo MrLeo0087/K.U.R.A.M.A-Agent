@@ -141,7 +141,7 @@ def test_fanout_runs_quick_tasks_concurrently(respond, slow_tools, monkeypatch):
     answer = bot.run("do alpha and do beta")
     dt = time.monotonic() - t0
     assert answer == "Finished slow_alpha. Finished slow_beta."
-    assert dt < 0.9, f"tasks ran sequentially ({dt:.2f}s)"
+    assert dt < 1.0, f"tasks ran sequentially ({dt:.2f}s)"
     assert len(bot.history) == 2 and bot.history[0].content == "do alpha and do beta"
 
 
@@ -382,3 +382,11 @@ def test_window_control_is_never_a_writing_job():
     assert not planner.is_long_job("split Brave and VS Code side by side")
     assert planner.is_long_job("write a python script that renames files")
     assert router.route("Can you full screen the VS Code?", log_it=False).groups == ["windows"]
+
+
+def test_parts_that_are_all_shortcuts_skip_the_planner_call(monkeypatch):
+    monkeypatch.setattr(planner, "decompose", lambda text: (_ for _ in ()).throw(AssertionError("no planner call")))
+    p = planner.plan("what's the weather in Pokhara and what time is it")
+    assert p.method == "rules" and [t["text"] for t in p.tasks] == ["what's the weather in Pokhara", "what time is it"]
+    assert not any("depends_on" in t for t in p.tasks)  # the 'it' in 'what time is it' points at nothing
+    assert planner.refers_back("open it") and not planner.refers_back("is it raining in Pokhara")

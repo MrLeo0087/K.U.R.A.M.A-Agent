@@ -266,14 +266,31 @@ class Registry:
         return new, {**(convert(a) if convert else a), **fixed}
 
     def groups(self) -> list[str]:
+        """The router's groups: every specialised tool's group, plus (v2) the groups a general tool covers."""
         self._ensure()
-        return sorted({group_of(t) for t in self.tools.values()})
+        groups = {group_of(t) for t in self.tools.values()} - {"core"}
+        if config.CORE_TOOLS:
+            groups |= {g for n, cov in config.CORE_COVERS.items() if n in self.tools for g in cov}
+        return sorted(groups)
 
     def schemas_for(self, groups: list[str] | tuple[str, ...]) -> list[BaseTool]:
-        """LangChain tools of the routed groups only (for bind_tools)."""
+        """LangChain tools of the routed groups only (for bind_tools). v2 (config.CORE_TOOLS): the general tools that
+        cover those groups; a group no general tool covers keeps its old tools."""
         self._ensure()
         wanted = set(groups)
-        return [t for t in self.tools.values() if group_of(t) in wanted]
+        if not config.CORE_TOOLS:
+            return [t for t in self.tools.values() if group_of(t) in wanted]
+        serving = {g: [n for n, cov in config.CORE_COVERS.items() if g in cov and n in self.tools] for g in groups}
+        core: list[str] = []
+        for g in groups:  # each group's main general tool first (in the router's order)...
+            if serving[g] and serving[g][0] not in core:
+                core.append(serving[g][0])
+        for g in groups:  # ...then the others that also cover it, while there is room
+            core += [n for n in serving[g] if n not in core]
+        core = core[:config.CORE_MAX_TOOLS]
+        covered = {g for g in groups if serving[g]}
+        old = [t for t in self.tools.values() if group_of(t) in wanted - covered and group_of(t) != "core"]
+        return [self.tools[n] for n in core] + old
 
     def openai_schemas_for(self, groups: list[str] | tuple[str, ...]) -> list[dict]:
         return [schema_of(t) for t in self.schemas_for(groups)]

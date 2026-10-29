@@ -118,6 +118,10 @@ def ask(prompt: str) -> bool:
 
 def describe(tool: registry.BaseTool, args: dict) -> str:
     """Short question for the user, e.g. "Should I delete a file (path=/tmp/x)?"."""
+    if tool.name in ("run_command", "run_python"):  # the owner approves the exact command / program
+        body = args.get("command") or args.get("code") or ""
+        where = f" in {args['folder']}" if args.get("folder") else ""
+        return f"Should I run this {'command' if tool.name == 'run_command' else 'Python program'}{where}?\n{str(body)[:600]}"
     what = tool.description.rstrip(". ")
     what = what[:1].lower() + what[1:]
     shown = ", ".join(f"{k}={str(v)[:60]}" for k, v in args.items())

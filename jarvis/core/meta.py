@@ -27,12 +27,28 @@ _REFUSAL = re.compile(
     r"access|the\s+ability|real[- ]time|live|internet|browsing|tools?|a\s+tool|any\s+tools?)|"
     r"there(?:'s| is)\s+no\s+tool|i\s+(?:can'?t|cannot|can not|am unable|'m unable|am not able|'m not able)|"
     r"no\s+(?:tool|way to|access to)|unable to|not able to|i\s+(?:don'?t|do not)\s+know|"
+    r"i\s+(?:don'?t|do not)\s+have\s+(?:that|this|any)\s+information|i'?m\s+not\s+sure\s+(?:about|what|where|how)|"
     r"i\s+have\s+no\s+(?:way|access|tool)|beyond my (?:capabilities|abilities)|as an ai)"
     r"|मैं नहीं|नहीं कर सकत|नहीं बता सकत|सक्दिन|सक्दैन|थाहा छैन|पता नहीं", re.I)
 
 
+# Claiming an action ("I've set a timer", "Sure, opening X") when no tool ran: the action never happened.
+_CLAIM = re.compile(
+    r"^\W*(?:(?:sure|okay|ok|done|alright|got it)\W+)?(?:i'?ve|i have|i'll|i will|i'm|i am)\s+(?:now\s+|just\s+)?"
+    r"(?:set|opened|open|opening|started|start|starting|sent|send|sending|turned|turn|turning|added|add|adding|created|"
+    r"scheduled|saved|save|played|play|playing|closed|close|closing|muted|launched|remind|reminded)\b(?!\s+to\b)|"
+    r"^\W*(?:sure|okay|ok|alright|got it)\W+(?:opening|starting|setting|sending|turning|playing|closing|launching|muting)\b",
+    re.I)
+
+
 def looks_like_refusal(text: str) -> bool:
     return bool(_REFUSAL.search((text or "")[:240].replace("\u2019", "'")))  # curly apostrophes too
+
+
+def needs_tool(text: str) -> bool:
+    """A tool-less answer that refuses, or claims an action no tool did: retried once with request_tools."""
+    t = (text or "")[:240].replace("\u2019", "'")
+    return looks_like_refusal(t) or bool(_CLAIM.search(t))
 
 
 def gloss(group: str) -> str:

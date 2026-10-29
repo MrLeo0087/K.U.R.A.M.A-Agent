@@ -11,6 +11,7 @@ def tmp_store(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "TELEGRAM_BOT_TOKEN", "")  # never message the real phone from a test
     monkeypatch.setattr(config, "NOTIFY_DESKTOP", False)
     monkeypatch.setattr(config, "SOUNDS", False)  # no alarm sounds from tests
+    monkeypatch.setattr(config, "CORE_TOOLS", False)  # old-tool tests see the specialised tools; v2 tests opt in
     monkeypatch.setattr(config, "FASTPATH", False)  # LLM-path tests stay on the LLM path; fastpath tests enable it
     monkeypatch.setattr(config, "SEMANTIC_ROUTER", False)
     monkeypatch.setattr(config, "TRAINING_KEEP_AWAKE", False)  # never start a real systemd-inhibit from a test  # no embedding model in tests unless a test opts in

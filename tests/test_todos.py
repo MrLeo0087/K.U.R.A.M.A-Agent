@@ -2,7 +2,7 @@
 from datetime import datetime, timedelta
 
 from jarvis.core import config, fastpath, readlater, store, todos
-from jarvis.tools.general.todo import todo
+from jarvis.tools.core.todo import todo
 
 
 def test_a_todo_never_rings_unless_asked():

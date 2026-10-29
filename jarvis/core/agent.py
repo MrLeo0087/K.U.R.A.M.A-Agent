@@ -335,7 +335,8 @@ class Agent:
             try:
                 reply = self._chat(msgs, notools, state.get("stream", False), hold)
             except llm.LLMError:  # still failing: answer from whatever the tools already returned
-                done = [str(m.content) for m in msgs if isinstance(m, ToolMessage) and not str(m.content).startswith("error")][-2:]
+                done = [str(m.content) for m in msgs if isinstance(m, ToolMessage) and m.name != meta.NAME
+                        and not str(m.content).startswith("error")][-2:]
                 reply = llm.Reply(" ".join(done)[:600] or NO_ANSWER, "", [])
         ai = reply.message or AIMessage(content=reply.text)
         calls = [] if last_round else list(ai.tool_calls)
@@ -346,7 +347,7 @@ class Agent:
             msg = AIMessage(content=reply.text, tool_calls=calls, invalid_tool_calls=bad)
             return {"messages": msgs + [msg], "pending": calls + bad}
         answer = reply.text.strip() or (TOO_MANY_ROUNDS if ai.tool_calls else NO_ANSWER)
-        if hold and not last_round and meta.looks_like_refusal(answer):
+        if hold and not last_round and meta.needs_tool(answer):
             log.info("tool-less refusal, retrying once with %s: %r", meta.NAME, answer[:80])
             self._log_meta(state["user_text"], [])
             self.last["meta_retry"] = True
@@ -404,7 +405,7 @@ class Agent:
                 delta = next(gen)
             except StopIteration as stop:
                 text = "".join(parts)
-                if held and text and not meta.looks_like_refusal(text):
+                if held and text and not meta.needs_tool(text):
                     writer(text)
                 return stop.value or llm.Reply(text, "", [])
             parts.append(delta)
@@ -413,7 +414,7 @@ class Agent:
                 continue
             text = "".join(parts)
             if len(text) >= 80 or (len(text) >= 12 and re.search(r"[.!?।]\s", text)):
-                if meta.looks_like_refusal(text):
+                if meta.needs_tool(text):
                     gen.close()  # will be retried with request_tools; never spoken
                     return llm.Reply(text, "", [])
                 held = False
@@ -481,8 +482,10 @@ class Agent:
     def _direct_reply(self, state: AgentState, results: list[ToolMessage]) -> str:
         """Every call this round was a simple action that worked: word the reply from the fast path's templates
         instead of a second LLM call (about half the tokens of a "open YouTube" turn)."""
+        from jarvis.tools.core._hub import underlying
         calls = {tc["id"]: tc for tc in state.get("pending") or []}
-        if not results or any(m.name not in config.DIRECT_REPLY_TOOLS for m in results):
+        real = {m.tool_call_id: underlying(m.name, (calls.get(m.tool_call_id) or {}).get("args") or {}) for m in results}
+        if not results or any(real[m.tool_call_id][0] not in config.DIRECT_REPLY_TOOLS for m in results):
             return ""
         lang = state.get("lang") or "en"
         said = []
@@ -492,8 +495,8 @@ class Agent:
                 continue  # said once already
             if text.lower().startswith(("error", "the user", "refused")):
                 return ""  # something went wrong: let the model explain it
-            intent = config.DIRECT_REPLY_TOOLS[m.name]
-            args = (calls.get(m.tool_call_id) or {}).get("args") or {}
+            tool_name, args = real[m.tool_call_id]  # a general tool's call is worded as the action it ran
+            intent = config.DIRECT_REPLY_TOOLS[tool_name]
             if intent == "audio":  # one tool, three kinds of reply
                 intent = "mic" if args.get("target") == "mic" else (
                     "volume" if args.get("action", "get") in ("get", "set", "up", "down") else "mute")
@@ -501,7 +504,7 @@ class Agent:
                 said.append("Done, I sent it to your Telegram.")
                 continue
             label = str(args.get("target") or args.get("name") or "")
-            said.append(fastpath.render(fastpath.Intent(intent, m.name, "", args, label), True, text, lang))
+            said.append(fastpath.render(fastpath.Intent(intent, tool_name, "", args, label), True, text, lang))
         return " ".join(fastpath.merge_opens(said)).strip()
 
     # --- history ---

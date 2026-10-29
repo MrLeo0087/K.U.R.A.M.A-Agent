@@ -65,6 +65,20 @@ def test_refusal_is_retried_once_with_meta(fake, monkeypatch):
     assert any(r[1] == "meta" for r in routing_rows())
 
 
+def test_claimed_action_without_a_tool_is_retried(fake, monkeypatch):
+    """'I've set a timer' with no tool call is a lie: retried once with request_tools so it really happens."""
+    monkeypatch.setattr(config, "META_TOOLS", True)
+    calls = fake(AIMessage(content="I've set a 1-minute timer for you."),
+                 call("request_tools", {"groups": ["general"], "reason": "clock"}, 1),
+                 call("get_time", {}, 2),
+                 AIMessage(content="Timer set."))
+    a = agent.Agent()
+    assert a.run("put a one minute countdown") == "Timer set." and a.last.get("meta_retry") and len(calls) == 4
+    assert meta.needs_tool("Sure, opening Stobas.") and meta.needs_tool("I'm sorry, I don't have that information.")
+    assert not any(meta.needs_tool(t) for t in ("Opening a business needs a PAN.", "I'll explain it simply.",
+                                                 "I'm starting to like it.", "The weather is nice."))
+
+
 def test_refusal_retry_happens_only_once(fake):
     calls = fake(AIMessage(content="Sorry, I can't do that."))
     assert agent.Agent().run("teleport me to Mars") == "Sorry, I can't do that."

@@ -55,13 +55,24 @@ TOOL_INTENT = {
     "token_usage": "tokens", "calculate": "calculate", "about_me": "self.about", "find_capability": "self.about",
     "volume": "volume", "_say": "chat", "mute_audio": "volume", "do_not_disturb": "dnd",
 }
+CORE = ("apps", "laptop", "files", "telegram", "schedule", "media", "web", "info", "memory", "create", "text", "code",
+        "life", "kurama", "run_command", "run_python")
 SLASH = {"control": "remote", "screen": "screenshot", "todo": "todo.list", "weather": "weather", "time": "time"}
 # intents that count as the same thing for scoring ("what's on today" may show the day or the to-do list)
 SAME = {"day.today": {"day.today", "todo.list"}, "web.news": {"web.news", "web.live", "web.search"},
         "web.live": {"web.live", "web.search"}, "clarify": {"clarify", "chat"}, "self.about": {"self.about", "chat"},
         "media.play": {"media.play", "media.control"}, "telegram.result": {"telegram.result", "telegram.file"},
         "telegram.find_send": {"telegram.find_send", "telegram.file"}, "files.find": {"files.find", "files.list"},
-        "volume": {"volume"}, "system.status": {"system.status"}, "power.sleep": {"power.sleep"}}
+        "volume": {"volume"}, "system.status": {"system.status"}, "power.sleep": {"power.sleep"},
+        "timer.set": {"timer.set", "alarm.set"}}
+
+
+def _real_args(tool: str | None, args: dict) -> dict:
+    """A general tool's call scored by the arguments its specialised tool gets."""
+    if tool not in CORE:
+        return args
+    from jarvis.tools.core._hub import underlying
+    return underlying(tool, args)[1]
 
 
 def intent_of(tool: str | None, args: dict | None = None) -> str:
@@ -69,6 +80,13 @@ def intent_of(tool: str | None, args: dict | None = None) -> str:
     a = args or {}
     if not tool:
         return "chat"
+    if tool in CORE:  # v2 general tool: score what it would run
+        from jarvis.tools.core._hub import underlying
+        if tool in ("run_command", "run_python"):
+            return f"run.{tool.split('_')[1]}"
+        tool, a = underlying(tool, a)
+        if tool in CORE:
+            return f"tool:{tool}"
     if tool == "todo":
         act = a.get("action", "list")
         return {"today": "day.today", "delete": "todo.delete", "clear": "todo.clear"}.get(act, f"todo.{act}")
@@ -114,12 +132,12 @@ def _isolated_store() -> None:
 
 # --- level 1: shortcut ---
 def run_shortcut(cases: list[dict]) -> dict:
-    from jarvis.core import config, fastpath
+    from jarvis.core import config, fastpath, planner
     config.FASTPATH = True
     handled = right = 0
     wrong, rows = [], []
     for c in cases:
-        it = fastpath.match(c["text"])
+        it = None if planner.is_multi(c["text"]) else fastpath.match(c["text"])  # like the agent: several tasks -> planner
         if it is None:
             rows.append({"id": c["id"], "level": "shortcut", "got": None})
             continue
@@ -142,7 +160,9 @@ def _group_of(intent: str) -> set[str]:
         for probe in ({}, {"action": "add"}, {"action": "list"}, {"action": "today"}, {"action": "done"},
                       {"action": "delete"}, {"action": "clear"}, {"action": "restart"}, {"action": "cancel"}):
             if ok(intent, intent_of(name, probe)):
-                groups.add(registry.group_of(t))
+                g = registry.group_of(t)
+                from jarvis.core import config
+                groups |= set(config.CORE_COVERS.get(name, ())) if g == "core" else {g}
     return groups
 
 
@@ -216,7 +236,7 @@ def run_ai(cases: list[dict], pace_s: float = 2.5) -> dict:
                 good = all(any(ok(p, d) for d in did) for p in c["all"])
                 got = "+".join(sorted(did)) or "chat"
             else:
-                good = ok(c["expect"], got) and args_ok(c["args"], first[1])
+                good = ok(c["expect"], got) and args_ok(c["args"], _real_args(*first))  # a general tool: its real args
             right += good
             used = sum(int(r["total_tokens"] or 0) for r in store._exec(
                 "SELECT total_tokens FROM llm_calls WHERE ts>=? AND purpose!='stt'", (ts0 - 0.5,)))

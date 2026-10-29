@@ -309,7 +309,16 @@ _NOT_FINDFILE = re.compile(r"^(?:my\s+)?(?:phone|mobile|iphone|android|laptop|co
                            r"|\b(?:news|weather|time|price|who|what\s+is|meaning|define|online|internet|web|song|video\s+of)\b", re.I)
 
 
+_FIND_SEND = re.compile(r"^(?P<find>.+?)\s+(?:and|then)\s+(?:also\s+)?(?:send|share|forward)\s+(?:it|this|that|them)?\s*"
+                        r"(?:to\s+)?(?:me|my\s+(?:telegram|phone|mobile)|telegram)\b.*$", re.I)
+_FILEISH = re.compile(r"\b[\w-]+\.[a-z0-9]{1,5}\b|\b(?:file|image|photo|picture|pic|folder|document|pdf|video|zip)\b", re.I)
+
+
 def findfile_intent(t: str) -> Intent | None:
+    if (fs := _FIND_SEND.match(t)) and _FILEISH.search(fs.group("find")) and (found := findfile_intent(fs.group("find"))) is not None:
+        # 'look for naruto.jpg image in my laptop and send me': find it everywhere AND send it (the send tool searches)
+        name = re.sub(r"\s+(?:image|picture|photo|file|document|video)$", "", found.args["query"], flags=re.I)
+        return Intent("sendfile", "send_file_telegram", "telegram", {"path": name}, name)
     m = _FINDFILE.match(t)
     if not m:
         return None
@@ -338,6 +347,9 @@ def _focus_intent() -> Intent | None:
 
 
 def sendfile_intent(t: str) -> Intent | None:
+    if re.match(r"^\s*(?:(?:ok|okay|now|please)\s+)*(?:send|share|forward)\s+(?:me\s+)?(?:this|that|the|it|my)?\s*"
+                r"(?:photo|picture|image|pic|wallpaper)(?:\s+(?:you\s+)?(?:made|generated|created))?" + _TGDEST + r"?\s*[.!?]*$", t, I):
+        return Intent("sendlast", "send_last_result", "telegram", {"kind": "image"}, "image")
     if _ANAPHORA_SEND.match(t):  # "send this folder" / "send it to telegram"
         return _focus_intent()
     m = _full(SENDFILE, t)
@@ -620,7 +632,7 @@ SESSION = _rx(
 )
 ABOUT_ME = _rx(
     r"what (?:do|else do|all do) you know about me", r"what have you learn(?:ed|t) about me",
-    r"who am i", r"tell me (?:what you know )?about (?:me|myself)", r"(?:show |what(?:'s| is) )?my profile",
+    r"who am i", r"what(?:'s| is) my name", r"tell me (?:what you know )?about (?:me|myself)", r"(?:show |what(?:'s| is) )?my profile",
     r"(?:timilai|tapai lai|tumhe|aapko) mero (?:barema|bare ma) (?:ke|kya) thaha (?:cha|xa|chha)",
 )
 NAME = _rx(
@@ -729,11 +741,16 @@ def mute_intent(t: str) -> Intent | None:
 _STOP_TRACK = re.compile(r"^(?:please\s+|kurama\W+)*(?:stop|end|turn\s+off|disable|cancel)\s+(?:the\s+)?(?:tracking|lost\s+mode|"
                          r"(?:sending(?:\s+me)?\s+)?(?:the\s+|my\s+)?(?:laptop(?:'s)?\s+)?location(?:\s+(?:messages?|updates?|alerts?))?)"
                          r"(?:\s+(?:for\s+)?(?:my|the|of\s+my|of\s+the)?\s*laptop)?(?:\s+(?:please|now))?\s*[.!]*$", I)
+_WHERE_LAPTOP = re.compile(r"^(?:please\s+|kurama\W+)*(?:(?:give|tell|show|send)\s+me\s+|what(?:'s|\s+is)\s+)?(?:the\s+)?"
+                           r"(?:(?:current\s+|live\s+)?location\s+of\s+(?:my\s+|the\s+)?laptop|(?:my\s+)?laptop(?:'s)?\s+location|"
+                           r"where\s+is\s+my\s+laptop)(?:\s+(?:please|now))?\s*[.!?]*$", I)
 
 
 def _p7_intent(t: str) -> Intent | None:
     if _STOP_TRACK.match(t) and not _mute_minutes(t):  # lost mode is what sends location: switch it off
         return Intent("guard", "laptop_guard", "power", {"action": "track_off"})
+    if _WHERE_LAPTOP.match(t):
+        return Intent("guard", "laptop_guard", "power", {"action": "where"})
     if mu := mute_intent(t):
         return mu
     if pm := power_mode_intent(t):
@@ -803,7 +820,7 @@ WALL_TAIL = re.compile(r"[\s,]*(?:\band\b|\bthen\b)?\s*(?:please\s+)?(?:make|set
                        r"(?:wallpaper|background)\b.*$", I)
 
 
-TG_TAIL = re.compile(r"[\s,]*(?:\b(?:and|then)\b\s*)?(?:also\s+)?(?:please\s+)?(?:send|share|forward)\s+"
+TG_TAIL = re.compile(r"[\s,]*(?:\b(?:and|then)\b\s*)?(?:also\s+)?(?:please\s+)?(?:send|share|forward|get|put|drop|deliver)\s+"
                      r"(?:it|this|that|them|the (?:image|picture|photo|pic|file))?\s*(?:image|picture|photo|pic)?\s*"
                      r"(?:to|in|on|via|through)\s+(?:my\s+)?(?:telegram|phone|mobile)\b.*$", I)
 
@@ -2078,7 +2095,7 @@ def everyday_intent(t: str) -> Intent | None:
     if _SLOW.search(t) and len(t.split()) <= 16:
         free = re.search(r"\b(?:ram|memory)\b", t, I) and re.search(r"\b(?:clean|clear|free)\b", t, I)
         return Intent("doctor", "laptop_doctor", "system", {"action": "free_ram" if free else "check"})
-    if re.search(r"\btokens?\b.{0,15}\b(?:usage|used|spent|left|budget)\b|\bhow\s+many\s+tokens\b", t, I) and len(t.split()) <= 10 \
+    if re.search(r"\btokens?\b.{0,15}\b(?:usage|used|spent|left|budget)\b|\bhow\s+many\s+tokens?\b", t, I) and len(t.split()) <= 10 \
             and not re.search(r"\b(?:week|month|year|yesterday|all|total|ever)\b", t, I):
         return Intent("tokens", "token_usage", "usage", {"period": "today"})
     if re.fullmatch(r"(?:please\s+)?(?:enable|run|start|open|use)\s+(?:the\s+)?laptop\s+doctor[\s.!]*", t, I):
@@ -3127,6 +3144,10 @@ def _open_intent(target: str, verb: str) -> Intent | None:
     entry, score = _apps.find_app(target)
     need = 100 if verb in ("start", "run") else _apps.FASTPATH_MIN_SCORE
     if entry is None or score < need:
+        place = re.sub(r"\s+(?:in|on)\s+(?:my\s+|the\s+)?(?:laptop|computer|pc|file\s+manager)$", "", target, flags=I).strip()
+        from jarvis.core.paths import smart_path
+        if verb == "open" and place and smart_path(place, want="dir") is not None:
+            return Intent("openfolder", "open_folder", "filesearch", {"name": place}, place)
         return None
     return Intent("open", "open_app", "apps", {"name": target}, entry["name"])
 
@@ -3516,10 +3537,58 @@ def _amount(m: re.Match) -> dict | None:
 
 
 _PHONE_TAIL = re.compile(r"[\s,]+(?:and\s+)?(?:(?:when|once|after)\b[^,]{0,40}?[\s,]+)?(?:also\s+)?(?:send|message|text|"
-                         r"notify|tell|ping|alert|inform)\b.{0,40}?\b(?:telegram|telegra|phone|mobile)\b.*$", I)
+                         r"notify|tell|ping|alert|inform|say|remind)\b.{0,40}?\b(?:telegram|telegra|phone|mobile)\b.*$", I)
+
+
+_WALL_CHANGE = re.compile(r"^(?:(?:i\s+mean|actually|please|can\s+you|could\s+you|i\s+want\s+(?:you\s+)?to)\W+)*"
+                          r"(?:change|switch|set\s+(?:a\s+)?(?:new|different)|give\s+me\s+a\s+new|new)\s+(?:the\s+|my\s+)?(?:image\s+in\s+my\s+)?"
+                          r"(?:desktop\s+)?(?:wallpaper|background)(?:\s+(?:image|picture))?$", I)
+_CHART = re.compile(r"^(?:(?:can|could)\s+you\s+)?(?:make|create|draw|show|give)\s+(?:me\s+)?(?:a\s+)?(?P<k>pie|bar|line)?\s*"
+                    r"(?:chart|graph|plot)\s+(?:of|for|about|showing)\s+(?P<x>.+)$", I)
+_TRAINING_Q = re.compile(r"\b(?:training|traning|trainning|traing)\b.*\b(?:happening|running|going|status|progress|done|finished)\b|"
+                         r"^(?:is\s+there\s+)?any\s+(?:training|traning|trainning)\b", I)
+_HABIT_DONE = re.compile(r"^i\s+(?:have\s+|just\s+)?(?:complete[d]?|did|done|finished|drank|drink|dring|had)\s+(?P<x>.+)$", I)
+_HI_WAKE = re.compile(r"(?P<w>.+?)\s+(?:utha|uthaa|jaga|jagaa)\s*(?:dena|do|dijiye|dijie|dijiega)$|"
+                      r"(?P<w2>.+?)\s+(?:uthaidinu|uthai\s+dinu|uthaunu|उठाइदिनु|उठा\s*देना|जगा\s*देना)$", I)
+_HI_TIME = ((r"\bkal\b|\bभोलि\b|\bकल\b", "tomorrow"), (r"\baaj\b|\baja\b|\bआज\b", "today"),
+            (r"\b(?:subah|bihana|सुबह|बिहान)\b", "am"), (r"\b(?:shaam|sham|beluka|साँझ|शाम|बेलुका)\b", "pm"),
+            (r"\b(?:raat|rati|रात|राति)\b", "pm"), (r"\b(?:baje|bajey|bajay|बजे|बजे)\b", ""), (r"\b(?:mujhe|malai|मुझे|मलाई)\b", ""))
+
+
+def _hinglish_when(text: str) -> str:
+    """'kal subah 6 baje' -> 'tomorrow 6 am'."""
+    t = " " + text.lower() + " "
+    ampm = "am" if re.search(_HI_TIME[2][0], t, I) else "pm" if re.search(_HI_TIME[3][0] + "|" + _HI_TIME[4][0], t, I) else ""
+    for rx, rep in _HI_TIME:
+        t = re.sub(rx, "" if rep in ("am", "pm") else rep, t, flags=I)
+    t = " ".join(t.split())
+    return re.sub(r"(\d{1,2}(?::\d{2})?)", lambda m: f"{m.group(1)} {ampm}".strip(), t, count=1) if ampm else t
+
+
+def _everyday_intent(t: str) -> Intent | None:
+    if _WALL_CHANGE.match(t):
+        return Intent("control", "set_wallpaper", "desktop", {"mode": "next"})
+    if m := _CHART.match(t):
+        return Intent("control", "make_chart", "image", {"request": m.group("x"), **({"kind": m.group("k").lower()} if m.group("k") else {})})
+    if _TRAINING_Q.search(t) and len(t.split()) <= 12:
+        return Intent("control", "training", "watch", {"action": "status"})
+    if (m := _HABIT_DONE.match(t.strip(" .!"))) and len(t.split()) <= 10:
+        try:
+            from jarvis.core import habits
+            if habits.find(m.group("x")):
+                return Intent("control", "habits", "tracker", {"action": "done", "text": m.group("x")})
+        except Exception:
+            pass
+    if m := _HI_WAKE.match(t.strip(" .!?")):
+        when = _hinglish_when(m.group("w") or m.group("w2"))
+        if re.search(r"\d", when):
+            return Intent("control", "set_alarm", "clock", {"when": when})
+    return None
 
 
 def _control_intent(t: str) -> Intent | None:
+    if ei := _everyday_intent(t):
+        return ei
     if _SHUTDOWN.match(t):
         return Intent("control", "power_off", "power", {"action": "shutdown"})
     if _RESTART.match(t):

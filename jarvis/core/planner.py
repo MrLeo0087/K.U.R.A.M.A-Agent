@@ -208,7 +208,7 @@ _WALL_TAIL = re.compile(r"^\s*(?:and\s+|then\s+)?(?:please\s+)?(?:make|set|use|k
 
 
 # "...and send it to my Telegram": a follow-up of the previous task (sent when its job is done)
-_TG_TAIL = re.compile(r"^\s*(?:(?:and|then|also)\s+)*(?:please\s+)?(?:send|share|forward)\s+(?:it|this|that|them|"
+_TG_TAIL = re.compile(r"^\s*(?:(?:and|then|also)\s+)*(?:please\s+)?(?:send|share|forward|get|put|drop|deliver)\s+(?:it|this|that|them|"
                       r"the\s+\w+)?\s*(?:image|picture|photo|pic|file)?\s*(?:to|in|on|via|through)\s+(?:my\s+)?"
                       r"(?:telegram|phone|mobile)\b", re.I)
 
@@ -248,11 +248,19 @@ def merge_tails(tasks: list[dict]) -> list[dict]:
     return out
 
 
+# 'it' that points at nothing ('what time is it', 'is it raining'): not a reference to the task before
+_DUMMY_IT = re.compile(r"\b(?:what\s+time\s+is\s+it|is\s+it\s+(?:going\s+to\s+)?(?:rain\w*|cold|hot|sunny|late|snow\w*))\b", re.I)
+
+
+def refers_back(text: str) -> bool:
+    return bool(_REF.search(_DUMMY_IT.sub(" ", text)))
+
+
 def add_dependencies(tasks: list[dict]) -> list[dict]:
     """Simple rule on top of the model's depends_on: a task that refers back depends on the previous one."""
     for i, t in enumerate(tasks):
         deps = {d for d in t.get("depends_on", []) if isinstance(d, int) and 0 <= d < i}
-        if i and _REF.search(t["text"]):
+        if i and refers_back(t["text"]):
             deps.add(i - 1)
         if deps:
             t["depends_on"] = sorted(deps)
@@ -361,9 +369,22 @@ def decompose(text: str) -> list[dict]:
     return tasks[: config.PLANNER_MAX_TASKS]
 
 
+def _shortcut_tasks(text: str) -> list[dict]:
+    """Independent quick parts that each match an instant shortcut ('weather in Pokhara and what time is it')."""
+    from jarvis.core import fastpath
+    parts = split_clauses(text)
+    if not 1 < len(parts) <= config.PLANNER_MAX_TASKS:
+        return []
+    if any(is_long_job(p) or refers_back(p) or fastpath.match(p) is None for p in parts):
+        return []
+    return [{"text": p, "kind": "quick"} for p in parts]
+
+
 def plan(text: str) -> Plan:
     if not is_multi(text):
         return Plan([{"text": text, "kind": "long" if is_long_job(text) else "quick"}], "single")
+    if quick := _shortcut_tasks(text):  # every part is a 0-token shortcut on its own: no planner call
+        return Plan(quick, "rules")
     try:
         tasks = decompose(text)
         method = "llm"
