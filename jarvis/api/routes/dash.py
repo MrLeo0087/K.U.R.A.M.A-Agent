@@ -163,16 +163,29 @@ def _switches() -> dict:
             "guard": guard.armed(), "saver": mode == "power-saver", "power_mode": mode or "unknown"}
 
 
+def _todo_rows() -> list[dict]:
+    from jarvis.core import todos
+    todos.ensure_migrated()
+    return [{"id": r["id"], "title": r["title"][:120], "due": r["due_text"], "late": r["due_text"].startswith("overdue"),
+             "priority": r["priority"], "tag": r["tag"], "bell": bool(r["reminder_id"])} for r in todos.items()]
+
+
+def _reminder_rows() -> list[dict]:
+    from jarvis.core import store, when
+    return [{"id": s["id"], "kind": s.get("kind") or "reminder", "text": s["text"][:120],
+             "when": when.describe(s["next_run"], s.get("repeat") or "none")}
+            for s in store.schedules_list(enabled_only=True, limit=50) if s.get("kind") in ("reminder", "alarm")]
+
+
 def _work() -> dict:
-    """Goals + my list (to-dos, reminders, read later) for the Work card; cheap: two small Excel reads."""
-    from jarvis.core import goals, readlater
-    rows = readlater.ordered()
+    """Goals + the to-do list (tasks) + counts of reminders and the reading list, for the Work card."""
+    from jarvis.core import goals, readlater, todos
+    rows = _todo_rows()
+    c = todos.summary_counts()
     nxt = next((r for r in rows if r["due"]), None)
-    items = [{"type": r["type"], "title": r["title"][:80], "due": r["due"]} for r in rows if r["type"] in ("reminder", "todo")][:6]
-    return {"goals": goals.cards(), "items": items,
-            "list": {"todo": sum(r["type"] == "todo" for r in rows), "read": sum(r["type"] == "read" for r in rows),
-                     "reminders": sum(r["type"] == "reminder" for r in rows),
-                     "next": {"title": nxt["title"][:60], "due": nxt["due"], "type": nxt["type"]} if nxt else None}}
+    return {"goals": goals.cards(), "items": rows[:6],
+            "list": {"todo": c["open"], "today": c["today"], "overdue": c["overdue"], "reminders": len(_reminder_rows()),
+                     "read": len(readlater.ordered()), "next": {"title": nxt["title"][:60], "due": nxt["due"]} if nxt else None}}
 
 
 def _tracker() -> dict:
@@ -195,22 +208,36 @@ def summary() -> dict:
 
 class TodoIn(BaseModel):
     action: str  # done | remove
-    title: str
-    type: str = ""
+    type: str = "todo"  # todo | reminder | read
+    id: int = 0  # to-do / reminder id
+    title: str = ""  # reading-list links (the sheet has no ids)
 
 
-@router.post("/todo", summary="Work card buttons: finish or delete one to-do / reminder (by its title)")
+@router.post("/todo", summary="Card buttons: finish or delete a to-do, cancel a reminder, mark a link read (0 tokens)")
 async def todo_action(body: TodoIn):
-    from jarvis.core import readlater
+    from jarvis.core import readlater, store, todos
 
     def run() -> dict:
-        r = next((x for x in readlater.ordered() if x["title"] == body.title and (not body.type or x["type"] == body.type)), None)
-        if r is None:
-            return {"ok": False, "text": "It's not in the list any more."}
-        readlater._drop(r)
+        if body.type == "reminder":
+            s = store.schedule_get(body.id)
+            if not s or not s.get("enabled"):
+                return {"ok": False, "text": "That reminder isn't pending any more."}
+            store.schedule_update(body.id, enabled=0, note="cancelled")
+            text = f"Cancelled: {s['text']}"
+        elif body.type == "read":
+            r = next((x for x in readlater.ordered() if x["title"] == body.title), None)
+            if r is None:
+                return {"ok": False, "text": "It's not in your reading list any more."}
+            readlater._drop(r)
+            text = f"Removed: {r['title']}"
+        else:
+            r = todos.by_id(body.id)
+            if r is None:
+                return {"ok": False, "text": "It's not on your to-do list any more."}
+            text = todos.done("", r) if body.action == "done" else todos.remove("", r)
         _cache.pop("summary", None)
         _cache.pop("work", None)
-        return {"ok": True, "text": ("Done: " if body.action == "done" else "Removed: ") + r["title"]}
+        return {"ok": True, "text": text}
     return await run_in_threadpool(run)
 
 
@@ -232,10 +259,12 @@ def detail(panel: str) -> dict:
                 "findings": r.findings, "facts": r.facts,
                 "ports": [{"port": p, "pid": pid, "name": n} for p, pid, n in doctor.listeners()[:12]],
                 "kernels": [{"pid": k[0], "mb": round(k[1])} for k in doctor.idle_kernels()]}
-    if panel == "work":  # the Work sheet: goals + my list + coding
+    if panel == "work":  # the Work sheet: goals + to-do + reminders + reading list + coding
         from jarvis.core import readlater
         w = _work()
-        w["items"] = [{k: r.get(k, "") for k in ("type", "title", "link", "tag", "due")} for r in readlater.ordered()[:30]]
+        w["items"] = _todo_rows()
+        w["reminders"] = _reminder_rows()
+        w["reads"] = [{k: r.get(k, "") for k in ("title", "link", "tag", "due")} for r in readlater.ordered()[:30]]
         try:
             w["coding"] = detail("coding")
         except Exception as e:

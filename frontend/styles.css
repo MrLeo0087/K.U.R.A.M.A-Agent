@@ -1046,6 +1046,9 @@ body:not(.mini) .suggest button { border-radius: 20px; padding: 7px 14px; backgr
 .tlist:empty { display: none; }
 .tlist li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; align-items: center; gap: 6px; font-size: 12.5px; }
 .tlist small { color: var(--dim); font-size: 11px; white-space: nowrap; }
+.tlist li.late small, .list-line .late { color: var(--danger); } /* overdue to-dos */
+.tlist.big li { font-size: 13.5px; padding: 4px 0; border-top: 1px solid var(--line); }
+.tlist.big li:first-child { border-top: 0; }
 .tlist .tb, .hlist .tb { width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.03);
   color: var(--muted); font-size: 12px; line-height: 1; display: grid; place-items: center; padding: 0; }
 .tlist .tb:hover, .hlist .tb:hover { color: var(--danger); border-color: rgba(255, 93, 93, 0.4); }

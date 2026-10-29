@@ -81,6 +81,41 @@ def find(query: str | int) -> dict | None:
     return best
 
 
+def named(text: str) -> dict | None:
+    """The pending reminder whose text clearly matches loose words ('the call mom one'); stricter than find()."""
+    want = {w for w in re.findall(r"[a-z0-9]+", (text or "").lower()) if len(w) > 2} - {
+        "the", "and", "for", "reminder", "remind", "about", "my", "one", "alarm", "timer"}
+    best, score = None, 0.0
+    for r in store.schedules_list(enabled_only=True, limit=50):
+        if r.get("kind") == "command":
+            continue
+        have = {w for w in re.findall(r"[a-z0-9]+", r["text"].lower()) if len(w) > 2}
+        s = len(want & have) / len(want) if want else 0
+        if s > score:
+            best, score = r, s
+    return best if score >= 0.5 else None
+
+
+def move(query: str | int, when_text: str) -> str:
+    """A new time for a reminder / alarm ('move the call mom reminder to 6 pm')."""
+    r = find(query) if str(query).strip().isdigit() else named(str(query))
+    if r is None:
+        return f"no reminder matches {query!r}"
+    w = when.resolve(when_text, datetime.now(), use_llm=False)
+    if w is None or w.ts <= time.time():
+        return f"error: I couldn't use the time {when_text!r}" + (" (it's already past)" if w else "")
+    store.schedule_update(r["id"], next_run=w.ts, enabled=1, note="")
+    return f"Moved #{r['id']} ({r['text']}) to {when.describe(w.ts, r.get('repeat') or 'none')}."
+
+
+def rename(query: str | int, new: str) -> str:
+    r = find(query) if str(query).strip().isdigit() else named(str(query))
+    if r is None:
+        return f"no reminder matches {query!r}"
+    store.schedule_update(r["id"], text=new.strip(" .'\"")[:200])
+    return f"Renamed #{r['id']} to '{new.strip()}'."
+
+
 def cancel(query: str | int) -> str:
     r = find(query)
     if r is None:

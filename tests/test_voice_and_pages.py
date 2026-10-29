@@ -58,8 +58,8 @@ def test_already_read_marks_the_reading_list(monkeypatch):
     assert i.tool == "read_later" and readlater.run(**i.args).startswith("Removed: Attention is All you Need")
     readlater.add("https://example.com/b", "Second article")
     i = fastpath.match("mark first task in read later as done")
-    assert i.args == {"action": "done", "n": 1, "text": "read"}
-    assert readlater.run(**i.args).startswith("✔ Done: Second article")  # not the to-do 'Reading the book'
+    assert i.args == {"action": "done", "n": 1}  # the reading list only (to-dos are their own list)
+    assert readlater.run(**i.args).startswith("✔ Read: Second article")  # not the to-do "Reading the book"
 
 
 @pytest.mark.parametrize("q", ["how is your day going", "what are you doing", "set up the colab notebook",

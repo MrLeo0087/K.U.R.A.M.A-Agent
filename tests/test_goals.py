@@ -192,18 +192,20 @@ def test_work_overview(sent, monkeypatch):
 
 def test_todo_vs_long_tasks_vs_code(sent):
     """Owner's 11:33 PM log: to-do questions went to knowledge/web, 'schedule a work for 11:41 pm' became a computer
-    command waiting for yes ('Stopped.'), and Whisper's 'tax' meant 'task'."""
-    todo = {"action": "list", "text": "todo"}
-    for q in ("Is there anything in my ToDo?", "Is there any tax for me today?", "what is my reminder today",
-              "what is the current work I have to do", "Show today's reminders and the current work I have to do",
-              "what are my tasks for today", "what do I have to do today"):
+    command waiting for yes ('Stopped.'), and Whisper's 'tax' meant 'task'. (v2: to-dos, reminders and the reading
+    list are three separate lists.)"""
+    for q in ("Is there anything in my ToDo?", "Is there any tax for me today?",
+              "what is the current work I have to do", "what are my tasks for today", "what do I have to do today"):
         i = fastpath.match(q)
-        assert i and i.tool == "read_later" and i.args == todo, (q, i)
-    i = fastpath.match("Okay, schedule a work for 11.41pm for reading the book.")
-    assert i.tool == "read_later" and i.args == {"action": "todo", "text": "reading the book", "when": "11.41pm"}
+        assert i and i.tool == "todo" and i.args == {"action": "list"}, (q, i)
+    assert fastpath.match("what is my reminder today").args == {"action": "list"}
+    assert fastpath.match("what is my reminder today").tool == "schedules"
+    assert fastpath.match("Show today's reminders and the current work I have to do").args == {"action": "today"}
+    i = fastpath.match("Okay, schedule a work for 11.41pm for reading the book.")  # a time = an alert = a reminder
+    assert i.tool == "add_reminder" and i.args == {"text": "reading the book", "when": "11.41pm"}
     assert fastpath.match("Schedule 2-2 tax for 11.41 pm for reading book.").args["text"] == "reading book"
     i = fastpath.match("schedule a shutdown at 10 pm")
-    assert i is None or i.tool != "read_later"  # a computer action stays schedule_command
+    assert i is None or i.tool not in ("todo", "add_reminder")  # a computer action stays schedule_command
     for q in ("What is the thing that I have to do for my month?", "show my long tasks"):
         assert args(q) == {"action": "list"}, q
     assert args("what am I working on") == {"action": "overview"}
@@ -213,28 +215,29 @@ def test_todo_vs_long_tasks_vs_code(sent):
 def test_owner_log_midnight_todo(sent, monkeypatch):
     """Owner's 12:02 AM log: 'What's on today?' said 'no timetable', 'remove all the tasks' / 'remove the review 30 day
     study plan' were AI claims with no tool (the item stayed on screen), 'schedule the task' lost its follow-up."""
-    from jarvis.core import readlater
-    readlater.add_todo("Review 30-day exam plan", when_text="at 9 pm")
-    readlater.add_todo("Buy milk")
+    from jarvis.core import todos
+    from jarvis.tools.general.todo import todo
+    todos.add("Review 30-day exam plan", "today 9 pm")
+    todos.add("Buy milk")
     goals.add("Exam", "in 30 days")
     i = fastpath.match("What's on today?")
-    assert i.args == {"action": "today"}
-    out = readlater.run(**i.args)
+    assert (i.tool, i.args) == ("todo", {"action": "today"})
+    out = todo(**i.args)
     assert "Review 30-day exam plan" in out and "Long tasks" in out and "Exam: 30 days left" in out
     i = fastpath.match("Remove the review 30 day study plan from the to-do list.")
-    assert i.args == {"action": "remove", "text": "review 30 day study plan"}
-    assert readlater.run(**i.args).startswith("Removed: Review 30-day exam plan")
-    assert [r["title"] for r in readlater.ordered()] == ["Buy milk"]
-    assert fastpath.match("Not only is there any task for me.").args == {"action": "list", "text": "todo"}
+    assert i.args == {"action": "delete", "item": "review 30 day study plan"}
+    assert todo(**i.args).startswith("Deleted from your to-do list: Review 30-day exam plan")
+    assert [r["title"] for r in todos.items()] == ["Buy milk"]
+    assert fastpath.match("Not only is there any task for me.").args == {"action": "list"}
     i = fastpath.match("Remove all the tasks for me.")
-    assert i.args == {"action": "clear", "text": "todo"}
-    assert readlater.run(**i.args) == "Removed 1: Buy milk." and readlater.ordered() == []
+    assert i.args == {"action": "clear"}
+    assert todo(**i.args) == "Deleted 1 to-do." and todos.items() == []
     i = fastpath.match("Okay, schedule the task for the task.")
-    assert i.args["action"] == "ask" and readlater.run(**i.args).startswith("What should I add, and when?")
-    i = fastpath.match("Read the book at 12:15 am")
-    assert i.args == {"action": "todo", "text": "Read the book", "when": "at 12:15 am"}
-    readlater.run(**i.args)
-    assert not readlater.pending()
+    assert i.args == {"action": "add", "task": ""} and todo(**i.args).startswith("What should I add to your to-do list?")
+    i = fastpath.match("Read the book at 12:15 am")  # the follow-up reply is the task
+    assert i.args == {"action": "add", "task": "Read the book", "due": "at 12:15 am"}
+    todo(**i.args)
+    assert not todos.pending() and todos.items()[0]["title"] == "Read the book"
     # the three kinds of work never mix
     assert fastpath.match("give me the code work for today").tool == "where_was_i"
     assert fastpath.match("show my long workers").tool == "goals"
@@ -243,30 +246,39 @@ def test_owner_log_midnight_todo(sent, monkeypatch):
 
 def test_short_tasks_win_over_long_tasks(sent):
     """Owner's 12:17 AM log: 'remove the review 30 day exam plan' deleted the long task 'Exam'; 'remove the second
-    task' and '... from your task from the To-Do' failed. Task / work / reminder = the to-do unless long words are said."""
-    from jarvis.core import readlater
-    readlater.add_todo("Reading the book", when_text="in 2 hours")
-    readlater.add_todo("Review 30-day exam plan", when_text="in 5 hours")
+    task' and '... from your task from the To-Do' failed. Task / work / to-do = the to-do list unless long words are said."""
+    from jarvis.core import todos
+    from jarvis.tools.general.todo import todo
+    todos.add("Reading the book", "in 2 hours")
+    todos.add("Review 30-day exam plan", "in 5 hours")
     goals.add("Exam", "in 30 days")
-    assert fastpath.match("Okay, remove the review 30 day exam plan.").args == {"action": "remove", "text": "review 30 day exam plan"}
-    assert fastpath.match("No, no, actually, remove the 30-day review plan from your task from the To-Do.").args["action"] == "remove"
-    assert fastpath.match("Okay, remove the second task from my list of tasks.").args == {"action": "remove", "n": 2}
+    assert fastpath.match("Okay, remove the review 30 day exam plan.").args == {"action": "delete", "item": "review 30 day exam plan"}
+    assert fastpath.match("No, no, actually, remove the 30-day review plan from your task from the To-Do.").args["action"] == "delete"
+    assert fastpath.match("Okay, remove the second task from my list of tasks.").args == {"action": "delete", "item": "2"}
     i = fastpath.match("move reading the book to 11 pm")
-    assert i.args["action"] == "reschedule"
-    assert "moved to" in readlater.run(**i.args)
+    assert i.args == {"action": "edit", "item": "reading the book", "due": "11 pm"}
+    assert "Updated 'Reading the book'" in todo(**i.args)
     i = fastpath.match("rename the reading the book task to Read chapter 3")
-    assert readlater.run(**i.args) == "Renamed 'Reading the book' to 'Read chapter 3'."
-    assert readlater.run(**fastpath.match("Okay, remove the review 30 day exam plan.").args).startswith("Removed: Review 30-day exam plan")
+    assert todo(**i.args) == "Updated 'Reading the book': renamed to 'Read chapter 3'."
+    assert todo(**fastpath.match("Okay, remove the review 30 day exam plan.").args).startswith("Deleted from your to-do list: Review 30-day exam plan")
     assert [g["name"] for g in goals.all_goals("active")] == ["Exam"]  # the long task is untouched
     assert fastpath.match("delete my exam goal").args["action"] == "delete"  # only with 'goal / long task'
     assert fastpath.match("remove the exam long task").args["action"] == "delete"
 
 
 def test_work_card_buttons(sent):
-    from jarvis.api.routes import dash
-    from jarvis.core import readlater
-    readlater.add_todo("Buy milk")
-    assert dash._work()["items"] == [{"type": "todo", "title": "Buy milk", "due": ""}]
     import asyncio
-    r = asyncio.run(dash.todo_action(dash.TodoIn(action="done", title="Buy milk", type="todo")))
-    assert r == {"ok": True, "text": "Done: Buy milk"} and readlater.ordered() == []
+
+    from jarvis.api.routes import dash
+    from jarvis.core import reminders, todos
+    todos.add("Buy milk")
+    items = dash._work()["items"]
+    assert [(r["title"], r["due"], r["priority"]) for r in items] == [("Buy milk", "", 2)]
+    r = asyncio.run(dash.todo_action(dash.TodoIn(action="done", type="todo", id=items[0]["id"])))
+    assert r["ok"] and r["text"].startswith("✔ Done: Buy milk") and todos.items() == []
+    out = reminders.add("call mom", "in 2 hours")
+    rid = int(out.split("#")[1].split()[0])
+    assert dash._work()["list"]["reminders"] == 1
+    r = asyncio.run(dash.todo_action(dash.TodoIn(action="remove", type="reminder", id=rid)))
+    assert r == {"ok": True, "text": "Cancelled: call mom"} and dash._work()["list"]["reminders"] == 0
+

@@ -84,8 +84,8 @@ def test_stores_never_mix_up(desk, monkeypatch):
         "save this link for later": "read_later",
         "read this later": "read_later",
         "what's on my reading list": "read_later",
-        "add buy milk to my to-do list": "read_later",
-        "show my to-do list": "read_later",
+        "add buy milk to my to-do list": "todo",  # v2: the to-do list is its own tool
+        "show my to-do list": "todo",
         "save Ram's number 9800000000": "contacts",
         "what is Ram's number": "contacts",
         "show my contacts": "contacts",

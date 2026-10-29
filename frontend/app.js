@@ -1325,22 +1325,26 @@ const goalHtml = (g, full = false) => `<div class="goal${g.status === "paused" ?
 function renderWork(w) {
   const gs = w.goals || [], l = w.list || {};
   $("goal-body").innerHTML = gs.slice(0, 3).map((g) => goalHtml(g)).join("") + (gs.length > 3 ? `<div class="gs">+${gs.length - 3} more</div>` : "");
-  const parts = [l.todo && `<b>${l.todo}</b> to-do`, l.reminders && `<b>${l.reminders}</b> reminder${l.reminders > 1 ? "s" : ""}`, l.read && `<b>${l.read}</b> to read`].filter(Boolean);
-  const nx = l.next ? ` · next: ${esc(l.next.title)} ${esc(fmtDue(l.next.due))}` : "";
-  $("list-line").innerHTML = parts.length ? parts.join(" · ") + nx : (gs.length ? "" : 'No goals yet: say “my exam is in 30 days, remind me every day”.');
-  const ic = { reminder: "⏰", todo: "✅" };
-  $("todo-items").innerHTML = (w.items || []).map((r) => `<li><span class="ell" title="${esc(r.title)}">${ic[r.type] || "•"} ${esc(r.title)}</span>
-    <small>${esc(fmtDue(r.due))}</small><button type="button" class="tb ok" data-todo="done" data-title="${esc(r.title)}" data-type="${r.type}" title="Done" aria-label="Done">✓</button>
-    <button type="button" class="tb" data-todo="remove" data-title="${esc(r.title)}" data-type="${r.type}" title="Delete" aria-label="Delete">✕</button></li>`).join("");
+  const parts = [l.todo && `<b>${l.todo}</b> to-do${l.today ? ` (${l.today} today${l.overdue ? `, <span class="late">${l.overdue} overdue</span>` : ""})` : ""}`,
+    l.reminders && `<b>${l.reminders}</b> reminder${l.reminders > 1 ? "s" : ""}`, l.read && `<b>${l.read}</b> to read`].filter(Boolean);
+  $("list-line").innerHTML = parts.length ? parts.join(" · ") : (gs.length ? "" : 'Nothing yet: say “add finish the report to my to-do, due Friday”.');
+  $("todo-items").innerHTML = (w.items || []).map((r) => todoLi(r)).join("");
   $("work-pill").textContent = gs.length ? `${gs.length} long task${gs.length > 1 ? "s" : ""}` : "";
 }
-document.addEventListener("click", async (e) => { // Work card: ✓ done / ✕ delete one to-do or reminder (no chat, 0 tokens)
+function todoLi(r) { // one to-do: ❗ for high priority, due/overdue, 🔔 when it has a linked reminder, ✓ done, ✕ delete
+  return `<li${r.late ? ' class="late"' : ""}><span class="ell" title="${esc(r.title)}">${r.priority === 1 ? "❗" : "✅"} ${esc(r.title)}${r.tag ? ` <small>#${esc(r.tag)}</small>` : ""}${r.bell ? " 🔔" : ""}</span>
+    <small>${esc(r.due || "")}</small><button type="button" class="tb ok" data-todo="done" data-id="${r.id}" data-type="todo" title="Done" aria-label="Done">✓</button>
+    <button type="button" class="tb" data-todo="remove" data-id="${r.id}" data-type="todo" title="Delete" aria-label="Delete">✕</button></li>`;
+}
+document.addEventListener("click", async (e) => { // ✓ done / ✕ delete a to-do, ✕ cancel a reminder, ✓ read a link (no chat, 0 tokens)
   const b = e.target.closest("[data-todo]");
   if (!b) return;
   e.stopPropagation();
   b.disabled = true;
-  try { const r = await api.todo(b.dataset.todo, b.dataset.title, b.dataset.type); toast(r.text); } catch { toast("Couldn't change it right now."); }
+  try { const r = await api.todo(b.dataset.todo, b.dataset.type, Number(b.dataset.id || 0), b.dataset.title || ""); toast(r.text); }
+  catch { toast("Couldn't change it right now."); }
   fresh = true; loadDash(); loadToday();
+  if ($("sheet")?.open && b.closest("#sheet")) openSheet("work");
 }, true);
 function fmtDue(due) { // '2026-10-27 17:00' -> 'tomorrow 5 PM'
   if (!due) return "";
@@ -1525,13 +1529,20 @@ function workHtml(d) {
     ${g.folder ? `<button type="button" class="act ghost" data-act="show_folder" data-path="${esc(g.folder)}">Folder</button>` : ""}
     ${ask(`${g.status === "paused" ? "resume" : "pause"} the ${g.name} long task`, g.status === "paused" ? "Resume" : "Pause")}</div></div>`)).join("");
   const help = '<p class="tiny">Say: “my exam is in 30 days, remind me 3 times a day” · “I started a project that ends in 6 months, ask me every day” · “Thesis update: wrote chapter 2” · “move my exam to December 2” · “the exam is over”. Stored in ~/Documents/KURAMA/goals.xlsx.</p>';
-  const ic = { reminder: "⏰", todo: "✅", read: "📖" };
-  const items = (d.items || []).length ? tbl(d.items.map((r, i) => [`${i + 1}. ${ic[r.type] || "•"} ${r.link ? `<a href="${esc(r.link)}" target="_blank" rel="noopener">${esc(r.title)}</a>` : esc(r.title)}${r.tag ? ` <small>#${esc(r.tag)}</small>` : ""}`,
-    `${esc(fmtDue(r.due))} <button type="button" class="act ghost" data-ask="done ${i + 1}">Done</button>`])) : '<p class="empty">Your list is empty.</p>';
+  const todo = (d.items || []).length ? `<ul class="tlist big">${d.items.map((r) => todoLi(r)).join("")}</ul>`
+    : '<p class="empty">No to-dos. Say “add finish the report to my to-do, due Friday, high priority”.</p>';
+  const rem = (d.reminders || []).length ? tbl(d.reminders.map((r) => [`${r.kind === "alarm" ? "⏰" : "🔔"} ${esc(r.text)}`,
+    `${esc(r.when)} <button type="button" class="tb" data-todo="remove" data-type="reminder" data-id="${r.id}" title="Cancel" aria-label="Cancel">✕</button>`]))
+    : '<p class="empty">No reminders. Say “remind me to call mom at 5 pm”.</p>';
+  const reads = (d.reads || []).length ? tbl(d.reads.map((r, i) => [`${i + 1}. 📖 <a href="${esc(r.link)}" target="_blank" rel="noopener">${esc(r.title)}</a>${r.tag ? ` <small>#${esc(r.tag)}</small>` : ""}`,
+    `${esc(fmtDue(r.due))} <button type="button" class="tb ok" data-todo="done" data-type="read" data-title="${esc(r.title)}" title="Read" aria-label="Mark read">✓</button>`]))
+    : '<p class="empty">Nothing to read later.</p>';
   const c = d.coding || {};
   const code = c.project ? codingHtml(c).replace(/^<div class="sgrid">|<\/div>$/g, "") : tile("Coding", '<p class="empty">No project yet. Say “protect my project”.</p>', "span3");
   return `<div class="sgrid">${tile("Long tasks", (goals || '<p class="empty">No long tasks yet.</p>') + help, "span3 gtile")}
-    ${tile("My list · reminders, to-do, read later", items + `<div class="btns">${ask("show my list", "Show in chat")}</div>`, "span3")}
+    ${tile("✅ To-do · tasks to do", todo + `<div class="btns">${ask("show my to-do list", "Show in chat")}</div>`, "span3")}
+    ${tile("🔔 Reminders · alerts at a time", rem, "span2")}
+    ${tile("📖 Read later", reads, "")}
     ${code}</div>`;
 }
 async function sheetHtml(panel) {

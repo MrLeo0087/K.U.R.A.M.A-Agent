@@ -44,11 +44,11 @@ def test_list_open_read_remove(rl):
     st, opened = rl
     for x in ("x1", "x2", "x3"):
         readlater.add(f"https://e.com/{x}")
-    assert readlater.show().startswith("📋 Your list (3)\n📖 Read later\n1. Title of x3 (e.com)") and "https://e.com/x3" in readlater.show()
+    assert readlater.show().startswith("📖 Read later (3)\n1. Title of x3 (e.com)") and "https://e.com/x3" in readlater.show()
     assert readlater.run("open", n=1) == "Opened: Title of x3 (done, removed from your list)." and opened == ["https://e.com/x3"]
-    assert readlater.run("read", n=2) == "✔ Done: Title of x1 (removed). 1 left."  # done = deleted
+    assert readlater.run("read", n=2) == "✔ Read: Title of x1 (removed). 1 left."  # read = deleted
     assert readlater.run("remove", n=1) == "Removed: Title of x2"
-    assert readlater.show().startswith("Your list is empty")
+    assert readlater.show().startswith("Your reading list is empty")
 
 
 def test_not_a_browser(rl):
@@ -117,22 +117,15 @@ def test_comma_sentences_reach_read_later_through_the_agent(monkeypatch):
     assert not planner.one_tool("open youtube and set a timer for 5 minutes")
 
 
-def test_todo_list_tags_time_and_done(rl, monkeypatch):
-    from jarvis.core import reminders, store
+def test_reading_list_never_holds_todos_or_reminders(rl):
+    """v2: three separate lists. A to-do saved through the old reading-list entry points lands on the to-do list."""
+    from jarvis.core import reminders, todos
     readlater.add("https://e.com/paper")
-    assert readlater.run("todo", text="buy milk", tag="#Shopping", when="in 2 hours").startswith(
-        "Added to your to-do list: Buy milk #shopping. I'll remind you")
-    assert readlater.run("todo", text="call Ram") == "Added to your to-do list: Call Ram."
-    out = readlater.show()
-    assert out.splitlines()[:3] == ["📋 Your list (3)", "✅ To-do", "1. Buy milk  #shopping  ⏰ " + out.splitlines()[2].split("⏰ ")[1]]
-    assert "2. Call Ram" in out and "📖 Read later\n3. Title of paper (e.com)" in out
-    assert readlater.show(tag="shopping").count("\n1. ") == 1 and "Call Ram" not in readlater.show(tag="shopping")
-    sid = int(readlater.ordered()[0]["reminder"])
-    row = next(r for r in store.schedules_list(enabled_only=True) if r["id"] == sid)
-    assert row["kind"] == "task" and row["text"] == "todo: Buy milk"
-    assert readlater.run("done", n=1).startswith("✔ Done: Buy milk (removed). 2 left.")
-    assert sid not in [r["id"] for r in store.schedules_list(enabled_only=True)]  # its reminder is cancelled too
-    assert "Not saved" in readlater.run("todo", text="x", when="January 1 2020 3 am")
+    assert readlater.run("todo", text="buy milk", tag="#Shopping").startswith("Added to your to-do list: Buy milk")
+    reminders.add("call mom", "in 3 hours", use_llm=False)
+    assert [r["title"] for r in readlater.ordered()] == ["Title of paper"]
+    assert [r["title"] for r in todos.items()] == ["Buy milk"] and todos.items()[0]["tag"] == "shopping"
+    assert "call mom" not in readlater.show() and "Buy milk" not in readlater.show()
 
 
 def test_read_later_with_a_time_reminds_before_and_at_the_time(rl, monkeypatch):
@@ -150,19 +143,20 @@ def test_read_later_with_a_time_reminds_before_and_at_the_time(rl, monkeypatch):
     assert sent[-1][0] == "📖 Read it now" and "https://e.com/deep" in sent[-1][1]
 
 
-def test_random_nudge_for_items_without_a_time(rl, monkeypatch):
+def test_random_nudge_for_links_without_a_time(rl, monkeypatch):
     import time as _t
-    from jarvis.core import notify, store
+    from jarvis.core import notify, store, todos
     sent = []
     monkeypatch.setattr(notify, "notify", lambda title, text="", **k: sent.append((title, text, k)) or [])
     store.kv_set(readlater.NUDGE_KEY, "{}")
-    readlater.add_todo("clean the room")
+    todos.add("clean the room")  # to-dos never nudge: only the reading list does
+    readlater.add("https://e.com/attention")
     noon = _t.mktime((2026, 10, 27, 12, 0, 0, 0, 0, -1))
     assert readlater.nudge(noon) is None  # first: picks a random moment later today
     nxt = __import__("json").loads(store.kv_get(readlater.NUDGE_KEY))["next"]
     assert noon < nxt <= noon + 4 * 3600
     body = readlater.nudge(nxt + 1)
-    assert "Clean the room" in body and "done 1" in body and sent[-1][2]["source"] == "todo"
+    assert "Title of attention" in body and "mark 1 as read" in body and "Clean the room" not in body
     late = _t.mktime((2026, 10, 27, 22, 30, 0, 0, 0, -1))
     assert readlater.nudge(late) is None  # never at night
 
@@ -170,40 +164,33 @@ def test_random_nudge_for_items_without_a_time(rl, monkeypatch):
 def test_todo_routing():
     a = lambda t: fastpath.match(t).args  # noqa: E731
     assert a("add buy milk to my to-do list #shopping tomorrow 5 pm") == \
-        {"action": "todo", "text": "buy milk", "tag": "shopping", "when": "tomorrow 5 pm"}
+        {"action": "add", "task": "buy milk", "tag": "shopping", "due": "tomorrow 5 pm"}
     assert a("save this in the read later and I can read this after 2 hours") == \
         {"action": "add", "url": "", "when": "after 2 hours"}
     assert a("keep this link for read later, november 28, 5 pm")["when"] == "november 28, 5 pm"
     assert a("I will read this at 2 pm") == {"action": "add", "url": "", "when": "at 2 pm"}
-    assert a("show my to-do list") == {"action": "list", "text": "todo"}
+    assert a("show my to-do list") == {"action": "list"}
     assert a("show my list #work") == {"action": "list", "tag": "work"}
-    assert a("done 2") == {"action": "done", "n": 2} and a("mark 3 as complete") == {"action": "done", "n": 3}
+    assert a("done 2") == {"action": "done", "item": "2"} and a("mark 3 as complete") == {"action": "done", "item": "3"}
+    assert a("mark 2 as read in my reading list") == {"action": "done", "n": 2}  # the reading list keeps its own numbers
     assert fastpath.match("what to do") is None and fastpath.match("done") is None
 
 
-def test_one_list_has_reminders_and_follows_up_on_unfinished_tasks(rl, monkeypatch):
-    import time as _t
+def test_due_link_says_read_it_now_then_follows_up(rl, monkeypatch):
+    """A saved link with a time: 'read it now' at the time, then once 'not read yet' if it's still on the list."""
     from jarvis.core import notify, reminders, store
     sent = []
     monkeypatch.setattr(notify, "notify", lambda title, text="", **k: sent.append((title, text)) or [])
     monkeypatch.setattr("jarvis.core.sound.play", lambda *a, **k: None)
-    reminders.add("call mom", "in 3 hours", use_llm=False)
-    readlater.add_todo("submit the form", when_text="in 1 hour")
-    readlater.add("https://e.com/a")
-    out = readlater.show()
-    assert "⏰ Reminders\n1. call mom  ⏰" in out and "✅ To-do\n2. Submit the form" in out and "📖 Read later\n3." in out
-    # the to-do's time comes: 'do it now', then an hour later 'not done yet' (only if still open)
+    readlater.add("https://e.com/a", when_text="in 1 hour")
     task = next(r for r in store.schedules_list() if r["kind"] == "task")
     reminders.fire(task)
-    assert sent[-1][0] == "✅ Do it now" and "done 2" in sent[-1][1]
+    assert sent[-1][0] == "📖 Read it now" and "done 1" in sent[-1][1]
     follow = next(r for r in store.schedules_list() if r["text"].startswith(readlater.OVERDUE))
     assert follow["next_run"] == task["next_run"] + config.TASK_OVERDUE_S
     reminders.fire(follow)
-    assert sent[-1][0] == "⏳ Not done yet" and "You haven't finished this yet" in sent[-1][1]
-    # finishing it cancels the follow-up; a finished one is never nagged about
-    assert readlater.run("done", n=2).startswith("✔ Done: Submit the form (removed)")
+    assert sent[-1][0] == "⏳ Not done yet" and "You haven't read this yet" in sent[-1][1]
+    assert readlater.run("done", n=1).startswith("✔ Read: Title of a")
     assert not any(r["text"].startswith(readlater.OVERDUE) for r in store.schedules_list())
-    assert reminders.fire({**follow, "id": 999}) == []
-    # 'done 1' on a reminder cancels it
-    assert readlater.run("done", n=1).startswith("✔ Done: call mom (reminder cancelled)")
-    assert not [r for r in store.schedules_list() if r["kind"] == "reminder"]
+    assert reminders.fire({**follow, "id": 999}) == []  # a finished one is never nagged about
+

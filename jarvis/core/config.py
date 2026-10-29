@@ -578,6 +578,8 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
                  "every weekday", "alarm", "yaad dila", "yaad dilana", "सम्झाइदेउ", "याद दिला",
                  "my exam", "goal", "goals", "long task", "long term", "long-term", "days left", "check-in", "check in",
                  "ask me every day", "ask me daily", "project report", "postponed", "postpone"),
+    "todo": ("to-do", "to do list", "todo", "todos", "to-dos", "my tasks", "task list", "tasks", "my task",
+             "what's on today", "what do i have to do", "mark as done", "काम", "कार्य"),
 }
 # Descriptions offered to the fast classifier when no rule matched.
 TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
@@ -622,6 +624,7 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
     "usage": "LLM token usage, budget and API cost; daily digest of the day's activity",
     "browser": "open a website or URL in the browser",
     "jobs": "long writing jobs (essays, articles, reports) and background job status/cancel/resume",
+    "todo": "the to-do list: tasks to do with due date, priority, tag (add, list, today, done, delete, edit); no alarm",
     "schedule": "reminders and scheduled commands at a time or repeating; list or cancel them; long goals (exam "
                 "countdown, project check-ins, progress, report)",
     "image": "make pictures, charts from data, diagrams, audio (MP3) and short videos",
@@ -637,7 +640,7 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
 TOOL_GROUP_GLOSS: dict[str, str] = {
     "tracker": "money",
     "general": "time", "weather": "", "files": "folders", "filesearch": "",
-    "telegram": "phone", "toolsmith": "", "skills": "", "system": "slow, wifi",
+    "telegram": "phone", "toolsmith": "", "skills": "", "system": "wifi",
     "watch": "training", "automation": "backup", "audio": "volume", "display": "brightness",
     "screen": "screenshot", "power": "battery", "clipboard": "", "windows": "",
     "apps": "", "media": "music", "desktop": "wallpaper", "git": "", "dev": "tests", "codequality": "review",
@@ -646,6 +649,7 @@ TOOL_GROUP_GLOSS: dict[str, str] = {
     "knowledge": "code", "usage": "tokens", "browser": "",
     "jobs": "writing",
     "schedule": "remind",
+    "todo": "",
     "clock": "",
     "image": "",
     "daily": "math",

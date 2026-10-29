@@ -79,7 +79,7 @@ export class Api {
   musicDuck(on) { return this.request("/api/v1/music/duck", { method: "POST", body: { on } }); }
   suggest(n = 4) { return this.request(`/api/v1/suggest?n=${n}`); }
   tracker(kind, ref) { return this.request("/api/v1/tracker", { method: "POST", body: { kind, ref } }); }
-  todo(action, title, type = "") { return this.request("/api/v1/todo", { method: "POST", body: { action, title, type } }); }
+  todo(action, type = "todo", id = 0, title = "") { return this.request("/api/v1/todo", { method: "POST", body: { action, type, id, title } }); }
   dashboard(fresh = false) { return this.request(`/api/v1/dashboard${fresh ? "?fresh=1" : ""}`); }
   detail(panel) { return this.request(`/api/v1/dashboard/detail/${encodeURIComponent(panel)}`); }
   weatherFull() { return this.request("/api/v1/weather/full"); }

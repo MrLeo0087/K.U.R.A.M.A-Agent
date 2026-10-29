@@ -68,6 +68,12 @@ CREATE TABLE IF NOT EXISTS schedules (
     repeat TEXT DEFAULT 'none', created REAL, last_run REAL, enabled INTEGER DEFAULT 1, note TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_schedules_due ON schedules(enabled, next_run);
+CREATE TABLE IF NOT EXISTS todos (
+    id INTEGER PRIMARY KEY, title TEXT NOT NULL, tag TEXT DEFAULT '', priority INTEGER DEFAULT 2,
+    due REAL, due_time INTEGER DEFAULT 0, note TEXT DEFAULT '', created REAL NOT NULL, done_at REAL,
+    reminder_id INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_todos_open ON todos(done_at, due);
 CREATE TABLE IF NOT EXISTS profile (
     key TEXT PRIMARY KEY, value TEXT NOT NULL, source TEXT, created REAL, updated REAL,
     hits INTEGER DEFAULT 0, last_used REAL
@@ -631,6 +637,56 @@ def notes_between(t0: float, t1: float) -> list[dict]:
 
 # --- P9b: reminders / scheduled commands ---
 SCHEDULE_FIELDS = ("text", "kind", "next_run", "repeat", "last_run", "enabled", "note")
+
+
+# --- to-dos: tasks the user has to do (never ring by themselves; an optional linked reminder does) ---
+TODO_FIELDS = ("title", "tag", "priority", "due", "due_time", "note", "done_at", "reminder_id")
+
+
+def todo_add(title: str, tag: str = "", priority: int = 2, due: float | None = None, due_time: bool = False,
+             note: str = "", created: float | None = None) -> int:
+    with _lock:
+        if _conn is None:
+            init(_path)
+        cur = _conn.execute("INSERT INTO todos(title,tag,priority,due,due_time,note,created) VALUES (?,?,?,?,?,?,?)",  # type: ignore[union-attr]
+                            (title, tag, int(priority), due, int(bool(due_time)), note, created or time.time()))
+        return int(cur.lastrowid)
+
+
+def todo_update(todo_id: int, **fields: Any) -> None:
+    cols = [k for k in fields if k in TODO_FIELDS]
+    if cols:
+        _exec(f"UPDATE todos SET {', '.join(c + '=?' for c in cols)} WHERE id=?",
+              tuple(fields[c] for c in cols) + (int(todo_id),))
+
+
+def todo_get(todo_id: int) -> dict | None:
+    rows = _exec("SELECT * FROM todos WHERE id=?", (int(todo_id),))
+    return dict(rows[0]) if rows else None
+
+
+def todos_open() -> list[dict]:
+    """Open to-dos in list order: overdue/dated first (soonest), then undated; high priority first within a day."""
+    rows = _exec("SELECT * FROM todos WHERE done_at IS NULL ORDER BY due IS NULL, due, priority, created")
+    return [dict(r) for r in rows]
+
+
+def todos_done_between(t0: float, t1: float) -> list[dict]:
+    return [dict(r) for r in _exec("SELECT * FROM todos WHERE done_at>=? AND done_at<? ORDER BY done_at", (t0, t1))]
+
+
+def todos_clear_done() -> int:
+    with _lock:
+        if _conn is None:
+            init(_path)
+        return _conn.execute("DELETE FROM todos WHERE done_at IS NOT NULL").rowcount  # type: ignore[union-attr]
+
+
+def todo_delete(todo_id: int) -> bool:
+    with _lock:
+        if _conn is None:
+            init(_path)
+        return _conn.execute("DELETE FROM todos WHERE id=?", (int(todo_id),)).rowcount > 0  # type: ignore[union-attr]
 
 
 def schedule_add(text: str, kind: str, next_run: float, repeat: str = "none", created: float | None = None,

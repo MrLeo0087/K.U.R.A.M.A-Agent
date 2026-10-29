@@ -1,10 +1,10 @@
-"""My list = reminders + to-dos + read later in ONE list, 0 tokens. To-dos and links live in a real Excel sheet
-(~/Documents/KURAMA/read_later.xlsx); reminders stay in the scheduler table and are shown (and finished) here too.
+"""Reading list ("read later"), 0 tokens: links saved in a real Excel sheet (~/Documents/KURAMA/read_later.xlsx).
+To-dos are a separate list (todos.py, KURAMA's database) and reminders are the scheduler (reminders.py); the old
+combined sheet's to-do rows are moved out once (todos.migrate_from_sheet).
 
-Each row is a to-do ("add buy milk to my to-do list #shopping tomorrow 5 pm") or a link to read ("read this later
-at 2 pm"). Optional tag and due time: a due item becomes a scheduler reminder (kind 'task': heads-up 10 min before,
-then "do it now"); items without a time get an occasional random nudge (nudge(), at most NUDGE_PER_DAY a day,
-NUDGE_HOURS only). Marking an item done REMOVES it from the sheet (and cancels its reminder).
+Each row is a link to read ("read this later at 2 pm"), with an optional tag and due time: a due link becomes a
+scheduler 'task' (heads-up 10 min before, then "read it now"); links without a time get an occasional random nudge
+(nudge(), at most NUDGE_PER_DAY a day, NUDGE_HOURS only). Marking a link read REMOVES it from the sheet.
 
 "read this later" saves the highlighted link(s); with no link selected and a browser in front, it saves the page
 that is open there (its URL comes from the browser's own history file, no key presses; any highlighted text on the
@@ -194,33 +194,18 @@ def add(url: str, title: str = "", note: str = "", tag: str = "", when_text: str
 
 
 def add_todo(text: str, tag: str = "", when_text: str = "") -> str:
-    text = " ".join((text or "").split()).strip(" .,")
-    if not text:
-        return "What should I add to your to-do list?"
-    return _put("todo", text[:1].upper() + text[1:], "", tag, when_text)
-
-
-def _reminders() -> list[dict]:
-    """Reminders set with 'remind me to ...' (scheduler), as list rows."""
-    out = []
-    for r in store.schedules_list(enabled_only=True, limit=50):
-        if r.get("kind") != "reminder":
-            continue
-        rep = (r.get("repeat") or "none")
-        out.append({"type": "reminder", "title": r["text"], "link": "", "tag": "", "saved": "", "note": "",
-                    "due": datetime.fromtimestamp(r["next_run"]).strftime("%Y-%m-%d %H:%M"),
-                    "reminder": str(r["id"]), "repeat": "" if rep == "none" else rep})
-    return out
+    """Old entry point: to-dos live in todos.py now."""
+    from jarvis.core import todos
+    return todos.add(text, when_text, tag)
 
 
 def ordered(tag: str = "") -> list[dict]:
-    """The numbering everyone uses: reminders, then to-dos, then reading; due ones soonest first, then newest."""
+    """The reading list in the numbering everyone uses: due links soonest first, then the newest."""
+    from jarvis.core import todos
+    todos.ensure_migrated()  # the old sheet's to-do rows move to the to-do list (once)
     tag = tag.strip().lstrip("#").lower()
-    rows = [r for r in _rows() if not tag or r["tag"] == tag]
-    key = lambda r: (r["due"] or "9999", "")  # noqa: E731
-    todo = sorted([r for r in rows if r["type"] != "read"], key=key)
-    read = sorted([r for r in rows if r["type"] == "read"], key=key)
-    return ([] if tag else _reminders()) + todo + read
+    rows = [r for r in _rows() if r["type"] == "read" and (not tag or r["tag"] == tag)]
+    return sorted(rows, key=lambda r: (r["due"] or "9999", ""))
 
 
 def is_open(kind: str, title: str, link: str = "") -> int:
@@ -237,47 +222,28 @@ def unread() -> list[dict]:
 
 def _item(i: int, r: dict) -> str:
     extra = (f"  #{r['tag']}" if r["tag"] else "") + (f"  ⏰ {_due_words(r['due'])}" if r["due"] else "")
-    if r["type"] == "reminder":
-        return f"{i}. {r['title'][:90]}  ⏰ {_due_words(r['due'])}" + (f" (repeats {r['repeat']})" if r.get("repeat") else "")
-    if r["type"] == "read":
-        site = f" ({r['link'].split('/')[2].removeprefix('www.')})" if r["link"].count("/") >= 2 else ""
-        return f"{i}. {r['title'][:80]}{site}{extra}\n    {r['link']}"
-    return f"{i}. {r['title'][:90]}{extra}"
+    site = f" ({r['link'].split('/')[2].removeprefix('www.')})" if r["link"].count("/") >= 2 else ""
+    return f"{i}. {r['title'][:80]}{site}{extra}\n    {r['link']}"
 
 
 def show(limit: int = 20, tag: str = "", kind: str = "") -> str:
+    if kind == "todo":  # old callers: the to-do list is its own list now
+        from jarvis.core import todos
+        return todos.show(tag)
     rows = ordered(tag)
-    want = ("reminder", "todo") if kind == "todo" else (kind,) if kind else ()  # 'to-do' = reminders + tasks
-    if want and rows and not any(r["type"] in want for r in rows):
-        return ("Nothing on your to-do list: no tasks or reminders." if kind == "todo" else "Nothing there.") + \
-            " Say 'schedule reading the book at 11:45 pm' or 'add buy milk to my to-do list'."
     if not rows:
-        return ("Your list is empty." + (f" Nothing tagged #{tag}." if tag else "")
-                + " Say 'add <task> to my to-do list', 'remind me to ... at 5 pm' or select a link and say 'read this later'.")
-    lines, n = [f"📋 Your list ({len(rows)})" + (f" #{tag.lstrip('#')}" if tag else "")], 0
-    for label, typ in (("⏰ Reminders", "reminder"), ("✅ To-do", "todo"), ("📖 Read later", "read")):
-        part = [r for r in rows if r["type"] == typ]
-        if want and typ not in want:
-            n += len(part)
-            continue
-        if part:
-            lines.append(label)
-            for r in part:
-                n += 1
-                if n <= limit:
-                    lines.append(_item(n, r))
+        return ("Your reading list is empty." + (f" Nothing tagged #{tag}." if tag else "")
+                + " Select a link (or open a page) and say 'read this later'.")
+    lines = [f"📖 Read later ({len(rows)})" + (f" #{tag.lstrip('#')}" if tag else "")]
+    lines += [_item(i, r) for i, r in enumerate(rows[:limit], 1)]
     if len(rows) > limit:
         lines.append(f"…and {len(rows) - limit} more in {path().name}.")
-    lines.append("Say 'done <number>' when you finish one (it's removed), 'open <number>' for a link.")
+    lines.append("Say 'open <number>' to read one, 'mark <number> as read' when you're done.")
     return "\n".join(lines)
 
 
 def _pick(n: int, kind: str = "") -> dict | None:
     rows = ordered()
-    if kind == "read":  # 'open 1' with only links in mind: count among the links if the number points at a to-do
-        if 1 <= n <= len(rows) and rows[n - 1]["type"] != "read":
-            reads = unread()
-            return reads[n - 1] if 1 <= n <= len(reads) else None
     return rows[n - 1] if 1 <= n <= len(rows) else None
 
 
@@ -295,23 +261,15 @@ def _cancel(r: dict) -> None:
 
 
 def _drop(r: dict) -> None:
-    if r["type"] == "reminder":
-        _cancel_id(r)
-        return
     with sheets.locked(path()):
         _save([x for x in _rows() if not _same(x, r)])
     _cancel(r)
 
 
-def _cancel_id(r: dict) -> None:
-    if (r.get("reminder") or "").isdigit():
-        store.schedule_update(int(r["reminder"]), enabled=0)
-
-
 def open_item(n: int = 1) -> str:
     r = _pick(n, "read")
     if r is None or r["type"] != "read":
-        return f"There's no link {n} in your list." if _rows() else "Your list is empty."
+        return f"There's no link {n} in your reading list." if ordered() else "Your reading list is empty."
     from jarvis.tools.general import open_url
     open_url._open(r["link"])
     _drop(r)
@@ -326,11 +284,10 @@ def done(n: int, kind: str = "") -> str:
     else:
         r = _pick(n)
     if r is None:
-        return f"There's no item {n} in your list."
+        return f"There's no link {n} in your reading list."
     _drop(r)
     left = len(ordered())
-    what = "reminder cancelled" if r["type"] == "reminder" else "removed"
-    return f"✔ Done: {r['title']} ({what}). {left} left." if left else f"✔ Done: {r['title']}. Your list is empty now 🎉"
+    return f"✔ Read: {r['title']} (removed). {left} left." if left else f"✔ Read: {r['title']}. Your reading list is empty now 🎉"
 
 
 mark_read = done
@@ -349,7 +306,7 @@ def _words(s: str) -> set[str]:
         "the", "and", "for", "from", "list", "todo", "task", "my", "paper", "article", "link", "page", "video", "post"}
 
 
-def find(text: str, kinds: tuple[str, ...] = ("reminder", "todo", "read")) -> dict | None:
+def find(text: str, kinds: tuple[str, ...] = ("read",)) -> dict | None:
     """The list item a loose title means ('the review 30 day study plan' -> 'Review 30-day exam plan')."""
     want = _words(text)
     if not want:
@@ -372,23 +329,20 @@ def find(text: str, kinds: tuple[str, ...] = ("reminder", "todo", "read")) -> di
 def remove_named(text: str) -> str:
     r = find(text)
     if r is None:
-        return f"I couldn't find '{text}' in your list.\n" + show(kind="todo")
+        return f"I couldn't find '{text}' in your reading list.\n" + show()
     _drop(r)
-    return f"Removed: {r['title']}. " + (f"{len(ordered())} left." if ordered() else "Your list is empty now 🎉")
+    return f"Removed: {r['title']}. " + (f"{len(ordered())} left." if ordered() else "Your reading list is empty now 🎉")
 
 
 def reschedule(text: str, when_text: str) -> str:
-    """'move reading the book to 1 am': a new time for a to-do or a reminder (the old alert is replaced)."""
-    r = find(text, ("reminder", "todo", "read"))
+    """'move the attention paper to 1 am': a new reading time for a saved link (the old alert is replaced)."""
+    r = find(text)
     if r is None:
-        return f"I couldn't find '{text}' in your list.\n" + show(kind="todo")
+        return f"I couldn't find '{text}' in your reading list.\n" + show()
     from jarvis.core import when
     w = when.resolve(when_text, datetime.now(), use_llm=False)
     if w is None or w.ts <= time.time():
         return f"I couldn't use the time '{when_text}'" + (" (it's already past)." if w else ".")
-    if r["type"] == "reminder":
-        store.schedule_update(int(r["reminder"]), next_run=w.ts, enabled=1)
-        return f"Reminder '{r['title']}' moved to {when.describe(w.ts)}."
     with sheets.locked(path()):
         rows = _rows()
         x = next((y for y in rows if _same(y, r)), None)
@@ -401,13 +355,10 @@ def reschedule(text: str, when_text: str) -> str:
 
 
 def rename(text: str, new: str) -> str:
-    r = find(text, ("reminder", "todo", "read"))
+    r = find(text)
     if r is None:
-        return f"I couldn't find '{text}' in your list."
+        return f"I couldn't find '{text}' in your reading list."
     new = new.strip(" .'\"")[:200]
-    if r["type"] == "reminder":
-        store.schedule_update(int(r["reminder"]), text=new)
-        return f"Renamed the reminder to '{new}'."
     with sheets.locked(path()):
         rows = _rows()
         x = next((y for y in rows if _same(y, r)), None)
@@ -426,56 +377,23 @@ def rename(text: str, new: str) -> str:
     return f"Renamed '{r['title']}' to '{new}'."
 
 
-def clear(kind: str = "todo") -> str:
-    """'remove all my tasks': every to-do and reminder (kind 'todo'), or the reading list (kind 'read')."""
-    kinds = ("reminder", "todo") if kind == "todo" else ("read",)
-    gone = [r for r in ordered() if r["type"] in kinds]
+def clear(kind: str = "read") -> str:
+    """'empty my reading list' (kind 'todo' = the to-do list, for old callers)."""
+    if kind == "todo":
+        from jarvis.core import todos
+        return todos.clear()
+    gone = ordered()
     for r in gone:
         _drop(r)
     if not gone:
-        return "Nothing to remove: your to-do list is already empty." if kind == "todo" else "Your reading list is already empty."
+        return "Your reading list is already empty."
     return f"Removed {len(gone)}: " + ", ".join(r["title"][:40] for r in gone) + "."
 
 
 def today() -> str:
-    """'What's on today?': reminders + to-dos, today's classes, and the running long tasks, in one short answer."""
-    parts = []
-    rows = [r for r in ordered() if r["type"] in ("reminder", "todo")]
-    parts.append(show(kind="todo") if rows else "✅ To-do: nothing yet.")
-    try:
-        from jarvis.core import study
-        if study.classes():
-            parts.append(study.show("today"))
-    except Exception:
-        pass
-    try:
-        from jarvis.core import goals
-        live = [g for g in goals.all_goals() if g["status"] == "active"]
-        if live:
-            parts.append("📂 Long tasks:\n" + "\n".join(goals.status_text(g) for g in live))
-    except Exception:
-        pass
-    return "\n\n".join(parts)
-
-
-PENDING_KEY = "todo_pending"  # 'schedule a task' with no task/time: the next short reply fills it in
-
-
-def ask_details(text: str = "") -> str:
-    store.kv_set(PENDING_KEY, json.dumps({"ts": time.time(), "text": text}))
-    return "What should I add, and when? For example: 'reading the book at 12:15 am'."
-
-
-def pending() -> bool:
-    try:
-        d = json.loads(store.kv_get(PENDING_KEY) or "{}")
-    except ValueError:
-        return False
-    return bool(d) and time.time() - float(d.get("ts", 0)) <= 180
-
-
-def clear_pending() -> None:
-    store.kv_delete(PENDING_KEY)
+    """Old entry point: 'what's on today' is the to-do list's day view now."""
+    from jarvis.core import todos
+    return todos.day()
 
 
 def nudge(now: float | None = None) -> str | None:
@@ -514,11 +432,8 @@ def nudge(now: float | None = None) -> str | None:
     except ValueError:
         age = 0
     since = "today" if age < 1 else "yesterday" if age < 2 else f"{int(age)} days ago"
-    if r["type"] == "read":
-        title, body = "📖 Still want to read this?", f"{r['title']}\n{r['link']}\nYou saved it {since}. Got a few minutes?"
-    else:
-        title, body = "📌 From your to-do list", f"{r['title']}\nYou added it {since}. Can you do it now?"
-    body += f"\n(Say 'done {n}' when it's finished.)"
+    title, body = "📖 Still want to read this?", f"{r['title']}\n{r['link']}\nYou saved it {since}. Got a few minutes?"
+    body += f"\n(Say 'mark {n} as read' when you've read it.)"
     from jarvis.core import notify
     notify.notify(title, body, level="info", source="todo", telegram=True)
     return body
@@ -591,9 +506,9 @@ def run(action: str = "add", url: str = "", n: int = 0, text: str = "", tag: str
         if url.strip() and _given(url.strip()):
             return add(url, tag=tag, when_text=when)
         return save_this(tag, when)
-    if action == "todo":
-        clear_pending()
-        return add_todo(text, tag, when)
+    if action in ("todo", "today", "ask"):  # old callers: the to-do list is todos.py now
+        from jarvis.core import todos
+        return todos.day() if action == "today" else todos.add(text if action == "todo" else "", when, tag)
     if action == "last":
         return last()
     if action == "open":
@@ -601,7 +516,7 @@ def run(action: str = "add", url: str = "", n: int = 0, text: str = "", tag: str
     if action in ("done", "read"):
         if text and not n and text not in ("read", "todo"):
             return remove_named(text)
-        return done(n or 1, "read" if text == "read" or action == "read" else "")
+        return done(n or 1)
     if action == "remove":
         return remove_named(text) if text and not n else remove(n or 1)
     if action == "reschedule":
@@ -610,9 +525,5 @@ def run(action: str = "add", url: str = "", n: int = 0, text: str = "", tag: str
         old, _, new = text.partition(" » ")
         return rename(old, new)
     if action == "clear":
-        return clear(text or "todo")
-    if action == "today":
-        return today()
-    if action == "ask":
-        return ask_details(text)
-    return show(tag=tag, kind={"todo": "todo", "read": "read", "reminder": "reminder"}.get(text, ""))
+        return clear(text or "read")
+    return show(tag=tag, kind="todo" if text == "todo" else "")

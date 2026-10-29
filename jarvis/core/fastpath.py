@@ -2385,13 +2385,15 @@ _TD_CMD = re.compile(r"\b(?:shut\s*down|restart|reboot|run|command|script|backup
 
 
 def todo_now_intent(t: str) -> Intent | None:
-    """'schedule a work for 11:41 pm for reading the book', 'schedule reading the book at 11:45 am' -> a to-do with a
-    time (heads-up 10 min before + at the time; NOT schedule_command, which runs computer commands and asks first).
-    'is there anything in my to-do', 'what is my reminder today', 'what is the current work I have to do',
-    'any task for me today' -> the to-do list (reminders + tasks)."""
-    from jarvis.core import readlater
+    """Three separate lists, 0 tokens: the TO-DO list (tasks to do; never rings), REMINDERS (alerts at a time) and the
+    READING list. 'schedule reading the book at 11:45 pm' -> a reminder (NOT schedule_command, which runs computer
+    commands); 'is there anything in my to-do', 'what is the current work I have to do' -> the to-do list; 'what are
+    my reminders' -> the reminders; 'remove/move/rename X' -> whichever list X is on."""
+    from jarvis.core import readlater, reminders, todos
     low = t.strip(" .!?").lower()
-    L = lambda a, **k: Intent("todo", "read_later", "browser", {"action": a, **k})  # noqa: E731
+    T = lambda a, **k: Intent("todo", "todo", "todo", {"action": a, **k})  # noqa: E731  (to-do list)
+    R = lambda a, **k: Intent("readlater", "read_later", "browser", {"action": a, **k})  # noqa: E731  (reading list)
+    S = lambda a, **k: Intent("schedules", "schedules", "schedule", {"action": a, **k})  # noqa: E731  (reminders)
     lead = r"(?:okay\W+|ok\W+|so\W+|please\W+|kurama\W+|can\s+you\s+|could\s+you\s+|now\W+)*"
     from jarvis.core import pageread
     if pageread.waiting() and yes_no(t) == "no":
@@ -2410,76 +2412,102 @@ def todo_now_intent(t: str) -> Intent | None:
             and not re.search(r"\b(?:link|save|store|bookmark|open|close|read\s+later|reading\s+list|qr|screenshot|copy|when|changes?|"
                               r"updates?|watch|monitor|notify|alert|https?)\b", low):
         return Intent("page", "page_summary", "browser", {"action": "summary"})
-    # 'I already read the attention is all you need paper' = that reading-list / to-do item is done
+    # 'I already read the attention is all you need paper' = that reading-list link is done
     if (m := re.fullmatch(lead + r"i\s+(?:have\s+|had\s+)?(?:already\s+|just\s+)?(?:read|finished(?:\s+reading)?|completed|done\s+reading)\s+"
                           r"(?:the\s+)?(?P<x>.+?)(?:\s+(?:already|now|today))?", low, I)) and readlater.find(m.group("x")):
-        return L("remove", text=m.group("x"))
+        return R("remove", text=m.group("x"))
     if (m := re.fullmatch(lead + r"(?:mark|set|tick)\s+(?:the\s+)?(?P<n>first|second|third|last|1st|2nd|3rd|\d{1,2})\s*(?:one|task|item|link|article)?"
                           r"\s+(?:in|on|from)\s+(?:my\s+|the\s+)?(?:read(?:ing)?[\s-]*later(?:\s+list)?|reading\s+list)\s+(?:as\s+)?(?:done|read|finished|complete(?:d)?)", low, I)):
         n = _nth(m.group("n"))
-        return L("done", n=n if n > 0 else len(readlater.unread()), text="read")
-    # 'schedule a task' was asked without details: this short reply is the task (and maybe its time)
-    if readlater.pending() and len(low.split()) <= 14 and not t.strip().endswith("?") and not re.match(
+        return R("done", n=n if n > 0 else len(readlater.unread()))
+    # 'add a task' was asked without details: this short reply is the task (with an optional due date)
+    if todos.pending() and len(low.split()) <= 14 and not t.strip().endswith("?") and not re.match(
             r"(?:no|cancel|never\s*mind|stop|what|why|how|open|close|show)\b", low):
         extra, rest = _extras(t.strip(" .!"))
         task = re.sub(r"^(?:it'?s|it\s+is|to|for)\s+", "", rest.strip(" ,."), flags=I)
         if len(task) >= 2:
-            return L("todo", text=task, **extra)
-    if readlater.pending() and re.match(r"(?:no|cancel|never\s*mind)\b", low):
-        readlater.clear_pending()
-    # 'what's on today' = the whole day: to-do + reminders, classes, long tasks
+            return T("add", task=task, **_todo_extra(extra))
+    if todos.pending() and re.match(r"(?:no|cancel|never\s*mind)\b", low):
+        todos.clear_pending()
+    # 'what's on today' = the whole day: to-dos, reminders, classes, long tasks
     if re.fullmatch(lead + r"(?:what(?:'s|\s+is)\s+(?:on\s+)?(?:for\s+)?today|what\s+(?:do\s+i\s+have|have\s+i\s+got)\s+today|"
                     r"(?:my|today'?s)\s+(?:plan|schedule|day)(?:\s+today)?|what(?:'s|\s+is)\s+(?:my|the)\s+(?:plan|schedule)\s+(?:for\s+)?today|"
                     r"how\s+(?:does|is)\s+my\s+day\s+look(?:ing)?)", low, I):
-        return L("today")
-    # remove everything / one named item
+        return T("today")
+    # remove everything: the to-do list or the reading list (reminders are cancelled one by one)
     if m := re.fullmatch(lead + r"(?:remove|delete|clear|cancel|erase|empty)\s+(?:all|every|everything)?\s*(?:of\s+)?(?:the\s+|my\s+)?"
-                         r"(?P<k>tasks?|to[\s-]?dos?|reminders?|to[\s-]?do\s*list|list|reading\s+list|read\s+later(?:\s+list)?)(?:\s+for\s+me)?", low, I):
+                         r"(?P<k>tasks?|to[\s-]?dos?|to[\s-]?do\s*list|list|reading\s+list|read\s+later(?:\s+list)?)(?:\s+for\s+me)?", low, I):
         if re.search(r"\ball\b|\bevery|\bclear\b|\bempty\b|\blist\b", low):
-            return L("clear", text="read" if re.search(r"read", m.group("k")) else "todo")
+            return R("clear", text="read") if re.search(r"read", m.group("k")) else T("clear")
     rm = r"(?:remove|delete|cancel|drop|forget|take|cross|strike|tick|clear|done|finish(?:ed)?|complete(?:d)?)"
     if m := re.fullmatch(lead + r"(?P<v>" + rm + r")\s+(?:off\s+|with\s+)?(?:the\s+|my\s+)?(?P<n>first|second|third|fourth|fifth|last|1st|2nd|3rd|4th|5th|"
-                         r"(?:number|no\.?|item)\s*\d{1,2}|\d{1,2})(?:\s+(?:one|task|item|reminder|to[\s-]?do|work))?(?:\s+(?:from|in|on|off)\s+.*)?", low, I):
+                         r"(?:number|no\.?|item)\s*\d{1,2}|\d{1,2})(?:\s+(?:one|task|item|reminder|to[\s-]?do|work))?(?P<tail>\s+(?:from|in|on|off)\s+.*)?", low, I):
         n = _nth(m.group("n"))
+        if re.search(_RL_LIST, m.group("tail") or "", I):
+            return R("done", n=n if n > 0 else len(readlater.ordered()))
         done = re.match(r"(?:done|finish|complete|tick)", m.group("v"))
-        return L("done" if done else "remove", n=n if n > 0 else len(readlater.ordered()))
+        return T("done" if done else "delete", item=str(n if n > 0 else len(todos.items())))
     if m := re.fullmatch(lead + r"(?:no\W+)*(?:actually\W+)?" + rm + r"\s+(?:off\s+|out\s+)?(?:the\s+|my\s+)?(?P<x>.+?)\s+"
-                         r"(?:from|off|out\s+of|in)\s+.*?\b(?:to[\s-]?do(?:\s*list)?|list|tasks?|reminders?)\b.*", low, I):
-        return L("remove", text=m.group("x"))
-    if (m := re.fullmatch(lead + r"(?:no\W+)*(?:actually\W+)?" + rm + r"\s+(?:the\s+|my\s+)?(?P<x>.+?)(?:\s+(?:task|reminder|to[\s-]?do))?", low, I)) \
-            and not _LONG_WORDS.search(low) and readlater.find(m.group("x"), ("reminder", "todo")):
-        return L("remove", text=m.group("x"))
-    if (m := re.fullmatch(lead + r"(?:move|change|shift|reschedule|update|push|postpone|set)\s+(?:the\s+|my\s+)?(?P<x>.+?)(?:\s+(?:task|reminder|to[\s-]?do))?"
-                          r"\s+(?:to|for|at|till|until)\s+(?P<w>.+)", low, I)) and not _LONG_WORDS.search(low) \
-            and readlater.find(m.group("x"), ("reminder", "todo", "read")):
+                         r"(?:from|off|out\s+of|in)\s+.*?\b(?P<k>to[\s-]?do(?:\s*list)?|list|tasks?|reminders?)\b.*", low, I):
+        if m.group("k").startswith("reminder"):
+            return S("cancel", item=m.group("x"))
+        return T("delete", item=m.group("x"))
+    if (m := re.fullmatch(lead + r"(?:no\W+)*(?:actually\W+)?" + rm + r"\s+(?:the\s+|my\s+)?(?P<x>.+?)(?:\s+(?P<k>task|reminder|to[\s-]?do|alarm))?", low, I)) \
+            and not _LONG_WORDS.search(low):
+        x = m.group("x")
+        if m.group("k") not in ("reminder", "alarm") and todos.find(x):
+            return T("done" if re.match(r"(?:done|finish|complete|tick)", low.split()[0] if low else "") else "delete", item=x)
+        if reminders.named(x):
+            return S("cancel", item=x)
+    if (m := re.fullmatch(lead + r"(?:move|change|shift|reschedule|update|push|postpone|set)\s+(?:the\s+|my\s+)?(?P<x>.+?)(?:\s+(?P<k>task|reminder|to[\s-]?do|alarm))?"
+                          r"\s+(?:to|for|at|till|until)\s+(?P<w>.+)", low, I)) and not _LONG_WORDS.search(low):
         from jarvis.core import when
-        if when.resolve(m.group("w"), use_llm=False):
-            return L("reschedule", text=m.group("x"), when=m.group("w"))
-    if (m := re.fullmatch(lead + r"rename\s+(?:the\s+|my\s+)?(?P<x>.+?)(?:\s+(?:task|reminder|to[\s-]?do))?\s+(?:to|as)\s+(?P<y>.+)", t.strip(" .!?"), I)) \
-            and readlater.find(m.group("x"), ("reminder", "todo", "read")):
-        return L("rename", text=m.group("x") + " » " + m.group("y"))
+        x, w = m.group("x"), m.group("w")
+        if when.resolve(w, use_llm=False):
+            if m.group("k") not in ("reminder", "alarm") and todos.find(x):
+                return T("edit", item=x, due=w)
+            if reminders.named(x):
+                return S("move", item=x, when=w)
+            if readlater.find(x):
+                return R("reschedule", text=x, when=w)
+    if m := re.fullmatch(lead + r"rename\s+(?:the\s+|my\s+)?(?P<x>.+?)(?:\s+(?P<k>task|reminder|to[\s-]?do))?\s+(?:to|as)\s+(?P<y>.+)", t.strip(" .!?"), I):
+        x, y = m.group("x"), m.group("y")
+        if (m.group("k") or "").lower() != "reminder" and todos.find(x):
+            return T("edit", item=x, task=y)
+        if reminders.named(x):
+            return S("rename", item=x, text=y)
+        if readlater.find(x):
+            return R("rename", text=x + " » " + y)
     if (m := re.fullmatch(lead + r"(?:i\s+(?:have\s+)?(?:finished|completed|did|done)|i'?m\s+done\s+with|done\s+with|mark)\s+(?:the\s+)?(?P<x>.+?)"
                           r"(?:\s+as\s+(?:done|complete(?:d)?|finished))?", low, I)) and not re.search(r"\d", m.group("x")[:3]) \
-            and readlater.find(m.group("x"), ("reminder", "todo")):
-        return L("remove", text=m.group("x"))
-    if re.fullmatch(r"(?:okay\W+|ok\W+|so\W+|please\W+|kurama\W+|can\s+you\s+|could\s+you\s+)*(?:"
-                    r"(?:is|are)\s+there\s+(?:anything|something|any\s+(?:tasks?|work|to[\s-]?dos?|reminders?))\s+(?:in|on|for)\s+(?:me\s+)?(?:my\s+|the\s+)?"
+            and todos.find(m.group("x")):
+        return T("done", item=m.group("x"))
+    # 'what's on my to-do', 'any task for me today' -> the to-do list; 'my reminders' -> the reminders; both -> the day
+    if len(low.split()) <= 18 and re.search(r"\breminders?\b", low) and re.search(r"\b(?:tasks?|work|to[\s-]?dos?)\b", low) \
+            and re.search(r"\b(?:show|what|tell|give|list|any)\b", low) and not re.search(r"\b(?:add|remove|delete|cancel|set)\b", low):
+        return T("today")
+    if re.fullmatch(lead + r"(?:what(?:'s|\s+is|\s+are)?\s+(?:my|the)\s+reminders?(?:\s+(?:for\s+)?today)?|(?:show|list|tell|give)\s+(?:me\s+)?"
+                    r"(?:my\s+|the\s+|all\s+)?(?:reminders?|alarms?)(?:\s+(?:for\s+)?today)?|(?:is|are)\s+there\s+any\s+reminders?(?:\s+(?:today|for\s+me))?|"
+                    r"(?:my\s+)?reminders?(?:\s+today)?)", low, I):
+        return S("list")
+    if re.fullmatch(lead + r"(?:"
+                    r"(?:is|are)\s+there\s+(?:anything|something|any\s+(?:tasks?|work|to[\s-]?dos?))\s+(?:in|on|for)\s+(?:me\s+)?(?:my\s+|the\s+)?"
                     r"(?:to[\s-]?do(?:\s*list)?|list|today|now)(?:\s+(?:for\s+)?today)?"
-                    r"|(?:is|are)\s+there\s+any\s+(?:tasks?|work|to[\s-]?dos?|reminders?)(?:\s+for\s+me)?(?:\s+(?:today|now|left))?"
+                    r"|(?:is|are)\s+there\s+any\s+(?:tasks?|work|to[\s-]?dos?)(?:\s+for\s+me)?(?:\s+(?:today|now|left))?"
                     r"|what(?:'s|\s+is|\s+are)?\s+(?:in|on)\s+my\s+to[\s-]?do(?:\s*list)?(?:\s+today)?"
-                    r"|what(?:'s|\s+is|\s+are)?\s+(?:my|the|today'?s)\s+(?:reminders?|tasks?|to[\s-]?dos?)(?:\s+(?:for\s+)?today)?"
+                    r"|what(?:'s|\s+is|\s+are)?\s+(?:my|the|today'?s)\s+(?:tasks?|to[\s-]?dos?)(?:\s+(?:for\s+)?today)?"
                     r"|what(?:'s|\s+is|\s+are)?\s+(?:the\s+)?(?:current\s+|next\s+)?(?:work|tasks?|things?)\s+(?:that\s+)?i\s+(?:have|need|got)\s+to\s+do(?:\s+(?:today|now|next))?"
                     r"|what\s+do\s+i\s+(?:have|need)\s+to\s+do(?:\s+(?:today|now|next))?"
-                    r"|(?:show|tell|give)\s+(?:me\s+)?(?:my\s+|the\s+|today'?s\s+)?(?:reminders?|tasks?|to[\s-]?dos?)(?:\s+(?:and|&)\s+(?:the\s+)?"
-                    r"(?:current\s+)?(?:work|tasks?)(?:\s+i\s+have\s+to\s+do)?)?(?:\s+(?:for\s+)?today)?"
-                    r"|(?:my\s+)?(?:tasks?|to[\s-]?dos?|reminders?)\s+(?:for\s+)?today)", low, I):
-        return Intent("todo", "read_later", "browser", {"action": "list", "text": "todo"})
+                    r"|(?:show|tell|give)\s+(?:me\s+)?(?:my\s+|the\s+|today'?s\s+)?(?:tasks?|to[\s-]?dos?)(?:\s+(?:for\s+)?today)?"
+                    r"|(?:my\s+)?(?:tasks?|to[\s-]?dos?)\s+(?:for\s+)?today)", low, I):
+        return T("list")
     if len(low.split()) <= 12 and re.search(r"\b(?:tasks?|todos?|to-dos?|(?:my|any|the)\s+to\s+dos?)\b", low) and re.search(
             r"\b(?:any|anything|is\s+there|are\s+there|what|which|show|list|tell|have\s+i|do\s+i)\b", low) and not re.search(
             r"\b(?:long|code|coding|add|schedule|plan|remove|delete|clear|cancel|set|create|make|remind\s+me)\b", low):
-        return L("list", text="todo")
+        return T("list")
     if re.fullmatch(lead + r"(?:schedule|plan|add)\s+(?:a|the|my|one|new)?\s*(?:task|work|to[\s-]?do|thing)(?:\s+for\s+(?:me|the\s+task))?", low, I):
-        return L("ask", text=t)
+        return T("add", task="")  # asks what; the next short reply is the task
+    # 'schedule reading the book at 11:45 pm' = an alert at that time: a reminder (a to-do never rings)
     m = re.fullmatch(r"(?:okay\W+|ok\W+|so\W+|please\W+|kurama\W+|can\s+you\s+|could\s+you\s+)*(?:schedule|plan)\s+(?P<x>.+)", low, I)
     if not m or _TD_CMD.search(m.group("x")) or re.search(r"\b(?:timer|alarm|meeting\s+with\s+kurama)\b", low):
         return None
@@ -2494,7 +2522,12 @@ def todo_now_intent(t: str) -> Intent | None:
     task = re.sub(r"^(?:tasks?|works?)\s+(?:for|to)\s+", "", task, flags=I)
     if len(task) < 2:
         return None
-    return Intent("todo", "read_later", "browser", {"action": "todo", "text": task, **extra})
+    return Intent("remind", "add_reminder", "schedule", {"text": task, "when": extra["when"]}, task)
+
+
+def _todo_extra(extra: dict) -> dict:
+    """_extras() {'tag', 'when'} -> the todo tool's {'tag', 'due'}."""
+    return {k: v for k, v in (("tag", extra.get("tag", "")), ("due", extra.get("when", ""))) if v}
 
 
 # --- goals: long tasks (weeks-months): countdowns, daily check-ins, progress, report (0 tokens) ---
@@ -2551,8 +2584,8 @@ def goal_intent(t: str) -> Intent | None:
     low = t.strip(" .!?").lower()
     if _LONG_WORDS.search(low):
         return i
-    from jarvis.core import readlater
-    if readlater.find(low, ("reminder", "todo")) or re.search(r"\b(?:to[\s-]?do|reminders?|tasks?)\b", low):
+    from jarvis.core import reminders, todos
+    if todos.find(low) or reminders.named(low) or re.search(r"\b(?:to[\s-]?do|reminders?|tasks?)\b", low):
         return None
     return i
 
@@ -2771,7 +2804,8 @@ def _extras(t: str) -> tuple[dict, str]:
 
 
 def todo_intent(t: str) -> Intent | None:
-    """To-do list (same sheet as read later): add (with tag/time), show, done N (removes it)."""
+    """To-do list (its own list, not the reading list): add (with tag/due date, 'and remind me' = a linked reminder),
+    show, done N."""
     low = t.strip(" .!?")
     # done / complete: 'done 2', 'mark 2 as done', 'I finished number 3', 'complete 1 from my list', 'tick 2'
     if re.fullmatch(r"(?:please\s+)?(?:(?:mark|set)\s+(?:number\s+|item\s+|no\.?\s*)?\d{1,3}\s+(?:as\s+)?(?:done|complete(?:d)?|finished|read)"
@@ -2779,9 +2813,13 @@ def todo_intent(t: str) -> Intent | None:
                     r"|i\s+(?:have\s+)?(?:finished|completed|did|done)\s+(?:number\s+|item\s+|no\.?\s*)?\d{1,3}"
                     r"|(?:number\s+|item\s+)?\d{1,3}\s+is\s+(?:done|complete(?:d)?|finished))"
                     r"(?:\s+(?:in|on|from)\s+(?:my\s+|the\s+)?" + _LIST_ANY + r")?", low, I):
-        return Intent("todo", "read_later", "browser", {"action": "done", "n": _nth(low)})
+        if re.search(_RL_LIST + r"|\bread\b", low, I):
+            return Intent("readlater", "read_later", "browser", {"action": "done", "n": _nth(low)})
+        return Intent("todo", "todo", "todo", {"action": "done", "item": str(_nth(low))})
     if re.fullmatch(r"(?:please\s+)?(?:remove|delete)\s+(?:number\s+|item\s+)?\d{1,3}\s+(?:from|in|on)\s+(?:my\s+|the\s+)?" + _LIST_ANY, low, I):
-        return Intent("todo", "read_later", "browser", {"action": "remove", "n": _nth(low)})
+        if re.search(_RL_LIST, low, I):
+            return Intent("readlater", "read_later", "browser", {"action": "remove", "n": _nth(low)})
+        return Intent("todo", "todo", "todo", {"action": "delete", "item": str(_nth(low))})
     # show
     if m := re.fullmatch(r"(?:please\s+|kurama\W+)*(?:show(?:\s+me)?|what(?:'s|\s+is|\s+are)?(?:\s+(?:on|in))?|list|open|see|check|give\s+me|read)?"
                          r"\s*(?:all\s+)?(?:my\s+|the\s+)?(?P<k>" + _TODO + r"|list|tasks|task\s+list)(?:\s+items?)?(?P<x>(?:\s+(?:for\s+)?today|"
@@ -2791,20 +2829,26 @@ def todo_intent(t: str) -> Intent | None:
         k = m.group("k").lower()
         if (k == "list" or not re.search(r"list|todo|-", k)) and not re.search(r"\bmy\b", low):
             return None  # 'what to do' is a question, 'my to do' / 'to-do list' is the list
-        args = {"action": "list"} | ({"tag": tag} if tag else {})
-        if re.match(r"(?:to[\s-]?do|todo)", m.group("k"), I):
-            args["text"] = "todo"
-        return Intent("todo", "read_later", "browser", args)
+        return Intent("todo", "todo", "todo", {"action": "list"} | ({"tag": tag} if tag else {}))
     # add
     m = (re.fullmatch(r"(?:please\s+|kurama\W+|can\s+you\s+)*(?:add|put|save|note|write|keep|include)\s+(?:down\s+)?(?P<x>.+?)\s+"
                       r"(?:to|in|on|into|onto)\s+(?:my\s+|the\s+)?" + _TODO + r"(?P<r>.*)", low, I)
          or re.fullmatch(r"(?:please\s+|kurama\W+)*(?:add|new|create|make)\s+(?:a\s+)?(?:new\s+)?(?:to[\s-]?do|todo)(?:\s+item)?\s*[:,-]?\s+(?P<x>.+?)(?P<r>)", low, I)
          or re.fullmatch(r"(?:to[\s-]?do|todo)\s*:\s*(?P<x>.+?)(?P<r>)", low, I))
     if m:
-        extra, task = _extras(m.group("x") + " " + m.group("r"))
+        body = m.group("x") + " " + m.group("r")
+        remind = re.search(r"\b(?:and\s+)?remind\s+me\b(?P<w>.*)$", body, I)  # '... and remind me Thursday at 6'
+        if remind:
+            body = body[:remind.start()]
+        extra, task = _extras(body)
         task = re.sub(r"^(?:a\s+(?:task|reminder)\s+(?:to\s+)?|to\s+)", "", task, flags=I).strip(" ,.")
+        pr = "high" if re.search(r"\b(?:urgent|important|high\s+priority|asap)\b", task, I) else ""
+        task = re.sub(r"[\s,]*\b(?:it'?s\s+)?(?:urgent|important|high\s+priority|asap)\b", "", task, flags=I).strip(" ,.")
         if task:
-            return Intent("todo", "read_later", "browser", {"action": "todo", "text": task, **extra})
+            args = {"action": "add", "task": task, **_todo_extra(extra)} | ({"priority": pr} if pr else {})
+            if remind:
+                args["remind"] = (remind.group("w").strip(" ,.") or extra.get("when", "")).strip()
+            return Intent("todo", "todo", "todo", args)
     return None
 
 

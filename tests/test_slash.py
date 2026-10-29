@@ -15,7 +15,7 @@ def test_commands_unique_and_valid():
 def test_expansion_typos_and_paths():
     m = fastpath.match
     assert m("/weather pokhara").args == {"place": "pokhara", "days": 1}
-    assert m("/todo buy milk").args == {"action": "todo", "text": "buy milk"}
+    assert m("/todo buy milk").args == {"action": "add", "task": "buy milk"}
     assert m("/wether").tool == "weather" and m("/plya").args == {"action": "play"}
     assert m("/search python asyncio").args == {"query": "python asyncio"}
     assert "Usage: /search" in m("/search").args["en"]

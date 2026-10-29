@@ -42,18 +42,22 @@ def _weather() -> str:
 
 
 def _todo(now: datetime) -> str:
-    from jarvis.core import readlater
-    rows = [r for r in readlater.ordered() if r["type"] in ("reminder", "todo")]
-    today = now.strftime("%Y-%m-%d")
-    due = [r for r in rows if (r.get("due") or "").startswith(today)]
-    if not rows:
-        return ""
-    first = due[0] if due else rows[0]
-    when = f" at {datetime.strptime(first['due'][:16], '%Y-%m-%d %H:%M').strftime('%I:%M %p').lstrip('0')}" \
-        if first.get("due", "").startswith(today) and len(first["due"]) >= 16 else ""
-    n = len(rows)
-    return f"You have {n} thing{'s' if n != 1 else ''} on your list" + (f", {len(due)} due today" if due else "") + \
-        f". First: {first['title']}{when}."
+    """'You have 4 to-dos, 2 due today (1 overdue). First: Finish the report. 2 reminders today, first at 5 PM.'"""
+    from jarvis.core import store, todos
+    rows, c = todos.items(), todos.summary_counts()
+    end = now.replace(hour=23, minute=59, second=59).timestamp()
+    rem = sorted((s for s in store.schedules_list(enabled_only=True, limit=50)
+                  if s.get("kind") in ("reminder", "alarm") and s.get("next_run") and s["next_run"] <= end),
+                 key=lambda s: s["next_run"])
+    out = []
+    if rows:
+        n = len(rows)
+        out.append(f"You have {n} to-do{'s' if n != 1 else ''}" + (f", {c['today']} due today" if c["today"] else "")
+                   + (f" ({c['overdue']} overdue)" if c["overdue"] else "") + f". First: {rows[0]['title']}.")
+    if rem:
+        at = datetime.fromtimestamp(rem[0]["next_run"]).strftime("%I:%M %p").lstrip("0")
+        out.append(f"{len(rem)} reminder{'s' if len(rem) != 1 else ''} today, first at {at}: {rem[0]['text'][:60]}.")
+    return " ".join(out)
 
 
 def _goals(now: datetime) -> str:
