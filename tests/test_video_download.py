@@ -137,3 +137,11 @@ def test_library_remove_only_forgets_the_entry_and_open_stays_inside_the_folder(
     monkeypatch.setattr(ytdl.subprocess, "Popen", lambda argv, **k: opened.append(argv[-1]))
     assert ytdl.open_item("../outside.mp4").startswith("error") and opened == []
     assert ytdl.open_item(folder=True) == "Opened." and opened == [str(tmp_path.resolve())]
+
+
+def test_where_is_this_function_goes_to_the_code_not_the_file_search():
+    for t, name in (("where is this function", ""), ("find this function in this code base", ""),
+                    ("where is the function load_state", "load_state")):
+        i = fastpath.match(t)
+        assert i.tool == "code_nav" and i.args == {"action": "find", "name": name}, t
+    assert fastpath.match("where is my report.pdf").tool == "find_files"

@@ -3018,9 +3018,25 @@ def meaning_ok(text: str, it: Intent) -> bool:
     return top < config.MEANING_GATE_SURE or best.get(it.group, 0.0) >= top - config.MEANING_GATE_MARGIN
 
 
+_CODE_THING = re.compile(r"\b(?:function|method|class|def|variable|func)\b", I)
+
+
+def _code_not_file(it: Intent | None) -> Intent | None:
+    """'where is this function' / 'find this function in this code base' is code, not a file on the disk: go to
+    where it is defined in the VS Code project (the highlighted name when none is given)."""
+    if it is None or it.tool != "find_files":
+        return it
+    q = f"{it.args.get('query', '')} {it.args.get('path', '')}"
+    if not _CODE_THING.search(q):
+        return it
+    name = re.sub(r"\b(?:this|that|the|my|a|in|code\s*base|codebase|project|repo|file|function|method|class|def|"
+                  r"variable|func)\b", " ", it.args.get("query", ""), flags=I).strip(" .?")
+    return Intent("codenav", "code_nav", "codequality", {"action": "find", "name": name})
+
+
 def match(text: str) -> Intent | None:
     """The single high-confidence intent for text whose meaning agrees (meaning_ok), or None."""
-    it = _match(text)
+    it = _code_not_file(_match(text))
     return it if it is None or meaning_ok(text, it) else None
 
 
