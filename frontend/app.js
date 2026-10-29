@@ -1921,7 +1921,7 @@ window.kuramaMiniWake = (rest = "") => { // minimized: the host heard "KURAMA / 
   wakeUp(rest || "");
 };
 window.kuramaMiniShown = (on, keepTalking = false) => { // mini panel opened / hidden
-  miniGhost = !on && keepTalking && mode === "conv" && conv.on; // talk mode goes on with the panel closed
+  miniGhost = !on && keepTalking; // talk mode, or a reply still on its way (any mode), goes on with the panel closed
   document.body.classList.toggle("paused", !on); // freeze CSS animations while hidden
   if (on) { input.focus(); return; }
   if (miniGhost) { saveMiniLog(); return; }

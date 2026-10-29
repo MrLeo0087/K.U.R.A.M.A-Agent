@@ -800,6 +800,7 @@ ORGANIZE_MAX_FILES = 80  # files looked at per organize run (newest first)
 ORGANIZE_MAX_IMAGES = 8  # pictures captioned by the vision model per run (~600 tokens each)
 VIDEO_DIR = os.getenv("KURAMA_VIDEO_DIR", "~/Videos/KURAMA")  # video/audio downloads (yt-dlp)
 VIDEO_COOKIES_BROWSER = os.getenv("KURAMA_COOKIES_BROWSER", "brave")  # YouTube "not a bot" check: retry once with this browser's cookies (read locally by yt-dlp; "" = never)
+VIDEO_CONNECTIONS = 6  # parallel connections per video download (YouTube throttles each one)
 VIDEO_DEFAULT_HEIGHT = 1080  # "download this video" and "best quality" = 1080p; "extra high" / "max" = the highest there is
 BACKUP_EVERY_DAYS = 7  # automatic backup interval (also runs when the backup drive appears)
 COLAB_POLL_S = 60.0  # how often KURAMA checks for Colab pings (only while a Colab run is active)

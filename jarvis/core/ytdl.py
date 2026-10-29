@@ -83,7 +83,9 @@ def build_args(source: str, quality: str = "", audio: bool = False, playlist: bo
         tmpl = "%(playlist_title).80B/%(playlist_index)03d - " + tmpl
     args = ["--no-mtime", "--restrict-filenames", "-c", "--retries", "5", "--fragment-retries", "5",
             "-o", str(out_dir() / tmpl), "--yes-playlist" if playlist else "--no-playlist",
-            "--progress", "--newline", "--progress-template", _TPL]
+            "--progress", "--newline", "--progress-template", _TPL,
+            # YouTube slows each connection to ~0.3 MB/s: fetch it as pieces over several connections at once
+            "-N", str(config.VIDEO_CONNECTIONS), "--extractor-args", "youtube:formats=dashy"]
     if audio:
         args += ["-f", "ba/b", "-x", "--audio-format", "mp3", "--audio-quality", "0"]
     else:

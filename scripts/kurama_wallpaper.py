@@ -62,6 +62,7 @@ BUBBLE = 56  # floating button size (px)
 PANEL_W, PANEL_H = 400, 600  # mini chat panel (default size; a resized panel remembers its size)
 PANEL_MIN_W, PANEL_MIN_H = 300, 260
 MINI_HOTKEY = os.getenv("KURAMA_MINI_HOTKEY", "<Control><Alt>k")  # opens / hides the mini chat (GNOME shortcut; '' = none)
+ALERT_POLL_S = 5  # mini KURAMA checks for new alerts this often (one tiny local request)
 PID_FILE = STATE_FILE.with_name("wallpaper.pid")  # the shortcut signals this process (SIGUSR1)
 BUSY_STATES = ("listening", "capturing", "thinking", "speaking")  # closing the panel now keeps it alive
 WS_W, WS_H = 480, 620  # mini workspace window
@@ -584,6 +585,19 @@ def _api_token() -> str:
     return os.getenv("JARVIS_API_TOKEN", "")
 
 
+_TOKEN: str | None = None
+
+
+def api_get(page_url: str, path: str, timeout: float = 5) -> dict:
+    global _TOKEN
+    u = urlsplit(page_url)
+    token = _TOKEN = _TOKEN if _TOKEN is not None else _api_token()
+    r = urllib.request.Request(f"{u.scheme}://{u.netloc}{path}",
+                               headers={"Authorization": f"Bearer {token}"} if token else {})
+    with urllib.request.urlopen(r, timeout=timeout) as resp:
+        return json.loads(resp.read().decode())
+
+
 class WakeBridge:
     """While minimized, the big dashboard page is unloaded, so THIS process keeps the wake word: it asks the API
     to listen (cheap, server-side) and, on "KURAMA / wake up", opens the mini panel in talk mode."""
@@ -655,6 +669,10 @@ class Mini:
         self.state = "idle"  # voice state shown by the ring while ghosted
         self.caption = None  # Caption window, made on first use
         self.ws = self.ws_view = None  # the workspace window, made when needed
+        self.ws_hidden = False  # the shortcut hid the workspace along with the chat: it comes back with it
+        self.alert_last = 0  # newest alert already seen; new ones pop up beside the button (download done, reminder...)
+        self.alert_busy = False
+        self.alert_timer = GLib.timeout_add_seconds(ALERT_POLL_S, self.poll_alerts)
         b = self.bubble = Gtk.Window(title="KURAMA mini")
         b.set_decorated(False)
         b.set_resizable(False)
@@ -916,7 +934,45 @@ class Mini:
         return False
 
     def toggle_panel(self) -> None:
-        self.hide_panel() if self.open else self.show_panel()
+        """The shortcut: chat and its workspace window hide together and come back together."""
+        if self.open:
+            self.hide_panel()
+            if self.ws is not None and self.ws.get_visible():
+                self.ws.hide()
+                self.ws_hidden = True
+        else:
+            self.show_panel()
+            if self.ws is not None and self.ws_hidden:
+                self.ws.show()
+            self.ws_hidden = False
+
+    def poll_alerts(self) -> bool:
+        """Every few seconds (in a thread): new alerts -> a bubble beside the button, unless the chat is open."""
+        if self.alert_busy:
+            return True
+        self.alert_busy = True
+
+        def fetch():
+            try:
+                d = api_get(self.wp.url, f"/api/v1/alerts/new?after={self.alert_last}")
+                self.alert_last = int(d.get("last") or self.alert_last)
+                for a in d.get("items", [])[-2:]:
+                    GLib.idle_add(self.show_alert, a)
+            except Exception:  # noqa: BLE001 - API restarting / offline: next tick
+                pass
+            finally:
+                self.alert_busy = False
+        threading.Thread(target=fetch, daemon=True, name="mini-alerts").start()
+        return True
+
+    def show_alert(self, a: dict) -> bool:
+        if self.open:  # the chat is in front of the user anyway
+            return False
+        if self.caption is None:
+            self.caption = Caption(self)
+        text = f"🔔 {a.get('title', '')}" + (f"\n{a['text'][:240]}" if a.get("text") else "")
+        self.caption.show("bot", text, True)
+        return False
 
     def on_configure(self, win, _ev):
         """Remember the panel's size (saved 1 s after the last resize)."""
@@ -974,6 +1030,7 @@ class Mini:
         self.ws = self.ws_view = None  # closing frees its page
 
     def close(self) -> None:
+        GLib.source_remove(self.alert_timer)
         if self.ws is not None:
             self.ws.destroy()
         if self.reaper:

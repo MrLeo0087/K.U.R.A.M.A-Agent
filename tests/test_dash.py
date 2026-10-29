@@ -59,3 +59,14 @@ def test_toggle_goes_through_the_tools(api, monkeypatch):
 
 def test_detail_unknown_panel_is_empty(api):
     assert api.get("/api/v1/dashboard/detail/nope").json() == {}
+
+
+def test_alerts_new_returns_only_newer_alerts():
+    import asyncio
+    from jarvis.api.routes import dash
+    from jarvis.core import store
+    first = store.alert_add("old", "", "info", "x", "desktop")
+    assert asyncio.run(dash.alerts_new(0)) == {"last": first, "items": []}
+    store.alert_add("Downloaded video", "song.mp4", "info", "downloads", "desktop,telegram")
+    d = asyncio.run(dash.alerts_new(first))
+    assert [i["title"] for i in d["items"]] == ["Downloaded video"] and d["last"] > first

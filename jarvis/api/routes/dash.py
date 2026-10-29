@@ -378,6 +378,17 @@ def forecast(place: str) -> dict:
     return {"place": place.split(",")[0], "hours": hours, "days": days, "sun": sun}
 
 
+@router.get("/alerts/new", summary="Alerts newer than ?after=<id> (mini KURAMA shows them beside its button)")
+async def alerts_new(after: int = 0):
+    from jarvis.core import store
+    rows = await run_in_threadpool(store.alerts_recent, 5)
+    if after <= 0:  # first call: just learn where the list is
+        return {"last": rows[0]["id"] if rows else 0, "items": []}
+    items = [{k: r[k] for k in ("id", "title", "text", "level", "source")} for r in reversed(rows)
+             if r["id"] > after and "desktop" in (r.get("channels") or "")]  # phone-only ones (guard) stay off
+    return {"last": max([after, *(i["id"] for i in items)]), "items": items}
+
+
 @router.get("/downloads", summary="Running downloads (videos and files) with progress, for the download bars")
 async def downloads():
     from jarvis.core import automation
