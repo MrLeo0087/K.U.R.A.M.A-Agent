@@ -91,3 +91,50 @@ def match(text: str) -> dict | None:
         if rx.fullmatch(t):
             return ans
     return None
+
+
+# Small talk by MEANING (0 tokens): the WHOLE request must be one of these (any phrasing close to the examples);
+# "hello, what are you doing and tell me the time" is split into parts first, so the time is still told.
+SMALL_TALK: list[tuple[tuple[str, ...], dict]] = [
+    (("hello", "hi kurama", "hey there", "good morning", "namaste", "yo kurama", "hello kurama how are you"),
+     {"en": "Hello! What can I do for you?", "hi": "नमस्ते! बताइए क्या करूँ?", "ne": "नमस्ते! के गरूँ?"}),
+    (("how are you", "how are you doing", "are you okay", "how do you feel today", "kasto xa", "kaise ho"),
+     {"en": "I'm doing great, thanks! What can I do for you?", "hi": "मैं बढ़िया हूँ, धन्यवाद! क्या करूँ?",
+      "ne": "म ठिकै छु, धन्यवाद! के गरूँ?"}),
+    (("what are you doing", "what's up", "what are you up to", "k gardai xau", "kya kar rahe ho"),
+     {"en": "Just waiting for your next command. What should I do?", "hi": "बस आपके अगले काम का इंतज़ार। क्या करूँ?",
+      "ne": "तपाईंको अर्को कामको पर्खाइमा छु। के गरूँ?"}),
+    (("how is your day going", "how was your day", "how's it going", "how are things", "is your day good"),
+     {"en": "It's going well, thanks for asking! What can I do for you?", "hi": "अच्छा चल रहा है, धन्यवाद! क्या करूँ?",
+      "ne": "राम्रै चलिरहेको छ, धन्यवाद! के गरूँ?"}),
+    (("thank you", "thanks a lot", "nice job", "great work", "good job kurama", "dhanyabad", "shukriya"),
+     {"en": "Happy to help!", "hi": "खुशी हुई मदद करके!", "ne": "सहयोग गर्न पाउँदा खुसी लाग्यो!"}),
+    (("good night", "bye", "see you later", "talk to you later", "i'm going to sleep"),
+     {"en": "Good night! I'll be here when you need me.", "hi": "शुभ रात्रि! ज़रूरत हो तो मैं यहीं हूँ।",
+      "ne": "शुभ रात्री! चाहिँदा म यहीँ छु।"}),
+    (("ok", "okay", "alright", "cool", "hmm", "nice", "😆", "😂", "👍"),
+     {"en": "👍", "hi": "👍", "ne": "👍"}),
+]
+_st: tuple | None = None
+
+
+def small_talk(text: str) -> dict | None:
+    """A ready answer when the whole request MEANS one of the SMALL_TALK examples (model loaded), else None."""
+    from jarvis.core import config, semantic
+    t = " ".join((text or "").split())
+    if not t or len(t.split()) > 10 or not semantic.ready():
+        return None
+    from jarvis.core import planner
+    if len(planner.split_clauses(t)) > 1:  # "hello, what are you doing, and tell me the time": parts, each answered
+        return None
+    global _st
+    try:
+        if _st is None:
+            rows = [(i, ex) for i, (exs, _) in enumerate(SMALL_TALK) for ex in exs]
+            _st = ([i for i, _ in rows], semantic.embedder().embed([ex for _, ex in rows], query=True))
+        idx, mat = _st
+        sims = (mat @ semantic.embedder().embed([t], query=True)[0]).tolist()
+    except Exception:  # noqa: BLE001 - the model failed: no shortcut, the AI answers
+        return None
+    best = max(range(len(sims)), key=sims.__getitem__)
+    return SMALL_TALK[idx[best]][1] if sims[best] >= config.SMALL_TALK_SIM else None

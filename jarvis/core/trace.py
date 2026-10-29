@@ -157,6 +157,9 @@ def end(tr: dict | None, answer: str = "", last: dict | None = None, error: str 
             db = _db()
             db.execute(f"INSERT OR REPLACE INTO traces VALUES ({','.join('?' * len(row))})", row)
             _prune(db)
+        if not error:
+            from jarvis.core import learn
+            learn.on_turn({"text": tr["text"] or "", "ts": tr["ts"], "path": path, "intent": row[7], "tools": tools})
     except Exception as e:
         log.warning("trace write failed: %s", e)
 

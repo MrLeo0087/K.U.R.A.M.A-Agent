@@ -267,8 +267,12 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Score KURAMA on the test set")
     ap.add_argument("--ai", action="store_true", help="also run the full agent with the real AI (costs tokens)")
     ap.add_argument("--limit", type=int, default=0, help="only the first N cases (for --ai)")
+    ap.add_argument("--cold", action="store_true", help="score before the meaning model is loaded (word rules decide)")
     a = ap.parse_args(argv)
     _isolated_store()
+    if not a.cold:  # all-day use: the meaning model is loaded, so shortcuts and routing go by meaning
+        from jarvis.core import semantic
+        semantic.scores("open youtube")
     cases = load()
     prev = last_card()
     t0 = time.monotonic()

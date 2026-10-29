@@ -26,7 +26,7 @@ Voice loop: hotkey or wake word -> VAD -> Groq STT -> LangGraph agent (stream) -
 
 ## Runtime token and rate-limit rules (Groq free tier is limited)
 - System prompt under 250 tokens. Voice replies: 1 to 2 short sentences unless asked for more.
-- The router sends only the 1 to 3 relevant tool groups' schemas per request (keyword rules first, then the local semantic router (fastembed, 0 tokens), 8b classifier only if still unclear). Never send all tools.
+- The router sends only the 1 to 3 relevant tool groups' schemas per request: by MEANING first (local semantic router, fastembed, 0 tokens, plus wordings learned from corrections); word rules only add candidates or stand in while the model loads / for Nepali-Hindi script; 8b classifier only if still unclear. Never send all tools. Never add new word-based intent rules; whole-query small talk is the one exception (templates.SMALL_TALK, by meaning). A shortcut runs only if its meaning agrees (fastpath.meaning_ok).
 - History: last 6 turns plus a rolling summary (8b). Truncate tool output to about 800 characters.
 - Use 8b for chat and routing, 70b only for reasoning or multi-tool tasks. On 429 or 5xx: backoff, read retry headers, fall back 70b to 8b.
 - Cache repeated results (weather, search) for a few minutes.

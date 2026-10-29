@@ -171,7 +171,27 @@ def scores(text: str) -> list[tuple[str, float]]:
     for g, s in zip(groups, (mat @ q).tolist()):
         if s > best.get(g, -1.0):
             best[g] = s
+    from jarvis.core import learn  # wordings learned from how earlier requests went
+    for g, s in learn.group_scores(q).items():
+        if s > best.get(g, -1.0):
+            best[g] = s
+    global last_vec
+    last_vec = q
     return sorted(best.items(), key=lambda kv: kv[1], reverse=True)
+
+
+last_vec: Any = None  # the last request's vector (the shortcut veto reuses it)
+
+
+def ready() -> bool:
+    """The model is loaded: asking by meaning costs ~10 ms (cold it takes seconds)."""
+    return bool(config.SEMANTIC_ROUTER) and mode() != "off" and _embedder is not None and _embedder.loaded
+
+
+def warm_soon() -> None:
+    """Load the model in the background (the request that needed it goes on without waiting)."""
+    if config.SEMANTIC_ROUTER and mode() != "off" and not ready():
+        threading.Thread(target=lambda: scores("open youtube"), daemon=True, name="semantic-warm").start()
 
 
 def match(text: str, k: int | None = None) -> list[str]:

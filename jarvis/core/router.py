@@ -194,8 +194,19 @@ def route(text: str, log_it: bool = True) -> Route:
     t0 = time.monotonic()
     available = registry.groups()
     r = Route(reasoning=needs_reasoning(text))
-    matched = rule_groups(text)
-    if matched:
+    if semantic.ready() and not is_small_talk(text) and (sem := [g for g in semantic.match(text) if g in available]):
+        # by meaning first (model loaded: ~10 ms); word-rule areas only fill the free places as extra candidates —
+        # the AI still picks the action by meaning
+        extra = [g for g in refine(text, site_over_apps(text, [g for g in rule_groups(text) if g in available]))
+                 if g not in sem]
+        r.method, r.groups = "semantic", (sem[:2] + extra + sem[2:])[: config.ROUTER_MAX_GROUPS]
+        matched = []
+    else:
+        matched = rule_groups(text)  # model not loaded yet / meaning unclear / Nepali-Hindi script: the word rules
+        semantic.warm_soon()
+    if r.groups:
+        pass
+    elif matched:
         r.method = "rules"
         r.groups = refine(text, site_over_apps(text, [g for g in matched if g in available]))
         if len(r.groups) < config.ROUTER_MAX_GROUPS and (more := semantic.extra(text, r.groups)) in available:

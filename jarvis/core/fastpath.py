@@ -2994,8 +2994,37 @@ def ocr_intent(t: str) -> Intent | None:
     return Intent("ocr", "read_text", "screen", {"source": "area"})  # the owner wants to drag a box first
 
 
+_NO_GATE = {"unlock", "error", "study", "say", "slash", "assist"}  # exact answers / commands, not guesses
+
+
+def meaning_ok(text: str, it: Intent) -> bool:
+    """A shortcut's pattern matched; it runs only if the MEANING agrees: its area is (near) the best area for the
+    request, and no earlier correction said this wording isn't this shortcut. Model not loaded yet: the pattern
+    decides this once (the model starts in the background)."""
+    from jarvis.core import learn, semantic
+    if it.name in _NO_GATE or it.tool.startswith("_") or it.group in ("self", ""):
+        return True
+    if not semantic.ready():
+        semantic.warm_soon()
+        return True
+    ranked = [(g, s) for g, s in semantic.scores(text) if g != semantic.CHAT]
+    if not ranked:  # non-English script: the model can't judge
+        return True
+    if semantic.last_vec is not None and learn.vetoed(semantic.last_vec, it.name):
+        return False
+    best = dict(ranked)
+    top = ranked[0][1]
+    return top < config.MEANING_GATE_SURE or best.get(it.group, 0.0) >= top - config.MEANING_GATE_MARGIN
+
+
 def match(text: str) -> Intent | None:
-    """The single high-confidence intent for text, or None."""
+    """The single high-confidence intent for text whose meaning agrees (meaning_ok), or None."""
+    it = _match(text)
+    return it if it is None or meaning_ok(text, it) else None
+
+
+def _match(text: str) -> Intent | None:
+    """The single high-confidence intent for text (by pattern), or None."""
     from jarvis.core import selfknow
     if selfknow.looks_like_password_try(text):  # raw text: the password answer is checked before anything else
         return Intent("unlock", "_unlock", "self", {"text": text})
@@ -3015,7 +3044,7 @@ def match(text: str) -> Intent | None:
     if wr := workspace_read_intent(t):
         return wr
     from jarvis.core import templates
-    if ans := templates.match(t):  # small talk + setup guides: a ready answer, 0 tokens
+    if ans := templates.match(t) or templates.small_talk(text):  # small talk + setup guides: a ready answer, 0 tokens
         return Intent("say", "_say", "self", ans)
     if pi := plan_answer_intent(t):
         return pi

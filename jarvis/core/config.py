@@ -352,6 +352,14 @@ SEMANTIC_MIN = 0.66  # best similarity needed to trust a group (bge-small cosine
 SEMANTIC_MARGIN = 0.03  # runners-up this close to the best one are sent too
 SEMANTIC_ADD_MIN = 0.76  # with keyword matches, a different group is added only when this sure
 SEMANTIC_OVER_CHAT = 0.03  # a group must beat the best plain-chat example by this much
+MEANING_GATE_MARGIN = 0.15  # a shortcut runs only if its area scores within this of the best area (by meaning)...
+MEANING_GATE_SURE = 0.85  # ...unless the best area is below this (the meaning is unclear: the shortcut's pattern decides)
+SMALL_TALK_SIM = 0.86  # the whole request this close to a small-talk example = its ready answer (0 tokens)
+LEARN = os.getenv("KURAMA_LEARN", "1").lower() not in ("0", "false", "no", "off")  # learn areas from corrections
+LEARN_WINDOW_S = 120  # a correction counts within this long after the request it corrects
+LEARN_CORRECTION_SIM = 0.80  # similarity to an example correction ("no, I meant...") to count as one
+LEARN_VETO_SIM = 0.92  # a corrected wording this similar never runs that shortcut again
+LEARN_MAX = 3000  # learned wordings kept (newest)
 # Plain conversation (no tools): a group has to look more like the request than these do.
 ROUTER_CHAT_EXAMPLES: tuple[str, ...] = (
     "hi there", "how are you doing", "thank you so much", "good morning", "good night, see you",
