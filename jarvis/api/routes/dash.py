@@ -407,7 +407,17 @@ async def videos():
     return {"items": items, "folder": str(ytdl.out_dir()), "total": sum(i["size"] for i in items)}
 
 
-@router.post("/videos/remove", summary="Move downloaded videos to the Trash: {names: [...]} or {all: true}")
+@router.post("/videos/open", summary="Play a downloaded video ({name}) or open the downloads folder ({folder: true})")
+async def videos_open(request: Request):
+    from jarvis.core import ytdl
+    d = await request.json()
+    out = await run_in_threadpool(ytdl.open_item, str(d.get("name") or ""), bool(d.get("folder")))
+    if out.startswith("error"):
+        raise HTTPException(404, out[7:])
+    return {"ok": True}
+
+
+@router.post("/videos/remove", summary="Take videos off the list (files stay): {names: [...]} or {all: true}")
 async def videos_remove(request: Request):
     from jarvis.core import ytdl
     d = await request.json()

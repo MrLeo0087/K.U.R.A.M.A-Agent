@@ -8,6 +8,7 @@ Quality: nothing / "best" = 1080p (config.VIDEO_DEFAULT_HEIGHT); "extra high" / 
 from __future__ import annotations
 
 import contextlib
+import json
 import logging
 import os
 import re
@@ -283,14 +284,24 @@ def progress_text(st: dict) -> str:
 _MEDIA = {".mp4", ".mkv", ".webm", ".mp3", ".m4a", ".opus", ".mov"}
 
 
+def _hidden() -> set[str]:
+    try:
+        return set(json.loads(store.kv_get("videos_hidden") or "[]"))
+    except ValueError:
+        return set()
+
+
 def library() -> list[dict]:
-    """Every finished video/audio in the downloads folder (playlists' subfolders too), newest first."""
+    """Every finished video/audio in the downloads folder (playlists' subfolders too), newest first, minus the
+    ones removed from the list (their files stay)."""
     from datetime import date, datetime
-    root, out = out_dir(), []
+    root, out, hidden = out_dir(), [], _hidden()
     for f in root.rglob("*"):
         if f.suffix.lower() not in _MEDIA or not f.is_file() or re.search(r"\.f[\w-]+\.\w+$", f.name):
             continue  # .part / separate video-only and sound-only tracks are not finished downloads
         st = f.stat()
+        if f"{f.relative_to(root)}|{int(st.st_mtime)}" in hidden:
+            continue
         d = datetime.fromtimestamp(st.st_mtime).date()
         day = "Today" if d == date.today() else "Yesterday" if (date.today() - d).days == 1 else d.strftime("%d %b %Y")
         out.append({"name": str(f.relative_to(root)), "size": st.st_size, "mtime": st.st_mtime, "day": day})
@@ -298,19 +309,28 @@ def library() -> list[dict]:
 
 
 def remove(names: list[str] | None = None) -> str:
-    """Move downloaded videos to the Trash (names relative to the downloads folder; None = all of them)."""
+    """Take videos off the list (None = all). Only the list forgets them: the files stay in the folder."""
+    items = library()
+    keep = {x["name"] for x in items} if names is None else set(names)
+    gone = {f"{x['name']}|{int(x['mtime'])}" for x in items if x["name"] in keep}
+    hidden = _hidden() | gone
+    store.kv_set("videos_hidden", json.dumps(sorted(hidden)[-5000:]))
+    n = len(gone)
+    return f"Removed {n} video{'s' if n != 1 else ''} from the list (the files are still in {out_dir()})."
+
+
+def open_item(name: str = "", folder: bool = False) -> str:
+    """Play a downloaded video in the laptop's video player, or open the downloads folder."""
     root = out_dir().resolve()
-    targets = [root / x["name"] for x in library()] if names is None else [(root / n).resolve() for n in names]
-    done = 0
-    for f in targets:
-        if root not in f.parents or not f.is_file():  # never outside the downloads folder
-            continue
-        try:
-            subprocess.run(["gio", "trash", str(f)], check=True, capture_output=True, timeout=30)
-            done += 1
-        except (OSError, subprocess.SubprocessError) as e:
-            log.warning("couldn't trash %s: %s", f, e)
-    return f"Moved {done} video{'s' if done != 1 else ''} to the Trash."
+    target = root if folder or not name else (root / name).resolve()
+    if target != root and (root not in target.parents or not target.is_file()):
+        return "error: that video isn't in the downloads folder any more"
+    try:
+        subprocess.Popen(["xdg-open", str(target)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         start_new_session=True)
+    except OSError as e:
+        return f"error: couldn't open it ({e})"
+    return "Opened."
 
 
 def start(source: str, quality: str = "", audio: bool = False, playlist: bool = False) -> str:

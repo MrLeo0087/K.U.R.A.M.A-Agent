@@ -1,6 +1,8 @@
 """Device sound and the mic ("Hear device sound" in settings).
 
-OFF (default): the laptop's own sound (videos, music, KURAMA's own voice) is removed from what KURAMA hears.
+OFF (default): the laptop's own sound (videos, music, KURAMA's own voice) is removed from what KURAMA hears —
+ONLY while a page records the mic (voice / talk mode: mic_use()), plus EC_LINGER_S after. The rest of the time the
+canceller is unloaded: the laptop's speaker and mic are the plain ones (no quieter sound, mic not held).
 PipeWire's echo canceller (module-echo-cancel, webrtc) gets a sink that every app plays through and a mic source
 with that sound subtracted; both become the defaults, so it covers all apps. Measured here: the speaker's echo drops
 by ~20 dB after 2-3 s. Cost: ~9% of a core, but only while something records that mic (KURAMA awake and listening);
@@ -137,6 +139,7 @@ def cancel_on(sink: str | None = None) -> None:
             time.sleep(0.1)
         _pactl("set-default-sink", EC_SINK)
         _pactl("set-default-source", EC_SOURCE)
+        _pactl("set-sink-volume", EC_SINK, "100%")  # the real speaker keeps the user's volume: nothing gets quieter
 
 
 def cancel_off() -> None:
@@ -152,13 +155,47 @@ def cancel_off() -> None:
             _pactl("set-default-source", saved["source"])
 
 
+_users: set[str] = set()  # pages recording the mic right now (voice / talk mode)
+_release: threading.Timer | None = None
+
+
+def mic_use(on: bool, who: str = "page") -> dict:
+    """A page starts / stops recording: the canceller is loaded while anyone records, unloaded EC_LINGER_S after."""
+    global _release
+    with _lock:
+        (_users.add if on else _users.discard)(who)
+        if _release:
+            _release.cancel()
+            _release = None
+        if not _users and cancelling():
+            _release = threading.Timer(config.EC_LINGER_S, _idle_off)
+            _release.daemon = True
+            _release.start()
+    if on and not hear() and available() and not cancelling():
+        try:
+            cancel_on()
+            watch()
+        except Exception as e:  # no speaker / mic: KURAMA still hears, just with the device sound
+            log.warning("echo canceller not started: %s", e)
+    return status()
+
+
+def _idle_off() -> None:
+    global _release
+    with _lock:
+        _release = None
+        if not _users:
+            cancel_off()
+            log.info("device sound: nobody records the mic: canceller off, plain speaker + mic again")
+
+
 def apply() -> dict:
     """Make the system match the setting (startup and after a change). Never raises."""
     if not available():
         return {**status(), "error": "pactl not found"}
     try:
-        if hear():
-            cancel_off()
+        if hear() or not _users:
+            cancel_off()  # startup: a canceller left from before is removed (mic free, normal volume)
         else:
             cancel_on()
             watch()

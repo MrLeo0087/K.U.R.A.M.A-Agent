@@ -86,6 +86,17 @@ async def device_sound_set(body: DeviceSoundIn):
     return await run_in_threadpool(devaudio.set_hear, body.hear)
 
 
+class MicUseIn(BaseModel):
+    on: bool = Field(..., description="the page starts (true) / stops (false) recording the mic")
+    id: str = Field("page", max_length=40, description="which page (main, mini...)")
+
+
+@router.post("/voice/mic", summary="A page records the mic: the echo canceller runs only meanwhile")
+async def mic_use(body: MicUseIn):
+    from jarvis.core import devaudio
+    return await run_in_threadpool(devaudio.mic_use, body.on, body.id)
+
+
 class VoiceSettingsIn(BaseModel):
     mic_volume: int | None = Field(None, ge=10, le=150, description="laptop microphone volume %")
     wake: str | None = Field(None, description="wake word sensitivity: low | normal | high")

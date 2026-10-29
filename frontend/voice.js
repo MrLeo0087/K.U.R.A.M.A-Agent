@@ -11,6 +11,9 @@ export function audioCtx() {
   return _ctx;
 }
 
+// set by the page: before = the mic is about to record (await), after = it stopped
+export const micHooks = { before: null, after: null };
+
 // Nothing playing or listening for 20 s: close the context. An open AudioContext keeps WebKit's audio thread
 // rendering silence all day (~12% of a core, measured); the next mic / voice reply opens a fresh one.
 export function audioSleepSoon(ms = 20000) {
@@ -151,6 +154,7 @@ export class Mic {
   async start({ plain = false } = {}) {
     if (this.stream) return;
     this.plain = plain;
+    if (!plain) await micHooks.before?.(); // the system echo canceller starts only while KURAMA really listens
     if (!navigator.mediaDevices?.getUserMedia) {
       throw new Error(window.isSecureContext === false
         ? "Microphone needs a secure page: open http://127.0.0.1:8000 (or https)."
@@ -202,6 +206,7 @@ export class Mic {
 
   stop() {
     if (!this.stream) return;
+    if (!this.plain) micHooks.after?.();
     this.stream.getTracks().forEach((t) => t.stop());
     for (const n of [this.src, this.tap, this.mute]) { try { n.disconnect(); } catch { /* ignore */ } }
     if (this.tap?.port) this.tap.port.onmessage = null;

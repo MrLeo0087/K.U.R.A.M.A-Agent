@@ -60,6 +60,7 @@ def pactl(monkeypatch, tmp_path):
 
 
 def test_device_sound_off_routes_everything_through_the_canceller(pactl):
+    devaudio._users.add("test")  # a page records: the canceller runs only meanwhile
     st = devaudio.set_hear(False)
     assert st["cancelling"] and not st["hear"]
     assert pactl.default == {"sink": devaudio.EC_SINK, "source": devaudio.EC_SOURCE}
@@ -79,6 +80,7 @@ def test_device_sound_on_gives_the_real_devices_back(pactl):
 
 
 def test_canceller_follows_new_headphones(pactl):
+    devaudio._users.add("test")  # a page records: the canceller runs only meanwhile
     devaudio.set_hear(False)
     pactl.sinks.append(BT)  # Bluetooth headphones connect
     devaudio._new["sink"] = BT

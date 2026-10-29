@@ -120,14 +120,20 @@ def test_this_video_now_is_the_open_tab_not_a_search_for_now():
     assert fastpath.match("download interstellar trailer in 4k").args["source"] == "interstellar trailer"  # still a search
 
 
-def test_library_lists_finished_videos_and_trashes_only_inside_the_folder(monkeypatch, tmp_path):
+def test_library_remove_only_forgets_the_entry_and_open_stays_inside_the_folder(monkeypatch, tmp_path):
     monkeypatch.setattr(ytdl.config, "VIDEO_DIR", str(tmp_path))
     (tmp_path / "Song [1080p].mp4").write_text("x")
+    (tmp_path / "Other.mp4").write_text("x")
     (tmp_path / "Song [1080p].f399.mp4").write_text("x")  # a separate track, not a finished video
     (tmp_path / "Clip.mp4.part").write_text("x")
     items = ytdl.library()
-    assert [i["name"] for i in items] == ["Song [1080p].mp4"] and items[0]["day"] == "Today"
-    trashed = []
-    monkeypatch.setattr(ytdl.subprocess, "run", lambda argv, **k: trashed.append(argv[-1]))
-    assert ytdl.remove(["../outside.mp4", "Song [1080p].mp4"]) == "Moved 1 video to the Trash."
-    assert trashed == [str(tmp_path / "Song [1080p].mp4")]
+    assert sorted(i["name"] for i in items) == ["Other.mp4", "Song [1080p].mp4"] and items[0]["day"] == "Today"
+    assert "Removed 1 video" in ytdl.remove(["Song [1080p].mp4"])
+    assert (tmp_path / "Song [1080p].mp4").exists()  # the file stays
+    assert [i["name"] for i in ytdl.library()] == ["Other.mp4"]
+    ytdl.remove(None)
+    assert ytdl.library() == [] and (tmp_path / "Other.mp4").exists()
+    opened = []
+    monkeypatch.setattr(ytdl.subprocess, "Popen", lambda argv, **k: opened.append(argv[-1]))
+    assert ytdl.open_item("../outside.mp4").startswith("error") and opened == []
+    assert ytdl.open_item(folder=True) == "Opened." and opened == [str(tmp_path.resolve())]

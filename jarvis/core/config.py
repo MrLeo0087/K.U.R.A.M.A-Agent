@@ -809,6 +809,7 @@ ORGANIZE_MAX_FILES = 80  # files looked at per organize run (newest first)
 ORGANIZE_MAX_IMAGES = 8  # pictures captioned by the vision model per run (~600 tokens each)
 VIDEO_DIR = os.getenv("KURAMA_VIDEO_DIR", "~/Videos/KURAMA")  # video/audio downloads (yt-dlp)
 BROWSER_TAB_TTL_S = 6 * 3600  # the browser extension's "open tab" counts this long (a closed browser says so itself)
+EC_LINGER_S = 30  # the echo canceller stays this long after the mic is released (no flapping between turns)
 VIDEO_COOKIES_BROWSER = os.getenv("KURAMA_COOKIES_BROWSER", "brave")  # YouTube "not a bot" check: retry once with this browser's cookies (read locally by yt-dlp; "" = never)
 VIDEO_CONNECTIONS = 6  # parallel connections per video download (YouTube throttles each one)
 VIDEO_DEFAULT_HEIGHT = 1080  # "download this video" and "best quality" = 1080p; "extra high" / "max" = the highest there is

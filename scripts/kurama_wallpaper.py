@@ -629,7 +629,8 @@ class WakeBridge:
         self.disarm()
 
     def _run(self) -> None:
-        self.armed.set()
+        # not armed by itself: listening for the wake phrase holds the mic, so only talk mode's sleep does it
+        # (the page asks the API); text / voice mode leave the laptop's mic free
         while not self.stop_ev.is_set():
             if not self.armed.wait(1):
                 continue
@@ -713,8 +714,6 @@ class Mini:
         kind, _, rest = msg.partition(":")
         if kind == "talk":
             self.talking = rest == "on"
-            if not self.talking and self.wp.wake is not None:
-                self.wp.wake.arm()  # conversation over: the backend listens for "KURAMA / wake up" again
             if not self.talking and self.ghost:  # talk mode ended while closed: really hide now
                 self.end_ghost()
         elif kind == "state":

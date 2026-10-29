@@ -41,6 +41,7 @@ export class Api {
   status() { return this.request("/api/v1/status"); }
   downloads() { return this.request("/api/v1/downloads"); }
   videos() { return this.request("/api/v1/videos"); }
+  videosOpen(body) { return this.request("/api/v1/videos/open", { method: "POST", body }); }
   videosRemove(body) { return this.request("/api/v1/videos/remove", { method: "POST", body }); }
   downloadControl(id, action) { return this.request(`/api/v1/downloads/${id}/${action}`, { method: "POST", body: {} }); }
   confirm(id, yes) { return this.request("/api/v1/confirm", { method: "POST", body: { id, yes } }); }
@@ -54,6 +55,7 @@ export class Api {
   schedule() { return this.request("/api/v1/schedule"); }
   cancelSchedule(id) { return this.request(`/api/v1/schedule/${encodeURIComponent(id)}`, { method: "DELETE" }); }
   stopwatch(action) { return this.request(`/api/v1/stopwatch/${action}`, { method: "POST", body: {} }); }
+  micUse(on, id) { return this.request("/api/v1/voice/mic", { method: "POST", body: { on, id } }); }
   wakeSleep() { return this.request("/api/v1/wake/sleep", { method: "POST", body: {} }); }
   deviceSound() { return this.request("/api/v1/voice/device-sound"); }
   voiceSettings() { return this.request("/api/v1/voice/settings"); }

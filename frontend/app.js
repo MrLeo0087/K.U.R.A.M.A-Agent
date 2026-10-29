@@ -5,7 +5,7 @@ import { Dust } from "./dust.js";
 import { Orb } from "./orb.js";
 import { attachSlash } from "./slash.js";
 import { openMoney } from "./money.js";
-import { Conversation, Mic, Player, Recorder, SentenceSplitter, audioCtx, audioSleepSoon, insertAtCursor } from "./voice.js";
+import { Conversation, Mic, Player, Recorder, SentenceSplitter, audioCtx, audioSleepSoon, insertAtCursor, micHooks } from "./voice.js";
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -123,7 +123,8 @@ function updateState() {
   if (!mic.open && !player.active && !recording) audioSleepSoon(); // free the audio thread when idle (asleep = API listens)
   // music down only while you actually speak (or the mic button records), KURAMA thinks or answers; back up 2 s
   // after (not while talk mode merely waits: that kept the music at a whisper and every state flip pumped it)
-  const duck = recording || conv.state === "capturing" || busy || sttBusy || player.playing;
+  // text mode: you type, so the music stays as it is (only voice / talk mode turns it down)
+  const duck = recording || conv.state === "capturing" || (mode !== "text" && (busy || sttBusy || player.playing));
   clearTimeout(unduckTimer);
   if (duck && !ducked) { ducked = true; api.musicDuck(true).catch(() => {}); }
   else if (!duck && ducked) unduckTimer = setTimeout(() => { ducked = false; api.musicDuck(false).catch(() => {}); }, 2000);
@@ -2599,9 +2600,9 @@ function renderVideos() {
   const days = [...new Set(dlLib.map((v) => v.day))];
   $("dl-libl").innerHTML = days.map((day) => {
     const vs = dlLib.filter((v) => v.day === day);
-    return `<div class="dl-day"><span>${esc(day)} · ${fmtVid(vs.reduce((a, v) => a + v.size, 0))}</span><button type="button" class="dl-btn bad" data-vday="${esc(day)}">Clear ${esc(day.toLowerCase() === "today" ? "today" : "day")}</button></div>
+    return `<div class="dl-day"><span>${esc(day)} · ${fmtVid(vs.reduce((a, v) => a + v.size, 0))}</span><button type="button" class="dl-btn bad" data-vday="${esc(day)}" title="Take these off the list (the files stay)">Clear ${esc(day.toLowerCase() === "today" ? "today" : "day")}</button></div>
       <ul class="dl-list">${vs.map((v) => `<li><div class="dl-row"><span class="ell" title="${esc(v.name)}">${esc(v.name.replace(/\.[^.]+$/, ""))}</span><span class="s">${fmtVid(v.size)}</span>
-        <span class="dl-btns"><button type="button" class="dl-btn bad" data-vrm="${esc(v.name)}">Remove</button></span></div></li>`).join("")}</ul>`;
+        <span class="dl-btns"><button type="button" class="dl-btn" data-vopen="${esc(v.name)}">Play</button><button type="button" class="dl-btn bad" data-vrm="${esc(v.name)}" title="Take it off this list (the video file stays)">Remove</button></span></div></li>`).join("")}</ul>`;
   }).join("");
 }
 async function removeVideos(body, ask) {
@@ -2610,13 +2611,15 @@ async function removeVideos(body, ask) {
   loadVideos();
 }
 $("dl-libl").onclick = (e) => {
-  const b = e.target.closest("[data-vrm],[data-vday]");
+  const b = e.target.closest("[data-vrm],[data-vday],[data-vopen]");
   if (!b) return;
+  if (b.dataset.vopen) return api.videosOpen({ name: b.dataset.vopen }).catch((err) => toast(err.message || "Couldn't open it"));
   if (b.dataset.vrm) return removeVideos({ names: [b.dataset.vrm] });
   const names = dlLib.filter((v) => v.day === b.dataset.vday).map((v) => v.name);
-  removeVideos({ names }, `Move ${names.length} video${names.length > 1 ? "s" : ""} from ${b.dataset.vday} to the Trash?`);
+  removeVideos({ names });
 };
-$("dl-clear").onclick = () => removeVideos({ all: true }, `Move all ${dlLib.length} downloaded videos to the Trash?`);
+$("dl-clear").onclick = () => removeVideos({ all: true }, `Clear the list? (${dlLib.length} videos — the files stay in the folder)`);
+$("dl-folder").onclick = () => api.videosOpen({ folder: true }).catch((err) => toast(err.message || "Couldn't open the folder"));
 for (const b of document.querySelectorAll("[data-dlt]")) b.onclick = () => {
   dlTab = b.dataset.dlt;
   for (const x of document.querySelectorAll("[data-dlt]")) x.classList.toggle("on", x === b);
@@ -2642,3 +2645,9 @@ if (MINI && !WSONLY) {
   }, { passive: true });
   document.addEventListener("mousedown", (e) => { const ed = e.button === 0 && edgeAt(e); if (ed && hostSay("resize:" + ed)) e.preventDefault(); }, true);
 }
+
+// the laptop's echo canceller runs only while this page records (voice / talk mode), never in text mode
+const MIC_ID = (MINI ? "mini-" : "main-") + Math.random().toString(36).slice(2, 8);
+micHooks.before = () => Promise.race([api.micUse(true, MIC_ID), new Promise((r) => setTimeout(r, 2500))]).catch(() => {});
+micHooks.after = () => { api.micUse(false, MIC_ID).catch(() => {}); };
+addEventListener("pagehide", () => { try { navigator.sendBeacon?.(api.base() + "/api/v1/voice/mic", new Blob([JSON.stringify({ on: false, id: MIC_ID })], { type: "application/json" })); } catch { /* ignore */ } });
