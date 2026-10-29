@@ -1200,7 +1200,7 @@ def _study_intent(t: str) -> Intent | None:
 
 
 _VID_SITES = r"(?:youtube\.com|youtu\.be|vimeo\.com|facebook\.com|fb\.watch|instagram\.com|tiktok\.com|x\.com|twitter\.com|dailymotion\.com)"
-_VDL = re.compile(r"^(?:please\s+)?(?:download|save|get)\s+(?:me\s+)?(?:the\s+|this\s+|that\s+|a\s+)?(?P<pl>(?:whole\s+)?playlist\s+)?"
+_VDL = re.compile(r"^(?:please\s+)?(?:download|save|get)\s+(?:me\s+)?(?P<det>the\s+|this\s+|that\s+|a\s+)?(?P<pl>(?:whole\s+)?playlist\s+)?"
                   r"(?:(?:youtube|yt)\s+)?(?P<kind>video|movie|film|song|music|audio|mp3|clip|playlist)?"
                   r"(?:\s+(?:of|called|named|for))?\s*(?P<src>.*?)"
                   r"(?:\s+(?:from|on)\s+youtube)?"
@@ -2179,8 +2179,9 @@ def video_dl_intent(t: str) -> Intent | None:
         return None  # "download the dataset" etc. are not videos
     if re.search(r"\b(?:link|url)$", src, I):
         return None  # "save this video link" keeps the link (saved_links), it doesn't download the video
-    if src.lower() in ("", "it", "this", "that", "one"):
-        src = ""
+    if src.lower() in ("", "it", "this", "that", "one") or \
+            (not is_url and (m.group("det") or "").strip().lower() in ("this", "that") and kind):
+        src = ""  # "download this youtube video (now / please)": the video open in the browser, not a search
     audio = bool(m.group("aud")) or kind in ("mp3", "audio")  # "this song" = its video (with sound) unless MP3/audio
     return Intent("vdl", "video_download", "media", {"source": src, "quality": q.replace(" ", ""),
                                                       "audio": audio,

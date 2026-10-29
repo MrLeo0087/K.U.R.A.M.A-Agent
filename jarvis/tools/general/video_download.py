@@ -17,7 +17,8 @@ def video_download(source: str = "", quality: str = "", audio: bool = False, pla
         playlist: True = the whole playlist.
     """
     from jarvis.core import ytdl
-    if not source.strip() or source.strip().lower() in ("this", "this video", "it", "that"):
+    if not source.strip() or source.strip().lower() in ("this", "this video", "it", "that", "now", "right now",
+                                                        "please", "this one", "for me", "quickly", "fast"):
         source = this_video()
         if not source:
             return "error: open the video in your browser (or give its link), then ask again"

@@ -1278,5 +1278,11 @@ body.minimal .to-minimal { display: none; }
 .dl-list .s { color: var(--muted); overflow-wrap: anywhere; }
 .dl-failed .gbar i, .dl-stopped .gbar i { background: #c0453a; }
 .dl-done .gbar i { background: #3fb67a; }
-.dl-btns { display: inline-flex; gap: 2px; } .dl-btns .icon-btn { width: 22px; height: 22px; font-size: 11px; }
+.dl-row { flex-wrap: wrap; }
+.dl-btns { display: inline-flex; gap: 6px; flex-shrink: 0; }
+.dl-btn { padding: 3px 10px; border-radius: 999px; border: 1px solid var(--card-border); background: rgba(255, 255, 255, 0.04);
+  color: var(--accent-2); font: inherit; font-size: 12px; cursor: pointer; }
+.dl-btn:hover { background: var(--accent-soft); color: #fff; }
+.dl-btn.bad { color: #e8796e; border-color: rgba(232, 121, 110, 0.35); }
+.dl-btn:disabled { opacity: 0.5; cursor: default; }
 .dl-paused .gbar i { background: var(--muted); }

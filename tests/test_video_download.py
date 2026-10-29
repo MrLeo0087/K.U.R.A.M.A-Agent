@@ -111,3 +111,10 @@ def test_pause_resume_and_delete(monkeypatch, tmp_path):
     assert "partial" in ytdl.control(wid, "delete")
     assert not part.exists() and keep.exists()  # only this download's leftovers go
     assert all(d["id"] != wid for d in automation.live_downloads())
+
+
+def test_this_video_now_is_the_open_tab_not_a_search_for_now():
+    for t in ("download this youtube video now", "download this video please", "download this youtube video"):
+        i = fastpath.match(t)
+        assert i.tool == "video_download" and i.args["source"] == "", t
+    assert fastpath.match("download interstellar trailer in 4k").args["source"] == "interstellar trailer"  # still a search
