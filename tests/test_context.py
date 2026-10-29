@@ -108,3 +108,18 @@ def test_replace_it_after_code_in_the_chat_goes_into_the_open_file(monkeypatch, 
     assert i.tool == "code_to_file" and i.args == {"request": ""}
     assert "Should I add it?" in ctf.code_to_file(**i.args) and f.read_text() == "x = 1\n"
     assert fastpath.match("replace it").tool == "text_assist"  # now a change waits: 'replace it' = yes, apply it
+
+
+def test_a_patch_replaces_only_the_unfinished_method():
+    from jarvis.tools.general.code_to_file import patch_python
+    old = ("import numpy as np\nfrom typing import List\n\nclass Store:\n    def __init__(self):\n        self.x = []\n\n"
+           "    def search(self, q: List[float]) -> list:\n        \"\"\"TODO\"\"\"\n        pass\n\n    def size(self):\n"
+           "        return len(self.x)\n\n\nif __name__ == \"__main__\":\n    print(Store().size())\n")
+    patch = ("import logging\nimport numpy as np\n\nclass Store:\n    def search(self, q: List[float]) -> list:\n"
+             "        logging.info('search')\n        return sorted(self.x)\n\n    def clear(self):\n        self.x = []\n\n"
+             "def helper():\n    return 1\n")
+    out = patch_python(old, patch)
+    assert out.count("class Store") == 1 and out.count("def search") == 1 and out.count("import numpy") == 1
+    assert "return sorted(self.x)" in out and "pass\n" not in out and "def size(self)" in out  # only search changed
+    assert out.index("def clear") < out.index("def helper") < out.index("if __name__")
+    assert "import logging" in out

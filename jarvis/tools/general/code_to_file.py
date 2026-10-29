@@ -64,9 +64,96 @@ def latest_code() -> str:
     return ""
 
 
+_PATCH_PROMPT = ("You are an expert programmer editing an existing Python file. Reply with ONE Markdown fenced code "
+                 "block holding ONLY what must change: new import lines, and each function or method you add or "
+                 "change, written out complete (a method inside its `class Name:` line, indented as in the file). "
+                 "Return only the function(s) the request is about and new helpers/imports they need; never return "
+                 "a function that already works, even to tidy it. Keep names and signatures unless asked.")
+
+
+def _blocks(tree) -> dict:
+    """name -> node for the top-level functions / classes of a module."""
+    import ast
+    return {n.name: n for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))}
+
+
+def _span(node) -> tuple[int, int]:
+    """0-based [start, end) lines of a def/class, decorators included."""
+    start = min([node.lineno] + [d.lineno for d in getattr(node, "decorator_list", [])]) - 1
+    return start, node.end_lineno
+
+
+def _indent(lines: list[str], width: int) -> list[str]:
+    import textwrap
+    body = textwrap.dedent("\n".join(lines)).splitlines()
+    return [(" " * width + ln) if ln.strip() else "" for ln in body]
+
+
+def patch_python(old: str, patch: str) -> str | None:
+    """Apply a patch of complete functions / methods / imports to `old`: same name = replaced in place, new =
+    added (methods at the end of their class, functions before `if __name__`). None when it can't be applied."""
+    import ast
+    try:
+        new_tree, old_tree = ast.parse(patch), ast.parse(old)
+    except SyntaxError:
+        return None
+    lines, plines = old.splitlines(), patch.splitlines()
+    edits: list[tuple[int, int, list[str]]] = []  # (start, end, replacement lines) on the old file
+    have = _blocks(old_tree)
+    imports = [plines[n.lineno - 1:n.end_lineno] for n in new_tree.body if isinstance(n, (ast.Import, ast.ImportFrom))]
+    imports = [ln for block in imports for ln in block if ln.strip() not in {x.strip() for x in lines}]
+    tail_add: list[str] = []
+    for name, node in _blocks(new_tree).items():
+        a, b = _span(node)
+        src = plines[a:b]
+        if name in have and isinstance(node, ast.ClassDef) and isinstance(have[name], ast.ClassDef):
+            cls = have[name]
+            methods = _blocks(cls)
+            width = cls.body[0].col_offset if cls.body else cls.col_offset + 4
+            insert_at = cls.end_lineno
+            for m in node.body:
+                if not isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                ma, mb = _span(m)
+                msrc = _indent(plines[ma:mb], width)
+                if m.name in methods:
+                    edits.append((*_span(methods[m.name]), msrc))
+                else:
+                    edits.append((insert_at, insert_at, [""] + msrc))
+        elif name in have:
+            edits.append((*_span(have[name]), _indent(src, 0)))
+        else:
+            tail_add += ["", ""] + _indent(src, 0)
+    if not edits and not imports and not tail_add:
+        return None
+    for a, b, rep in sorted(edits, key=lambda e: e[0], reverse=True):
+        lines[a:b] = rep
+    if tail_add:
+        main = next((i for i, ln in enumerate(lines) if ln.startswith("if __name__")), len(lines))
+        lines[main:main] = tail_add + ([""] if main < len(lines) else [])
+    if imports:
+        last = max((n.end_lineno for n in old_tree.body if isinstance(n, (ast.Import, ast.ImportFrom))), default=0)
+        lines[last:last] = imports
+    out = "\n".join(lines).rstrip() + "\n"
+    try:
+        ast.parse(out)
+    except SyntaxError:
+        return None
+    return out
+
+
 def generate(request: str, target: Path, old: str) -> str:
+    """The new content of the file. A Python file with code gets a PATCH (only the functions that change or are
+    added), applied in place; anything else (or a patch that can't be applied) gets the complete file."""
     from jarvis.core import llm
     from jarvis.core.writer import code_only
+    if old.strip() and target.suffix == ".py":
+        reply = llm.chat([{"role": "system", "content": _PATCH_PROMPT},
+                          {"role": "user", "content": f"File: {target.name}\n```python\n{old[-12000:]}\n```\n"
+                                                      f"Request: {request}"}],
+                         tier="smart", purpose="code_patch", max_tokens=config.CODE_FILE_MAX_TOKENS)
+        if (patched := patch_python(old, code_only(str(reply)))) is not None:
+            return patched
     reply = llm.chat([{"role": "system", "content": _EDIT_PROMPT},
                       {"role": "user", "content": f"File: {target.name}\nCurrent content:\n```\n{old[-12000:]}\n```\n"
                                                   f"Request: {request}"}],

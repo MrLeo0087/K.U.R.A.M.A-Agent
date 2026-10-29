@@ -2,7 +2,7 @@ import numpy as np
 from typing import List, Dict
 import logging
 
-# Configure a basic logger for this module
+# Configure basic logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -23,54 +23,48 @@ class SimpleVectorStore:
     def search(self, query_embedding: List[float], top_k: int = 3) -> List[Dict[str, float]]:
         """
         Perform a cosine similarity search between ``query_embedding`` and the stored
-        ``self.embeddings``. Returns the ``top_k`` most similar documents together
-        with their similarity scores, sorted in descending order.
+        document embeddings. Returns the ``top_k`` most similar documents along with
+        their similarity scores in descending order.
 
         Each result is a dictionary with the keys:
             - ``document``: the original document string
-            - ``score``: cosine similarity (float) between the query and the document vector
+            - ``score``: cosine similarity score (float, range [-1, 1])
 
         Args:
-            query_embedding: A list (or 1‑D array) representing the query vector.
+            query_embedding: A list (or array‑like) representing the query vector.
             top_k: Number of top results to return.
 
         Returns:
-            A list of dictionaries ordered by decreasing similarity.
+            A list of dictionaries sorted by descending similarity.
         """
-        if not self.documents:
-            logger.warning("Search called on an empty store.")
+        if self.embeddings.size == 0:
+            logger.warning("Search called on an empty vector store.")
             return []
 
-        # Convert query to a NumPy array and ensure correct shape
+        # Convert query to numpy array and ensure same dtype
         query_vec = np.asarray(query_embedding, dtype=np.float32)
-        if query_vec.ndim != 1:
-            raise ValueError("query_embedding must be a 1‑dimensional list or array.")
 
-        # Guard against dimension mismatch
-        if self.embeddings.shape[1] != query_vec.shape[0]:
+        if query_vec.shape[0] != self.embeddings.shape[1]:
             raise ValueError(
-                f"Dimension mismatch: store embeddings have dimension {self.embeddings.shape[1]}, "
-                f"but query embedding has dimension {query_vec.shape[0]}."
+                f"Dimension mismatch: query vector has dimension {query_vec.shape[0]}, "
+                f"but stored embeddings have dimension {self.embeddings.shape[1]}."
             )
 
-        # Compute cosine similarity
-        # Normalize vectors to unit length
-        doc_norms = np.linalg.norm(self.embeddings, axis=1, keepdims=True)
-        query_norm = np.linalg.norm(query_vec)
-
-        # Avoid division by zero
-        if query_norm == 0:
-            raise ValueError("Query embedding is a zero vector; cannot compute cosine similarity.")
-        doc_norms[doc_norms == 0] = 1e-10  # small epsilon to prevent NaNs
-
+        # Normalize embeddings and query to unit vectors
+        # Add a tiny epsilon to avoid division by zero
+        eps = 1e-10
+        doc_norms = np.linalg.norm(self.embeddings, axis=1, keepdims=True) + eps
         normalized_docs = self.embeddings / doc_norms
+
+        query_norm = np.linalg.norm(query_vec) + eps
         normalized_query = query_vec / query_norm
 
+        # Cosine similarity is just dot product of normalized vectors
         similarities = normalized_docs @ normalized_query  # shape: (num_documents,)
 
-        # Get indices of top_k scores
+        # Get indices of top_k similarities
         top_k = min(top_k, len(self.documents))
-        top_indices = np.argpartition(-similarities, top_k - 1)[:top_k]
+        top_indices = np.argpartition(-similarities, range(top_k))[:top_k]
         # Sort those top indices by actual similarity descending
         top_indices = top_indices[np.argsort(-similarities[top_indices])]
 
