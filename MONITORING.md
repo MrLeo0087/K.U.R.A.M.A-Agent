@@ -56,6 +56,8 @@ venv/bin/python scripts/trace_report.py               # last 7 days
 venv/bin/python scripts/trace_report.py --days 30
 venv/bin/python scripts/trace_report.py --show 3fa9c1  # one request in full (id or its first letters)
 venv/bin/python scripts/trace_report.py --csv /tmp/traces.csv   # everything, for a spreadsheet
+venv/bin/python scripts/trace_report.py --mark-fixed   # after fixing what a report found: later reports start from now
+venv/bin/python scripts/trace_report.py --all          # include requests from before the last --mark-fixed
 ```
 
 The report shows:
@@ -90,5 +92,9 @@ EOF
 | A tool failed | the specialised tool in `jarvis/tools/{general,interactive,external}/` |
 | Slow or expensive | check `llm` in the trace: planner / router / summary calls that could be skipped, a big tier where the fast one would do |
 
-After a fix: add a test, run the related tests and the scorecard (`venv/bin/python -m tests.eval.harness`; add `--ai`
+After a fix: add a test, run the related tests and the scorecard (then `--mark-fixed`, so the next report only shows what happened after the fixes) (`venv/bin/python -m tests.eval.harness`; add `--ai`
 for the full agent, which costs tokens), update `PROGRESS.md`, commit.
+
+## Fix history
+
+- 2026-10-30: the first report's problems (wrong tools, downloads, open tab / code / small talk, honest replies, mic/sound) were fixed; see PROGRESS.md (FIX 1-5). Reports start after this (`traces_fixed_at`).

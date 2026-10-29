@@ -33,12 +33,21 @@ COMMANDISH = re.compile(r"^\W*(?:open|close|play|set|turn|start|stop|send|find|s
                         r"save|cancel|schedule)\b", re.I)
 
 
-def load(db: Path, days: float) -> list[dict]:
+def fixed_at(db: Path) -> float:
+    """When the problems found so far were fixed (--mark-fixed): older traces are left out unless --all."""
+    try:
+        return float((db.parent / "traces_fixed_at").read_text().strip())
+    except (OSError, ValueError):
+        return 0.0
+
+
+def load(db: Path, days: float, since: float = 0.0) -> list[dict]:
     if not db.exists():
         return []
     c = sqlite3.connect(str(db))
     c.row_factory = sqlite3.Row
-    return [dict(r) for r in c.execute("SELECT * FROM traces WHERE ts >= ? ORDER BY ts", (time.time() - days * 86400,))]
+    start = max(time.time() - days * 86400, since)
+    return [dict(r) for r in c.execute("SELECT * FROM traces WHERE ts >= ? ORDER BY ts", (start,))]
 
 
 def short(t: str, n: int = 70) -> str:
@@ -146,12 +155,22 @@ def main() -> int:
     ap.add_argument("--show", help="one trace id (or its first letters) in full")
     ap.add_argument("--csv", help="write every row of the period to this CSV file")
     ap.add_argument("--db", default=str(config.TRACE_DB))
+    ap.add_argument("--mark-fixed", action="store_true",
+                    help="the problems found so far are fixed: later reports start from now (old traces are kept)")
+    ap.add_argument("--all", action="store_true", help="include traces from before the last --mark-fixed")
     a = ap.parse_args()
     db = Path(a.db)
     if a.show:
         print(show(db, a.show))
         return 0
-    rows = load(db, a.days)
+    if a.mark_fixed:
+        (db.parent / "traces_fixed_at").write_text(str(time.time()))
+        print(f"Marked as fixed at {time.strftime('%Y-%m-%d %H:%M')}: reports start from now (old traces kept; --all shows them).")
+        return 0
+    since = 0.0 if a.all else fixed_at(db)
+    if since:
+        print(f"(Only requests after the fixes of {time.strftime('%Y-%m-%d %H:%M', time.localtime(since))}; --all for older ones.)")
+    rows = load(db, a.days, since)
     if a.csv:
         with open(a.csv, "w", newline="") as f:
             w = csv.DictWriter(f, fieldnames=list(rows[0].keys()) if rows else ["id"])
