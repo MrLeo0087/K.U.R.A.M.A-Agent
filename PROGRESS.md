@@ -368,6 +368,10 @@ Phases (one at a time, owner tests after each):
 - [ ] E tools, each with multi-turn live scenarios: money + contacts; read later, notes, quiz, study, habits; power,
       folder lock, calculator, open apps/sites/text; Telegram/phone, safety
 - [ ] F live end-to-end scenario run for every tool through the API (small batches: Groq free tier)
+- Standing targets for every phase (owner, 2026-10-30): >= 65% of requests at 0 tokens (scorecard), everyday chat /
+  time / date / greetings instant (now: median 11 ms), any tool request answered within 3-4 s (now: AI median 1.7 s
+  but p90 6.2 s, 17% over 4 s: tools sat 6 s before going to the background (KURAMA_TOOL_BG_AFTER_S), 4-9 AI calls
+  on retries, live scores ~6 s); slow work says "on it" at once and announces the result.
 - [x] 2026-10-30 Phase A: page never cancels a waiting yes/no (abortChat refuses while a card is open; talk-mode
       auto-sleep waits; "sleep" = an explicit no); yes/no words matched whole ("Now", "Nothing", "How", "Hold on" no
       longer answer it); learning only from self-contained wordings that really worked (no error / "you said no" /
