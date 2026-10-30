@@ -1721,7 +1721,7 @@ def tracker_intent(t: str) -> Intent | None:
     def habit(action, text=""):
         return Intent("habit", "habits", "tracker", {"action": action, "text": text})
     low = t.lower().strip(" .!?")
-    if re.fullmatch(r"(?:please\s+)?(?:give\s+me\s+|tell\s+me\s+|read\s+me\s+|what(?:'s|\s+is)\s+)?(?:my\s+|the\s+|today'?s\s+)?(?:morning\s+|daily\s+)?brief(?:ing)?"
+    if re.fullmatch(r"(?:please\s+)?(?:give\s+me\s+|tell\s+me\s+|read\s+me\s+|send\s+(?:me\s+)?|show\s+(?:me\s+)?|what(?:'s|\s+is)\s+)?(?:my\s+|the\s+|today'?s\s+)?(?:morning\s+|daily\s+)?brief(?:ing)?"
                     r"(?:\s+(?:for\s+)?today)?|brief\s+me|how\s+does\s+my\s+day\s+look(?:\s+like)?|what\s+does\s+my\s+day\s+look\s+like", low, I):
         return Intent("brief", "_brief", "self", {})
     # --- habits ---

@@ -163,6 +163,8 @@ class Watch:
         was, self.locked = self.locked, locked if locked is not None else self.locked
         if was is True and locked is False:
             return "unlock"
+        if was is None and locked is False:  # the first look after KURAMA started (a fresh boot / login): unlocked
+            return "start"
         if woke and locked is not True:
             return "wake"
         return None
