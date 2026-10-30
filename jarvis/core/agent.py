@@ -286,9 +286,10 @@ class Agent:
             r = router.Route(prev, "followup", r.reasoning, r.latency_ms)
         if r.groups:
             self._prev_groups = (list(r.groups), time.time())
-        try:  # code is open in VS Code: the code-editing tool is always offered (the context line says what's open)
-            from jarvis.core import context
-            if self.channel != "telegram" and context.editor_open() and "clipboard" not in r.groups:
+        try:  # code open in VS Code or text highlighted anywhere: the text/code tool is always offered (the context
+            from jarvis.core import context, rewrite  # line says what is open / selected)
+            if self.channel != "telegram" and "clipboard" not in r.groups and (
+                    context.editor_open() or (config.CONTEXT and rewrite.peek().strip())):
                 r = router.Route(["clipboard", *r.groups][: config.ROUTER_MAX_GROUPS], r.method, r.reasoning, r.latency_ms)
         except Exception as e:  # noqa: BLE001
             log.warning("editor context failed: %s", e)
@@ -722,6 +723,23 @@ class Agent:
                 self.last.setdefault("jobs", []).extend(res.jobs)  # the UI watches and announces them
         return res
 
+    BARE = {"yes": "There's nothing waiting for a yes right now. What should I do?",
+            "no": "Okay, nothing to cancel right now."}
+
+    def _bare_answer(self, text: str) -> str | None:
+        """A bare 'yes' / 'no' when nothing waits for it (no shortcut took it) and my last reply asked nothing: a
+        0-token answer. It used to go to the AI (up to 7k tokens), which guessed and redid the last action."""
+        words = re.findall(r"[^\s,.!?।]+", (text or "").lower())
+        if not words or len(words) > 3 or safety.parse_yes_no(text) is None:
+            return None
+        if not all(w in safety.YES_WORDS or w in safety.NO_WORDS or w in ("please", "ok", "okay", "sir") for w in words):
+            return None
+        last = next((m for m in reversed(self.history) if isinstance(m, AIMessage)), None)
+        if last is not None and "?" in str(last.content)[-200:]:
+            return None  # I asked something: the AI reads the answer with the conversation
+        self.last = {"tools": [], "t0": time.monotonic(), "fastpath": "bare_answer"}
+        return self.BARE["yes" if safety.parse_yes_no(text) else "no"]
+
     # --- public API ---
     def _state(self, user_text: str, mode: str, lang: str | None, stream: bool) -> AgentState:
         self.last = {"tools": [], "t0": time.monotonic()}
@@ -750,6 +768,8 @@ class Agent:
         if fast is not None:
             self._remember(user_text, fast.answer)
             return fast.answer
+        if (bare := self._bare_answer(user_text)) is not None:
+            return bare
         if modes.ai_level() == "off":
             return modes.NO_AI
         try:
@@ -786,6 +806,9 @@ class Agent:
         if fast is not None:
             self._remember(user_text, fast.answer)
             yield fast.answer
+            return
+        if (bare := self._bare_answer(user_text)) is not None:
+            yield bare
             return
         if modes.ai_level() == "off":
             self.last = {"tools": [], "t0": time.monotonic()}

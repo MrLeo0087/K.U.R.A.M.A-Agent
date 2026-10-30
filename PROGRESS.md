@@ -361,7 +361,7 @@ an item, "empty the list" removed one, contacts saved as a memory note, habits m
 Phases (one at a time, owner tests after each):
 - [x] A foundations (below)
 - [x] B VS Code extension: exact open file, selection + range, unsaved state; browser selection via browser_ext
-- [ ] C routing by meaning: context first (selection/editor/page = automatic focus, owner's "modes" idea without
+- [x] C routing by meaning: context first (selection/editor/page = automatic focus, owner's "modes" idea without
       picking a mode), assist/code regexes -> meaning examples, gate always on, wrong patterns removed (e.g. eval #176
       'Stop tracking laptop' -> habits delete, a pattern bug)
 - [ ] D coding agent as its own project (owner: 'like Claude Code, for daily real work'): explain / change the
@@ -403,3 +403,19 @@ Phases (one at a time, owner tests after each):
       sentences, small model, ~150 tokens, stays in the chat) + "Want the full step-by-step explanation?"; only a yes
       writes the long one (it goes to the workspace). Open: "what this code about" (no 'selected') went to the AI
       without the selection -> Phase C (the selection decides first).
+- [x] 2026-10-30 Phase C: (1) SELECTION FIRST: with text/code highlighted (VS Code / browser via the extensions, else
+      the newest highlight outside KURAMA; rewrite.peek never touches the screen), the request's MEANING is compared
+      with config.SELECTION_EXAMPLES (explain / improve / complete / translate / summary / use / run / ask) by the local
+      model (semantic.best_of, 0 tokens); >= SELECTION_MIN 0.78 and not clearly another area -> text_assist with that
+      action (fastpath.selection_intent; words only give details: language, 'replace it'; a link/path/file name in
+      the request or a waiting yes/no skips it). Calibrated on 27 selection + 29 other real phrasings: all separated
+      ('what this code about' 0.98 vs knowledge 0.90; 'what is the time' 0.75 vs general 0.88). The text tool is also
+      offered to the AI whenever something is highlighted. (2) The meaning gate always applies (it only acted when the
+      model was >= 0.85 sure): scorecard #176 'Stop tracking laptop' no longer deletes a habit; 'youtube kholo' kept by
+      open_url examples. (3) Spoken math -> calculator, 0 tokens ('32 per of 100', 'what is the 30 percent of 100',
+      '15 plus 27', 'square root of 144'; calculate.spoken_math). (4) A bare yes/no with nothing waiting and no
+      question in my last reply: 0-token answer (was up to 7k tokens + a redone action). (5) A tool still running
+      after 3 s (was 6) becomes a background job. Live: math/time/yes 40-180 ms, 0 tokens. Scorecard 219 cases: 66%
+      instant, 100% right, router 92%. 1021 tests. Idle: server 130 MB, wallpaper 165 MB, embedder 267 MB while
+      loaded (unloads when idle, auto mode).
+      The old assist regexes stay only as the fallback while the model is loading / for Nepali-Hindi script.

@@ -212,3 +212,8 @@
 {"id": 212, "text": "write a function that reverses a string in this file", "expect": "code.to_file", "args": {}, "channel": "laptop"}
 {"id": 213, "text": "thanks a lot", "expect": "chat", "args": {}, "channel": "laptop"}
 {"id": 214, "text": "how's your day been", "expect": "chat", "args": {}, "channel": "laptop"}
+{"id": 215, "text": "calculate 32 per of 100", "expect": "calculate", "args": {}, "channel": "laptop"}
+{"id": 216, "text": "what is the 30 percent of 100", "expect": "calculate", "args": {}, "channel": "laptop"}
+{"id": 217, "text": "what is 15 plus 27", "expect": "calculate", "args": {}, "channel": "laptop"}
+{"id": 218, "text": "square root of 144", "expect": "calculate", "args": {}, "channel": "laptop"}
+{"id": 219, "text": "youtube kholo", "expect": "open.site", "args": {}, "channel": "laptop"}

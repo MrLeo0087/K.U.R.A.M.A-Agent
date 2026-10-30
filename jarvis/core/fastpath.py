@@ -1308,6 +1308,10 @@ def _daily_intent(t: str) -> Intent | None:
             return Intent("gesture", "gesture_control", "media", {"action": "on"})
     if (m := _MATH.match(t)) and re.search(r"\d", t) and (re.search(r"[+\-*/×÷^%]|sqrt|\bto\b|\bin\b|into", t)):
         return Intent("calc", "calculate", "daily", {"expression": m.group("e")})
+    if re.search(r"\d", t) and re.search(r"[a-z]", t, I):  # said in words: '30 percent of 100', '5 times 6'
+        from jarvis.tools.general.calculate import spoken_math
+        if (sm := spoken_math(t)) != t and (m := _MATH.match(sm)) and re.search(r"[+\-*/×÷^%]|sqrt", sm):
+            return Intent("calc", "calculate", "daily", {"expression": m.group("e")})
     if m := _NEWS.match(t):
         topic = (m.group("topic") or "").strip()
         return Intent("news", "web_search", "web", {"query": f"latest news {topic or 'Nepal'}"})
@@ -2999,9 +3003,9 @@ _NO_GATE = {"unlock", "error", "study", "say", "slash", "assist"}  # exact answe
 
 
 def meaning_ok(text: str, it: Intent) -> bool:
-    """A shortcut's pattern matched; it runs only if the MEANING agrees: its area is (near) the best area for the
-    request, and no earlier correction said this wording isn't this shortcut. Model not loaded yet: the pattern
-    decides this once (the model starts in the background)."""
+    """A shortcut's pattern matched; it runs only if the MEANING agrees: its area is within MEANING_GATE_MARGIN of the
+    best area for the request, and no earlier correction said this wording isn't this shortcut. Model not loaded
+    yet: the pattern decides this once (the model starts in the background)."""
     from jarvis.core import learn, semantic
     if it.name in _NO_GATE or it.tool.startswith("_") or it.group in ("self", ""):
         return True
@@ -3015,7 +3019,9 @@ def meaning_ok(text: str, it: Intent) -> bool:
         return False
     best = dict(ranked)
     top = ranked[0][1]
-    return top < config.MEANING_GATE_SURE or best.get(it.group, 0.0) >= top - config.MEANING_GATE_MARGIN
+    # always by meaning (Phase C): it used to apply only when the model was >= 0.85 sure, and most requests score
+    # 0.70-0.80, so in practice the pattern alone decided
+    return best.get(it.group, 0.0) >= top - config.MEANING_GATE_MARGIN
 
 
 _CODE_THING = re.compile(r"\b(?:function|method|class|def|variable|func)\b", I)
@@ -3172,8 +3178,62 @@ def daily_intent(text: str) -> Intent | None:
 def match(text: str) -> Intent | None:
     """The single high-confidence intent for text whose meaning agrees (meaning_ok), or None."""
     it = link_play_intent(text) or clean_intent(text) or shutdown_later_intent(text) or to_file_intent(text) \
-        or _code_not_file(_match(text)) or daily_intent(text)
+        or selection_intent(text) or _code_not_file(_match(text)) or daily_intent(text)
     return it if it is None or meaning_ok(text, it) else None
+
+
+def _assist_waiting() -> bool:
+    from jarvis.core import assist
+    return bool(assist.pending_code_active() or assist.more_waiting() or assist.use_waiting()
+                or assist.retry_active() or assist.ask_back_waiting())
+
+
+def selection_intent(text: str) -> Intent | None:
+    """Selection first (0 tokens): when code/text is highlighted, a request whose MEANING is one of the selection
+    actions (config.SELECTION_EXAMPLES: explain, improve, complete, translate, summary, use, run, ask) is about the
+    highlight, whatever the words ("what this code about", "make it better", "what is this in hindi"). Requests
+    that mean something else ("open youtube", "what is the time") keep their own area. The words only give
+    details (the language, 'replace it')."""
+    t = " ".join((text or "").split())
+    if not config.CONTEXT or not t or len(t) > 300 or t.startswith("/") or _assist_waiting():
+        return None
+    if re.search(r"https?://|(?<!\w)[~/][\w.-]+/|\b[\w-]+\.(?:py|js|ts|md|txt|json|ipynb|html|css|sh)\b", t, I):
+        return None  # a link, a path or a file named in the request: it is about THAT, not the highlight
+    from jarvis.core import rewrite, semantic
+    try:
+        sel = rewrite.peek()
+    except Exception:  # noqa: BLE001 - context is a bonus
+        return None
+    if not sel.strip():
+        return None
+    if not semantic.ready():  # never wait seconds for the model: the patterns decide this once, it loads meanwhile
+        semantic.warm_soon()
+        return None
+    ranked = semantic.scores(t)
+    best = semantic.best_of(t, "selection", config.SELECTION_EXAMPLES)
+    if not ranked or best is None:
+        return None  # the meaning model isn't ready / not English: the patterns below decide
+    action, score = best
+    chat = next((s for g, s in ranked if g == semantic.CHAT), 0.0)
+    other = next((s for g, s in ranked if g not in (semantic.CHAT, "clipboard")), 0.0)  # clipboard = this tool's area
+    if score < config.SELECTION_MIN or score < max(other, chat) - config.SELECTION_MARGIN:
+        return None
+    from jarvis.core.assist import is_code, lang_of
+    code = is_code(sel)
+    if action == "run":
+        return Intent("codenav", "code_nav", "codequality", {"action": "run", "name": "", "request": t}) if code else None
+    if action == "explain":
+        args = {"action": "code"} if code else {"action": "meaning" if len(sel.split()) <= 3 else "explain"}
+    elif action == "translate":
+        args = {"action": "translate", "lang": lang_of(t) or "ne", "replace": bool(re.search(r"\breplace\b", t, I)),
+                "text": ""}
+    elif action in ("complete", "use") and not code:
+        args = {"action": "ask", "request": t}  # text: no code to finish or call; do what was asked with it
+    else:
+        args = {"action": action, "request": t}
+    if action in ("explain", "summary"):
+        args["lang"] = lang_of(t) or ""
+    return Intent("assist", "text_assist", "clipboard", args)
 
 
 def _match(text: str) -> Intent | None:

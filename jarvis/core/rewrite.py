@@ -136,6 +136,20 @@ def _from_browser(wid: int, in_front: bool) -> "Grab | None":
     return Grab(text, wid, in_front, False, _window_name(wid)) if text.strip() and len(text) <= MAX_CHARS else None
 
 
+def peek() -> str:
+    """The highlighted text the user would mean by "this", WITHOUT touching anything (no window switch, no Ctrl+C):
+    VS Code / the browser through their extensions, else the newest highlight made outside KURAMA. '' = none."""
+    wid, in_front = target_window()
+    if wid is None:
+        return ""
+    if (ed := _from_editor(wid, in_front)) is not None:
+        return ed.text if isinstance(ed, Grab) else ""  # VS Code says exactly: nothing selected means nothing
+    if (br := _from_browser(wid, in_front)) is not None:
+        return br.text
+    mem = remembered()
+    return mem.text if mem is not None else ""
+
+
 class Grab:
     """The highlighted text, copied from the app the user works in, and where it came from."""
 

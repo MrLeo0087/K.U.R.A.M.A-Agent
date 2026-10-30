@@ -175,12 +175,13 @@ def scores(text: str) -> list[tuple[str, float]]:
     for g, s in learn.group_scores(q).items():
         if s > best.get(g, -1.0):
             best[g] = s
-    global last_vec
-    last_vec = q
+    global last_vec, _last_text
+    last_vec, _last_text = q, text
     return sorted(best.items(), key=lambda kv: kv[1], reverse=True)
 
 
 last_vec: Any = None  # the last request's vector (the shortcut veto reuses it)
+_last_text = ""  # ...and its text
 
 
 def ready() -> bool:
@@ -218,3 +219,32 @@ def extra(text: str, have: list[str]) -> str | None:
             and ranked[0][1] >= chat + config.SEMANTIC_OVER_CHAT:
         return ranked[0][0]
     return None
+
+
+_tables: dict[str, tuple[list[str], Any]] = {}  # name -> (label per row, L2-normalized matrix), embedded once
+
+
+def best_of(text: str, name: str, table: dict[str, tuple[str, ...]]) -> tuple[str, float] | None:
+    """The label whose example phrasings are closest in meaning to `text`, and how close; None when the model can't
+    judge (off, not English, not loaded yet: the caller keeps its old way). Reuses the request's vector when
+    scores() just embedded the same text."""
+    if not config.SEMANTIC_ROUTER or not text.strip() or not re.search(r"[A-Za-z]{3}", text) or mode() == "off":
+        return None
+    if re.search(r"[ऀ-ॿ]", text):
+        return None
+    import numpy as np
+    try:
+        with _lock:
+            key = hashlib.sha1(repr(sorted(table.items())).encode()).hexdigest()[:12]
+            if name not in _tables or _tables[name][0][0] != key:
+                labels = [lab for lab, exs in table.items() for _ in exs]
+                mat = embedder().embed([e for exs in table.values() for e in exs]).astype(np.float32)
+                _tables[name] = ((key, labels), mat)
+            (_, labels), mat = _tables[name]
+            q = last_vec if _last_text == text and last_vec is not None else embedder().embed([text], query=True)[0]
+    except Exception as e:  # noqa: BLE001 - the meaning model is a bonus: never break a request
+        log.warning("semantic best_of unavailable: %s", e)
+        return None
+    sims = (mat @ q).tolist()
+    i = max(range(len(sims)), key=sims.__getitem__)
+    return labels[i], float(sims[i])

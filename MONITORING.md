@@ -115,6 +115,9 @@ every tool of that kind, not just the sentence in the trace.
 
 - **Routing:** meaning first (`semantic.py`, warm model) + learned wordings (`learn.py`, `data/learned.json`);
   word rules only add candidates or stand in while the model loads. Shortcuts run only if the meaning agrees.
+- **Selection first (Phase C):** highlighted code/text + a request that MEANS explain/improve/translate/... (config.
+  SELECTION_EXAMPLES, `fastpath.selection_intent`) -> text_assist, any wording. VS Code/browser selection comes from
+  the extensions (`jarvis/core/editor.py`, `browsertab.selection`). The meaning gate (`meaning_ok`) always applies.
 - **Learning:** each turn is judged when the next one arrives (a correction by meaning within 2 min teaches the
   right area and vetoes the wrong shortcut; a correction after a FAILED action does not veto it).
 - **Context:** the VS Code file + selected code, or the browser tab, go into the prompt as one short line.

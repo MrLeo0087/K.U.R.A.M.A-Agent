@@ -283,7 +283,7 @@ WORKSPACE_SKIP_TOOLS = ("read_webpage", "search_knowledge", "ask_knowledge", "re
                         "todo", "schedules", "read_later")  # lists with their own views never clutter the workspace
 # A tool still running after this many seconds keeps going as a background job; the user can keep talking and
 # is told when it's done (0 = off)
-TOOL_BACKGROUND_AFTER_S = float(os.getenv("KURAMA_TOOL_BG_AFTER_S", "6"))
+TOOL_BACKGROUND_AFTER_S = float(os.getenv("KURAMA_TOOL_BG_AFTER_S", "3"))
 TOOL_NO_BACKGROUND = ("start_job", "generate_image", "write_document", "jobs", "make_tool",
                       "focus_mode", "gesture_control", "power_off", "suspend_computer",
                       "read_text", "scan_qr")  # these wait for the user to drag a box: never "still working"
@@ -296,6 +296,8 @@ ROUTER_MAX_GROUPS = 3
 # Free phrasing for tools: paraphrases embedded by the semantic router (0 tokens), so "enable speech to text
 # mode" finds dictate even though no keyword rule says so. Add a few lines here for any tool that gets missed.
 TOOL_EXAMPLES: dict[str, tuple[str, ...]] = {
+    "open_url": ("open youtube", "youtube kholo", "google khol", "facebook kholdeu", "open github in the browser",
+                 "go to gmail", "kholo chatgpt", "open the website of tribhuvan university"),
     "page_summary": ("what is this page about", "look at the screen and tell me what this website is about",
                      "summarize this web page", "what is this website showing"),
     "saved_links": ("save this link as facebook", "this is the link for claude code, save it", "give me the link of my "
@@ -352,8 +354,37 @@ SEMANTIC_MIN = 0.66  # best similarity needed to trust a group (bge-small cosine
 SEMANTIC_MARGIN = 0.03  # runners-up this close to the best one are sent too
 SEMANTIC_ADD_MIN = 0.76  # with keyword matches, a different group is added only when this sure
 SEMANTIC_OVER_CHAT = 0.03  # a group must beat the best plain-chat example by this much
-MEANING_GATE_MARGIN = 0.15  # a shortcut runs only if its area scores within this of the best area (by meaning)...
-MEANING_GATE_SURE = 0.85  # ...unless the best area is below this (the meaning is unclear: the shortcut's pattern decides)
+MEANING_GATE_MARGIN = 0.15  # a shortcut runs only if its area scores within this of the best area (by meaning)
+# Selection first (Phase C): when text/code is highlighted (VS Code / browser / another app), a request whose MEANING
+# is one of these actions is about the selection, whatever the words. Phrasings, never keywords.
+SELECTION_EXAMPLES: dict[str, tuple[str, ...]] = {
+    "explain": ("explain this", "what does this mean", "what is this code about", "what does this code do",
+                "what does this function do", "explain the selected code", "tell me what this is", "what is this",
+                "help me understand this", "how does this work", "what is going on here", "describe this code",
+                "explain this paragraph", "what is it saying", "what is this about", "explain it simply",
+                "what does this line do", "meaning of this word", "what is the meaning of this",
+                "what is the main idea here"),
+    "improve": ("make this better", "improve this", "fix this", "fix the grammar", "refactor this code",
+                "optimize this code", "clean this up", "make it more readable", "rewrite this more formally",
+                "fix the bug in this", "make this shorter", "correct this", "make it sound professional",
+                "make this code faster", "format this code", "rewrite this", "polish this text"),
+    "complete": ("complete this", "finish this function", "complete the code", "fill in the missing part",
+                 "implement this todo", "finish writing this", "complete the selected function"),
+    "translate": ("translate this", "translate this to nepali", "what is this in hindi", "say this in english",
+                  "convert this to nepali", "translate the selected text"),
+    "summary": ("summarize this", "give me the gist", "what is the main point", "tl;dr", "summarize the selected paragraph",
+                "in short what does it say", "short summary of this"),
+    "use": ("how do i use this function", "how can i run this function", "give me an example of using this",
+            "show me how to call this", "how to use this class"),
+    "run": ("run this", "run the selected code", "execute this code", "what is the output of this", "run it"),
+    "ask": ("write tests for this", "add docstrings to this", "add type hints to this", "convert this to javascript",
+            "what is the time complexity of this", "find bugs in this code", "add comments to this code",
+            "draw a flowchart of this", "what inputs break this function", "is this code correct",
+            "write a unit test for the selected function", "rename the variables in this", "why is this slow",
+            "what is wrong with this code"),
+}
+SELECTION_MIN = 0.78  # a request this close to a selection action is about the highlighted text...
+SELECTION_MARGIN = 0.02  # ...unless another area (not the selection's own) is clearly closer
 SMALL_TALK_SIM = 0.86  # the whole request this close to a small-talk example = its ready answer (0 tokens)
 LEARN = os.getenv("KURAMA_LEARN", "1").lower() not in ("0", "false", "no", "off")  # learn areas from corrections
 LEARN_WINDOW_S = 120  # a correction counts within this long after the request it corrects

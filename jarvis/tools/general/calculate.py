@@ -68,6 +68,22 @@ _CODES = {"NPR", "INR", "USD", "EUR", "GBP", "JPY", "CNY", "AED", "SAR", "MYR", 
           "QAR", "KWD", "BDT", "PKR", "LKR", "THB", "HKD", "NZD", "SEK", "NOK", "DKK", "RUB", "BRL", "ZAR", "TRY"}
 
 
+_WORDS = ((r"\bper\s*cent(?:age)?\b|\bpercent(?:age)?\b|\bpct\b|\bper(?=\s+of\b)", "%"), (r"\bplus\b|\badd(?:ed)?\s+to\b", "+"),
+          (r"\bminus\b|\bless\b", "-"), (r"\btimes\b|\bmultiplied\s+by\b|(?<=\d)\s*x\s*(?=\d)", "*"),
+          (r"\bdivided\s+by\b|\bover\b", "/"), (r"\bsquare\s+root\s+of\s*([\d.]+)", r"sqrt(\1)"), (r"\bto\s+the\s+power\s+of\b", "^"))
+
+
+def spoken_math(text: str) -> str:
+    """'30 percent of 100' / '32 per of 100' / '5 times 6' -> '30% of 100' / '32% of 100' / '5 * 6' (the words
+    people say or type, as the symbols the calculator reads); lead-ins like 'what is the' / 'i mean' dropped."""
+    t = " ".join((text or "").split()).strip().rstrip("?.!=")
+    t = re.sub(r"^(?:(?:i\s+mean|so|ok(?:ay)?|please|hey|kurama)[\s,]+)*(?:(?:what(?:'s|\s+is)|calculate|compute|find|tell\s+me)"
+               r"\s+)?(?:the\s+)?", "", t, flags=re.I)
+    for pat, sym in _WORDS:
+        t = re.sub(pat, sym, t, flags=re.I)
+    return re.sub(r"\s*%\s*", "% ", t).replace("% of", "% of").strip()
+
+
 @tool(group="daily", safety="safe",
       description="Do math (+ - * / ^ %, sqrt, percent of), convert units (km, kg, °C, GB, hours...) or money "
                   "with today's rate (100 USD to NPR).")
@@ -78,6 +94,8 @@ def calculate(expression: str) -> str:
         expression: e.g. "18% of 2500", "(45*3)+12", "sqrt(144)", "10 km to miles", "100 f to c", "50 dollars to NPR".
     """
     text = (expression or "").strip().rstrip("?=")
+    if re.search(r"\d", text) and re.search(r"[a-z]", text, re.I):
+        text = spoken_math(text) if not (_convert(text) or _MONEY.match(text)) else text
     if conv := _convert(text):
         return conv
     if money := _MONEY.match(text):  # "100 usd to npr", "50 dollars in rupees"
