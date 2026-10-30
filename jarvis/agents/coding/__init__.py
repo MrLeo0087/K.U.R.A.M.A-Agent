@@ -19,7 +19,11 @@ EXAMPLES: dict[str, tuple[str, ...]] = {
     "apply": ("apply the answer", "apply chatgpt's answer", "put the copied answer in the files", "use this answer",
               "apply what gemini said", "apply the copied code"),
     "project": ("make a new project", "create a fastapi project for a todo app", "set up a flask app",
-                "start a new python project that scrapes news", "build me a small app", "create a project for"),
+                "start a new python project that scrapes news", "build me a small app", "create a project for",
+                "setup a cnn model training project", "create a pytorch project to train an image classifier",
+                "make a machine learning project", "set up a project to train a model on mnist",
+                "build a streamlit dashboard project", "start a data analysis project with pandas",
+                "create a rag chatbot project", "new project for a telegram bot"),
     "undo": ("undo that", "undo your change", "put the old code back", "revert what you did", "undo the fix"),
     "run": ("run it again", "run the project", "run it"),
 }
@@ -47,7 +51,7 @@ def _stop() -> None:
 
 SPEC = AgentSpec(
     name="coding", title="Coding agent", groups=("coding_agent",),
-    prompt=("Coding agent ON: the user is coding. For errors use coding fix; big tasks: coding bridge (a prompt for "
-            "ChatGPT/Gemini); new projects: coding project; 'undo that': coding undo. Never claim a change: changes "
-            "are shown and wait for the user's yes."),
+    prompt=("Coding agent ON: the user is coding. Use the tool named `coding`: action=fix for errors, bridge for a "
+            "prompt for ChatGPT/Gemini, project to create a new project (request = what to build), undo, run. There "
+            "is no other project/fix tool. Never claim a change: changes are shown and wait for the user's yes."),
     examples=EXAMPLES, start=_start, stop=_stop)

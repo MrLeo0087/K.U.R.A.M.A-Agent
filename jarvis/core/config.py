@@ -1077,6 +1077,6 @@ AGENT_PROJECT_MAX_FILES = 8
 AGENT_PROJECT_MAX_TOKENS = 6000
 AGENT_PIP_TIMEOUT_S = 600
 AGENT_FIRST_RUN_S = 8  # a first run still going after this long is a server that started fine
-AGENT_MIN = 0.80  # meaning closeness for a coding-agent request (0-token routing while the agent is on)
+AGENT_MIN = 0.72  # meaning closeness for a coding-agent request (0-token routing while the agent is on)
 AGENT_TOOL_MODULES = ("jarvis.agents.coding.tools",)
 AGENT_GROUPS = ("coding_agent",)  # never routed to by the router; the active agent offers its own

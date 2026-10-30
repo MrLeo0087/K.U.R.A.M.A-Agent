@@ -901,10 +901,9 @@ let agentName = "general", agentSeen = null;
 function renderAgent(a) {
   if (!a) return;
   agentName = a.name || "general";
-  const b = $("btn-agent");
-  b.textContent = agentName === "coding" ? "Coding agent" : "General";
-  b.setAttribute("aria-pressed", String(agentName !== "general"));
-  b.title = agentName === "coding" ? "Coding agent is on · click to go back to General" : "Agent: General · click to turn on the coding agent";
+  const sw = $("agent-switch");
+  sw.dataset.on = agentName;
+  for (const b of sw.querySelectorAll("button")) b.setAttribute("aria-checked", String(b.dataset.agent === agentName));
   const evs = a.events || [];
   if (agentSeen === null) { agentSeen = Math.max(0, ...evs.map((e) => e.id)); return; } // never replay old news
   for (const e of evs) {
@@ -918,13 +917,16 @@ function renderAgent(a) {
     if (!S.mute) { audioCtx(); player.enqueue(e.text, null); }
   }
 }
-$("btn-agent").onclick = async () => {
-  try {
-    const r = await api.agent(agentName === "coding" ? "general" : "coding");
-    renderAgent(r);
-    toast(r.text || "Done.");
-  } catch (e) { toast("Couldn't switch: " + e.message); }
-};
+for (const b of $("agent-switch").querySelectorAll("button")) {
+  b.onclick = async () => {
+    if (b.dataset.agent === agentName) return;
+    try {
+      const r = await api.agent(b.dataset.agent);
+      renderAgent(r);
+      toast(r.text || "Done.");
+    } catch (e) { toast("Couldn't switch: " + e.message); }
+  };
+}
 
 function renderJobs(jb) {
   const items = jb.items || [];

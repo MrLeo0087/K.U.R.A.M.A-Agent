@@ -1296,8 +1296,16 @@ body.minimal .to-minimal { display: none; }
 .dl-btn:disabled { opacity: 0.5; cursor: default; }
 .dl-paused .gbar i { background: var(--muted); }
 
-/* agent switch (General / Coding agent) in the chat header */
-.agent-pill { font: inherit; font-size: 11px; letter-spacing: .04em; padding: 3px 10px; border-radius: 999px; cursor: pointer;
-  color: var(--muted, #9aa); background: transparent; border: 1px solid rgba(255,255,255,.14); }
-.agent-pill:hover { color: var(--text, #eee); border-color: rgba(255,255,255,.3); }
-.agent-pill[aria-pressed="true"] { color: #111; background: var(--accent, #f5a524); border-color: transparent; font-weight: 600; }
+/* agent switch (General / Coding agent) in the chat header: a two-part toggle, the active part lit */
+.agent-switch { position: relative; display: inline-flex; align-items: center; gap: 2px; padding: 3px; margin-right: 4px;
+  border-radius: 999px; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--card-border); }
+.agent-switch button { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 12px; border: 0;
+  border-radius: 999px; background: transparent; color: var(--muted); font: 600 12.5px/1 var(--sans); letter-spacing: .02em;
+  cursor: pointer; transition: color .2s var(--ease), background .25s var(--ease), box-shadow .25s var(--ease); }
+.agent-switch button svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round;
+  stroke-linejoin: round; }
+.agent-switch button:hover { color: var(--text); }
+.agent-switch button[aria-checked="true"] { color: var(--text); background: rgba(255, 255, 255, 0.08); }
+.agent-switch[data-on="coding"] button[data-agent="coding"] { color: #1a0d02;
+  background: linear-gradient(135deg, var(--accent), #ffb15c); box-shadow: 0 0 14px var(--accent-soft); }
+@media (max-width: 520px) { .agent-switch button span { display: none; } .agent-switch button { padding: 0 9px; } }

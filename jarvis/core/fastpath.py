@@ -3233,7 +3233,8 @@ def coding_intent(text: str) -> Intent | None:
     if best is None or not ranked:
         return None
     label, score = best
-    other = next((s for g, s in ranked if g not in (semantic.CHAT, "clipboard", "dev", "codequality")), 0.0)
+    other = next((s for g, s in ranked if g not in (semantic.CHAT, "clipboard", "dev", "codequality",
+                                                    *config.AGENT_GROUPS)), 0.0)
     if score < config.AGENT_MIN or score < other - config.SELECTION_MARGIN:
         return None
     if label in ("fix", "run") and not crash:
