@@ -73,6 +73,13 @@ async def chat(body: ChatIn, request: Request):
     return StreamingResponse(events(), media_type="text/event-stream", headers=SSE_HEADERS)
 
 
+@router.get("/confirm/pending", summary="Yes/no questions waiting for an answer (the page asks when its stream is quiet)")
+async def confirm_pending(request: Request):
+    engine = request.app.state.engine
+    return {"pending": [{"type": "confirm", "id": cid, "prompt": p.prompt}
+                        for cid, p in list(engine.pending.items()) if not p.event.is_set()]}
+
+
 @router.post("/confirm", summary="Answer a pending confirmation (yes/no)")
 async def confirm(body: ConfirmIn, request: Request):
     import logging

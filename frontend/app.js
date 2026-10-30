@@ -558,6 +558,22 @@ async function sendChat(text, { voice = false, lang = null, speak = false, ambie
   const watchdog = setInterval(() => {
     if (!openConfirm && Date.now() - lastEv > 90000) { stalled = true; ctrl.abort(); }
   }, 5000);
+  const shown = new Set();
+  function showConfirm(ev) { // from the stream, or found by asking (WebKit can hold a waiting stream's last bytes)
+    if (shown.has(ev.id) || ctrl.signal.aborted) return;
+    shown.add(ev.id);
+    lastEv = Date.now();
+    bot.confirm(ev);
+    miniCaption("bot", ev.prompt);
+    openConfirm = ev.id;
+    if (mode === "conv" && conv.on) pendingConfirm = ev.id; // any spoken yes/no answers it
+    if (speak) player.enqueue(ev.prompt + (pendingConfirm ? " Please say yes or no." : ""), hint, gen);
+    setTimeout(maybeResume, 400); // listen even if the spoken question failed to play
+  }
+  const asker = setInterval(async () => { // a question the stream didn't deliver yet: ask the server directly
+    if (openConfirm || Date.now() - lastEv < 800) return;
+    try { for (const q of (await api.pendingConfirms()).pending || []) showConfirm(q); } catch { /* offline */ }
+  }, 1000);
   try {
     for await (const ev of api.chat(text, { mode: voice ? "voice" : "text", lang: hint, signal: ctrl.signal, ambient })) {
       lastEv = Date.now();
@@ -568,14 +584,7 @@ async function sendChat(text, { voice = false, lang = null, speak = false, ambie
           if (split) split.feed(ev.text).forEach((s) => speakPart(s, hint, gen));
           break;
         case "tool": bot.tool(ev); break;
-        case "confirm":
-          bot.confirm(ev);
-          miniCaption("bot", ev.prompt);
-          openConfirm = ev.id;
-          if (mode === "conv" && conv.on) pendingConfirm = ev.id; // any spoken yes/no answers it
-          if (speak) player.enqueue(ev.prompt + (pendingConfirm ? " Please say yes or no." : ""), hint, gen);
-          setTimeout(maybeResume, 400); // listen even if the spoken question failed to play
-          break;
+        case "confirm": showConfirm(ev); break;
         case "confirm_timeout":
           bot.settle(ev.id, "No answer in time, so I declined.");
           if (pendingConfirm === ev.id) pendingConfirm = null;
@@ -615,6 +624,7 @@ async function sendChat(text, { voice = false, lang = null, speak = false, ambie
     }
   } finally {
     clearInterval(watchdog);
+    clearInterval(asker);
     busy = false;
     chatCtrl = null;
     pendingConfirm = null;

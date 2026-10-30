@@ -503,3 +503,7 @@ Phases (one at a time, owner tests after each):
       closed the chat"). Reproduced in an offscreen WebKit page of the mini chat: no card; with the fix the card
       shows and the No button answers ("answered False via 'button'"). Fix: chat SSE adds a 4 KB comment after a
       confirm event (ignored by the page). This was also behind earlier "stuck" yes/no tools (folder lock, folders).
+- [x] 2026-10-30 Shutdown, part 2: the owner's real dashboard still got no Yes/No after the 4 KB flush, so the page no
+      longer depends on the stream for a question: while a chat turn is open and the stream is quiet (> 0.8 s), it
+      asks GET /api/v1/confirm/pending every second and shows the question (same card, never twice). Probed in an
+      offscreen WebKit for both the mini chat and the full dashboard: card shown, No answered via 'button'.
