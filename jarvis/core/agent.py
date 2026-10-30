@@ -333,12 +333,15 @@ class Agent:
             reply = self._chat(msgs, kw, state.get("stream", False), hold)
         except llm.LLMError as e:
             low = str(e).lower()
-            if not tools or ("tool" not in low and "400" not in low):
+            if "tool" not in low and "400" not in low:
                 raise
-            # a tool-call / tool_choice 400 from Groq: retry once with NO tools so it answers in text
+            # a tool-call / tool_choice 400 from Groq: retry once with NO tools so it answers in text; already
+            # tool-less (the final round, where gpt-oss still tries to call a tool): answer from the tool results
             log.warning("tool-call generation failed (%s); retrying without tools", str(e)[:120])
             notools = {k: v for k, v in kw.items() if k != "tools"}
             try:
+                if not tools:
+                    raise e
                 reply = self._chat(msgs, notools, state.get("stream", False), hold)
             except llm.LLMError:  # still failing: answer from whatever the tools already returned
                 done = [str(m.content) for m in msgs if isinstance(m, ToolMessage) and m.name != meta.NAME

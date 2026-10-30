@@ -39,6 +39,7 @@ const conv = new Conversation(mic, player, {
   onState: () => updateState(),
   onBargeCheck: (blob) => bargeCheck(blob), // words spoken while KURAMA talks: "stop", yes/no, or a new request
   onAutoOff: () => { // 2 minutes of silence: back to sleep (wake word) or, without the wake word, off
+    if (openConfirm) return; // a yes/no is waiting: keep listening for it (the server times it out by itself)
     if (S.wakeListen) { goSleep(true); return; }
     conv.stop(); mic.stop(); setMode("text"); toast("Conversation turned off after 2 minutes of silence.");
   },
@@ -163,7 +164,12 @@ function maybeResume() {
   conv.listen();
 }
 
-function abortChat() { chatCtrl?.abort(); }
+// a waiting yes/no question is never cancelled by a side effect (a new message, Esc, the orb, a chip): closing the
+// turn used to make the server answer "no" for the user. Only an explicit no / sleep / reset closes it (force).
+function abortChat(force = false) {
+  if (openConfirm && !force) { toast("A yes/no question is waiting: answer it first (yes or no)."); return; }
+  chatCtrl?.abort();
+}
 
 // ---------- modes ----------
 function setMode(m) {
@@ -269,8 +275,9 @@ async function transcribe(blob) {
   }
 }
 
-const YES = /^(yes|yeah|yep|yup|sure|ok|okay|do it|go ahead|confirm|please do|haan|han|ha|ho|हो|हाँ|हां|हजुर|ठीक|गर)/i;
-const NO = /^(no|nope|nah|don'?t|do not|cancel|stop|never|nahi|hoina|होइन|नाइ|नहीं|नही|नगर)/i;
+// whole words only: "Now…" / "Nothing" are not a no, "How" / "Hold on" / "Hang on" are not a yes
+const YES = /^(yes|yeah|yep|yup|sure|ok|okay|do it|go ahead|confirm|please do|haan|han|ha|ho|हो|हाँ|हां|हजुर|ठीक\S*|गर\S*)(?=$|[\s,.!?;:'"।])/i;
+const NO = /^(no|nope|nah|don'?t|do not|cancel|stop|never|nahi|hoina|होइन|नाइ|नहीं|नही|नगर\S*)(?=$|[\s,.!?;:'"।])/i;
 
 async function handleUtterance(blob) {
   if (conv.asleep) { // fallback (the API can't listen): the page's own asleep mode // only the wake phrase counts; everything else (TV, other people, noise) is ignored silently
@@ -530,6 +537,7 @@ async function sendChat(text, { voice = false, lang = null, speak = false, ambie
   if (!text) return;
   if (wantsSleep(text) && mode === "conv") { addUser(text, voice); goSleep(); return; } // talk mode: "sleep" puts KURAMA to sleep, never the laptop
   if (busy) { // e.g. a barge-in utterance while the previous turn is still closing
+    if (openConfirm) { abortChat(); return; } // the question first (abortChat says so)
     abortChat();
     for (let i = 0; busy && i < 40; i++) await new Promise((r) => setTimeout(r, 50));
     if (busy) return;
@@ -2105,7 +2113,8 @@ function goSleep(quiet = false) {
   if (asleep) return;
   asleep = true;
   if (conv.on) conv.sleep(true); // from now on only the wake phrase counts, even before the API takes over
-  abortChat();
+  if (openConfirm) answerConfirm(openConfirm, false); // "sleep" while a question waits is a real no
+  abortChat(true);
   player.stop();
   if (!quiet && !S.mute) player.enqueue(`Okay, going to sleep. Say wake up ${botName} when you need me.`);
   updateState();
@@ -2347,7 +2356,7 @@ for (const b of document.querySelectorAll("[data-reset]")) {
     try {
       const r = await api.reset(level);
       log.innerHTML = ""; // clear the on-screen conversation
-      player.stop(); if (busy) abortChat();
+      player.stop(); if (busy) abortChat(true);
       toast(r.message || "Done.");
       $("settings").close();
       if (level !== "chat") setTimeout(() => location.reload(), 1500); // every card shows the empty state

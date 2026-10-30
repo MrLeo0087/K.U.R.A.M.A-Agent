@@ -88,10 +88,10 @@ def transform(text: str, instruction: str) -> str:
     return (reply.text or "").strip().strip('"“”')
 
 
-def _window_name(wid: int) -> str:
+def _window_name(wid: int, limit: int = 60) -> str:
     try:
         return subprocess.run(["xdotool", "getwindowname", str(wid)], capture_output=True, text=True,
-                              timeout=3).stdout.strip()[:60]
+                              timeout=3).stdout.strip()[:limit]
     except (OSError, subprocess.SubprocessError):
         return "that window"
 

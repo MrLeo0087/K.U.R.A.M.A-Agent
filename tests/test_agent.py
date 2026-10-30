@@ -182,3 +182,18 @@ def test_refusal_on_a_task_offers_the_toolsmith(fake, monkeypatch):
     a = agent.Agent()
     out = a.run("check my unread telegram messages")
     assert seen == ["check my unread telegram messages"] and out == "Okay, no problem."
+
+
+def test_final_round_tool_choice_error_answers_from_tool_results(fake, monkeypatch):
+    """gpt-oss still calls a tool on the tool-less final round -> Groq 400 'Tool choice is none'. That error reached
+    the user; now the reply is what the tools already said."""
+    fake(call())  # every round asks for get_time
+    real = agent.Agent._chat
+
+    def chat(self, msgs, kw, stream, hold=False):
+        if kw.get("tools") is None:
+            raise llm.LLMError("all models failed: Error code: 400 - Tool choice is none, but model called a tool")
+        return real(self, msgs, kw, stream, hold)
+    monkeypatch.setattr(agent.Agent, "_chat", chat)
+    ans = agent.Agent().run("what time is it")
+    assert ans and "went wrong" not in ans and "Tool choice" not in ans

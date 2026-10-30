@@ -297,3 +297,16 @@ def test_reply_routing():
     assert a("reply to this in nepali") == ("text_assist", "reply", "ne")
     assert a("what should i reply")[1] == "reply" and a("answer this email")[1] == "reply"
     assert (a("answer this question") or (None, None))[1] != "reply"
+
+
+def test_vscode_title_finds_the_file_for_any_folder_or_file_name():
+    """The open file was missed for folders with '-', files without an extension and long (cut) titles."""
+    from jarvis.core.assist import vscode_title
+    assert vscode_title("update.sh - Tara-Assistant - Visual Studio Code") == ("update.sh", "Tara-Assistant")
+    assert vscode_title("● a_really_long_test_file_name_here.py - New_project_1 - Visual Studio Code") == \
+        ("a_really_long_test_file_name_here.py", "New_project_1")
+    assert vscode_title("Makefile - KURAMA - Visual Studio Code") == ("Makefile", "KURAMA")
+    assert vscode_title("test.py - KURAMA [SSH: box] - Visual Studio Code") == ("test.py", "KURAMA")
+    assert vscode_title("test.py - KURAMA - Claude-1 - Visual Studio Code") == ("test.py", "KURAMA")
+    assert vscode_title("Welcome - KURAMA - Visual Studio Code") is None
+    assert vscode_title("Brave") is None

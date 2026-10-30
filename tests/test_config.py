@@ -13,7 +13,7 @@ def test_models_and_voices():
     assert config.TIER_CHAIN["smart"] == [config.LLM_DEFAULT, config.LLM_FAST]
     for m in config.TIERS.values():
         assert config.DAILY_TOKEN_BUDGET[m] > 0
-    assert config.DB_PATH.parent == config.DATA_DIR
+    assert config.DB_PATH.parent == pathlib.Path(__import__("os").getenv("JARVIS_DATA_DIR", str(config.ROOT / "data")))  # (DATA_DIR is a tmp dir in tests)
 
 
 def test_model_ids_only_in_config():

@@ -19,7 +19,7 @@ _en = None
 def _wordnet():
     global _en
     if _en is None:
-        db = config.DATA_DIR / "wordnet" / "wn.db"
+        db = config.WORDNET_DB
         if not db.exists():
             return None
         import wn
@@ -30,7 +30,7 @@ def _wordnet():
 
 
 def available() -> bool:
-    return (config.DATA_DIR / "wordnet" / "wn.db").exists()
+    return config.WORDNET_DB.exists()
 
 
 def lookup(word: str, senses: int = 2) -> str | None:

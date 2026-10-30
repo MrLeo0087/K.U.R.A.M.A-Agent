@@ -348,3 +348,32 @@ DROPPED, do not build: Custom Object/Error-State Detector, Voice Cloning (Coqui/
 - [x] 2026-10-30 Close-out: MONITORING.md updated for future sessions (fix rules = fix the class not the sentence, meaning before words, 3+ phrasings in the eval set, live API check; how KURAMA works now; the word-pattern shortcuts still to replace by meaning; fix history). 14 eval cases for today's behaviours (scorecard 64% instant at 100%, router 92%); traces marked fixed (reports start 2026-10-30 03:33). Project paused until the owner reports new problems.
 - [x] 2026-10-30 Yes/no fixes after "shutdown" failed: (1) a tool waiting on a yes/no was moved to a background job after 6 s whenever the question came from a nested call (laptop -> power_off), the turn ended, and the user's later "Yes" counted as declined; safety now counts every waiting question globally (_wait_for_user / asking_now) so such a tool never goes to the background. Live test: Yes after 9 s -> done. (2) MY test of that bug, run once without the fix, left a background thread that outlived its mock and really ran `systemctl poweroff` (the laptop shut down 03:38): tests/conftest.py now sets KURAMA_TESTING before anything and _sys._exec refuses power/session commands in that process (power_blocked). (3) Everyday commands as the whole request, typos within 2 letters: shutdown, restart, log out, sleep, lock, time, date, weather, battery, RAM, laptop status, wifi speed, internet (fastpath.daily_intent, 0 tokens; live: "hutodwn" -> instant yes/no). A "no" now says "Okay, I didn't do it."
 - [x] 2026-10-30 Shutdown / restart later (tools/general/shutdown_timer.py, clock group): "shutdown after 90 min / in 2 hours / at 11 pm", "3s / 4min / 2hrs / 1h 30m", "restart the laptop in 1 hour"; asks first; Ubuntu's own scheduled shutdown (`shutdown -P|-r +N`, no sudo, survives KURAMA closing; under a minute KURAMA's timer), warning 1 min before (desktop + Telegram); "cancel shutdown", "when will the laptop shut down"; laptop core action shutdown_later. Live: "shutdown 2hrs" -> yes -> Ubuntu scheduled 05:59 -> status -> cancel -> gone.
+
+## Transformation (owner, 2026-10-30): make every tool reliable, route by meaning, code agent that knows the editor
+Audit (traces 10-29..10-30 + code): (1) yes/no cards were cancelled by the page (new message / Esc / orb / talk-mode
+sleep closed the turn -> server answered "no", reply cut to one word): most "it's stuck" reports (shutdown, folder lock,
+30% of 100). (2) ~195 regexes in fastpath + 898 router keywords decide before meaning; the meaning gate only acts when
+the model is >= 0.85 sure (most requests score 0.70-0.80). (3) learned.json taught the AI's own wrong picks ("remove it"
+-> files, "food" -> files, "yes" -> daily) at similarity 1.0. (4) selection = X PRIMARY + must be in the saved file
+(stale after deselect, lost on unsaved edits); open file = window-title regex (broke on 'Tara-Assistant', Makefile,
+titles > 60 chars). (5) tool bugs: budget never saved (asked back, AI said "set"), read-later "is there anything" ADDED
+an item, "empty the list" removed one, contacts saved as a memory note, habits merged, quiz = 1 question then forgotten.
+Phases (one at a time, owner tests after each):
+- [x] A foundations (below)
+- [ ] B VS Code extension: exact open file, selection + range, unsaved state; browser selection via browser_ext
+- [ ] C routing by meaning: context first (selection/editor/page = automatic focus, owner's "modes" idea without
+      picking a mode), assist/code regexes -> meaning examples, gate always on, wrong patterns removed (e.g. eval #176
+      'Stop tracking laptop' -> habits delete, a pattern bug)
+- [ ] D code agent: one path for explain / improve / complete / write into file / new project
+- [ ] E tools, each with multi-turn live scenarios: money + contacts; read later, notes, quiz, study, habits; power,
+      folder lock, calculator, open apps/sites/text; Telegram/phone, safety
+- [ ] F live end-to-end scenario run for every tool through the API (small batches: Groq free tier)
+- [x] 2026-10-30 Phase A: page never cancels a waiting yes/no (abortChat refuses while a card is open; talk-mode
+      auto-sleep waits; "sleep" = an explicit no); yes/no words matched whole ("Now", "Nothing", "How", "Hold on" no
+      longer answer it); learning only from self-contained wordings that really worked (no error / "you said no" /
+      question back) and not followed by anything close to a correction; the 48 auto-learned rows were removed
+      (backup data/backups/learned.*.20261030.bak, the one correction kept); VS Code title parsing (folders with '-',
+      no extension, profile name, no 60-char cut); final-round "Tool choice is none" answers from the tool results;
+      tests never write into data/ (DATA_DIR + LOG_DIR are tmp; WORDNET_DB constant). 1004 tests pass; scorecard 65%
+      instant / 99% right (#176 is an old pattern bug, Phase C) / router 92%. Needs a KURAMA restart (the server keeps
+      the old learned rows in memory and would write them back).

@@ -35,7 +35,7 @@ def _fake(monkeypatch, tmp_path):
 
 def test_a_correction_teaches_the_area_and_stops_the_wrong_shortcut(monkeypatch, tmp_path):
     _fake(monkeypatch, tmp_path)
-    monkeypatch.setattr(learn, "is_correction", lambda text: text.startswith("i mean"))
+    monkeypatch.setattr(learn, "correction_score", lambda text: 1.0 if text.startswith("i mean") else 0.0)
     t = "get me this video"
     it = fastpath._match(t)
     assert it is not None and it.name == "vdl"  # the pattern alone downloads the video
@@ -53,13 +53,35 @@ def test_a_correction_teaches_the_area_and_stops_the_wrong_shortcut(monkeypatch,
 
 def test_a_working_ai_request_is_learned_and_old_turns_are_not_corrections(monkeypatch, tmp_path):
     _fake(monkeypatch, tmp_path)
-    monkeypatch.setattr(learn, "is_correction", lambda text: True)
+    monkeypatch.setattr(learn, "correction_score", lambda text: 1.0)
     now = time.time()
     learn._judge({"text": "which process eats my ram", "ts": now, "path": "ai", "intent": "top_processes",
                   "tools": [{"name": "find_files", "ok": True}]})
     learn._judge({"text": "no", "ts": now + 600, "path": "ai", "intent": "", "tools": []})  # 10 min later
     rows = learn._load()[0]
     assert len(rows) == 1 and rows[0]["src"] == "worked" and rows[0]["neg"] == ""
+
+
+def test_only_real_successes_of_self_contained_wordings_are_learned(monkeypatch, tmp_path):
+    """The AI's own picks were learned from 'remove it', 'food', 'yes' and from refused / question-back results,
+    and then beat every other area forever (they match themselves at 1.0)."""
+    _fake(monkeypatch, tmp_path)
+    monkeypatch.setattr(learn, "correction_score", lambda text: 0.7 if text.startswith("hmm") else 0.0)
+    now = time.time()
+    turns = [  # (request, tool result) -> none of these may be learned
+        ("remove it", "Removed."), ("food", "ok"), ("yes", "Done."), ("give me that", "Sent."),
+        ("create a folder called test in downloads", "The user declined: the folder was not created."),
+        ("my budget for this month is two thousand", "How much should the monthly budget be?"),
+        ("delete the old report file please", "error: no such file"),
+    ]
+    for i, (text, result) in enumerate(turns):
+        learn._judge({"text": text, "ts": now + i, "path": "ai", "intent": "",
+                      "tools": [{"name": "find_files", "ok": True, "result": result}]})
+    learn._judge({"text": "which process eats my ram", "ts": now + 50, "path": "ai", "intent": "",
+                  "tools": [{"name": "find_files", "ok": True, "result": "3 files"}]})
+    learn._judge({"text": "hmm not quite what I wanted", "ts": now + 60, "path": "ai", "intent": "", "tools": []})
+    assert learn._load()[0] == []  # the last one was followed by something close to a correction
+    assert learn.standalone("which process eats my ram") and not learn.standalone("replace it")
 
 
 def test_small_talk_only_when_the_whole_request_is_small_talk(monkeypatch, tmp_path):

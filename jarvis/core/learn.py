@@ -4,7 +4,10 @@ After every turn the previous one is judged, once the user's next message shows 
 - the next message is a correction ("no, I meant save the link", "not that", "hoina") said within
   LEARN_WINDOW_S, and the corrected request ran a tool: the earlier wording is learned as belonging to THAT tool's
   area, and as NOT being the shortcut / tool that answered it;
-- otherwise, an AI request whose tool ran fine is learned as belonging to that tool's area.
+- otherwise, an AI request whose tool ran fine is learned as belonging to that tool's area, but only when the
+  wording means something by itself (no "remove it" / "yes" / "food": their meaning lives in the chat before them),
+  the tool really did it (no error, no "you said no", no question back) and the next message is not even close to
+  a correction. Learning the AI's own wrong picks made them stick forever.
 A correction is recognised by MEANING (similarity to example corrections), not by words.
 
 Learned wordings join the semantic router (semantic.scores) and veto a shortcut whose meaning was corrected
@@ -110,20 +113,43 @@ def vetoed(q: Any, intent: str) -> bool:
 
 
 def is_correction(text: str) -> bool:
+    return correction_score(text) >= config.LEARN_CORRECTION_SIM
+
+
+_REF = frozenset("it this that these those them they me my mine you your i we us he she the a an to of in on at for "
+                 "and or with please yes no ok okay now again so is are was be do does did can could will would "
+                 "just one here there".split())
+
+
+def standalone(text: str) -> bool:
+    """The wording carries its own meaning: 3+ words, 2+ of them content words ('remove it', 'give me that',
+    'food', 'yes' only mean something after the turn before them, so they are never learned)."""
+    words = [w.lower() for w in re.findall(r"[^\W\d_]{2,}", text or "")]
+    return len(words) >= 3 and sum(w not in _REF for w in words) >= 2
+
+
+def _really_did(result: str) -> bool:
+    r = str(result or "").strip()
+    return not re.match(r"\W*(?:error|the user declined|the user already|i couldn'?t|i can'?t|sorry)", r, re.I) \
+        and not r.rstrip().endswith("?")  # a question back ("How much should the budget be?") is not done
+
+
+def correction_score(text: str) -> float:
     global _corr_vecs
     from jarvis.core import semantic
     if not text.strip():
-        return False
+        return 0.0
     if _corr_vecs is None:
         _corr_vecs = semantic.embedder().embed(list(CORRECTIONS), query=True)
-    return float((_corr_vecs @ _embed(text)).max()) >= config.LEARN_CORRECTION_SIM
+    return float((_corr_vecs @ _embed(text)).max())
 
 
-def _area(tools: list[dict]) -> str:
-    """The area (tool group) of the first specialised tool that ran fine."""
+def _area(tools: list[dict], done: bool = False) -> str:
+    """The area (tool group) of the first specialised tool that ran fine (done: and really did the thing)."""
     from jarvis.core import registry
     for t in tools:
-        tool = registry.REGISTRY.get(t.get("name") or "") if t.get("ok") else None
+        ok = t.get("ok") and (not done or _really_did(t.get("result")))
+        tool = registry.REGISTRY.get(t.get("name") or "") if ok else None
         if tool is not None and (g := registry.group_of(tool)) not in ("core", "self", ""):
             return g
     return ""
@@ -143,7 +169,8 @@ def _judge(turn: dict) -> None:
         return
     try:
         recent = turn["ts"] - prev["ts"] < config.LEARN_WINDOW_S
-        if recent and is_correction(turn["text"]):
+        corr = correction_score(turn["text"]) if recent else 0.0
+        if corr >= config.LEARN_CORRECTION_SIM:
             # the right action that FAILED ("I couldn't find...") is a bug to fix, not a wrong choice to unlearn
             failed = any(re.match(r"\W*(?:error|i couldn'?t|i can'?t|sorry|i'm sorry)", str(t.get("result") or ""), re.I)
                          for t in prev["tools"])
@@ -152,7 +179,8 @@ def _judge(turn: dict) -> None:
                 add(prev["text"], area, neg, "correction")
             elif prev.get("path") == "fastpath" and neg:
                 add(prev["text"], "", prev["intent"], "correction")
-        elif prev.get("path") == "ai" and (area := _area(prev["tools"])):
+        elif prev.get("path") == "ai" and corr < config.LEARN_WORKED_MAX_CORR and standalone(prev["text"]) \
+                and (area := _area(prev["tools"], done=True)):
             add(prev["text"], area, "", "worked")
     except Exception as e:  # noqa: BLE001 - learning must never break KURAMA
         log.warning("learning failed: %s", e)

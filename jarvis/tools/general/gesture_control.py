@@ -6,6 +6,7 @@ Only one camera feature at a time; the camera turns off when it's stopped (or 'q
 from __future__ import annotations
 
 import os
+from pathlib import Path
 import signal
 import subprocess
 from typing import Literal
@@ -32,6 +33,7 @@ def start() -> str:
         return f"error: gesture module not found in {config.GESTURE_DIR}"
     if not os.path.exists(config.VISION_PYTHON):
         return "error: the vision environment is missing (data/vision_venv: pip install mediapipe pyautogui)"
+    Path(config.LOG_DIR).mkdir(parents=True, exist_ok=True)
     log = open(config.LOG_DIR / "gesture.log", "ab")
     p = subprocess.Popen([config.VISION_PYTHON, str(config.ROOT / "scripts" / "gesture_runner.py"), str(config.GESTURE_DIR)],
                          stdout=log, stderr=subprocess.STDOUT, start_new_session=True)

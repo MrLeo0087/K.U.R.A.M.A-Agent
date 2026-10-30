@@ -549,12 +549,24 @@ def open_file_in_editor() -> Path | None:
     """The file open in the front VS Code / editor window: '<name> - <folder> - Visual Studio Code'."""
     from jarvis.core import rewrite as rw
     wid, _ = rw.target_window()
-    title = rw._window_name(wid) if wid else ""
-    m = re.match(r"^[●•\s]*(?P<f>[^/\\]+?\.\w{1,8})\s+-\s+(?P<d>[^-]+?)\s+-\s+.*Visual Studio Code", title)
-    if not m:
+    title = rw._window_name(wid, limit=400) if wid else ""  # whole title: a long one was cut before the app name
+    if not (vs := vscode_title(title)):
         return None
     from jarvis.core.paths import smart_path
-    return smart_path(f"{m.group('d').strip()}/{m.group('f').strip()}", want="file")
+    return smart_path(f"{vs[1]}/{vs[0]}" if vs[1] else vs[0], want="file")
+
+
+def vscode_title(title: str) -> tuple[str, str] | None:
+    """'● test.py - Tara-Assistant [SSH: x] - Visual Studio Code' -> ('test.py', 'Tara-Assistant') (also with a profile
+    name after the folder: 'test.py - KURAMA - Claude-1 - Visual Studio Code'); folder names may
+    hold '-', files may have no extension (Makefile). None: not a VS Code editor window."""
+    parts = [p.strip() for p in re.sub(r"\s+-\s+Visual Studio Code(?: - Insiders)?\s*$", "\n", title or "").split("\n")[0]
+             .split(" - ")] if re.search(r"\s-\sVisual Studio Code", title or "") else []
+    f = parts[0].lstrip("●• ").strip() if parts else ""
+    if not f or "/" in f or f.lower() in ("welcome", "settings", "keyboard shortcuts", "extensions", "untitled"):
+        return None
+    d = re.sub(r"\s*\[[^\]]*\]\s*$", "", parts[1]).strip() if len(parts) > 1 else ""  # then e.g. a profile name
+    return f, d
 
 
 def write_code(request: str) -> str:

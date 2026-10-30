@@ -358,6 +358,7 @@ SMALL_TALK_SIM = 0.86  # the whole request this close to a small-talk example = 
 LEARN = os.getenv("KURAMA_LEARN", "1").lower() not in ("0", "false", "no", "off")  # learn areas from corrections
 LEARN_WINDOW_S = 120  # a correction counts within this long after the request it corrects
 LEARN_CORRECTION_SIM = 0.80  # similarity to an example correction ("no, I meant...") to count as one
+LEARN_WORKED_MAX_CORR = 0.65  # "it worked" is learned only if the next message is not even close to a correction
 LEARN_VETO_SIM = 0.92  # a corrected wording this similar never runs that shortcut again
 LEARN_MAX = 3000  # learned wordings kept (newest)
 # Plain conversation (no tools): a group has to look more like the request than these do.
@@ -896,6 +897,7 @@ RATE_INTERACTIVE_MAX_WAIT_S = 3.0  # interactive calls wait at most this long, t
 # (220 MB, 384-d, 50+ languages incl. hi/ne). Changing the model re-embeds the whole index.
 EMBED_MODEL = os.getenv("JARVIS_EMBED_MODEL", "BAAI/bge-small-en-v1.5")
 EMBED_CACHE_DIR = DATA_DIR / "models"
+WORDNET_DB = DATA_DIR / "wordnet" / "wn.db"  # offline dictionary (an asset, like the models)
 EMBED_THREADS = 2  # ONNX intra-op threads (leave cores for VS Code / Chrome)
 EMBED_BATCH = 8  # measured on the repo: batch 8 peaks at ~475 MB vs ~680 MB for 16, and is faster on CPU
 EMBED_NICE = 10  # the embedding process and the index job thread run at low CPU priority
