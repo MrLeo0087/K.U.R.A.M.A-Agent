@@ -3001,7 +3001,7 @@ def ocr_intent(t: str) -> Intent | None:
     return Intent("ocr", "read_text", "screen", {"source": "area"})  # the owner wants to drag a box first
 
 
-_NO_GATE = {"unlock", "error", "study", "say", "slash", "assist"}  # exact answers / commands, not guesses
+_NO_GATE = {"unlock", "error", "study", "say", "slash", "assist", "agent", "coding"}  # exact answers / commands, not guesses
 
 
 def meaning_ok(text: str, it: Intent) -> bool:
@@ -3181,9 +3181,65 @@ def daily_intent(text: str) -> Intent | None:
 
 def match(text: str) -> Intent | None:
     """The single high-confidence intent for text whose meaning agrees (meaning_ok), or None."""
-    it = link_play_intent(text) or clean_intent(text) or shutdown_later_intent(text) or to_file_intent(text) \
-        or selection_intent(text) or _code_not_file(_match(text)) or daily_intent(text)
+    it = agent_intent(text) or coding_intent(text) or link_play_intent(text) or clean_intent(text) \
+        or shutdown_later_intent(text) or to_file_intent(text) or selection_intent(text) \
+        or _code_not_file(_match(text)) or daily_intent(text)
     return it if it is None or meaning_ok(text, it) else None
+
+
+_AGENT_ON = re.compile(r"(?:please\s+|kurama\W+)?(?:start|open|turn\s+on|switch\s+(?:on|to)|enable|activate|use|"
+                       r"go\s+to)\s+(?:the\s+)?(?:coding|code|programming)(?:\s+(?:agent|mode))?(?:\s+(?:on|now|please))*|"
+                       r"(?:coding|code)\s+(?:agent|mode)\s+on|/agent\s+(?:coding|code)", I)
+_AGENT_OFF = re.compile(r"(?:please\s+|kurama\W+)?(?:(?:stop|close|turn\s+off|exit|disable|leave|quit)\s+(?:the\s+)?"
+                        r"(?:coding|code|programming)(?:\s+(?:agent|mode))?|(?:switch|go)\s+(?:back\s+)?to\s+general"
+                        r"(?:\s+mode)?|general\s+mode|back\s+to\s+general|(?:coding|code)\s+(?:agent|mode)\s+off|"
+                        r"/agent\s+(?:general|off))", I)
+
+
+def agent_intent(text: str) -> Intent | None:
+    """Turning an agent on / off: a fixed command said as the whole request (0 tokens)."""
+    t = " ".join((text or "").split()).strip(" .!?")
+    if _AGENT_ON.fullmatch(t):
+        return Intent("agent", "_agent", "self", {"name": "coding"})
+    if _AGENT_OFF.fullmatch(t):
+        return Intent("agent", "_agent", "self", {"name": "general"})
+    if re.fullmatch(r"/agents?|which agent(?: is on)?|what agent(?: is (?:on|active))?", t, I):
+        return Intent("agent", "_agent", "self", {"name": ""})
+    return None
+
+
+def coding_intent(text: str) -> Intent | None:
+    """While the coding agent is on, its requests by MEANING (agents.coding.EXAMPLES, 0 tokens); its waiting change
+    takes yes / no. Off: nothing here runs."""
+    from jarvis import agents
+    t = " ".join((text or "").split())
+    if not t or t.startswith("/") or agents.current() != "coding":
+        return None
+    from jarvis.agents.coding import EXAMPLES, changes, terminal
+
+    def act(a: str, **kw) -> Intent:
+        return Intent("coding", "coding", "coding_agent", {"action": a, **kw})
+    yn = yes_no(t)
+    if changes.waiting() and yn:
+        return act("yes" if yn == "yes" else "no")
+    crash = terminal.last(600)
+    if crash and yn == "yes" and not _assist_waiting(t):  # "Crashed: ... Want me to fix it?" -> yes
+        return act("fix")
+    if len(t) > 300:
+        return None
+    from jarvis.core import semantic  # the agent keeps the model loaded; cold (just started) it loads now (~2 s)
+    best = semantic.best_of(t, "coding", EXAMPLES)
+    ranked = semantic.scores(t)
+    if best is None or not ranked:
+        return None
+    label, score = best
+    other = next((s for g, s in ranked if g not in (semantic.CHAT, "clipboard", "dev", "codequality")), 0.0)
+    if score < config.AGENT_MIN or score < other - config.SELECTION_MARGIN:
+        return None
+    if label in ("fix", "run") and not crash:
+        return None  # nothing crashed: 'fix this' is about the selection / the AI
+    site = (re.search(r"\b(chatgpt|gemini|claude)\b", t, I) or [None, ""])[1].lower()
+    return act(label, request=t, **({"site": site} if label == "bridge" and site else {}))
 
 
 def _assist_waiting(t: str) -> bool:
@@ -3639,6 +3695,10 @@ def _internal(intent: Intent) -> tuple[bool, str]:
         return True, selfknow.try_unlock(intent.args["text"])
     if intent.tool == "_say":
         return True, "ok"
+    if intent.tool == "_agent":
+        from jarvis import agents
+        name = intent.args.get("name")
+        return True, agents.switch(name) if name else f"{agents.status()['title']} is on."
     if intent.tool == "_cmd":
         from jarvis.core import phonecmds
         return True, phonecmds.run(intent.args["cmd"], intent.args.get("arg", ""))

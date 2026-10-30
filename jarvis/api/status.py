@@ -128,6 +128,12 @@ class StatusCollector:
             out["alerts"] = {"unread": len(unread),
                              "recent": [{k: a.get(k) for k in ("id", "ts", "title", "text", "level", "source")}
                                         for a in store.alerts_recent(self.s.status_alerts)]}
+        with contextlib.suppress(Exception):  # the agent switch + its announcements ("Crashed: ... fix it?")
+            from jarvis import agents
+            out["agent"] = agents.status()
+            if out["agent"]["name"] == "coding":
+                from jarvis.agents.coding import terminal
+                out["agent"]["events"] = terminal.events()
         with contextlib.suppress(Exception):
             from jarvis.core import usage
             u = usage.summary("today")

@@ -389,6 +389,33 @@ async def context_tab(request: Request):
     return {"ok": True}
 
 
+@router.get("/agent", summary="The agent that is on (general = none) and the agents there are")
+async def agent_get():
+    from jarvis import agents
+    return await run_in_threadpool(agents.status)
+
+
+@router.post("/agent", summary="Turn an agent on ({'name': 'coding'}) or off ({'name': 'general'})")
+async def agent_set(request: Request):
+    from jarvis import agents
+    d = await request.json()
+    text = await run_in_threadpool(agents.switch, str(d.get("name") or "general"))
+    return {**agents.status(), "text": text}
+
+
+@router.post("/coding/terminal", summary="The VS Code extension: a command failed in the terminal (coding agent on)")
+async def coding_terminal(request: Request):
+    from jarvis import agents
+    if agents.current() != "coding":
+        return {"ok": False, "reason": "the coding agent is off"}
+    from jarvis.agents.coding import terminal
+    d = await request.json()
+    code = d.get("exit_code")
+    ev = await run_in_threadpool(terminal.record, str(d.get("command") or ""), str(d.get("cwd") or ""),
+                                 code if isinstance(code, int) else None, str(d.get("output") or ""))
+    return {"ok": True, "event": ev}
+
+
 @router.post("/context/selection", summary="The browser extension: the text highlighted on the page (memory only)")
 async def context_selection(request: Request):
     from jarvis.core import browsertab

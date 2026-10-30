@@ -1,0 +1,53 @@
+"""The coding agent (owner: "separate from KURAMA, only when I turn it on"). While on:
+- the VS Code extension reports failed terminal commands -> "Crashed: ... Want me to fix it?" (terminal.py)
+- "fix it" -> the fix as a reviewed change, yes applies it and runs the command again (fixer.py, changes.py)
+- "ask ChatGPT / Gemini about this" -> one ready prompt copied (+ the site opened); "apply the answer" puts the
+  copied answer's code into the right files (bridge.py, 0 tokens)
+- "make a new project: ..." -> files + requirements + venv + VS Code + a first run (project.py)
+- "undo that" -> the last change put back (changes.py)
+Its requests are understood by meaning (EXAMPLES, local model, 0 tokens); everything else still works as usual.
+"""
+from __future__ import annotations
+
+from jarvis.agents import AgentSpec
+
+EXAMPLES: dict[str, tuple[str, ...]] = {
+    "fix": ("fix it", "fix this error", "fix the crash", "why did it crash", "solve this error", "it crashed, fix it",
+            "repair the bug", "make it work", "debug this", "what is this error and fix it"),
+    "bridge": ("ask chatgpt about this", "ask gemini to fix this", "make a prompt for chatgpt", "send this to claude",
+               "prepare this for chatgpt", "copy the prompt for gemini", "this is too big, ask chatgpt"),
+    "apply": ("apply the answer", "apply chatgpt's answer", "put the copied answer in the files", "use this answer",
+              "apply what gemini said", "apply the copied code"),
+    "project": ("make a new project", "create a fastapi project for a todo app", "set up a flask app",
+                "start a new python project that scrapes news", "build me a small app", "create a project for"),
+    "undo": ("undo that", "undo your change", "put the old code back", "revert what you did", "undo the fix"),
+    "run": ("run it again", "run the project", "run it"),
+}
+
+def _start() -> None:
+    """While on, the meaning model stays loaded (its requests are understood by meaning, never a cold wait)."""
+    import threading
+
+    from jarvis.core import semantic
+
+    def warm() -> None:
+        semantic.scores("fix it")
+        if semantic._embedder is not None:
+            semantic._embedder.idle_s = 0.0  # 0 = never unload
+    threading.Thread(target=warm, daemon=True, name="coding-agent-warm").start()
+
+
+def _stop() -> None:
+    from jarvis.core import semantic
+    if semantic._embedder is not None:
+        semantic._embedder.idle_s = semantic._idle_for(semantic.mode())
+        if semantic._embedder.loaded:
+            semantic._embedder._arm()  # the normal idle time counts from now
+
+
+SPEC = AgentSpec(
+    name="coding", title="Coding agent", groups=("coding_agent",),
+    prompt=("Coding agent ON: the user is coding. For errors use coding fix; big tasks: coding bridge (a prompt for "
+            "ChatGPT/Gemini); new projects: coding project; 'undo that': coding undo. Never claim a change: changes "
+            "are shown and wait for the user's yes."),
+    examples=EXAMPLES, start=_start, stop=_stop)

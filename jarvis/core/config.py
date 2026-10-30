@@ -1061,3 +1061,22 @@ JOB_MIN_FREE_MB = int(os.getenv("JARVIS_JOB_MIN_FREE_MB", "800"))  # queued jobs
 JOB_MAX_LOAD_PER_CORE = 1.5  # ...or while the 1-min load average exceeds cores x this
 JOB_RECHECK_S = 10.0
 JOB_MAX_WAIT_S = 600.0  # then they start anyway (with a note)
+
+# --- agents (jarvis/agents): off until the owner turns one on ---
+AGENT_MARKER = Path(os.getenv("KURAMA_AGENT_MARKER", str(Path.home() / ".local" / "share" / "kurama" / "agent")))
+AGENT_IDLE_OFF_S = float(os.getenv("KURAMA_AGENT_IDLE_MIN", "45")) * 60  # an agent unused this long turns itself off
+AGENT_PENDING_TTL_S = 900  # a shown change waits this long for its yes
+AGENT_FAILURE_MAX_AGE_S = 1800  # "fix it" means a crash from the last 30 min
+AGENT_OUTPUT_MAX = 6000  # characters of a failed command's output kept
+AGENT_FIX_MAX_FILES = 2  # files of the traceback sent to the AI
+AGENT_WHOLE_FILE_LINES = 250  # smaller files are sent whole, bigger ones around the crash
+AGENT_FIX_MAX_TOKENS = 3000
+AGENT_BRIDGE_FILE_CHARS = 12000  # per file in the ChatGPT/Gemini prompt
+AGENT_PROJECTS_DIR = os.getenv("KURAMA_PROJECTS_DIR", "~/projects")
+AGENT_PROJECT_MAX_FILES = 8
+AGENT_PROJECT_MAX_TOKENS = 6000
+AGENT_PIP_TIMEOUT_S = 600
+AGENT_FIRST_RUN_S = 8  # a first run still going after this long is a server that started fine
+AGENT_MIN = 0.80  # meaning closeness for a coding-agent request (0-token routing while the agent is on)
+AGENT_TOOL_MODULES = ("jarvis.agents.coding.tools",)
+AGENT_GROUPS = ("coding_agent",)  # never routed to by the router; the active agent offers its own

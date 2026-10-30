@@ -229,6 +229,13 @@ class Registry:
                         imported.append(info.name)
                     except Exception as e:  # one broken tool must not kill the others
                         log.error("failed to load tool module %s: %s", info.name, e)
+        if "jarvis.tools" in self.packages:  # agents' tools (jarvis/agents/<name>/tools.py): offered only while on
+            for mod in config.AGENT_TOOL_MODULES:
+                try:
+                    importlib.import_module(mod)
+                    imported.append(mod)
+                except Exception as e:  # noqa: BLE001
+                    log.error("failed to load agent tools %s: %s", mod, e)
         if "jarvis.tools" in self.packages:  # P7c: saved toolsmith skills (small JSON files, lazy run)
             try:
                 from jarvis.core import toolsmith
@@ -268,7 +275,7 @@ class Registry:
     def groups(self) -> list[str]:
         """The router's groups: every specialised tool's group, plus (v2) the groups a general tool covers."""
         self._ensure()
-        groups = {group_of(t) for t in self.tools.values()} - {"core"}
+        groups = {group_of(t) for t in self.tools.values()} - {"core", *config.AGENT_GROUPS}  # agents add theirs
         if config.CORE_TOOLS:
             groups |= {g for n, cov in config.CORE_COVERS.items() if n in self.tools for g in cov}
         return sorted(groups)

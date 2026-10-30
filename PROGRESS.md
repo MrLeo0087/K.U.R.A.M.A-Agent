@@ -452,3 +452,21 @@ Phases (one at a time, owner tests after each):
       + replace on read-only page text says so instead of "Replaced". The VS Code project folder is in the context
       line, so "new file in this VS Code" goes there. Live via chat: create folder / rename / new file in a scratch
       folder all correct (~2 s, ~2.5k tokens each through the AI). 1028 tests.
+- [x] 2026-10-30 Phase D: agents + the CODING AGENT (jarvis/agents/, separate from KURAMA's tools). Off by default;
+      on/off by the header pill (General / Coding agent), "start/stop coding agent", "/agent coding|general"; turns
+      itself off after 45 min unused; while on, its tool (coding: fix / bridge / apply / project / undo / yes / no / run)
+      is offered first, its prompt line is added, its requests are understood by MEANING (agents.coding.EXAMPLES,
+      0 tokens) and the meaning model stays loaded; off = 0 RAM/CPU (the extension watches the terminal only while
+      ~/.local/share/kurama/agent says coding). (1) CRASH -> FIX: VS Code extension 1.1 (shell integration) reports a
+      failed terminal command (command, folder, exit code, last 8k of output) -> POST /api/v1/coding/terminal ->
+      "Crashed: ZeroDivisionError in stats.py line 2. Want me to fix it?" in the chat (+ spoken); "yes"/"fix it" ->
+      the traceback's own files (whole if <= 250 lines, else around the crash) + error memory -> one smart call ->
+      the fix staged (diff in the workspace) -> yes applies (through the editor) and runs the command again in that
+      terminal; missing module -> pip install into the project's venv, no AI. (2) BIG-AI BRIDGE (0 tokens): "ask
+      ChatGPT/Gemini about this" copies one ready prompt (task, error, files, selection, project tree, answer format)
+      and can open the site; "apply the answer" turns the copied answer's file blocks into a staged change.
+      (3) NEW PROJECT: one call writes <= 8 files + requirements + README into ~/projects/<name>, makes .venv,
+      installs, opens VS Code, runs it once (only python/uvicorn/flask/streamlit/pytest commands; a crash -> 'fix it').
+      (4) UNDO: every applied change keeps the old files (data/agent_undo, last 20); undo also removes files it made.
+      Live: crash posted -> announced -> "fix it" -> cause + staged fix in 1.2 s / 482 tokens, file untouched until
+      yes. 1034+ tests (tests/test_coding_agent.py), scorecard 66% / 100% / 92%.

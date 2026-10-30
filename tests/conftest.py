@@ -15,6 +15,13 @@ def tmp_store(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "DATA_DIR", tmp_path)  # never KURAMA's real data (backups, learned wordings...)
     monkeypatch.setattr(config, "LOG_DIR", tmp_path / "logs")  # never the real worker logs
     monkeypatch.setattr(config, "VSCODE_STATE_DIR", tmp_path / "vscode")  # never the real VS Code windows
+    monkeypatch.setattr(config, "AGENT_MARKER", tmp_path / "agent")  # never switch the real VS Code terminal watch
+    from jarvis import agents
+    from jarvis.agents.coding import changes as _ch, terminal as _term
+    agents._last_use[0] = 0.0
+    _ch._pending.clear()
+    _term._last.clear()
+    _term._events.clear()
     from jarvis.core import browsertab
     monkeypatch.setattr(browsertab, "_SEL", {"text": "", "url": "", "title": "", "ts": 0.0})  # no highlight leaks
     monkeypatch.setattr(config, "JOBS_NOTIFY", False)  # never pop desktop notifications in tests

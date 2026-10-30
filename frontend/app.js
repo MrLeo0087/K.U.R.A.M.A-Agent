@@ -893,7 +893,38 @@ function renderStatus(s) {
   $("tile-alerts").classList.toggle("hot", (al.unread || 0) > 0);
   $("tile-alerts").title = al.recent?.[0] && al.unread ? al.recent[0].title : "No new alerts";
   renderJobs(s.jobs || {});
+  renderAgent(s.agent);
 }
+
+// ---------- agents: General (default) or the coding agent; its news ("Crashed: ... fix it?") is said in the chat
+let agentName = "general", agentSeen = null;
+function renderAgent(a) {
+  if (!a) return;
+  agentName = a.name || "general";
+  const b = $("btn-agent");
+  b.textContent = agentName === "coding" ? "Coding agent" : "General";
+  b.setAttribute("aria-pressed", String(agentName !== "general"));
+  b.title = agentName === "coding" ? "Coding agent is on · click to go back to General" : "Agent: General · click to turn on the coding agent";
+  const evs = a.events || [];
+  if (agentSeen === null) { agentSeen = Math.max(0, ...evs.map((e) => e.id)); return; } // never replay old news
+  for (const e of evs) {
+    if (e.id <= agentSeen || !e.text) continue;
+    agentSeen = e.id;
+    const bb = new BotBubble();
+    bb.append(e.text);
+    bb.finish();
+    scrollDown(true);
+    miniCaption("bot", e.text, true);
+    if (!S.mute) { audioCtx(); player.enqueue(e.text, null); }
+  }
+}
+$("btn-agent").onclick = async () => {
+  try {
+    const r = await api.agent(agentName === "coding" ? "general" : "coding");
+    renderAgent(r);
+    toast(r.text || "Done.");
+  } catch (e) { toast("Couldn't switch: " + e.message); }
+};
 
 function renderJobs(jb) {
   const items = jb.items || [];

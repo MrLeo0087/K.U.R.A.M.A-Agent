@@ -286,6 +286,14 @@ class Agent:
             r = router.Route(prev, "followup", r.reasoning, r.latency_ms)
         if r.groups:
             self._prev_groups = (list(r.groups), time.time())
+        try:  # an agent is on: its tools come first, the router's choice after them (everything else still works)
+            from jarvis import agents
+            if self.channel != "telegram" and (ag := agents.spec()) is not None:
+                agents.touch()
+                r = router.Route([*ag.groups, *[g for g in r.groups if g not in ag.groups]][: config.ROUTER_MAX_GROUPS],
+                                 r.method, r.reasoning, r.latency_ms)
+        except Exception as e:  # noqa: BLE001
+            log.warning("agent routing failed: %s", e)
         try:  # code open in VS Code or text highlighted anywhere: the text/code tool is always offered (the context
             from jarvis.core import context, rewrite  # line says what is open / selected)
             if self.channel != "telegram" and "clipboard" not in r.groups and (
@@ -548,6 +556,12 @@ class Agent:
             other = self._other_channel(user_text)  # laptop <-> Telegram: one KURAMA, one conversation
             if other:
                 system += " " + other
+        try:  # an agent the owner turned on (coding): one line saying what to focus on
+            from jarvis import agents
+            if self.channel != "telegram" and (ag := agents.prompt_line()):
+                system += " " + ag
+        except Exception as e:  # noqa: BLE001
+            log.warning("agent line failed: %s", e)
         try:
             from jarvis.core import context  # what is open: the VS Code file + its selection, or the browser tab
             if (ctx := context.line()) and self.channel != "telegram":

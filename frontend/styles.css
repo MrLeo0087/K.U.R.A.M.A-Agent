@@ -1295,3 +1295,9 @@ body.minimal .to-minimal { display: none; }
 .dl-btn.bad { color: #e8796e; border-color: rgba(232, 121, 110, 0.35); }
 .dl-btn:disabled { opacity: 0.5; cursor: default; }
 .dl-paused .gbar i { background: var(--muted); }
+
+/* agent switch (General / Coding agent) in the chat header */
+.agent-pill { font: inherit; font-size: 11px; letter-spacing: .04em; padding: 3px 10px; border-radius: 999px; cursor: pointer;
+  color: var(--muted, #9aa); background: transparent; border: 1px solid rgba(255,255,255,.14); }
+.agent-pill:hover { color: var(--text, #eee); border-color: rgba(255,255,255,.3); }
+.agent-pill[aria-pressed="true"] { color: #111; background: var(--accent, #f5a524); border-color: transparent; font-weight: 600; }

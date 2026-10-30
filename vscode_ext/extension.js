@@ -80,8 +80,63 @@ function rangeOf(doc, r) {
   return new vscode.Range(r[0][0], r[0][1], r[1][0], r[1][1]);
 }
 
-// one request = one operation: text | replace_all | replace_range | replace_text | insert
+// ---- coding agent (only while it is on: ~/.local/share/kurama/agent says "coding") ----
+const AGENT = path.join(os.homedir(), ".local", "share", "kurama", "agent");
+const OUT_MAX = 8000; // characters of a command's output kept (the end of it)
+const runs = new Map(); // execution -> Promise<output>
+let lastTerminal = null;
+
+function codingOn() {
+  try { return fs.readFileSync(AGENT, "utf8").trim() === "coding"; } catch (e) { return false; }
+}
+
+async function collect(execution) {
+  let out = "";
+  try {
+    for await (const data of execution.read()) {
+      out += data;
+      if (out.length > OUT_MAX * 2) out = out.slice(-OUT_MAX);
+    }
+  } catch (e) { /* the terminal closed */ }
+  return out.slice(-OUT_MAX);
+}
+
+function report(body) { // a failed command -> KURAMA (it announces it and can fix it)
+  const data = JSON.stringify(body);
+  const req = http.request({ host: "127.0.0.1", port: 8000, path: "/api/v1/coding/terminal", method: "POST",
+    headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(data) }, timeout: 5000 });
+  req.on("error", () => {});
+  req.end(data);
+}
+
+function watchTerminal(context) {
+  if (!vscode.window.onDidStartTerminalShellExecution) return; // needs VS Code 1.93+ with shell integration
+  context.subscriptions.push(vscode.window.onDidStartTerminalShellExecution((e) => {
+    if (codingOn()) runs.set(e.execution, collect(e.execution));
+  }));
+  context.subscriptions.push(vscode.window.onDidEndTerminalShellExecution(async (e) => {
+    const pending = runs.get(e.execution);
+    if (!pending) return;
+    runs.delete(e.execution);
+    const output = await pending;
+    if (e.exitCode === undefined || e.exitCode === 0) return;
+    lastTerminal = e.terminal;
+    const cwd = e.execution.cwd ? e.execution.cwd.fsPath : "";
+    report({ command: e.execution.commandLine ? e.execution.commandLine.value : "", cwd, exit_code: e.exitCode, output });
+  }));
+}
+
+function terminalRun(req) { // run a command again (after a fix the user said yes to), in the terminal it failed in
+  let term = lastTerminal && vscode.window.terminals.includes(lastTerminal) ? lastTerminal : vscode.window.activeTerminal;
+  if (!term) term = vscode.window.createTerminal({ name: "KURAMA", cwd: req.cwd || undefined });
+  term.show(true);
+  term.sendText(req.text || "", true);
+  return { ok: true };
+}
+
+// one request = one operation: text | replace_all | replace_range | replace_text | insert | terminal_run
 async function handle(req) {
+  if (req.op === "terminal_run") return terminalRun(req);
   const doc = await docFor(req.file || "");
   if (!doc) return { ok: false, error: "no file is open" };
   if (req.op === "text") return { ok: true, text: doc.getText(), dirty: doc.isDirty, lines: doc.lineCount };
@@ -141,6 +196,7 @@ function serve() {
 
 function activate(context) {
   serve();
+  watchTerminal(context);
   const sub = (d) => context.subscriptions.push(d);
   sub(vscode.window.onDidChangeActiveTextEditor(() => soon()));
   sub(vscode.window.onDidChangeTextEditorSelection(() => soon()));
