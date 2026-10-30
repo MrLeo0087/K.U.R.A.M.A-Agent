@@ -41,10 +41,55 @@ def parse(text: str) -> list[tuple[str, str]]:
     return out
 
 
+def _main_span(tree) -> tuple[int, int] | None:
+    """(first, last) line of the top-level `if __name__ == "__main__":` block, 1-based."""
+    import ast
+    for n in tree.body:
+        if isinstance(n, ast.If) and "__name__" in ast.unparse(n.test):
+            return n.lineno, n.end_lineno
+    return None
+
+
+def patch_main(old: str, code: str) -> str | None:
+    """Patch functions/classes/imports (code_to_file.patch_python) AND the `if __name__ == "__main__":` block into the
+    file; None when the result isn't valid Python or nothing could be placed."""
+    import ast
+    from jarvis.tools.general.code_to_file import patch_python
+    try:
+        ctree = ast.parse(code)
+    except SyntaxError:
+        return None
+    lines = code.splitlines()
+    span = _main_span(ctree)
+    main_src = "\n".join(lines[span[0] - 1: span[1]]) if span else ""
+    rest = "\n".join(lines[: span[0] - 1] + lines[span[1]:]) if span else code
+    out = old
+    if rest.strip():
+        out = patch_python(old, rest)
+        if out is None:
+            return None
+    if main_src:
+        try:
+            otree = ast.parse(out)
+        except SyntaxError:
+            return None
+        olines = out.splitlines()
+        if (ospan := _main_span(otree)) is not None:
+            olines[ospan[0] - 1: ospan[1]] = main_src.splitlines()
+        else:
+            olines += ["", "", *main_src.splitlines()]
+        out = "\n".join(olines) + "\n"
+    try:
+        ast.parse(out)
+    except SyntaxError:
+        return None
+    return out if out != old else None
+
+
 def to_files(text: str, root: Path) -> dict[Path, str]:
     """{absolute path: complete new text}, Python partial blocks patched into the current file."""
+    skipped.clear()
     from jarvis.core import editor
-    from jarvis.tools.general.code_to_file import patch_python
     files: dict[Path, str] = {}
     for rel, code in parse(text):
         p = Path(rel).expanduser()
@@ -53,11 +98,16 @@ def to_files(text: str, root: Path) -> dict[Path, str]:
         if not str(p).startswith(str(root.resolve()) + "/"):
             continue  # '../../x' or an absolute path elsewhere: never outside the project
         old = files.get(p) or (editor.read(p) if p.exists() else "")
-        if p.suffix == ".py" and old.strip() and not _whole(old, code) and (patched := patch_python(old, code)):
-            files[p] = patched
-        else:
+        if p.suffix != ".py" or not old.strip() or _whole(old, code):
             files[p] = code
+        elif patched := patch_main(old, code):
+            files[p] = patched
+        else:  # a piece we can't place: NEVER written as the whole file (that once turned 58 lines into 2)
+            skipped.append(rel)
     return files
+
+
+skipped: list[str] = []  # files of the last to_files() whose code could not be placed safely
 
 
 def _whole(old: str, new: str) -> bool:

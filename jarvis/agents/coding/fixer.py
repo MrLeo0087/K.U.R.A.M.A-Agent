@@ -84,6 +84,9 @@ def fix(error_text: str = "", hint: str = "", confirmed: bool = False) -> str:
                          purpose="agent_fix", max_tokens=config.AGENT_FIX_MAX_TOKENS))
     cause = (re.search(r"CAUSE:\s*(.+)", reply) or [None, ""])[1].strip()
     new = blocks.to_files(reply, root)
+    if blocks.skipped and not new:
+        return (f"{('Cause: ' + cause + chr(10)) if cause else ''}I couldn't place the fix safely in "
+                f"{', '.join(blocks.skipped)}, so I changed nothing. Say 'ask ChatGPT about this error' for a bigger look.")
     if not new:  # an explanation without code (e.g. "why did it crash?"): say it, offer the change / the big AI
         why = cause or re.sub(r"```.*?```", "", reply, flags=re.S).strip()[:400]
         return (f"{why or 'I could not work out a fix.'}\nSay 'fix it' for the code change, or 'ask ChatGPT about this "

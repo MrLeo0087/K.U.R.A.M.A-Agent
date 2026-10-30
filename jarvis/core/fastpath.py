@@ -3181,7 +3181,7 @@ def daily_intent(text: str) -> Intent | None:
 
 def match(text: str) -> Intent | None:
     """The single high-confidence intent for text whose meaning agrees (meaning_ok), or None."""
-    it = agent_intent(text) or coding_intent(text) or link_play_intent(text) or clean_intent(text) \
+    it = agent_intent(text) or agent_coding_intent(text) or link_play_intent(text) or clean_intent(text) \
         or shutdown_later_intent(text) or to_file_intent(text) or selection_intent(text) \
         or _code_not_file(_match(text)) or daily_intent(text)
     return it if it is None or meaning_ok(text, it) else None
@@ -3208,9 +3208,13 @@ def agent_intent(text: str) -> Intent | None:
     return None
 
 
-def coding_intent(text: str) -> Intent | None:
+def agent_coding_intent(text: str) -> Intent | None:
     """While the coding agent is on, its requests by MEANING (agents.coding.EXAMPLES, 0 tokens); its waiting change
-    takes yes / no. Off: nothing here runs."""
+    takes yes / no. Off: nothing here runs. (It was named coding_intent too, which silently replaced the older
+    coding_intent above: 'generate requirements.txt', 'notebook to script', 'check dependencies' stopped working.)
+    It only takes a request that is clearly its own: an assist question waiting ('replace it?') keeps its answer;
+    a request whose meaning is closer to the selection/editing actions goes to them; undo needs a near-exact match
+    (it once undid fixes for 'update code', 'add comments', 'clean and complete this code')."""
     from jarvis import agents
     t = " ".join((text or "").split())
     if not t or t.startswith("/") or agents.current() != "coding":
@@ -3222,8 +3226,10 @@ def coding_intent(text: str) -> Intent | None:
     yn = yes_no(t)
     if (changes.waiting() or changes.cost_waiting()) and yn:
         return act("yes" if yn == "yes" else "no")
+    if _assist_waiting(t):  # 'replace it' / 'yes' answer the assist's own question
+        return None
     crash = terminal.last(600)
-    if crash and yn == "yes" and not _assist_waiting(t):  # "Crashed: ... Want me to fix it?" -> yes
+    if crash and yn == "yes":  # "Crashed: ... Want me to fix it?" -> yes
         return act("fix")
     if len(t) > 300:
         return None
@@ -3235,8 +3241,12 @@ def coding_intent(text: str) -> Intent | None:
     label, score = best
     other = next((s for g, s in ranked if g not in (semantic.CHAT, "clipboard", "dev", "codequality",
                                                     *config.AGENT_GROUPS)), 0.0)
-    if score < config.AGENT_MIN or score < other - config.SELECTION_MARGIN:
+    need = {"undo": config.AGENT_UNDO_MIN, "project": config.AGENT_PROJECT_MIN}.get(label, config.AGENT_MIN)
+    if score < need or score < other - config.SELECTION_MARGIN:
         return None
+    if label != "project" and (sel := semantic.best_of(t, "selection", config.SELECTION_EXAMPLES)) \
+            and sel[1] >= score - config.AGENT_OVER_SELECTION:
+        return None  # 'add comments to this code', 'clean and complete it': editing, not the agent's actions
     if label in ("fix", "run") and not crash:
         return None  # nothing crashed: 'fix this' is about the selection / the AI
     site = (re.search(r"\b(chatgpt|gemini|claude)\b", t, I) or [None, ""])[1].lower()

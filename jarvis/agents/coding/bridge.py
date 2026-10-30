@@ -109,4 +109,8 @@ def apply_answer(text: str = "") -> str:
         return ("The answer's code blocks don't say which file they belong to. Ask it to put '# file: <path>' as the "
                 "first line of each block (the prompt I copy asks for that).")
     fail = terminal.last()
+    if blocks.skipped:  # parts that couldn't be placed safely are left out, and said
+        note = f" (left out, couldn't place safely: {', '.join(blocks.skipped)})"
+        return changes.stage(files, "Apply the AI's answer", then=fail["command"] if fail else "",
+                             cwd=fail["cwd"] if fail else "") + note
     return changes.stage(files, "Apply the AI's answer", then=fail["command"] if fail else "", cwd=fail["cwd"] if fail else "")

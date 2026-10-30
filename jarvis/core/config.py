@@ -380,7 +380,8 @@ SELECTION_EXAMPLES: dict[str, tuple[str, ...]] = {
                 "turn this paragraph into a structured markdown", "structure this text with headings and bullets",
                 "make this paragraph into bullet points", "rewrite the selected paragraph", "fix this paragraph",
                 "make this paragraph clearer", "format this paragraph into a markdown structure", "make it markdown",
-                "put this in markdown"),
+                "put this in markdown", "fix the selected code", "fix selected code and replace it", "update this code",
+                "update the selected code", "clean up the selected code", "improve the selected function"),
     "complete": ("complete this", "finish this function", "complete the code", "fill in the missing part",
                  "implement this todo", "finish writing this", "complete the selected function"),
     "translate": ("translate this", "translate this to nepali", "what is this in hindi", "say this in english",
@@ -1077,9 +1078,12 @@ AGENT_PROJECT_MAX_FILES = 8
 AGENT_PROJECT_MAX_TOKENS = 4500  # the code of the template's files, short
 AGENT_PIP_TIMEOUT_S = 600
 AGENT_FIRST_RUN_S = 8  # a first run still going after this long is a server that started fine
-AGENT_MIN = 0.72  # meaning closeness for a coding-agent request (0-token routing while the agent is on)
+AGENT_MIN = 0.80  # meaning closeness for a coding-agent request (0-token routing while the agent is on)
 AGENT_TOOL_MODULES = ("jarvis.agents.coding.tools",)
 AGENT_GROUPS = ("coding_agent",)  # never routed to by the router; the active agent offers its own
 AGENT_ASK_ABOVE_TOKENS = int(os.getenv('KURAMA_AGENT_ASK_TOKENS', '4000'))  # bigger agent jobs ask first (owner)
 AGENT_PROJECT_TOKENS_PER_FILE = 700  # rough output per code file of a new project
 EDITOR_EXT_MIN = 4  # the VS Code extension version that reports terminal crashes
+AGENT_UNDO_MIN = 0.90  # undo puts code back: only a near-exact 'undo that'
+AGENT_PROJECT_MIN = 0.74  # 'make a yolo object detection project' (still must beat every other area)
+AGENT_OVER_SELECTION = 0.05  # an agent action must beat the closest editing action by this much

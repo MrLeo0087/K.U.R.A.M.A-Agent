@@ -482,3 +482,13 @@ Phases (one at a time, owner tests after each):
       version: turning the agent on says when a window must be reloaded to see crashes (the owner's crash wasn't seen:
       that window still ran the old extension). (6) UI: the mini panel keeps every header button (wraps to a 2nd line);
       mode / agent switches show a small note under the clicked button instead of a toast over the chat box.
+- [x] 2026-10-30 Repair step 1 (from the owner's 15:45-19:04 traces): (1) the coding agent's meaning matcher ran
+      BEFORE the selection/editing one and only knew its own actions, so 'update code', 'add comments to this code',
+      'clean and complete this code' (8 traces) ran UNDO and 'replace it' ran the fixer: it now steps aside while an
+      assist question waits, loses to a closer editing meaning (by 0.05), undo needs >= 0.90, threshold back to 0.80
+      (projects 0.74). It was also named coding_intent like an older function, silently breaking 'generate
+      requirements.txt' / 'notebook to script' / 'check dependencies': renamed agent_coding_intent. (2) 'Fix it' turned
+      a 58-line file into 2 lines (3 times): a fix holding only the __main__ block couldn't be patched and the fallback
+      wrote it as the WHOLE file; blocks.patch_main now patches functions + the main block, and a piece that can't be
+      placed is never written ("changed nothing"). Editing phrasings 'fix/update (the) selected code' added (they
+      ran the selection). Real-model check of all trace phrasings + tests. 1037+ tests, scorecard 66/100/92.
