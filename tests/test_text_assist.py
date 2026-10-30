@@ -229,7 +229,19 @@ def test_meaning_is_short_and_english_by_default(desk):
     assist.run("meaning", "meaning of this word in nepali", "ne")
     assert calls[-1] == ("assist_meaning", True)
     st["sel"] = "def f(x):\n    return x * 2"
-    assert assist.run("meaning", "what does this mean") == "[assist_code_explain]"
+    assert assist.run("meaning", "what does this mean").startswith("[assist_code_explain]")
+
+
+def test_selected_code_is_explained_short_first_and_long_only_on_yes(desk, monkeypatch):
+    """Owner: a short answer in the chat, then ask; the long one (workspace) only after a yes (tokens)."""
+    st, calls = desk
+    monkeypatch.setattr(assist, "_more", {})
+    st["sel"] = "def f(sessions):\n    return [s for s in sessions if s['on']]"
+    out = assist.run("code", "what is this code about")
+    assert out.startswith("[assist_code_explain]") and "Want the full step-by-step explanation?" in out
+    assert calls[-1] == ("assist_code_explain", False)  # the small model, small budget: no long answer yet
+    assert assist.more_waiting()
+    assert assist.more() == "[assist_more]" and calls[-1] == ("assist_more", True) and not assist.more_waiting()
 
 
 def test_format_whole_file_waits_for_yes(desk, tmp_path, monkeypatch):

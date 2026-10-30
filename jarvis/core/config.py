@@ -782,6 +782,7 @@ NUDGE_HOURS = (10, 21)  # only between these hours
 TASK_OVERDUE_S = float(os.getenv("KURAMA_TASK_OVERDUE_S", str(60 * 60)))  # due to-do still open this long after -> 'not done yet'
 SELECTION_MEMORY_S = float(os.getenv("KURAMA_SELECTION_MEMORY_S", "600"))  # a highlight outside KURAMA counts this long
 # the "KURAMA editor link" VS Code extension (vscode_ext/) keeps one small JSON per window here: open file, selection
+CODE_REUSE_MAX_AGE_S = 1800  # "put it in the file" reuses a code job only this recent
 VSCODE_STATE_DIR = Path(os.getenv("KURAMA_VSCODE_STATE_DIR", str(Path.home() / ".local" / "share" / "kurama" / "vscode")))
 READ_LATER_FILE = os.getenv("KURAMA_READ_LATER", "~/Documents/KURAMA/read_later.xlsx")  # reading list (Excel)
 PAGE_DETAIL_TTL_S = 180.0  # "Want a detailed overview?" waits this long for yes

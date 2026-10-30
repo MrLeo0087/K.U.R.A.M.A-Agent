@@ -92,6 +92,23 @@ def test_only_where_words_mean_no_description():
     assert ctf._spec("write generate code on this path /media/leo/x/test.py") == ""
     assert ctf._spec("write this code in oopen file test.py .. only code") == ""
     assert ctf._spec("add a main block that calls it in this file")
+    # one real word is a description: "write calculator code in this file" got an old, unrelated function before
+    for t in ("write calculator code in this file", "write calculatro code in this file", "make a snake game here"):
+        assert ctf._spec(t) == t
+    assert ctf._spec("write the python code in this file") == "" and ctf._spec("put it into test.py") == ""
+
+
+def test_an_old_code_job_is_never_put_into_the_file(tmp_path):
+    import time
+    from jarvis.core import store
+    from jarvis.tools.general import code_to_file as ctf
+    out = tmp_path / "old.py"
+    out.write_text("def filter_active_sessions():\n    pass\n")
+    jid = store.job_insert("Code for test.py", "code", "sessions")
+    store.job_update(jid, status="done", output_path=str(out), created=time.time() - 3 * 3600, finished=time.time() - 3 * 3600)
+    assert ctf.latest_code() == ""
+    store.job_update(jid, finished=time.time() - 60)
+    assert "filter_active_sessions" in ctf.latest_code()
 
 
 def test_replace_it_after_code_in_the_chat_goes_into_the_open_file(monkeypatch, tmp_path):

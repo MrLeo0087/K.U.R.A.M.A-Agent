@@ -395,3 +395,11 @@ Phases (one at a time, owner tests after each):
       POST /api/v1/context/selection, memory only, KURAMA's own page ignored); grab uses it for a browser window.
       Without the extensions everything falls back to the old guess. Checked against the real VS Code (read,
       replace_all, replace_text, the expect guard). 1011 tests, scorecard unchanged (65% / 99% / 92%).
+- [x] 2026-10-30 Owner's Phase B test: (1) "write calculator code in this file" wrote an OLD unrelated function
+      (filter_active_sessions): code_to_file needed 3+ description words, so one word ("calculator") counted as "no
+      description" and the last code job (hours old) was reused. Now any real word is a description (language names
+      alone are not), and a code job is reused only if it finished in the last 30 min (CODE_REUSE_MAX_AGE_S). Live:
+      "write calculator code in <file>" -> a 132-line calculator. (2) Selected code is explained SHORT first (2-3
+      sentences, small model, ~150 tokens, stays in the chat) + "Want the full step-by-step explanation?"; only a yes
+      writes the long one (it goes to the workspace). Open: "what this code about" (no 'selected') went to the AI
+      without the selection -> Phase C (the selection decides first).

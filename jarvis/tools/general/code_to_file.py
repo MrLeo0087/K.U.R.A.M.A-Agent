@@ -24,10 +24,15 @@ _EDIT_PROMPT = ("You are an expert programmer editing one file. You get the file
                 "logging when asked. An empty file gets the whole new code.")
 
 
+_LANGS = re.compile(r"\b(?:python|py|javascript|js|typescript|ts|java|bash|shell|html|css|sql|cpp|rust|go)\b", re.I)
+
+
 def _spec(request: str) -> str:
-    """The description of the code in the request ('' when it only says where to put it)."""
-    rest = re.findall(r"[^\W\d_]{2,}", _WHERE.sub(" ", request or ""))
-    return request.strip() if len(rest) >= 3 else ""
+    """The description of the code in the request ('' when it only says where to put it). One real word is a
+    description ('write calculator code in this file'); it used to need three, so short requests got the LAST
+    code written instead (an unrelated function). Only 'put it / the (python) code here' means the code we have."""
+    rest = re.findall(r"[^\W\d_]{2,}", _LANGS.sub(" ", _WHERE.sub(" ", request or "")))
+    return request.strip() if rest else ""
 
 
 def _last_spec() -> str:
@@ -58,6 +63,8 @@ def latest_code() -> str:
         pass
     for j in store.jobs_list(10):
         p = Path(j.get("output_path") or "")
+        if time.time() - float(j.get("finished") or j.get("created") or 0) > config.CODE_REUSE_MAX_AGE_S:
+            continue  # code from an hour ago is not "it": never paste an old, unrelated job's code
         if j.get("kind") == "code" and p.is_file():
             text = p.read_text(errors="replace")
             return text if p.suffix in _CODE_EXT else code_only(text) if "```" in text else ""

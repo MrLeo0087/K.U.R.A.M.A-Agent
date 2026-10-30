@@ -88,7 +88,7 @@ def _strip_fence(code: str) -> str:
 MORE_TAG = "[more]"
 MORE_RULE = (f" Stay within the size above. If a really good answer would need much more, give the short version and end "
              f"with the line {MORE_TAG} (nothing after it).")
-SHORT_MAX = {"explain": 320, "summary": 320, "ask_text": 450, "ask_code": 1100}
+SHORT_MAX = {"explain": 320, "summary": 320, "ask_text": 450, "ask_code": 1100, "code": 300}
 _more: dict = {}
 
 
@@ -115,10 +115,13 @@ def more() -> str:
     m = dict(_more)
     _more.clear()
     out = LANGS.get(m["lang"] or "en", "English")
-    long_sys = (f"Write a complete, well organised explanation in simple everyday {out} with short headings and bullets "
+    long_sys = f"{CODE_EXPLAIN_LONG} Answer in {out}." if m["kind"] == "code" else (
+                f"Write a complete, well organised explanation in simple everyday {out} with short headings and bullets "
                 f"(Markdown). {EXPLAIN_RULES}") if m["kind"] != "ask" else (
                 "Do exactly what the user asks about the selected code/text, completely this time. Code in fenced blocks.")
     user = m["sel"] if m["kind"] != "ask" else f"Request: {m['request']}\n\nSelected:\n{m['sel']}"
+    if m["kind"] == "code" and m.get("source"):
+        user = f"File: {m['source']}\n{user}"
     return _llm(long_sys, user[:8000], smart=True, max_tokens=1800, purpose="assist_more")
 
 
@@ -444,12 +447,25 @@ def reply(chat: str, instruction: str = "", lang: str = "") -> str:
     return _llm(sys, chat, smart=smart, max_tokens=250, purpose="assist_reply")
 
 
+CODE_EXPLAIN_LONG = ("Explain this code to a student: first one line on what it does overall, then the important steps "
+                     "in order (short bullet lines), then any bug or risk you notice. Plain text, no code blocks unless "
+                     "a tiny snippet helps.")
+
+
 def explain_code(code: str, lang: str = "", name: str = "") -> str:
+    """Short first (owner): 2-3 sentences in the chat (~150 tokens), then 'Want the full explanation?'; only a yes
+    writes the long, step-by-step one (it goes to the workspace). It used to always write the long one."""
     out = LANGS.get(lang or "en", "English")
-    return _llm(f"Explain this code to a student, in {out}: first one line on what it does overall, then the "
-                f"important steps in order (short bullet lines), then any bug or risk you notice. Plain text, no "
-                f"code blocks unless a tiny snippet helps.", (f"File: {name}\n" if name else "") + code[:12000],
-                smart=True, max_tokens=1200, purpose="assist_code_explain")
+    reply = _llm(f"In {out}, say in 2-3 short plain sentences what this code does and the one thing worth knowing "
+                 f"about it (a bug or risk if there is one). No lists, no headings, no code.",
+                 (f"File: {name}\n" if name else "") + code[:12000], smart=False, max_tokens=SHORT_MAX["code"],
+                 purpose="assist_code_explain")
+    if not reply.strip() or reply.startswith("error"):
+        return reply
+    import time
+    _more.clear()
+    _more.update(kind="code", sel=code, request="", source=name, lang=lang, until=time.time() + config.ASSIST_MORE_TTL_S)
+    return reply.strip() + "\nWant the full step-by-step explanation? Say yes."
 
 
 _CODE_VERB = re.compile(r"\b(?:make|improve|optimi[sz]e|fix|refactor|format|clean|modify|change|update|edit|enhance|"
