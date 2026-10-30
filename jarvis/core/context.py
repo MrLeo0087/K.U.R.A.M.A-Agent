@@ -45,7 +45,7 @@ def snapshot() -> dict:
         if (st := editor.target()) is not None:  # the editor link: exact file, selection (or none), unsaved edits
             if st.get("file"):
                 out.update(file=Path(st["file"]), selection=(st.get("selection") or "").strip(),
-                           lines=_lines(st), dirty=bool(st.get("dirty")), exact=True)
+                           lines=_lines(st), dirty=bool(st.get("dirty")), exact=True, root=st.get("root") or "")
         else:
             f = assist.open_file_in_editor()
             if f is not None and f.is_file():
@@ -72,6 +72,8 @@ def line() -> str:
     s = snapshot()
     if s["file"] is not None:
         txt = f"Open in VS Code: {s['file'].name} ({s['file'].parent.name})."
+        if s.get("root"):
+            txt += f" Its project folder: {s['root']} (new files 'in this project/VS Code' go there)."
         if s["selection"]:
             sel = " ".join(s["selection"].split())
             where = f" (lines {s['lines'][0]}-{s['lines'][1]})" if s.get("lines") else ""

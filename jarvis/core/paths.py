@@ -75,8 +75,9 @@ def _score(name: str, want: str) -> float:
         return 0.0
     if a == b:
         return 1.0
-    if a.startswith(b) or b.startswith(a):
-        return 0.9 if min(len(a), len(b)) >= 3 else 0.0
+    if a.startswith(b) or b.startswith(a):  # 'down' -> Downloads; but 3 letters of a long name ('bro' ->
+        short, long_ = sorted((len(a), len(b)))  # browser_ext) is a guess, not a name
+        return 0.9 if short >= 4 or (short >= 3 and short / long_ >= 0.5) else 0.0
     if b in a:
         return 0.8
     return difflib.SequenceMatcher(None, a, b).ratio()

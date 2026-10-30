@@ -6,7 +6,7 @@ from typing import Literal
 from jarvis.core.registry import tool
 
 
-@tool(group="filesearch", safety="confirm",
+@tool(group="filesearch", safety="safe",  # typing the password twice in the box IS the yes (no extra yes/no first)
       description="Lock a folder or file with a password (encrypted into one file, original removed) or unlock it. "
                   "The password is typed into a box on the laptop, never in chat.")
 def folder_lock(action: Literal["lock", "unlock"] = "lock", path: str = "") -> str:

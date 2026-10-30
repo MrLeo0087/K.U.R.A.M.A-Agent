@@ -12,6 +12,8 @@ def _open(a: dict) -> tuple[str, dict]:
     """One name -> website, folder or app: a URL / known site / domain is a site; a folder that exists and is not an
     app is the file manager; everything else is an app ('open tara' = the Tara folder, 'open brave' = the app)."""
     name = (a.get("target") or "").strip()
+    if re.search(r"\b(?:vs\s*code|vscode|visual\s+studio\s+code|code|editor)\b", a.get("how") or "", re.I):
+        return "open_path", {"path": name, "app": "vscode"}  # 'open Downloads in VS Code'
     from jarvis.tools.general import _apps, open_url
     if re.search(r"\b(?:website|site|\.com|\.org|https?://|www\.)", name, re.I) or open_url.resolve(name):
         return "open_url", {"target": name}
@@ -47,7 +49,8 @@ def apps(action: Literal["open", "close", "kill", "window", "press", "type", "cl
     Args:
         action: open, close, kill (force), window, press (keys like 'ctrl+v', 'enter'), type, click, install.
         target: App / website / folder name ('brave', 'youtube', 'tara'), or several sites 'youtube, facebook'.
-        how: window: focus, minimize, maximize, left, right, restore, list; install: install, remove, search, update.
+        how: open: the app to open it IN ('vscode' for a folder/file in VS Code); window: focus, minimize, maximize,
+            left, right, restore, list; install: install, remove, search, update.
         text: What to type, the keys to press, or what to click.
     """
     if action == "open" and re.search(r",|\band\b", target or "") and all(len(p.split()) <= 3 for p in re.split(r",|\band\b", target)):

@@ -189,3 +189,15 @@ def test_format_shows_first_and_replace_it_puts_it_back(vscode, monkeypatch):
     vscode.select((0, 7), (0, 23))
     assert assist.run("improve", "format this and replace it").startswith("Replaced")
     assert vscode.text == "notes: The plan is good.\n" and not assist.pending_code_active()
+
+
+def test_translate_and_replace_on_a_read_only_page_says_so(monkeypatch):
+    from jarvis.core import assist
+    monkeypatch.setattr(rewrite, "target_window", lambda: (7, False))
+    monkeypatch.setattr(rewrite, "_window_name", lambda wid, limit=60: "Chat - Google Gemini - Brave"[:limit])
+    monkeypatch.setattr(rewrite, "_xclip", lambda args, text=None: "")
+    monkeypatch.setattr(rewrite, "put", lambda g, new: (_ for _ in ()).throw(AssertionError("no paste on a page")))
+    monkeypatch.setattr(assist, "translate", lambda text, lang: "नमस्ते")
+    browsertab.put_selection("hello there", "https://gemini.google.com/app/x", "Chat - Google Gemini", editable=False)
+    out = assist.run("translate", "translate into nepali and replace", "ne", True)
+    assert "read only" in out and "Replaced" not in out

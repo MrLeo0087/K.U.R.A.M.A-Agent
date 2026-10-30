@@ -79,7 +79,7 @@ def test_make_folder_safe_root_and_outside(roots, tmp_path):
     res, asked = ex("make_folder", {"path": str(roots / "demo")})
     assert res.ok and (roots / "demo").is_dir() and asked == []
     res, asked = ex("make_folder", {"path": str(tmp_path / "out")}, answers=(False,))
-    assert "declined" in res.output and not (tmp_path / "out").exists() and len(asked) == 1
+    assert res.ok and (tmp_path / "out").is_dir() and asked == []  # creating never asks (owner: Downloads asked)
     res, _ = ex("make_folder", {"path": "/etc/jarvis"})
     assert not res.ok and "refusing" in res.output
 
@@ -387,3 +387,33 @@ def test_dropped_leading_slash_is_restored_from_the_request(tmp_path, monkeypatc
 def test_curly_apostrophe_refusal_detected():
     from jarvis.core import meta
     assert meta.looks_like_refusal("I’m sorry, I don’t have the ability to change your wallpaper.")
+
+
+def test_new_names_are_literal_and_rename_stays_in_place(roots, tmp_path, monkeypatch):
+    """'Create new folder here' made ~/new_folder resolve to an existing 'new' folder elsewhere; a rename's bare new
+    name must stay in the same folder; renaming never asks, moving does."""
+    (roots / "new").mkdir()
+    res, asked = ex("make_folder", {"path": str(roots / "new_folder")})
+    assert res.ok and (roots / "new_folder").is_dir() and asked == []
+    (roots / "test").mkdir()
+    res, asked = ex("move_path", {"source": str(roots / "test"), "destination": "test2", "rename": True})
+    assert res.ok and (roots / "test2").is_dir() and not (roots / "test").exists() and asked == []
+    (roots / "report.pdf").write_text("x")
+    res, _ = ex("move_path", {"source": str(roots / "report.pdf"), "destination": "final", "rename": True})
+    assert (roots / "final.pdf").exists()  # the extension is kept
+    (roots / "dest").mkdir()
+    res, asked = ex("move_path", {"source": str(roots / "final.pdf"), "destination": str(roots / "dest")}, answers=(False,))
+    assert "declined" in res.output and len(asked) == 1 and (roots / "final.pdf").exists()
+
+
+def test_open_in_vscode_and_pasted_path_is_this(roots, monkeypatch):
+    from jarvis.core import safety
+    from jarvis.tools.general import _sys, open_path
+    ran = []
+    monkeypatch.setattr(_sys, "run", lambda argv, **k: ran.append(argv) or "")
+    assert open_path.open_path(str(roots), "vscode").startswith("Opened") and ran[-1] == ["code", str(roots)]
+    tok = safety._CTX.set({"user_text": f"{roots}\nopen this folder in vs code"})
+    try:
+        assert "Opened" in open_path.open_path("this folder", "vscode") and ran[-1] == ["code", str(roots)]
+    finally:
+        safety._CTX.reset(tok)

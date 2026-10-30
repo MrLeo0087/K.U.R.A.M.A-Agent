@@ -15,6 +15,8 @@ TABLE = {
     "write": Act("write_file", lambda a: {"path": a.get("path"), "content": a.get("text", "")}),
     "mkdir": Act("make_folder", lambda a: {"path": a.get("path")}),
     "move": Act("move_path", lambda a: {"source": a.get("path"), "destination": a.get("to")}),
+    "rename": Act("move_path", lambda a: {"source": a.get("path"), "destination": a.get("to"), "rename": True}),
+    "open": Act("open_path", lambda a: {"path": a.get("path"), "app": a.get("to") or "vscode"}),
     "copy": Act("copy_path", lambda a: {"source": a.get("path"), "destination": a.get("to")}),
     "delete": Act("delete_to_trash", lambda a: {"path": a.get("path")}),
     "organize": Act("organize_files", lambda a: {"action": a.get("text", "organize"), "folder": a.get("path", "~/Downloads")}),
@@ -25,16 +27,19 @@ TABLE = {
 
 @tool(group="core", safety="safe",
       description="Files and folders anywhere on the laptop: list a folder, find files by their NAME (not code inside them), read, write (NEW files; to change code in a file open in VS Code use text edit_code), make a "
-                  "folder, move, copy, delete (to trash, asks first), organize a messy folder, convert a file, lock a folder.")
-def files(action: Literal["list", "find", "read", "write", "mkdir", "move", "copy", "delete", "organize", "convert", "lock"],
+                  "folder, rename, move, copy, delete (to trash, asks first), open a file/folder in VS Code or another app, "
+                  "organize a messy folder, convert a file, lock a folder.")
+def files(action: Literal["list", "find", "read", "write", "mkdir", "rename", "move", "copy", "delete", "open", "organize",
+                         "convert", "lock"],
           path: str = "", query: str = "", to: str = "", text: str = "") -> str:
     """Files and folders.
 
     Args:
-        action: list, find, read, write, mkdir, move, copy, delete, organize, convert, lock.
+        action: list, find, read, write, mkdir, rename (to = the new name), move, copy, delete, open (in VS Code by
+            default; to = 'files' for the file manager, 'default' for its own app), organize, convert, lock.
         path: The file or folder; loose names work ('downloads', 'project1 then tara').
         query: For find: the file name or part of it ('main.py', 'naruto'), searched on all disks.
-        to: Destination folder (move/copy) or format (convert: pdf, md, mp3...).
+        to: Destination folder (move/copy), the new name (rename), the app (open) or format (convert: pdf, md...).
         text: write: the content; find: name/folder/content; organize: organize/apply/undo; lock: lock/unlock.
     """
     return run(TABLE, {"action": action, "path": path, "query": query, "to": to, "text": text})

@@ -3085,6 +3085,7 @@ _TO_FILE = re.compile(r"(?:please\s+)?(?:write|put|paste|insert|save|add|copy|re
                       r"(?P<p>[\w./~-]+\.\w{1,5}|/\S+)?\s*(?:file)?\s*(?:\.\.?\s*)?(?:(?:only|just)\s+(?:the\s+)?code)?", I)
 
 
+_VSCODE_NAME = re.compile(r"\b(?:vs\s*code|vscode|visual\s+studio\s+code)\b", I)
 _CODE_ASK = re.compile(r"\b(?:write|writ|generate|create|make|put|paste|insert|add|save|copy|replace|implement|code)\b", I)
 _CODE_WORD = re.compile(r"\b(?:code|codes|function|module|script|class|program|it)\b", I)
 _INTO_FILE = re.compile(r"\b(?:in|into|to|on|inside)\s+(?:the\s+|this\s+|my\s+|that\s+)?(?:open(?:ed)?\s+|oopen\s+|"
@@ -3111,7 +3112,8 @@ def to_file_intent(text: str) -> Intent | None:
         from jarvis.core import context
         if not context.snapshot()["selection"] and context.editor_open():  # selected code: assist completes that
             return Intent("tofile", "code_to_file", "clipboard", {"request": t})
-    if not (_CODE_ASK.search(t) and _CODE_WORD.search(t) and _INTO_FILE.search(t)):
+    bare = _VSCODE_NAME.sub(" ", t)  # the 'code' in 'VS Code' is the app's name, not a request for code
+    if not (_CODE_ASK.search(bare) and _CODE_WORD.search(bare) and _INTO_FILE.search(t)):
         return _TO_FILE.fullmatch(t.strip(" .!?")) and Intent("tofile", "code_to_file", "clipboard", {"request": t}) or None
     p = re.search(r"(?<!\w)(/[^\s]+\.\w{1,5})\b", t)
     return Intent("tofile", "code_to_file", "clipboard", {"request": t, "path": p.group(1) if p else ""})

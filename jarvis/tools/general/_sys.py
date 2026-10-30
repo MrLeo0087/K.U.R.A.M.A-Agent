@@ -24,6 +24,7 @@ INSTALL = {
     # P9a
     "gsettings": "sudo apt install libglib2.0-bin", "upower": "sudo apt install upower",
     "mpv": "sudo apt install mpv", "xdg-open": "sudo apt install xdg-utils",
+    "code": "install VS Code (code.visualstudio.com) and its 'code' command",
     # laptop switches + power
     "nmcli": "sudo apt install network-manager", "rfkill": "sudo apt install rfkill",
     "powerprofilesctl": "sudo apt install power-profiles-daemon", "xset": "sudo apt install x11-xserver-utils",

@@ -9,7 +9,9 @@ from pathlib import Path
 from jarvis.core import config, safety
 
 
-def resolve(path: str) -> Path:
+def resolve(path: str, create: bool = False) -> Path:
+    """The real path for a loose one. create=True: the LAST part is a new name, kept exactly as given (only the
+    folders before it are looked up), so 'new_folder' never lands on some existing 'new' folder."""
     raw = str(path).strip().strip("\"'")
     if raw and not raw.startswith(("/", "~")):
         # Models sometimes drop the leading slash ("tmp/x" for "/tmp/x"): trust the user's own words.
@@ -36,6 +38,12 @@ def resolve(path: str) -> Path:
             return (cur / raw).resolve()  # "create notes.txt here" -> in the current folder
         p = Path.home() / p
     p = p.resolve()
+    if create and not p.exists():
+        if p.parent.exists():
+            return p
+        from jarvis.core.paths import smart_path
+        parent = smart_path(str(Path(str(path)).parent), want="dir")
+        return (parent / p.name).resolve() if parent else p
     if not p.exists() and (not p.parent.exists() or p.parent == Path.home()):
         # spoken/loose folder ("project1 then tara folder/notes.txt"): find the real folder. Never used when
         # the parent exists, so a new file is never redirected onto some other existing file.

@@ -1,4 +1,4 @@
-"""make_folder (P7c): create a folder (asks first outside the project roots)."""
+"""make_folder (P7c): create a folder. Creating never asks (nothing is lost); system folders are refused."""
 from __future__ import annotations
 
 from jarvis.core.registry import tool
@@ -12,15 +12,16 @@ def make_folder(path: str) -> str:
     Args:
         path: Folder path (absolute, ~/..., or relative to home).
     """
-    p = _files.resolve(path)
+    p = _files.resolve(path, create=True)
     _files.guard(p)
     if p.is_dir():
         return f"The folder {p} already exists."
     if p.exists():
         return f"error: {p} exists and is a file"
-    if not _files.ask_outside(p, "create the folder"):
-        return "The user declined: the folder was not created."
-    p.mkdir(parents=True, exist_ok=True)
+    try:
+        p.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        return f"error: couldn't create {p}: {e.strerror or e}"
     from jarvis.core import focus
     focus.set_path(str(p))  # follow-ups ('open it', 'send it') refer to it
     return f"Created folder {p}"

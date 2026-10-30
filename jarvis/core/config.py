@@ -296,6 +296,12 @@ ROUTER_MAX_GROUPS = 3
 # Free phrasing for tools: paraphrases embedded by the semantic router (0 tokens), so "enable speech to text
 # mode" finds dictate even though no keyword rule says so. Add a few lines here for any tool that gets missed.
 TOOL_EXAMPLES: dict[str, tuple[str, ...]] = {
+    "open_path": ("open this folder in vs code", "open downloads in vs code", "open main.py in vscode",
+                  "open the kurama project in code", "open /home/leo/Downloads/test in vs code", "open it in vs code"),
+    "move_path": ("rename this folder to old_test", "rename the folder test to test2", "rename report.pdf to final",
+                  "move this file to downloads", "change the folder name to projects"),
+    "make_folder": ("create a new folder in downloads", "make a folder named test in documents", "create folder here",
+                    "new folder called photos on the desktop"),
     "write_file": ("create a markdown file named notes", "make a new text file called todo", "create a new file notes.md",
                    "save this as a file in downloads", "write hello into a new file", "create an empty python file"),
     "open_url": ("open youtube", "youtube kholo", "google khol", "facebook kholdeu", "open github in the browser",

@@ -102,10 +102,25 @@ def is_anaphora(text: str) -> bool:
     return t in ANAPHORA
 
 
+def said_path() -> Path | None:
+    """The one existing absolute path written in the user's current message, if there is exactly one."""
+    import re
+    try:
+        from jarvis.core import safety
+        said = str(safety.context().get("user_text", "") or "")
+    except Exception:  # noqa: BLE001
+        return None
+    found = {Path(m.rstrip(".,;:!?)\"'")) for m in re.findall(r"(?<![\w~])(/[^\s\"']+|~/[^\s\"']+)", said)}
+    real = [p.expanduser() for p in found if p.expanduser().exists()]
+    return real[0] if len(real) == 1 else None
+
+
 def refer(text: str) -> Path | None:
     """'this/it/here' -> current folder, 'previous folder' -> the one before, 'parent folder' -> one up; else None."""
     t = " ".join((text or "").lower().split()).strip(" .?")
     if not t or is_anaphora(t):
+        if (pasted := said_path()) is not None:  # "/home/leo/Documents  organize this folder": that path
+            return pasted
         if (p := get_path(config.FOCUS_TTL_H * 3600)) and Path(p).exists():
             return Path(p)
         return cwd()

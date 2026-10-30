@@ -31,8 +31,11 @@ def organize_files(action: Literal["organize", "apply", "edit", "cancel", "undo"
         return organizer.cancel_pending()
     if action == "edit":
         return organizer.edit_pending(change or "")
+    from jarvis.core import focus
     from jarvis.core.paths import resolve_target
-    d = resolve_target(folder or "downloads")
+    pasted = focus.said_path()  # a folder path written in the message wins over a loose name ('organize this folder')
+    d = pasted if pasted is not None and pasted.is_dir() and not str(folder or "").startswith("/") \
+        else resolve_target(folder or "downloads")
     if isinstance(d, str):
         return d
     if not d.is_dir():

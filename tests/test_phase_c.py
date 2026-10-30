@@ -35,3 +35,12 @@ def test_the_meaning_gate_applies_even_when_the_model_is_unsure(monkeypatch):
     monkeypatch.setattr(semantic, "scores", lambda t: [("power", 0.81), ("study", 0.76), ("tracker", 0.60)])
     it = fastpath.Intent("habit", "habits", "tracker", {"action": "delete", "text": "laptop"})
     assert not fastpath.meaning_ok("Stop tracking laptop", it)  # was let through: top 0.81 < 0.85 'unsure'
+
+
+def test_vs_code_is_an_app_name_not_a_request_for_code(monkeypatch):
+    monkeypatch.setattr(config, "FASTPATH", True)
+    for t in ("open this folder in vs code", "/home/leo/Downloads/test\nopen this folder in vs code",
+              "search for command.md file and open it on vs code", "Make a new python.py, test.py file in this VS Code."):
+        it = fastpath.to_file_intent(t)
+        assert it is None, t
+    assert fastpath.to_file_intent("now write this code in test.py in vs code").tool == "code_to_file"

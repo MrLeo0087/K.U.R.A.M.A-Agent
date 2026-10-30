@@ -438,3 +438,17 @@ Phases (one at a time, owner tests after each):
       original alone, then 'replace it' puts it in place (VS Code through the editor, elsewhere the old paste);
       'format this and replace it' does it at once; read-only page text says so (no offer). Translations the same.
       Summaries of a selection: 2-3 plain sentences (no bullets, so they stay in the chat). 1024 tests.
+- [x] 2026-10-30 Files & folders basics (owner: "I cannot create / name / rename a folder, open VS Code from a folder"):
+      (1) creating a folder / a NEW file never asks (Downloads asked because it is outside the 'project roots', and
+      that yes/no was the one the page cancelled); only overwriting asks. (2) A new name is kept exactly
+      (_files.resolve(create=True)): "~/new_folder" had landed on an existing 'new' folder elsewhere. (3) rename:
+      files(action=rename) / move_path(rename=True): the bare new name stays in the same folder, keeps the extension,
+      never asks; moving to another folder asks. (4) open_path tool + files(action=open) + apps(open, how=vscode):
+      "open this folder / Downloads / it / <path> in VS Code" runs `code <path>` (code added to the _sys allowlist);
+      "VS Code" in a sentence no longer triggers code writing (to_file_intent ignores the app's name). (5) A path
+      written in the message is what "this folder/file/it" means (focus.said_path; organize uses it first).
+      (6) folder lock: the password box (typed twice) is the consent, no extra yes/no first (vault lock/unlock
+      checked live). (7) Fuzzy names: 3 letters of a long name ('bro' -> browser_ext) no longer match. (8) Translate
+      + replace on read-only page text says so instead of "Replaced". The VS Code project folder is in the context
+      line, so "new file in this VS Code" goes there. Live via chat: create folder / rename / new file in a scratch
+      folder all correct (~2 s, ~2.5k tokens each through the AI). 1028 tests.

@@ -1001,9 +1001,7 @@ def run(action: str, request: str = "", lang: str = "", replace: bool = False, p
     if action == "translate":
         out = translate(sel, lang or "ne")
         if replace:
-            if not rewrite.put(g, out):
-                return "The text changed meanwhile, so I didn't replace it: the new version is on your clipboard (Ctrl+V)."
-            return f"Replaced with the {LANGS.get(lang or 'ne', '').split(' ')[0]} translation."
+            return _replace_now(g, out)
         return _offer_replace(g, out, LANGS.get(lang or "ne", "").split(" ")[0] or "translated")
     if action == "meaning":  # code selected: what the code does; otherwise the word / sentence meaning
         return explain_code(sel, lang) if is_code(sel) else meaning(sel, lang or "en")

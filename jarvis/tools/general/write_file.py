@@ -1,4 +1,4 @@
-"""write_file (P7c): write a text file (asks first to overwrite or outside the project roots)."""
+"""write_file (P7c): write a text file (asks first only to overwrite an existing one)."""
 from __future__ import annotations
 
 from jarvis.core import safety
@@ -18,7 +18,7 @@ def write_file(path: str, content: str = "", overwrite: bool = False) -> str:
         content: Text to write.
         overwrite: Replace the file if it already exists.
     """
-    p = _files.resolve(path)
+    p = _files.resolve(path, create=True)
     _files.guard(p)
     if p.is_dir():
         return f"error: {p} is a folder"
@@ -27,9 +27,7 @@ def write_file(path: str, content: str = "", overwrite: bool = False) -> str:
         # tool can't pass overwrite, so every "yes" asked again)
         if not safety.ask(f"Should I overwrite the existing file {p}?"):
             return "The user declined: the file was not overwritten."
-    elif not _files.ask_outside(p, "write the file"):
-        return "The user declined: the file was not written."
-    p.parent.mkdir(parents=True, exist_ok=True)
+    p.parent.mkdir(parents=True, exist_ok=True)  # a NEW file never asks: nothing is lost
     p.write_text(content[:MAX_CHARS], encoding="utf-8")
     from jarvis.core import focus
     focus.set_path(str(p))  # follow-ups ('open it', 'send it') refer to it
