@@ -32,6 +32,7 @@ class ChatIn(BaseModel):
 class ConfirmIn(BaseModel):
     id: str
     yes: bool = False
+    via: str = ""  # who answered on the page (button / typed / voice / sleep): logged, to trace wrong answers
 
 
 def norm_lang(v: object) -> str | None:
@@ -71,6 +72,8 @@ async def chat(body: ChatIn, request: Request):
 
 @router.post("/confirm", summary="Answer a pending confirmation (yes/no)")
 async def confirm(body: ConfirmIn, request: Request):
+    import logging
+    logging.getLogger("jarvis.confirm").warning("confirm %s answered %s via %r", body.id, body.yes is True, body.via[:60])
     if not request.app.state.engine.answer(body.id, body.yes is True):
         return JSONResponse({"ok": False, "error": "unknown or expired confirmation"}, status_code=404)
     return {"ok": True, "yes": body.yes is True}

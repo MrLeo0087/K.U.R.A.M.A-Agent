@@ -132,6 +132,7 @@ class Engine:
         try:
             answered = p.event.wait(self.settings.confirm_timeout_s)
             if not answered:
+                log.warning("confirm %s denied: no answer in %ss", cid, self.settings.confirm_timeout_s)
                 turn.push({"type": "confirm_timeout", "id": cid})
             return bool(answered and p.answer)
         finally:
@@ -148,6 +149,8 @@ class Engine:
     def deny_pending(self, turn: Turn) -> None:
         for cid in turn.confirm_ids:
             p = self.pending.get(cid)
+            if p is not None and not p.event.is_set():
+                log.warning("confirm %s denied: the page closed the chat before an answer (closed=%s)", cid, turn.closed)
             if p is not None:
                 p.answer = False
                 p.event.set()

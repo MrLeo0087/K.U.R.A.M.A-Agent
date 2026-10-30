@@ -300,7 +300,7 @@ async function handleUtterance(blob) {
     const yes = NO.test(t) ? false : YES.test(t) ? true : null;
     if (yes === null) { player.enqueue("Please say yes or no.", r.lang); return; }
     addUser(r.text, true);
-    answerConfirm(pendingConfirm, yes);
+    answerConfirm(pendingConfirm, yes, "voice:" + t.slice(0, 40));
     return;
   }
   sendChat(r.text, { voice: true, lang: r.lang, speak: !S.mute, ambient: Date.now() - lastBotAt > FOLLOWUP_MS });
@@ -470,8 +470,8 @@ class BotBubble {
     const row = el("div", "row");
     const yes = el("button", "btn yes", "Yes"), no = el("button", "btn no", "No");
     yes.type = no.type = "button";
-    yes.onclick = () => answerConfirm(ev.id, true);
-    no.onclick = () => answerConfirm(ev.id, false);
+    yes.onclick = () => answerConfirm(ev.id, true, "button");
+    no.onclick = () => answerConfirm(ev.id, false, "button");
     row.append(yes, no);
     card.append(row);
     this.body.insertBefore(card, this.meta);
@@ -508,11 +508,11 @@ class BotBubble {
   }
 }
 
-async function answerConfirm(id, yes) {
+async function answerConfirm(id, yes, via = "") { // via: who answered (logged by the server)
   if (pendingConfirm === id) pendingConfirm = null;
   if (openConfirm === id) openConfirm = null;
   bubbles.get(id)?.settle(id, yes ? "Approved" : "Declined");
-  try { await api.confirm(id, yes); } catch (e) { toast("Confirmation failed: " + e.message); }
+  try { await api.confirm(id, yes, via); } catch (e) { toast("Confirmation failed: " + e.message); }
 }
 
 let lastBotAt = 0; // talk mode: speech long after KURAMA last spoke is probably room talk (sent as "ambient")
@@ -639,7 +639,7 @@ $("composer").addEventListener("submit", (e) => {
   const t = input.value.trim();
   if (openConfirm) { // typed answer to the yes/no card
     const yes = NO.test(t) ? false : YES.test(t) ? true : null;
-    if (yes !== null) { input.value = ""; autosize(); addUser(t); answerConfirm(openConfirm, yes); }
+    if (yes !== null) { input.value = ""; autosize(); addUser(t); answerConfirm(openConfirm, yes, "typed:" + t.slice(0, 40)); }
     else toast("Answer the question first: type yes or no (or click a button).");
     return;
   }
@@ -922,7 +922,7 @@ function renderAgent(a) {
         btn.onclick = () => { row.remove(); ask(a.say); };
         row.append(btn);
       }
-      bb.root.append(row);
+      bb.body.insertBefore(row, bb.meta); // under the message, not beside it
     }
     scrollDown(true);
     miniCaption("bot", e.text, true);
@@ -2169,7 +2169,7 @@ function goSleep(quiet = false) {
   if (asleep) return;
   asleep = true;
   if (conv.on) conv.sleep(true); // from now on only the wake phrase counts, even before the API takes over
-  if (openConfirm) answerConfirm(openConfirm, false); // "sleep" while a question waits is a real no
+  if (openConfirm) answerConfirm(openConfirm, false, "sleep"); // "sleep" while a question waits is a real no
   abortChat(true);
   player.stop();
   if (!quiet && !S.mute) player.enqueue(`Okay, going to sleep. Say wake up ${botName} when you need me.`);
@@ -2205,7 +2205,7 @@ async function bargeCheck(blob) { // something was said while KURAMA was talking
   try { r = await api.stt(blob, S.lang); } catch { return; }
   const t = (r?.text || "").trim();
   if (!t) return;
-  if (pendingConfirm && (YES.test(t) || NO.test(t))) { player.stop(); addUser(t, true); answerConfirm(pendingConfirm, !NO.test(t) && YES.test(t)); return; }
+  if (pendingConfirm && (YES.test(t) || NO.test(t))) { player.stop(); addUser(t, true); answerConfirm(pendingConfirm, !NO.test(t) && YES.test(t), "barge:" + t.slice(0, 40)); return; }
   if (openConfirm) return; // a question is waiting: anything but yes/no must not cancel it
   if (STOP_RE.test(t) && t.split(/\s+/).length <= 4) { player.stop(); if (!openConfirm) abortChat(); updateState(); maybeResume(); return; }
   const words = t.toLowerCase().match(/\p{L}+/gu) || [];

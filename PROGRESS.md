@@ -492,3 +492,7 @@ Phases (one at a time, owner tests after each):
       wrote it as the WHOLE file; blocks.patch_main now patches functions + the main block, and a piece that can't be
       placed is never written ("changed nothing"). Editing phrasings 'fix/update (the) selected code' added (they
       ran the selection). Real-model check of all trace phrasings + tests. 1037+ tests, scorecard 66/100/92.
+- [x] 2026-10-30 Repair step 2: crash buttons sit under the message (inside the bubble's column, not beside it); every
+      yes/no answer is logged with who gave it (button / typed / voice / barge / sleep, POST /confirm 'via'), and a
+      question denied because the page closed the chat or by timeout is logged too (data/logs/server.log) — to find
+      why "shutdown now" was declined 4-13 s after asking (the server side was verified to wait correctly).

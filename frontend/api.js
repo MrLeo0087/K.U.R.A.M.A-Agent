@@ -44,7 +44,7 @@ export class Api {
   videosOpen(body) { return this.request("/api/v1/videos/open", { method: "POST", body }); }
   videosRemove(body) { return this.request("/api/v1/videos/remove", { method: "POST", body }); }
   downloadControl(id, action) { return this.request(`/api/v1/downloads/${id}/${action}`, { method: "POST", body: {} }); }
-  confirm(id, yes) { return this.request("/api/v1/confirm", { method: "POST", body: { id, yes } }); }
+  confirm(id, yes, via = "") { return this.request("/api/v1/confirm", { method: "POST", body: { id, yes, via } }); }
   tools() { return this.request("/api/v1/tools"); }
   slash() { return this.request("/api/v1/slash"); }
   profile() { return this.request("/api/v1/profile"); }
