@@ -73,6 +73,7 @@ export class Api {
   setResources(mode) { return this.request("/api/v1/resources", { method: "POST", body: { semantic_mode: mode } }); }
   freeModel() { return this.request("/api/v1/resources/free", { method: "POST", body: {} }); }
   modes() { return this.request("/api/v1/modes"); }
+  agentState() { return this.request("/api/v1/agent"); }
   agent(name) { return this.request("/api/v1/agent", { method: "POST", body: { name } }); }
   setPowerMode(mode) { return this.request("/api/v1/modes", { method: "POST", body: { mode } }); }
   setPowerSwitch(key, value) { return this.request("/api/v1/modes", { method: "POST", body: { key, value } }); }

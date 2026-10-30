@@ -38,7 +38,7 @@ def record(command: str, cwd: str, exit_code: int | None, output: str, window: s
     _last.update(command=(command or "").strip(), cwd=cwd or "", code=exit_code, output=out, error=p.get("error", ""),
                  ts=time.time(), window=window)
     touch()
-    if exit_code in (130, 2) and not p.get("error"):  # Ctrl+C / a typo'd shell command: no announcement
+    if exit_code in (130, 2, 127) and not p.get("error"):  # Ctrl+C / a mistyped shell command: no announcement
         return {"text": ""}
     what = p.get("error") or f"`{_last['command'][:60]}` failed (exit code {exit_code})"
     known = errmem.lookup(p["error"]) if p.get("error") else None

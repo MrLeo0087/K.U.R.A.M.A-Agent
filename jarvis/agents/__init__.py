@@ -131,4 +131,8 @@ def prompt_line() -> str:
 
 def status() -> dict:
     name = current()
-    return {"name": name, "title": TITLES.get(name, name), "agents": ["general", *AGENTS]}
+    out = {"name": name, "title": TITLES.get(name, name), "agents": ["general", *AGENTS]}
+    if name == "coding":
+        from jarvis.agents.coding import terminal
+        out["events"] = terminal.events()
+    return out

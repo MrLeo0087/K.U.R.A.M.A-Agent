@@ -16,7 +16,7 @@ const crypto = require("crypto");
 const DIR = path.join(os.homedir(), ".local", "share", "kurama", "vscode");
 const FILE = path.join(DIR, `${process.pid}.json`);
 const TOKEN = crypto.randomBytes(16).toString("hex");
-const EXT_VERSION = 3; // KURAMA checks it: 3 = watches the terminal for the coding agent
+const EXT_VERSION = 4; // KURAMA checks it: 3 = watches the terminal for the coding agent
 const MAX_SEL = 20000; // characters of selected text written to the state file
 const MAX_BODY = 8 * 1024 * 1024;
 let port = 0;
@@ -102,12 +102,54 @@ async function collect(execution) {
   return out.slice(-OUT_MAX);
 }
 
-function report(body) { // a failed command -> KURAMA (it announces it and can fix it)
-  const data = JSON.stringify(body);
-  const req = http.request({ host: "127.0.0.1", port: 8000, path: "/api/v1/coding/terminal", method: "POST",
-    headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(data) }, timeout: 5000 });
-  req.on("error", () => {});
-  req.end(data);
+function api(route, body, timeout = 5000) { // POST to KURAMA (127.0.0.1); the API token too when one is set
+  return new Promise((resolve) => {
+    const data = JSON.stringify(body);
+    const headers = { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(data) };
+    try { headers.Authorization = "Bearer " + fs.readFileSync(path.join(os.homedir(), ".local", "share", "kurama", "api_token"), "utf8").trim(); } catch (e) { /* no token set */ }
+    const req = http.request({ host: "127.0.0.1", port: 8000, path: route, method: "POST", headers, timeout }, (res) => {
+      let out = "";
+      res.on("data", (c) => { out += c; });
+      res.on("end", () => { try { resolve(JSON.parse(out)); } catch (e) { resolve({}); } });
+    });
+    req.on("error", () => resolve({}));
+    req.on("timeout", () => { req.destroy(); resolve({}); });
+    req.end(data);
+  });
+}
+
+async function showDiff(files) { // KURAMA's proposed change, side by side with the file
+  for (const f of files.slice(0, 3)) {
+    const tmp = path.join(os.tmpdir(), `kurama-${Date.now()}-${path.basename(f.path)}`);
+    fs.writeFileSync(tmp, f.new);
+    await vscode.commands.executeCommand("vscode.diff", vscode.Uri.file(f.path), vscode.Uri.file(tmp),
+      `${path.basename(f.path)} ↔ KURAMA's fix`);
+  }
+}
+
+async function act(say) { // a button was pressed: KURAMA does it and answers right here
+  const r = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "KURAMA…" },
+    () => api("/api/v1/coding/action", { say }, 120000));
+  if (!r.text) { vscode.window.showWarningMessage("KURAMA didn't answer (is it running?)."); return; }
+  if (!r.waiting) { vscode.window.showInformationMessage("KURAMA: " + r.text); return; }
+  const btns = r.files && r.files.length ? ["Apply", "Show diff", "No"] : ["Yes", "No"];
+  const pick = await vscode.window.showInformationMessage("KURAMA: " + r.text, ...btns);
+  if (pick === "Show diff") {
+    await showDiff(r.files);
+    const again = await vscode.window.showInformationMessage("Apply KURAMA's change?", "Apply", "No");
+    if (again === "Apply") act("yes"); else if (again === "No") act("no");
+  } else if (pick === "Apply" || pick === "Yes") act("yes");
+  else if (pick === "No") act("no");
+}
+
+async function report(body) { // a failed command -> KURAMA; its offer pops up right here in VS Code
+  const r = await api("/api/v1/coding/terminal", body);
+  const ev = r && r.event;
+  if (!ev || !ev.text) return;
+  const acts = ev.actions || [];
+  const pick = await vscode.window.showErrorMessage("KURAMA: " + ev.text, ...acts.map((a) => a.label));
+  const a = acts.find((x) => x.label === pick);
+  if (a) act(a.say);
 }
 
 function watchTerminal(context) {

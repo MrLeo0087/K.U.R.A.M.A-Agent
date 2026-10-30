@@ -46,6 +46,23 @@ class _Frontend(StaticFiles):
         return resp
 
 
+def _share_token(token: str) -> None:
+    """The VS Code extension (same user) reads the API token from a 0600 file to call protected routes."""
+    import os
+    from pathlib import Path
+    f = Path.home() / ".local" / "share" / "kurama" / "api_token"
+    try:
+        if token:
+            f.parent.mkdir(parents=True, exist_ok=True)
+            fd = os.open(f, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w") as fh:
+                fh.write(token)
+        else:
+            f.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     s = settings or settings_mod.from_env()
     engine = Engine(s)
@@ -69,6 +86,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                               "(JARVIS_API_TOKEN); SSE endpoints also accept ?token=.")
     app.state.settings = s
     app.state.engine = engine
+    _share_token(s.token)
     app.state.status = StatusCollector(s, engine)
     for r in (chat.router, voice.router, info.router, wake.router, dash.router):
         app.include_router(r)

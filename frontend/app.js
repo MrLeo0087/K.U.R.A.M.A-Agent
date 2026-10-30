@@ -929,6 +929,8 @@ function renderAgent(a) {
     if (!S.mute) { audioCtx(); player.enqueue(e.text, null); }
   }
 }
+// the mini chat gets no status stream: it asks for the agent's news itself (a tiny request every 4 s)
+if (MINI) setInterval(async () => { if (!document.hidden) { try { renderAgent(await api.agentState()); } catch { /* offline */ } } }, 4000);
 $("agent-select").onchange = async (ev) => { // the mini chat's drop-down
   const name = ev.target.value;
   try {

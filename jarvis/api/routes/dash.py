@@ -410,6 +410,25 @@ async def coding_prompt(request: Request):
     return {"text": bridge.take_prompt(str(d.get("id") or ""))}
 
 
+@router.post("/coding/action", summary="The VS Code extension: a button under a crash (fix it / ask ChatGPT / apply...)")
+async def coding_action(request: Request):
+    """Same protection as the chat (the API token when one is set); runs one normal agent turn."""
+    from jarvis.agents.coding import changes
+    d = await request.json()
+    say = str(d.get("say") or "").strip()[:300]
+    if not say:
+        return {"text": ""}
+    engine = request.app.state.engine
+
+    def turn() -> str:
+        with engine.turn_lock:  # one turn at a time, like the chat
+            return engine.agent().run(say)
+    text = await run_in_threadpool(turn)
+    files = [{"path": p, "new": new} for p, (_old, new) in (changes._pending.get("files") or {}).items()] \
+        if changes.waiting() else []
+    return {"text": text, "waiting": changes.waiting() or changes.cost_waiting(), "files": files}
+
+
 @router.post("/coding/terminal", summary="The VS Code extension: a command failed in the terminal (coding agent on)")
 async def coding_terminal(request: Request):
     from jarvis import agents

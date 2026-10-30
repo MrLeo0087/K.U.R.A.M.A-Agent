@@ -1082,4 +1082,4 @@ AGENT_TOOL_MODULES = ("jarvis.agents.coding.tools",)
 AGENT_GROUPS = ("coding_agent",)  # never routed to by the router; the active agent offers its own
 AGENT_ASK_ABOVE_TOKENS = int(os.getenv('KURAMA_AGENT_ASK_TOKENS', '4000'))  # bigger agent jobs ask first (owner)
 AGENT_PROJECT_TOKENS_PER_FILE = 700  # rough output per code file of a new project
-EDITOR_EXT_MIN = 3  # the VS Code extension version that reports terminal crashes
+EDITOR_EXT_MIN = 4  # the VS Code extension version that reports terminal crashes
