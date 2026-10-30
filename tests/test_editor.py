@@ -169,4 +169,23 @@ def test_read_only_page_text_is_shown_not_pasted(monkeypatch):
     monkeypatch.setattr(rewrite, "transform", lambda text, instruction: "## Notes\n- one")
     browsertab.put_selection("notes one two three", "https://gemini.google.com/app/x", "Notes - Google Gemini", editable=False)
     out = assist.run("improve", "format this text into markdown")
-    assert out.startswith("Here it is") and "## Notes" in out
+    assert "read only" in out and "## Notes" in out and "replace it" not in out
+    assert not assist.pending_code_active()  # nothing to put back: no 'replace it' offer
+
+
+def test_format_shows_first_and_replace_it_puts_it_back(vscode, monkeypatch):
+    """Owner: 'format this' -> the result (workspace for a long one), the original untouched; 'replace it' -> in
+    place. 'format this and replace it' -> in place at once."""
+    from jarvis.core import assist, fastpath
+    vscode.text = "notes: teh plan is good\n"
+    vscode.select((0, 7), (0, 23))
+    monkeypatch.setattr(rewrite, "transform", lambda text, instruction: "The plan is good.")
+    out = assist.run("improve", "format this")
+    assert "Say 'replace it'" in out and vscode.text == "notes: teh plan is good\n"
+    it = fastpath.plan_answer_intent("replace it")
+    assert it.args == {"action": "apply_code"}
+    assert assist.run("apply_code").startswith("Replaced in test.py") and vscode.text == "notes: The plan is good.\n"
+    vscode.text = "notes: teh plan is good\n"
+    vscode.select((0, 7), (0, 23))
+    assert assist.run("improve", "format this and replace it").startswith("Replaced")
+    assert vscode.text == "notes: The plan is good.\n" and not assist.pending_code_active()

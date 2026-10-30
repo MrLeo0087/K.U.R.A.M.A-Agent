@@ -3188,7 +3188,9 @@ def _assist_waiting(t: str) -> bool:
     """One of the assist questions waits for this reply (a code change / run block / question / 'which file'); an
     offer ('want the long version?', 'try again?') only takes a yes or no, anything else is a new request."""
     from jarvis.core import assist
-    return bool(assist.pending_code_active() or assist.use_waiting() or assist.ask_back_waiting()
+    text_offer = assist.pending_code_active() and assist._pending.get("text")  # 'replace it?' after a text rewrite
+    return bool((assist.pending_code_active() and (not text_offer or yes_no(t) or _APPLY_CODE.search(t)))
+                or assist.use_waiting() or assist.ask_back_waiting()
                 or assist.file_ref_waiting() or ((assist.more_waiting() or assist.retry_active()) and yes_no(t)))
 
 

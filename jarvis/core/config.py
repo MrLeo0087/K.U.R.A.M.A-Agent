@@ -296,6 +296,8 @@ ROUTER_MAX_GROUPS = 3
 # Free phrasing for tools: paraphrases embedded by the semantic router (0 tokens), so "enable speech to text
 # mode" finds dictate even though no keyword rule says so. Add a few lines here for any tool that gets missed.
 TOOL_EXAMPLES: dict[str, tuple[str, ...]] = {
+    "write_file": ("create a markdown file named notes", "make a new text file called todo", "create a new file notes.md",
+                   "save this as a file in downloads", "write hello into a new file", "create an empty python file"),
     "open_url": ("open youtube", "youtube kholo", "google khol", "facebook kholdeu", "open github in the browser",
                  "go to gmail", "kholo chatgpt", "open the website of tribhuvan university"),
     "page_summary": ("what is this page about", "look at the screen and tell me what this website is about",
@@ -367,11 +369,16 @@ SELECTION_EXAMPLES: dict[str, tuple[str, ...]] = {
     "improve": ("make this better", "improve this", "fix this", "fix the grammar", "refactor this code",
                 "optimize this code", "clean this up", "make it more readable", "rewrite this more formally",
                 "fix the bug in this", "make this shorter", "correct this", "make it sound professional",
-                "make this code faster", "format this code", "rewrite this", "polish this text"),
+                "make this code faster", "format this code", "rewrite this", "polish this text",
+                "format this paragraph", "format the selected paragraph", "format this text into markdown",
+                "turn this paragraph into a structured markdown", "structure this text with headings and bullets",
+                "make this paragraph into bullet points", "rewrite the selected paragraph", "fix this paragraph",
+                "make this paragraph clearer", "format this paragraph into a markdown structure", "make it markdown",
+                "put this in markdown"),
     "complete": ("complete this", "finish this function", "complete the code", "fill in the missing part",
                  "implement this todo", "finish writing this", "complete the selected function"),
     "translate": ("translate this", "translate this to nepali", "what is this in hindi", "say this in english",
-                  "convert this to nepali", "translate the selected text"),
+                  "convert this to nepali", "translate the selected text", "translate this paragraph"),
     "summary": ("summarize this", "give me the gist", "what is the main point", "tl;dr", "summarize the selected paragraph",
                 "in short what does it say", "short summary of this"),
     "use": ("how do i use this function", "how can i run this function", "give me an example of using this",

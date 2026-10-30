@@ -430,3 +430,11 @@ Phases (one at a time, owner tests after each):
       (4) The knowledge (codebase search) keywords "this code", "explain this/the/my code" pulled every code question
       there (score 1.0, beating the selection): removed. An offer ("want the long version?") no longer blocks a new
       request about the selection. 1023 tests, scorecard 66% / 100% / 92%.
+- [x] 2026-10-30 Owner: "format this paragraph selected" got a SUMMARY and "format ... into markdown" got "please
+      paste": the selection examples had no 'format/markdown/paragraph' phrasings, so 'selected paragraph' was
+      closest to 'summarize the selected paragraph'. Added (improve: format / markdown / bullet points / rewrite
+      this paragraph; write_file examples so "create a markdown file named notes" stays a file). Rewrites now work
+      like code changes (owner): 'format this' shows the result (long -> workspace, the note first) and leaves the
+      original alone, then 'replace it' puts it in place (VS Code through the editor, elsewhere the old paste);
+      'format this and replace it' does it at once; read-only page text says so (no offer). Translations the same.
+      Summaries of a selection: 2-3 plain sentences (no bullets, so they stay in the chat). 1024 tests.

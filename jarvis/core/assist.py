@@ -424,9 +424,9 @@ def ask(sel: str, request: str, source: str = "", lang: str = "") -> str:
 def summary(text: str, lang: str = "") -> str:
     """'Summary of this paragraph / what does it want to say': the main points, simply."""
     out = LANGS.get(lang or "en", "English")
-    reply = _llm(f"Summarise the user's highlighted text in very simple everyday {out}: first one sentence with the main "
-                 f"message, then 2-4 short bullets with the key points (fewer for a short text). What it wants to tell "
-                 f"the reader, not a retelling. {EXPLAIN_RULES}{MORE_RULE}", text[:8000], smart=True,
+    reply = _llm(f"Summarise the user's highlighted text in very simple everyday {out}, in 2-3 short plain sentences "
+                 f"(no list, no headings): the main message and what it means for the reader, not a retelling. "
+                 f"{EXPLAIN_RULES}{MORE_RULE}", text[:8000], smart=True,
                  max_tokens=SHORT_MAX["summary"], purpose="assist_summary")
     return _offer_more(reply, "summary", text, lang=lang)
 
@@ -830,7 +830,41 @@ def apply_pending_code() -> str:
     if isinstance(again, rewrite.Grab) and again.text.strip() == p["old"].strip() and rewrite.put(again, paste):
         return "Replaced. Ctrl+Z undoes it."
     rewrite._xclip(["-selection", "clipboard"], paste)
-    return "The code isn't selected anymore, so I put the new code on your clipboard: select the old code, Ctrl+V."
+    what = "text" if p.get("text") else "code"
+    return f"The old {what} isn't selected anymore, so I put the new {what} on your clipboard: select the old {what}, Ctrl+V."
+
+
+_REPLACE_NOW = re.compile(r"\b(?:replace|in\s+place|overwrite|put\s+it\s+back)\b", re.I)
+_READ_ONLY = "That text is on a web page (read only), so I can't write it back there; it's copied to your clipboard."
+
+
+def _offer_replace(g, new: str, what: str) -> str:
+    """Owner: 'format this' shows the result (the workspace takes a long one) and does NOT touch the original;
+    'replace it' then puts it in place. Page text that can't be edited: says so instead of offering."""
+    import time
+    from jarvis.core import workspace
+    rewrite._xclip(["-selection", "clipboard"], new)
+
+    def say(note: str) -> str:  # a short result first; a long one goes to the workspace, so the note leads
+        return f"{note}\n\n{new}" if workspace.too_long(new) else f"{new}\n\n({note})"
+    if getattr(g, "editable", None) is False:
+        return say(f"Here's the {what} version. {_READ_ONLY}")
+    _pending.clear()
+    _pending.update(old=g.text, new=new, lead="", file=(g.editor or {}).get("file", "") if getattr(g, "editor", None) else "",
+                    wid=g.wid, term=g.term, title=g.title, text=True, expires=time.time() + config.ASSIST_PENDING_TTL_S)
+    return say(f"Here's the {what} version (copied too). Say 'replace it' to put it in place of your selection.")
+
+
+def _replace_now(g, new: str) -> str:
+    """'format this and replace it': straight into the original place (when it can be written)."""
+    if getattr(g, "editable", None) is False:
+        rewrite._xclip(["-selection", "clipboard"], new)
+        return f"{_READ_ONLY}\n\n{new}"
+    if not rewrite.put(g, new):
+        return "The text changed meanwhile, so I didn't replace it: the new version is on your clipboard (Ctrl+V)."
+    if getattr(g, "editable", None) is None:
+        return "Replaced. Ctrl+Z undoes it. (If that text can't be edited, the new version is on your clipboard.)"
+    return "Replaced. Ctrl+Z undoes it."
 
 
 def cancel_pending_code() -> str:
@@ -960,25 +994,17 @@ def run(action: str, request: str = "", lang: str = "", replace: bool = False, p
         if is_code(sel) or "code" in (request or "").lower():
             return start_code_improve(g, clean_instruction(request))
         else:
-            new = rewrite.transform(sel, request or "fix grammar and make it clearer")
+            new = rewrite.transform(sel, _CODE_TAIL.sub("", request or "").strip(" ,.") or "fix grammar and make it clearer")
         if not new:
             return "error: nothing came back; the selection was not changed"
-        if getattr(g, "editable", None) is False:  # page text (an article, an AI chat): nothing to replace there
-            rewrite._xclip(["-selection", "clipboard"], new)
-            return f"Here it is (also copied to your clipboard; that page text can't be edited in place):\n\n{new}"
-        if not rewrite.put(g, new):
-            return "The text changed meanwhile, so I didn't replace it: the new version is on your clipboard (Ctrl+V)."
-        if getattr(g, "editable", None) is None and not getattr(g, "editor", None):
-            return ("Done: pasted over your selection (if that text can't be edited, it's on your clipboard).\n\n" + new)
-        return "Replaced. Ctrl+Z undoes it."
+        return _replace_now(g, new) if _REPLACE_NOW.search(request or "") else _offer_replace(g, new, "new")
     if action == "translate":
         out = translate(sel, lang or "ne")
         if replace:
             if not rewrite.put(g, out):
                 return "The text changed meanwhile, so I didn't replace it: the new version is on your clipboard (Ctrl+V)."
             return f"Replaced with the {LANGS.get(lang or 'ne', '').split(' ')[0]} translation."
-        rewrite._xclip(["-selection", "clipboard"], out)
-        return out + "\n(Copied. Say 'replace it' to put it in place.)"
+        return _offer_replace(g, out, LANGS.get(lang or "ne", "").split(" ")[0] or "translated")
     if action == "meaning":  # code selected: what the code does; otherwise the word / sentence meaning
         return explain_code(sel, lang) if is_code(sel) else meaning(sel, lang or "en")
     if action == "code":
