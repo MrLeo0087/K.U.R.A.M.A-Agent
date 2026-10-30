@@ -1333,3 +1333,11 @@ body.mini #agent-switch, body.mini #btn-full { display: none !important; }
 body.mini .agent-select { display: inline-block; height: 26px; padding: 0 6px; border-radius: 8px; cursor: pointer;
   font: 600 12px var(--sans); color: var(--text); background: rgba(255, 255, 255, 0.05); border: 1px solid var(--card-border); }
 body.mini .agent-select option { background: #14161e; color: var(--text); }
+
+/* mini chat: the icon toggle again (icons only when narrow, icon + name when wider) instead of the drop-down */
+body.mini #agent-switch { display: inline-flex !important; order: 6; }
+body.mini .agent-select { display: none !important; }
+@media (min-width: 520px) { body.mini .agent-switch button span { display: inline; } }
+/* scrolling one panel never moves another (no scroll chaining), and text added above keeps the view still */
+.messages, .col, .mws, .ws-card, .sheet, dialog { overscroll-behavior: contain; }
+.messages { overflow-anchor: auto; }
