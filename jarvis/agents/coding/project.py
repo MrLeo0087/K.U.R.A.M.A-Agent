@@ -3,7 +3,7 @@
 2. One smart call writes only the template's code files (small, ~2-3k tokens); requirements + README come from the
    template (+ any extra packages the AI names). Where: "here / in this project" = the folder open in VS Code
    (a sub-folder when it already has files), else ~/projects/<name>. Never over an existing folder.
-3. Opened in VS Code. NOTHING is installed and nothing is run (owner: they choose the venv and install themselves);
+3. An empty .venv, opened in VS Code. NO package is installed and nothing is run (owner installs them himself);
    requirements.txt + README (how to install, CPU-only PyTorch, how to run). Steps 2-3 run as a background job.
 """
 from __future__ import annotations
@@ -96,15 +96,18 @@ def build(ctx, description: str, t: templates.Template, root: Path) -> str | Non
                    + (f"pip install {' '.join(r for r in reqs if r not in torch_pkgs)}\n" if len(reqs) > len(torch_pkgs) else ""))
     (root / "README.md").write_text(
         f"# {root.name}\n\n{description}\n\n## Files\n\n" + "".join(f"- `{rel}`: {what}\n" for rel, what in t.files.items())
-        + (f"\n## Install (in the venv you want)\n\n```bash\n{install}```\n" if install else "")
+        + (f"\n## Install\n\n```bash\nsource .venv/bin/activate   # the empty .venv made for you (or use your own)\n"
+           f"{install}```\n" if install else "")
         + f"\n## Run\n\n```bash\n{t.run}\n```\n")
+    ctx.progress("making the .venv (no packages)")
+    _run(["python3", "-m", "venv", ".venv"], root, 120)  # owner: a venv yes, packages no (they install them)
     from jarvis.tools.general import _sys
     try:
         _sys.run(["code", str(root)], timeout=15)
     except _sys.SysError:
         pass
     ctx.progress(f"» {root.name} is ready in {root} (opened in VS Code): {', '.join([*t.files, 'requirements.txt', 'README.md'])}. "
-                 f"Nothing was installed: the README says how{' (CPU-only PyTorch)' if torch_pkgs else ''}. Run it with: {t.run}")
+                 f"A .venv is ready (empty); nothing was installed: the README says how{' (CPU-only PyTorch)' if torch_pkgs else ''}. Run it with: {t.run}")
     return str(root)
 
 
