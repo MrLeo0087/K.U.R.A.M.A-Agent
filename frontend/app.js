@@ -903,6 +903,7 @@ function renderAgent(a) {
   agentName = a.name || "general";
   const sw = $("agent-switch");
   sw.dataset.on = agentName;
+  $("agent-select").value = agentName;
   for (const b of sw.querySelectorAll("button")) b.setAttribute("aria-checked", String(b.dataset.agent === agentName));
   const evs = a.events || [];
   if (agentSeen === null) { agentSeen = Math.max(0, ...evs.map((e) => e.id)); return; } // never replay old news
@@ -928,6 +929,14 @@ function renderAgent(a) {
     if (!S.mute) { audioCtx(); player.enqueue(e.text, null); }
   }
 }
+$("agent-select").onchange = async (ev) => { // the mini chat's drop-down
+  const name = ev.target.value;
+  try {
+    const r = await api.agent(name);
+    renderAgent(r);
+    tip($("agent-select"), name === "coding" ? "Coding agent on" : "Back to General");
+  } catch (e) { ev.target.value = agentName; tip($("agent-select"), "Couldn't switch: " + e.message); }
+};
 for (const b of $("agent-switch").querySelectorAll("button")) {
   b.onclick = async () => {
     if (b.dataset.agent === agentName) return;

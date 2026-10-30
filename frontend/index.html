@@ -130,6 +130,9 @@
           <span id="chat-title" class="card-title">Conversation</span>
           <span class="head-tools">
             <span id="chat-state" class="chat-state" role="status"><i></i><span>Connecting</span></span>
+            <select id="agent-select" class="agent-select" aria-label="Agent" title="Agent">
+              <option value="general">General</option><option value="coding">Coding agent</option>
+            </select>
             <div id="agent-switch" class="agent-switch" role="radiogroup" aria-label="Agent">
               <button type="button" role="radio" data-agent="general" aria-checked="true" title="General: KURAMA as usual">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg><span>General</span></button>
@@ -149,7 +152,7 @@
             <button id="btn-info" class="icon-btn mini-off" type="button" aria-label="Tools, memory, jobs and alerts" title="Tools · Memory · Jobs · Alerts">
               <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>
             </button>
-            <button id="btn-settings" class="icon-btn mini-off" type="button" aria-label="Settings" title="Settings">
+            <button id="btn-settings" class="icon-btn" type="button" aria-label="Settings" title="Settings">
               <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>
             </button>
             <button id="btn-mini" class="icon-btn mini-off" type="button" aria-label="Minimize KURAMA to a floating button" title="Minimize · floating button over every app">

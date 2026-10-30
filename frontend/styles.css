@@ -562,7 +562,7 @@ body.minimized .orb { cursor: pointer; }
 /* ---------- mini KURAMA (?mini=1): just the conversation, in the small panel over every app ---------- */
 .mini-on { display: none !important; }
 body.mini .mini-on { display: inline-flex !important; }
-body.mini .mini-off:not(.icon-btn), body.mini .wall, body.mini .bg-grid, body.mini .bg-dust, body.mini .col, body.mini .core { display: none !important; }
+body.mini .mini-off, body.mini .wall, body.mini .bg-grid, body.mini .bg-dust, body.mini .col, body.mini .core { display: none !important; }
 body.mini { overflow: hidden; }
 body.mini .layout { display: block; height: 100%; min-height: 0; padding: 0; }
 body.mini .center { display: block; height: 100%; }
@@ -1319,3 +1319,17 @@ body.minimal .to-minimal { display: none; }
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35); pointer-events: none; opacity: 0; transform: translateY(-4px);
   transition: opacity .18s var(--ease), transform .18s var(--ease); }
 .tip.show { opacity: 1; transform: none; }
+
+/* mini chat header (owner): left = settings, workspace, clear; middle = KURAMA + Ready; right = agent (a drop-down),
+   voice, power, hide. Nothing else; the full dashboard has the rest. Wraps instead of hiding when very narrow. */
+.agent-select { display: none; }
+body.mini .head-tools { display: contents; }
+body.mini .chat-head { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; padding: 6px 8px; }
+body.mini #btn-settings { order: 1; } body.mini #m-ws { order: 2; } body.mini #btn-clear { order: 3; }
+body.mini #chat-title { order: 4; margin-left: auto; } body.mini #chat-state { order: 5; margin-right: auto; margin-left: 6px; }
+body.mini #agent-select { order: 6; } body.mini #btn-voice { order: 7; } body.mini #btn-power-mini { order: 8; }
+body.mini #btn-hide { order: 9; }
+body.mini #agent-switch, body.mini #btn-full { display: none !important; }
+body.mini .agent-select { display: inline-block; height: 26px; padding: 0 6px; border-radius: 8px; cursor: pointer;
+  font: 600 12px var(--sans); color: var(--text); background: rgba(255, 255, 255, 0.05); border: 1px solid var(--card-border); }
+body.mini .agent-select option { background: #14161e; color: var(--text); }
