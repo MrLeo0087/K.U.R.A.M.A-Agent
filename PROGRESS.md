@@ -419,3 +419,14 @@ Phases (one at a time, owner tests after each):
       instant, 100% right, router 92%. 1021 tests. Idle: server 130 MB, wallpaper 165 MB, embedder 267 MB while
       loaded (unloads when idle, auto mode).
       The old assist regexes stay only as the fallback while the model is loading / for Nepali-Hindi script.
+- [x] 2026-10-30 Owner's Phase C test: (1) "summarize this paragraph" with text highlighted in Brave got "please paste
+      it": KURAMA had restarted after the highlight and the browser extension wasn't reloaded yet, so nothing was
+      seen. rewrite.peek now also reads the X selection (read only) when nothing newer is known; with the browser
+      extension on, its answer is final. (2) "format this text into markdown" on Gemini's (read-only) answer said
+      "Replaced": the extension now reports whether the highlight is editable; page text gets the result shown and
+      copied, never a fake "Replaced". (3) "complete this code" / "what is this code about" with NOTHING highlighted
+      but test.py open: asks "Do you mean the whole test.py (open in VS Code)?" -> yes does it on the whole file
+      (explain short-first / complete+improve as a background change that waits for yes / ask), no drops it.
+      (4) The knowledge (codebase search) keywords "this code", "explain this/the/my code" pulled every code question
+      there (score 1.0, beating the selection): removed. An offer ("want the long version?") no longer blocks a new
+      request about the selection. 1023 tests, scorecard 66% / 100% / 92%.

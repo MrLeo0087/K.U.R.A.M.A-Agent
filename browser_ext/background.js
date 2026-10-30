@@ -26,6 +26,6 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   if (!msg || msg.kind !== "selection" || !sender.tab) return;
   fetch("http://127.0.0.1:8000/api/v1/context/selection", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text: msg.text || "", url: msg.url || "", title: msg.title || "" }),
+    body: JSON.stringify({ text: msg.text || "", editable: !!msg.editable, url: msg.url || "", title: msg.title || "" }),
   }).catch(() => {});
 });

@@ -58,7 +58,7 @@ def tmp_store(tmp_path, monkeypatch):
     monkeypatch.setattr(remotedesk, "_helper", lambda *a: (False, "test"))  # never touch the real RustDesk service/password
     ratelimit.reset()
     from jarvis.core import assist
-    for pending in (assist._use, assist._more, assist._ask_back, assist._retry, assist._pending):
+    for pending in (assist._use, assist._more, assist._ask_back, assist._retry, assist._pending, assist._file_ref):
         pending.clear()  # in-memory 'waiting for yes' states never leak from one test into the next
     monkeypatch.setattr(assist, "_screen_chat", lambda: "")  # no screenshots / OCR of the real screen in tests
     from jarvis.core import coderun

@@ -133,7 +133,9 @@ def _from_browser(wid: int, in_front: bool) -> "Grab | None":
     if not any(b in title for b in ("Brave", "Chrome", "Chromium")):
         return None
     text = browsertab.selection(title)
-    return Grab(text, wid, in_front, False, _window_name(wid)) if text.strip() and len(text) <= MAX_CHARS else None
+    if not text.strip() or len(text) > MAX_CHARS:
+        return None
+    return Grab(text, wid, in_front, False, _window_name(wid), editable=browsertab.editable())
 
 
 def peek() -> str:
@@ -146,16 +148,25 @@ def peek() -> str:
         return ed.text if isinstance(ed, Grab) else ""  # VS Code says exactly: nothing selected means nothing
     if (br := _from_browser(wid, in_front)) is not None:
         return br.text
-    mem = remembered()
-    return mem.text if mem is not None else ""
+    from jarvis.core import browsertab
+    if (mem := remembered()) is not None:
+        return mem.text
+    title = _window_name(wid, limit=400)
+    if any(b in title for b in ("Brave", "Chrome", "Chromium")) and browsertab.linked():
+        return ""  # the browser extension is on and says nothing is highlighted
+    if not _LAST["kurama_newer"] and not _is_kurama(title, None):
+        return selection()  # highlighted before KURAMA (re)started: the X selection still holds it (read only)
+    return ""
 
 
 class Grab:
     """The highlighted text, copied from the app the user works in, and where it came from."""
 
-    def __init__(self, text: str, wid: int | None, in_front: bool, term: bool, title: str, editor: dict | None = None):
+    def __init__(self, text: str, wid: int | None, in_front: bool, term: bool, title: str, editor: dict | None = None,
+                 editable: bool | None = None):
         self.text, self.wid, self.in_front, self.term, self.title = text, wid, in_front, term, title
         self.editor = editor  # VS Code with the editor link: its state when grabbed (file, selection range)
+        self.editable = True if editor is not None else editable  # None = unknown; False = read-only page text
 
 
 def _from_editor(wid: int, in_front: bool) -> "Grab | str | None":

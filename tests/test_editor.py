@@ -156,3 +156,17 @@ def test_browser_highlight_is_used_without_ctrl_c(monkeypatch):
     assert isinstance(g, rewrite.Grab) and g.text == "Plants turn light into sugar."
     browsertab.put_selection("", "https://en.wikipedia.org/wiki/P", "Photosynthesis - Wikipedia")
     assert browsertab.selection() == ""
+
+
+def test_read_only_page_text_is_shown_not_pasted(monkeypatch):
+    """'format this text' on an AI chat / article: the result is shown (and copied), never a fake 'Replaced'."""
+    from jarvis.core import assist
+    monkeypatch.setattr(rewrite, "target_window", lambda: (7, False))
+    monkeypatch.setattr(rewrite, "_window_name", lambda wid, limit=60: "Notes - Google Gemini - Brave"[:limit])
+    monkeypatch.setattr(rewrite, "_activate", lambda wid: (_ for _ in ()).throw(AssertionError("no window switching")))
+    monkeypatch.setattr(rewrite, "_xclip", lambda args, text=None: "")
+    monkeypatch.setattr(rewrite, "put", lambda g, new: (_ for _ in ()).throw(AssertionError("no paste on a page")))
+    monkeypatch.setattr(rewrite, "transform", lambda text, instruction: "## Notes\n- one")
+    browsertab.put_selection("notes one two three", "https://gemini.google.com/app/x", "Notes - Google Gemini", editable=False)
+    out = assist.run("improve", "format this text into markdown")
+    assert out.startswith("Here it is") and "## Notes" in out

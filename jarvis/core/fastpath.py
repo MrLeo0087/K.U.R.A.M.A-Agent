@@ -2256,6 +2256,8 @@ def plan_answer_intent(t: str) -> Intent | None:
             return Intent("assist", "text_assist", "clipboard", {"action": "use_cancel"})
     if assist.ask_back_waiting() and len(t.split()) <= 40 and not t.strip().endswith("?"):  # its question to the user
         return Intent("assist", "text_assist", "clipboard", {"action": "answer_back", "request": t})
+    if assist.file_ref_waiting() and (yn := yes_no(t)):  # "Do you mean the whole test.py?"
+        return Intent("assist", "text_assist", "clipboard", {"action": "file_yes" if yn == "yes" else "file_no"})
     if assist.more_waiting():  # "This needs a longer explanation. Want me to write it?"
         if (yn := yes_no(t)) == "yes":
             return Intent("assist", "text_assist", "clipboard", {"action": "more"})
@@ -3182,10 +3184,12 @@ def match(text: str) -> Intent | None:
     return it if it is None or meaning_ok(text, it) else None
 
 
-def _assist_waiting() -> bool:
+def _assist_waiting(t: str) -> bool:
+    """One of the assist questions waits for this reply (a code change / run block / question / 'which file'); an
+    offer ('want the long version?', 'try again?') only takes a yes or no, anything else is a new request."""
     from jarvis.core import assist
-    return bool(assist.pending_code_active() or assist.more_waiting() or assist.use_waiting()
-                or assist.retry_active() or assist.ask_back_waiting())
+    return bool(assist.pending_code_active() or assist.use_waiting() or assist.ask_back_waiting()
+                or assist.file_ref_waiting() or ((assist.more_waiting() or assist.retry_active()) and yes_no(t)))
 
 
 def selection_intent(text: str) -> Intent | None:
@@ -3195,16 +3199,17 @@ def selection_intent(text: str) -> Intent | None:
     that mean something else ("open youtube", "what is the time") keep their own area. The words only give
     details (the language, 'replace it')."""
     t = " ".join((text or "").split())
-    if not config.CONTEXT or not t or len(t) > 300 or t.startswith("/") or _assist_waiting():
+    if not config.CONTEXT or not t or len(t) > 300 or t.startswith("/") or _assist_waiting(t):
         return None
     if re.search(r"https?://|(?<!\w)[~/][\w.-]+/|\b[\w-]+\.(?:py|js|ts|md|txt|json|ipynb|html|css|sh)\b", t, I):
         return None  # a link, a path or a file named in the request: it is about THAT, not the highlight
-    from jarvis.core import rewrite, semantic
+    from jarvis.core import context, rewrite, semantic
     try:
         sel = rewrite.peek()
+        f = context.snapshot().get("file") if not sel.strip() else None  # nothing highlighted: the open file?
     except Exception:  # noqa: BLE001 - context is a bonus
         return None
-    if not sel.strip():
+    if not sel.strip() and f is None:
         return None
     if not semantic.ready():  # never wait seconds for the model: the patterns decide this once, it loads meanwhile
         semantic.warm_soon()
@@ -3219,6 +3224,11 @@ def selection_intent(text: str) -> Intent | None:
     if score < config.SELECTION_MIN or score < max(other, chat) - config.SELECTION_MARGIN:
         return None
     from jarvis.core.assist import is_code, lang_of
+    if not sel.strip():  # it means "this code / this" but nothing is highlighted: ask before using the whole file
+        if action in ("translate", "run"):
+            return None
+        return Intent("assist", "text_assist", "clipboard", {"action": "file_ask", "request": t, "path": str(f),
+                                                             "text": action, "lang": lang_of(t) or ""})
     code = is_code(sel)
     if action == "run":
         return Intent("codenav", "code_nav", "codequality", {"action": "run", "name": "", "request": t}) if code else None

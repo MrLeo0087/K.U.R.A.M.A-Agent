@@ -103,6 +103,44 @@ def _offer_more(reply: str, kind: str, sel: str, request: str = "", source: str 
     return short + "\nThis needs a longer explanation. Want me to write it (in the workspace)? Say yes."
 
 
+_file_ref: dict = {}  # "explain this code" with nothing highlighted: "Do you mean test.py?" waits for yes / no
+
+
+def ask_file_ref(action: str, request: str, f: Path, lang: str = "") -> str:
+    import time
+    _file_ref.clear()
+    _file_ref.update(action=action, request=request, file=str(f), lang=lang, until=time.time() + config.ASSIST_PENDING_TTL_S)
+    return (f"Nothing is highlighted. Do you mean the whole {f.name} (open in VS Code)? Say yes, or select the part "
+            f"you mean and ask again.")
+
+
+def file_ref_waiting() -> bool:
+    import time
+    return bool(_file_ref) and time.time() < _file_ref.get("until", 0)
+
+
+def answer_file_ref(yes: bool) -> str:
+    """'yes': do the asked thing with the whole open file; 'no': drop it."""
+    if not file_ref_waiting():
+        return "Nothing is waiting."
+    r = dict(_file_ref)
+    _file_ref.clear()
+    if not yes:
+        return "Okay. Select the code (or text) you mean, or tell me the file, and ask again."
+    f, action, request = Path(r["file"]), r["action"], r["request"]
+    text = editor.read(f)
+    if not text.strip():
+        return f"{f.name} is empty."
+    if action in ("explain", "summary"):
+        return explain_code(text, r["lang"], f.name) if is_code(text) or f.suffix in _EXT_LANG else summary(text, r["lang"])
+    if action in ("complete", "improve"):
+        from jarvis.tools.general.code_to_file import start_edit
+        return start_edit(request, f)  # the whole file in the background; the change then waits for a yes
+    if action == "use":
+        return use_code(rewrite.Grab(text, None, False, False, f.name))
+    return ask(text, request or "explain it", f.name, r["lang"])
+
+
 def more_waiting() -> bool:
     import time
     return bool(_more) and time.time() < _more.get("until", 0)
@@ -860,6 +898,10 @@ def run(action: str, request: str = "", lang: str = "", replace: bool = False, p
             action, lambda: explain(text, lang))()
     if action == "more":
         return more()
+    if action in ("file_yes", "file_no"):
+        return answer_file_ref(action == "file_yes")
+    if action == "file_ask":  # text = what to do with it (explain / improve / complete / ask...), path = the open file
+        return ask_file_ref(text or "explain", request, Path(path), lang)
     if action == "answer_back":
         return answer_back(request)
     if action == "use_yes":
@@ -921,8 +963,13 @@ def run(action: str, request: str = "", lang: str = "", replace: bool = False, p
             new = rewrite.transform(sel, request or "fix grammar and make it clearer")
         if not new:
             return "error: nothing came back; the selection was not changed"
+        if getattr(g, "editable", None) is False:  # page text (an article, an AI chat): nothing to replace there
+            rewrite._xclip(["-selection", "clipboard"], new)
+            return f"Here it is (also copied to your clipboard; that page text can't be edited in place):\n\n{new}"
         if not rewrite.put(g, new):
             return "The text changed meanwhile, so I didn't replace it: the new version is on your clipboard (Ctrl+V)."
+        if getattr(g, "editable", None) is None and not getattr(g, "editor", None):
+            return ("Done: pasted over your selection (if that text can't be edited, it's on your clipboard).\n\n" + new)
         return "Replaced. Ctrl+Z undoes it."
     if action == "translate":
         out = translate(sel, lang or "ne")

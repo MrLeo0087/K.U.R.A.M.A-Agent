@@ -13,7 +13,7 @@ from jarvis.core.registry import alias, tool
                   "or write new code at the cursor in VS Code; or explain a whole file.")
 def text_assist(action: Literal["explain", "meaning", "translate", "improve", "code", "write", "explain_file",
                                 "apply_code", "cancel_code", "reply", "summary", "ask", "more", "cancel_more", "use", "complete",
-                                "answer_back", "use_yes", "use_no", "use_retry", "use_cancel"] = "explain",
+                                "answer_back", "use_yes", "use_no", "use_retry", "use_cancel", "file_ask", "file_yes", "file_no"] = "explain",
                 request: str = "", lang: str = "", replace: bool = False, path: str = "",
                 text: str = "") -> str:
     """Help with the selection.

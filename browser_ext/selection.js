@@ -3,6 +3,11 @@
 let timer = null;
 let last = "";
 
+function editable() { // can the page take a replacement here (a text box / an editable area)?
+  const el = document.activeElement;
+  return !!el && (el.tagName === "TEXTAREA" || el.tagName === "INPUT" || el.isContentEditable);
+}
+
 function selected() {
   const el = document.activeElement;
   if (el && (el.tagName === "TEXTAREA" || (el.tagName === "INPUT" && /^(text|search|url|email)$/i.test(el.type || "text")))) {
@@ -16,7 +21,7 @@ function send() {
   const text = selected().slice(0, 8000);
   if (text === last) return;
   last = text;
-  try { chrome.runtime.sendMessage({ kind: "selection", text, url: location.href, title: document.title }); } catch (e) { /* extension reloaded */ }
+  try { chrome.runtime.sendMessage({ kind: "selection", text, editable: editable(), url: location.href, title: document.title }); } catch (e) { /* extension reloaded */ }
 }
 
 if (!/^(127\.0\.0\.1|localhost):8000$/.test(location.host)) { // KURAMA's own page never counts

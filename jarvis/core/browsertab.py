@@ -32,11 +32,22 @@ def get(max_age_s: float | None = None) -> tuple[str, str] | None:
 
 
 # the text highlighted on a page (browser_ext/selection.js), in memory only (private text is never written to disk)
-_SEL: dict = {"text": "", "url": "", "title": "", "ts": 0.0}
+_SEL: dict = {"text": "", "url": "", "title": "", "ts": 0.0, "editable": False}
 
 
-def put_selection(text: str, url: str = "", title: str = "") -> None:
-    _SEL.update(text=(text or "")[:8000], url=(url or "")[:2000], title=(title or "").strip()[:300], ts=time.time())
+def put_selection(text: str, url: str = "", title: str = "", editable: bool = False) -> None:
+    _SEL.update(text=(text or "")[:8000], url=(url or "")[:2000], title=(title or "").strip()[:300], ts=time.time(),
+                editable=bool(editable))
+
+
+def linked() -> bool:
+    """The extension has reported a highlight since KURAMA started (so an empty one really means 'nothing')."""
+    return _SEL["ts"] > 0
+
+
+def editable() -> bool:
+    """The highlighted page text is in a text box / editable area (a replacement can go there)."""
+    return bool(_SEL.get("editable"))
 
 
 def selection(window_title: str = "", max_age_s: float | None = None) -> str:
