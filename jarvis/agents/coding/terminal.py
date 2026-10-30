@@ -13,6 +13,9 @@ from jarvis.core import config
 _ANSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07]*(?:\x07|\x1b\\)|\r")
 _last: dict = {}
 _events: list[dict] = []  # announcements for the dashboard (status payload), newest last
+ACTIONS = [{"label": "Fix it", "say": "fix it"}, {"label": "Ask ChatGPT", "say": "ask chatgpt about this error"},
+           {"label": "Ask Gemini", "say": "ask gemini about this error"},
+           {"label": "Ask Claude", "say": "ask claude about this error"}]  # buttons under the announcement
 
 
 def clean(output: str) -> str:
@@ -40,7 +43,8 @@ def record(command: str, cwd: str, exit_code: int | None, output: str, window: s
     what = p.get("error") or f"`{_last['command'][:60]}` failed (exit code {exit_code})"
     known = errmem.lookup(p["error"]) if p.get("error") else None
     hint = " I've seen this one before." if known else ""
-    ev = {"id": int(time.time() * 1000), "text": f"Crashed: {what[:160]}{where}.{hint} Want me to fix it?"}
+    ev = {"id": int(time.time() * 1000), "text": f"Crashed: {what[:160]}{where}.{hint} Want me to fix it?",
+          "actions": ACTIONS}
     _events.append(ev)
     del _events[:-5]
     return ev

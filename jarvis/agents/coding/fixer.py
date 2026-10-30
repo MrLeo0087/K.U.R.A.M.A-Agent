@@ -43,7 +43,7 @@ def _snippet(path: Path, line: int) -> str:
     return f"(lines {lo + 1}-{hi} of {len(lines)})\n" + "\n".join(lines[lo:hi])
 
 
-def fix(error_text: str = "", hint: str = "") -> str:
+def fix(error_text: str = "", hint: str = "", confirmed: bool = False) -> str:
     """Fix the last crash (or the pasted error). Shows the change and waits for yes."""
     fail = terminal.last() or {}
     if error_text.strip():
@@ -76,6 +76,9 @@ def fix(error_text: str = "", hint: str = "") -> str:
             + "".join(f"# file: {rel[k]}\n```\n{v}\n```\n" for k, v in files.items())
             + (f"\nLast time this error was fixed by: {known['fix']}" if known and known.get("fix") else "")
             + (f"\nThe user says: {hint}" if hint else ""))
+    est = (len(_SYS) + len(user)) // 4 + 1200
+    if est > config.AGENT_ASK_ABOVE_TOKENS and not confirmed:
+        return changes.ask_cost("fix", {"error_text": error_text, "hint": hint}, est, "Fixing this (big files)")
     from jarvis.core import llm
     reply = str(llm.chat([{"role": "system", "content": _SYS}, {"role": "user", "content": user}], tier="smart",
                          purpose="agent_fix", max_tokens=config.AGENT_FIX_MAX_TOKENS))

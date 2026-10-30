@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "KURAMA tab link",
-  "version": "1.1",
-  "description": "Tells KURAMA (on this laptop only) which tab is open and what text you highlight, so 'save this link', 'download this video' and 'explain this' know it.",
+  "version": "1.2",
+  "description": "Tells KURAMA (on this laptop only) which tab is open and what text you highlight; pastes the coding agent's question into ChatGPT / Gemini / Claude and sends it.",
   "permissions": [
     "tabs"
   ],
@@ -22,6 +22,17 @@
         "selection.js"
       ],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://gemini.google.com/*",
+        "https://claude.ai/*"
+      ],
+      "js": [
+        "bridge.js"
+      ],
+      "run_at": "document_start"
     }
   ]
 }

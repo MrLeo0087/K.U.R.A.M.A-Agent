@@ -111,8 +111,16 @@ def switch(name: str) -> str:
         touch()
         if (s := spec(name)) and s.start:
             s.start()
-        return (f"{TITLES[name]} on. Run your code in the VS Code terminal: if it crashes I'll tell you and fix it. "
-                f"Say 'stop coding agent' (or General) when you're done.")
+        msg = (f"{TITLES[name]} on. Run your code in the VS Code terminal: if it crashes I'll tell you and fix it. "
+               f"Say 'stop coding agent' (or General) when you're done.")
+        try:  # a VS Code window still running the old extension can't see the terminal: say how to fix that
+            from jarvis.core import editor
+            old = [s for s in editor.states() if int(s.get("ext") or 0) < config.EDITOR_EXT_MIN]
+            if old:
+                msg += " (Reload your VS Code window once — Ctrl+Shift+P → Reload Window — so I can see crashes.)"
+        except Exception:  # noqa: BLE001
+            pass
+        return msg
     return "Back to General mode. The coding agent is off."
 
 

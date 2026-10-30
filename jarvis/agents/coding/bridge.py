@@ -73,15 +73,26 @@ def pack(task: str = "", site: str = "") -> str:
     parts.append(blocks.FORMAT_RULE)
     prompt = "\n\n".join(parts)
     _xclip(["-selection", "clipboard"], prompt)
-    opened = ""
-    if (s := (site or "").strip().lower()) in SITES:
-        from jarvis.tools.general.open_url import _open
-        _open(SITES[s])
-        opened = f" and opened {s.title()}"
     n = len(sent)
-    return (f"Copied a ready prompt{opened} ({len(prompt)} characters: "
-            f"{'the error, ' if fail else ''}{n} file{'s' if n != 1 else ''}{', the project tree' if root else ''}). "
-            f"Paste it there (Ctrl+V); when you have the answer, copy it and say 'apply the answer'.")
+    what = f"{'the error, ' if fail else ''}{n} file{'s' if n != 1 else ''}{', the project tree' if root else ''}"
+    if (s := (site or "").strip().lower()) in SITES:
+        import uuid
+        pid = uuid.uuid4().hex[:12]
+        _prompts.clear()  # one waiting prompt at a time
+        _prompts[pid] = prompt
+        from jarvis.tools.general.open_url import _open
+        _open(f"{SITES[s]}#kurama={pid}")  # the browser extension pastes it there and presses send
+        return (f"Opened {s.title()} with the whole problem ({what}); it is pasted and sent by itself (if not: Ctrl+V, "
+                f"Enter). When the answer is there, press its copy button and say 'apply the answer'.")
+    return (f"Copied a ready prompt ({len(prompt)} characters: {what}). Paste it there (Ctrl+V); when you have the "
+            f"answer, copy it and say 'apply the answer'.")
+
+
+_prompts: dict[str, str] = {}  # id -> the prompt the browser extension fetches once (memory only)
+
+
+def take_prompt(pid: str) -> str:
+    return _prompts.pop(pid, "")
 
 
 def apply_answer(text: str = "") -> str:

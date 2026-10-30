@@ -403,6 +403,13 @@ async def agent_set(request: Request):
     return {**agents.status(), "text": text}
 
 
+@router.post("/coding/prompt", summary="The browser extension: the prompt to paste into ChatGPT/Gemini/Claude (once)")
+async def coding_prompt(request: Request):
+    from jarvis.agents.coding import bridge
+    d = await request.json()
+    return {"text": bridge.take_prompt(str(d.get("id") or ""))}
+
+
 @router.post("/coding/terminal", summary="The VS Code extension: a command failed in the terminal (coding agent on)")
 async def coding_terminal(request: Request):
     from jarvis import agents

@@ -58,6 +58,29 @@ def stage(files: dict[Path, str], title: str, then: str = "", cwd: str = "", not
     return f"Ready: {', '.join(parts)} (the diff is in the workspace). Say yes to apply{then_txt}, or no."
 
 
+_cost: dict = {}  # a big AI job waiting for the owner's OK: {"action", "kwargs", "tokens", "until"}
+
+
+def ask_cost(action: str, kwargs: dict, tokens: int, what: str) -> str:
+    """Owner: before using many tokens, ask. The job runs only after a yes."""
+    _cost.clear()
+    _cost.update(action=action, kwargs=kwargs, tokens=tokens, until=time.time() + config.AGENT_PENDING_TTL_S)
+    return (f"{what} needs about {tokens / 1000:.1f}k tokens (your free daily limit is about 200k per model). "
+            f"Go ahead? (yes / no)")
+
+
+def cost_waiting() -> bool:
+    return bool(_cost) and time.time() < _cost.get("until", 0)
+
+
+def take_cost() -> dict | None:
+    if not cost_waiting():
+        return None
+    c = dict(_cost)
+    _cost.clear()
+    return c
+
+
 def waiting() -> bool:
     return bool(_pending) and time.time() < _pending.get("until", 0)
 

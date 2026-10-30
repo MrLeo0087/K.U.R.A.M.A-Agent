@@ -35,8 +35,13 @@ def coding(action: Literal["fix", "bridge", "apply", "project", "undo", "yes", "
     if action == "undo":
         return changes.undo()
     if action == "yes":
+        if (c := changes.take_cost()) is not None:  # "this needs ~6k tokens, go ahead?" -> yes
+            return (fixer.fix(**c["kwargs"], confirmed=True) if c["action"] == "fix"
+                    else project.start(**c["kwargs"], confirmed=True))
         return changes.apply()
     if action == "no":
+        if changes.take_cost() is not None:
+            return "Okay, I didn't do it (no tokens used)."
         return changes.cancel()
     last = terminal.last()
     return terminal.run_again(last["command"], last["cwd"]) if last else "Nothing failed recently to run again."

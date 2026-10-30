@@ -29,3 +29,11 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
     body: JSON.stringify({ text: msg.text || "", editable: !!msg.editable, url: msg.url || "", title: msg.title || "" }),
   }).catch(() => {});
 });
+
+// the coding agent's prompt for ChatGPT / Gemini / Claude (bridge.js asks for it once)
+chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
+  if (!msg || msg.kind !== "kurama_prompt") return false;
+  fetch("http://127.0.0.1:8000/api/v1/coding/prompt", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: msg.id }) }).then((r) => r.json()).then((d) => reply(d.text || "")).catch(() => reply(""));
+  return true; // the reply comes later
+});

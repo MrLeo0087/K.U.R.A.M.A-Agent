@@ -92,13 +92,23 @@ def test_blocks_never_write_outside_the_project(tmp_path):
     assert blocks.to_files("```python\n# file: ../../etc/x.py\nX=1\n```", tmp_path) == {}
 
 
-def test_new_project_is_written_set_up_and_run_once(tmp_path, monkeypatch):
-    monkeypatch.setattr(config, "AGENT_PROJECTS_DIR", str(tmp_path))
-    monkeypatch.setattr(llm, "chat", lambda *a, **k: llm.Reply(
-        "NAME: todo_api\nRUN: python main.py\n```python\n# file: main.py\nprint('hi')\n```\n"
-        "```text\n# file: requirements.txt\nrequests\n```\n```markdown\n# file: README.md\n# Todo\n```", "m"))
+def test_new_project_plan_first_then_small_code_cpu_torch_and_here(tmp_path, monkeypatch):
+    from jarvis.agents.coding import templates
+    monkeypatch.setattr(config, "AGENT_PROJECTS_DIR", str(tmp_path / "projects"))
+    monkeypatch.setattr(templates, "pick", lambda d: templates.TEMPLATES["cnn"])
+    here = tmp_path / "open_proj"
+    here.mkdir()
+    (here / "old.py").write_text("x=1\n")
+    monkeypatch.setattr(bridge, "project_root", lambda: here)
+    t, root = project.plan("set up a cnn retrain project here")
+    assert root.parent == here and root.name == "cnn_retrain"  # 'here' = the open VS Code project (a sub-folder)
+    t2, root2 = project.plan("set up a cnn retrain project")
+    assert root2.parent == tmp_path / "projects"
+    sent = []
+    monkeypatch.setattr(llm, "chat", lambda msgs, **k: sent.append(msgs) or llm.Reply(
+        "```python\n# file: model.py\nclass Net: pass\n```\n```python\n# file: train.py\nprint('ok')\n```\nEXTRA: pillow", "m"))
     calls = []
-    monkeypatch.setattr(project, "_run", lambda cmd, cwd, timeout: calls.append(cmd) or (0, "hi"))
+    monkeypatch.setattr(project, "_run", lambda cmd, cwd, timeout: calls.append(cmd) or (0, "ok"))
     from jarvis.tools.general import _sys
     monkeypatch.setattr(_sys, "run", lambda argv, **k: calls.append(argv) or "")
 
@@ -107,10 +117,20 @@ def test_new_project_is_written_set_up_and_run_once(tmp_path, monkeypatch):
         def progress(self, m): self.msgs.append(m)
         def check(self): pass
     ctx = Ctx()
-    root = Path(project.build(ctx, "a tiny todo api"))
-    assert root.name == "todo_api" and (root / "main.py").read_text() == "print('hi')\n"
-    assert any("venv" in c for c in calls) and any("pip" in " ".join(c) for c in calls) and ["code", str(root)] in calls
-    assert ctx.msgs[-1].startswith("» todo_api is ready")
-    monkeypatch.setattr(llm, "chat", lambda *a, **k: llm.Reply("NAME: bad\nRUN: rm -rf ~\n```python\n# file: a.py\nx=1\n```", "m"))
-    project.build(Ctx(), "something else entirely")
-    assert not any("rm" in " ".join(c) for c in calls if isinstance(c, list))  # the AI's run command is never run blindly
+    project.build(ctx, "set up a cnn retrain project here", t, root)
+    assert "model.py" in sent[0][0]["content"] and "train.py" in sent[0][0]["content"]  # only the template's files
+    assert (root / "model.py").read_text() == "class Net: pass\n"
+    assert (root / "requirements.txt").read_text().split() == ["torch", "torchvision", "tqdm", "pillow"]
+    torch_cmd = next(c for c in calls if "torch" in c)
+    assert "https://download.pytorch.org/whl/cpu" in torch_cmd and "pillow" not in torch_cmd  # CPU wheels only
+    assert ["code", str(root)] in calls and ctx.msgs[-1].startswith("» cnn_retrain is ready")
+
+
+def test_a_big_background_call_never_waits_forever():
+    """A 6k-token background call (new project) could never fit the 70% background share of an 8k/min bucket."""
+    from jarvis.core import ratelimit
+    b = ratelimit.Bucket(8000, 30)
+    b.tokens = 3000
+    assert not b.fits(7000, ratelimit.BACKGROUND)  # the share must be free first...
+    b.tokens = 8000
+    assert b.fits(7000, ratelimit.BACKGROUND)  # ...and then it goes (it used to wait forever)

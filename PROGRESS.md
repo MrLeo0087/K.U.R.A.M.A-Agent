@@ -470,3 +470,15 @@ Phases (one at a time, owner tests after each):
       (4) UNDO: every applied change keeps the old files (data/agent_undo, last 20); undo also removes files it made.
       Live: crash posted -> announced -> "fix it" -> cause + staged fix in 1.2 s / 482 tokens, file untouched until
       yes. 1034+ tests (tests/test_coding_agent.py), scorecard 66% / 100% / 92%.
+- [x] 2026-10-30 Coding agent, owner's test: (1) "setup cnn project here" never finished: a background AI call bigger
+      than the background share of the per-minute budget waited FOREVER (ratelimit.fits); now it waits for that share
+      only. (2) New projects: the kind is picked by meaning from templates (web = html+css+js linked, fastapi, flask,
+      streamlit, cnn/PyTorch, ml/sklearn, data/pandas, telegram bot, cli; 0 tokens), the plan (folder + files) is said
+      at once, one short AI call writes only the template's code files (~3k tokens), requirements/README from the
+      template; "here" = the open VS Code project (a sub-folder); PyTorch from the CPU-only wheels (~200 MB, not 2 GB);
+      the job is watched and announced. (3) Bigger agent jobs (> 4k tokens est.) ask first (owner). (4) A crash
+      announcement has buttons: Fix it / Ask ChatGPT / Ask Gemini / Ask Claude; asking opens the site and the browser
+      extension 1.2 (bridge.js) pastes the whole problem and presses send. (5) The VS Code extension reports its
+      version: turning the agent on says when a window must be reloaded to see crashes (the owner's crash wasn't seen:
+      that window still ran the old extension). (6) UI: the mini panel keeps every header button (wraps to a 2nd line);
+      mode / agent switches show a small note under the clicked button instead of a toast over the chat box.

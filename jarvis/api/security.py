@@ -18,8 +18,9 @@ from urllib.parse import parse_qs, urlsplit
 
 from jarvis.api.settings import Settings
 
-OPEN_PATHS = ("/api/v1/health", "/api/v1/context/tab", "/api/v1/context/selection", "/api/v1/coding/terminal")  # the browser extension (no token)
-EXT_PATHS = ("/api/v1/context/tab", "/api/v1/context/selection")  # browser-extension origins may call these
+OPEN_PATHS = ("/api/v1/health", "/api/v1/context/tab", "/api/v1/context/selection", "/api/v1/coding/terminal",
+              "/api/v1/coding/prompt")  # the browser / VS Code extensions (no token)
+EXT_PATHS = ("/api/v1/context/tab", "/api/v1/context/selection", "/api/v1/coding/prompt")  # browser-extension origins may call these
 RAW_BODY_PATHS = ("/api/v1/stt",)
 _SIMPLE_TYPES = ("text/plain", "application/x-www-form-urlencoded", "multipart/form-data")
 

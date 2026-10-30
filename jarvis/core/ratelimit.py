@@ -51,15 +51,15 @@ class Bucket:
         self.t = now
 
     def fits(self, est: int, priority: str) -> bool:
-        if priority == BACKGROUND:
+        if priority == BACKGROUND:  # a call bigger than the background share waits for that share, never forever
             r = config.RATE_BACKGROUND_RESERVE
-            return self.tokens - est >= r * self.tpm and self.requests - 1 >= r * self.rpm
+            return self.tokens - min(est, (1 - r) * self.tpm) >= r * self.tpm and self.requests - 1 >= r * self.rpm
         return self.tokens >= min(est, self.tpm) and self.requests >= 1
 
     def need_s(self, est: int, priority: str) -> float:
         """Seconds until `fits` would hold (rough, for sleeping)."""
         r = config.RATE_BACKGROUND_RESERVE if priority == BACKGROUND else 0.0
-        tok_gap = (min(est, self.tpm) + r * self.tpm) - self.tokens
+        tok_gap = (min(est, (1 - r) * self.tpm) + r * self.tpm) - self.tokens
         req_gap = (1 + r * self.rpm) - self.requests
         return max(0.0, tok_gap * 60.0 / self.tpm, req_gap * 60.0 / self.rpm)
 

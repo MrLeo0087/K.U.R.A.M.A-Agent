@@ -562,7 +562,7 @@ body.minimized .orb { cursor: pointer; }
 /* ---------- mini KURAMA (?mini=1): just the conversation, in the small panel over every app ---------- */
 .mini-on { display: none !important; }
 body.mini .mini-on { display: inline-flex !important; }
-body.mini .mini-off, body.mini .wall, body.mini .bg-grid, body.mini .bg-dust, body.mini .col, body.mini .core { display: none !important; }
+body.mini .mini-off:not(.icon-btn), body.mini .wall, body.mini .bg-grid, body.mini .bg-dust, body.mini .col, body.mini .core { display: none !important; }
 body.mini { overflow: hidden; }
 body.mini .layout { display: block; height: 100%; min-height: 0; padding: 0; }
 body.mini .center { display: block; height: 100%; }
@@ -1309,3 +1309,13 @@ body.minimal .to-minimal { display: none; }
 .agent-switch[data-on="coding"] button[data-agent="coding"] { color: #1a0d02;
   background: linear-gradient(135deg, var(--accent), #ffb15c); box-shadow: 0 0 14px var(--accent-soft); }
 @media (max-width: 520px) { .agent-switch button span { display: none; } .agent-switch button { padding: 0 9px; } }
+
+/* the header buttons never disappear: when the panel is narrow they wrap onto a second line */
+.chat-head { flex-wrap: wrap; row-gap: 6px; }
+.head-tools { flex-wrap: wrap; justify-content: flex-end; row-gap: 4px; min-width: 0; }
+/* a small note right next to the control that was clicked (not over the chat box) */
+.tip { position: fixed; z-index: 60; max-width: 240px; padding: 6px 10px; border-radius: 10px; font: 500 12px/1.35 var(--sans);
+  color: var(--text); background: rgba(20, 22, 30, 0.96); border: 1px solid var(--card-border);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35); pointer-events: none; opacity: 0; transform: translateY(-4px);
+  transition: opacity .18s var(--ease), transform .18s var(--ease); }
+.tip.show { opacity: 1; transform: none; }

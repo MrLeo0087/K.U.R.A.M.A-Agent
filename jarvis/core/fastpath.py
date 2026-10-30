@@ -3220,7 +3220,7 @@ def coding_intent(text: str) -> Intent | None:
     def act(a: str, **kw) -> Intent:
         return Intent("coding", "coding", "coding_agent", {"action": a, **kw})
     yn = yes_no(t)
-    if changes.waiting() and yn:
+    if (changes.waiting() or changes.cost_waiting()) and yn:
         return act("yes" if yn == "yes" else "no")
     crash = terminal.last(600)
     if crash and yn == "yes" and not _assist_waiting(t):  # "Crashed: ... Want me to fix it?" -> yes

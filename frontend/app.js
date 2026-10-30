@@ -656,9 +656,9 @@ $("composer").addEventListener("submit", (e) => {
   orb.poke(1);
   sendChat(t, { voice: speak || dictated, lang, speak });
 });
-$("m-text").onclick = () => { setMode("text"); input.focus(); };
-$("m-mic").onclick = () => toggleMic();
-$("m-conv").onclick = () => toggleConv();
+$("m-text").onclick = () => { setMode("text"); input.focus(); tip($("m-text"), "Text mode: type and press Enter."); };
+$("m-mic").onclick = () => { toggleMic(); tip($("m-mic"), "Mic: click again when you've finished speaking."); };
+$("m-conv").onclick = () => { toggleConv(); setTimeout(() => tip($("m-conv"), conv.on ? "Talk mode: just speak." : "Talk mode off."), 150); };
 // talk mode: mute / unmute the mic (KURAMA hears nothing, not even the wake word, until unmuted)
 function setMicMuted(on) {
   conv.mute(on); // also silences the mic track
@@ -912,6 +912,17 @@ function renderAgent(a) {
     const bb = new BotBubble();
     bb.append(e.text);
     bb.finish();
+    if (e.actions?.length) { // Fix it / Ask ChatGPT / Ask Gemini / Ask Claude
+      const row = el("div", "suggest agent-acts");
+      for (const a of e.actions) {
+        const btn = el("button", "chip sug");
+        btn.type = "button";
+        btn.textContent = a.label;
+        btn.onclick = () => { row.remove(); ask(a.say); };
+        row.append(btn);
+      }
+      bb.root.append(row);
+    }
     scrollDown(true);
     miniCaption("bot", e.text, true);
     if (!S.mute) { audioCtx(); player.enqueue(e.text, null); }
@@ -923,8 +934,9 @@ for (const b of $("agent-switch").querySelectorAll("button")) {
     try {
       const r = await api.agent(b.dataset.agent);
       renderAgent(r);
-      toast(r.text || "Done.");
-    } catch (e) { toast("Couldn't switch: " + e.message); }
+      tip($("agent-switch"), b.dataset.agent === "coding" ? "Coding agent on: crashes in the VS Code terminal → I offer the fix."
+        : "Back to General.");
+    } catch (e) { tip($("agent-switch"), "Couldn't switch: " + e.message); }
   };
 }
 
@@ -2482,6 +2494,20 @@ $("tile-alerts").onclick = () => openInfo("alerts");
 
 // ---------- toast ----------
 let toastTimer = 0;
+// a short note under the control that was clicked (mode / agent switches), gone after ~2.5 s
+let tipTimer = 0;
+function tip(el, msg) {
+  let t = $("tip");
+  if (!t) { t = el.ownerDocument.createElement("div"); t.id = "tip"; t.className = "tip"; document.body.append(t); }
+  t.textContent = msg;
+  const r = el.getBoundingClientRect();
+  t.style.left = Math.max(8, Math.min(window.innerWidth - 248, r.left + r.width / 2 - 110)) + "px";
+  t.style.top = Math.min(window.innerHeight - 40, r.bottom + 6) + "px";
+  t.classList.add("show");
+  clearTimeout(tipTimer);
+  tipTimer = setTimeout(() => t.classList.remove("show"), 2600);
+}
+
 function toast(msg) {
   const t = $("toast");
   t.textContent = msg;

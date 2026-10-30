@@ -20,6 +20,7 @@ def tmp_store(tmp_path, monkeypatch):
     from jarvis.agents.coding import changes as _ch, terminal as _term
     agents._last_use[0] = 0.0
     _ch._pending.clear()
+    _ch._cost.clear()
     _term._last.clear()
     _term._events.clear()
     from jarvis.core import browsertab

@@ -16,6 +16,7 @@ const crypto = require("crypto");
 const DIR = path.join(os.homedir(), ".local", "share", "kurama", "vscode");
 const FILE = path.join(DIR, `${process.pid}.json`);
 const TOKEN = crypto.randomBytes(16).toString("hex");
+const EXT_VERSION = 3; // KURAMA checks it: 3 = watches the terminal for the coding agent
 const MAX_SEL = 20000; // characters of selected text written to the state file
 const MAX_BODY = 8 * 1024 * 1024;
 let port = 0;
@@ -36,7 +37,7 @@ function snapshot() {
   const sel = doc ? ed.selection : null;
   const text = sel && !sel.isEmpty ? doc.getText(sel) : "";
   return {
-    v: 1, pid: process.pid, port, token: TOKEN, ts: Date.now() / 1000,
+    v: 1, ext: EXT_VERSION, pid: process.pid, port, token: TOKEN, ts: Date.now() / 1000,
     focused: vscode.window.state.focused, focused_at: focusedAt,
     workspace: vscode.workspace.name || "", root: root ? root.uri.fsPath : "",
     file: doc && !doc.isUntitled ? doc.uri.fsPath : "", untitled: !!(doc && doc.isUntitled),
