@@ -1352,3 +1352,4 @@ body.mini #btn-settings { order: 6; } body.mini #m-ws { order: 7; } body.mini #b
 body.mini #agent-select { order: 9; margin-left: 4px; } body.mini #btn-voice { order: 10; }
 body.mini #agent-switch { display: none !important; }
 body.mini .agent-select { display: inline-block !important; }
+body.mini .agent-select { width: auto; min-width: 0; padding: 0 4px 0 8px; font: 700 13px var(--code); }
