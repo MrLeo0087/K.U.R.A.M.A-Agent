@@ -1,9 +1,27 @@
 {
   "manifest_version": 3,
   "name": "KURAMA tab link",
-  "version": "1.0",
-  "description": "Tells KURAMA (on this laptop only) which tab is open, so 'save this link' and 'download this video' know the page.",
-  "permissions": ["tabs"],
-  "host_permissions": ["http://127.0.0.1:8000/*"],
-  "background": { "service_worker": "background.js" }
+  "version": "1.1",
+  "description": "Tells KURAMA (on this laptop only) which tab is open and what text you highlight, so 'save this link', 'download this video' and 'explain this' know it.",
+  "permissions": [
+    "tabs"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1:8000/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "selection.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
 }

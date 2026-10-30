@@ -29,3 +29,21 @@ def get(max_age_s: float | None = None) -> tuple[str, str] | None:
     if not d.get("url", "").startswith("http") or time.time() - float(d.get("ts") or 0) > age:
         return None
     return d["url"], d.get("title", "")
+
+
+# the text highlighted on a page (browser_ext/selection.js), in memory only (private text is never written to disk)
+_SEL: dict = {"text": "", "url": "", "title": "", "ts": 0.0}
+
+
+def put_selection(text: str, url: str = "", title: str = "") -> None:
+    _SEL.update(text=(text or "")[:8000], url=(url or "")[:2000], title=(title or "").strip()[:300], ts=time.time())
+
+
+def selection(window_title: str = "", max_age_s: float | None = None) -> str:
+    """The text highlighted in the browser now ('' = nothing, too old, or that window shows another page)."""
+    age = max_age_s if max_age_s is not None else config.SELECTION_MEMORY_S
+    if not _SEL["text"].strip() or time.time() - _SEL["ts"] > age:
+        return ""
+    if window_title and _SEL["title"] and not window_title.startswith(_SEL["title"][:40]):
+        return ""  # the browser window in front shows another tab than the one the text was highlighted in
+    return _SEL["text"]

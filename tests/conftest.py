@@ -14,6 +14,9 @@ def tmp_store(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "TRACE_DB", tmp_path / "traces.db")  # never the real traces
     monkeypatch.setattr(config, "DATA_DIR", tmp_path)  # never KURAMA's real data (backups, learned wordings...)
     monkeypatch.setattr(config, "LOG_DIR", tmp_path / "logs")  # never the real worker logs
+    monkeypatch.setattr(config, "VSCODE_STATE_DIR", tmp_path / "vscode")  # never the real VS Code windows
+    from jarvis.core import browsertab
+    monkeypatch.setattr(browsertab, "_SEL", {"text": "", "url": "", "title": "", "ts": 0.0})  # no highlight leaks
     monkeypatch.setattr(config, "JOBS_NOTIFY", False)  # never pop desktop notifications in tests
     monkeypatch.setattr(config, "TELEGRAM_BOT_TOKEN", "")  # never message the real phone from a test
     monkeypatch.setattr(config, "NOTIFY_DESKTOP", False)

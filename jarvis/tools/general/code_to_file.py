@@ -188,9 +188,9 @@ def _put(target: Path, old: str, body: str, ctx=None) -> str:
     copy.parent.mkdir(parents=True, exist_ok=True)
     copy.write_text(body, encoding="utf-8")
     if not old.strip():
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(body, encoding="utf-8")
-        return f"Wrote {len(body.splitlines())} lines of code into {target.name}." + _dirty_note(target)
+        from jarvis.core import editor
+        how = editor.save_text(target, body)
+        return f"Wrote {len(body.splitlines())} lines of code into {target.name}." + ("" if how == "editor" else _dirty_note(target))
     if old.strip() == body.strip():
         return f"{target.name} already has this code."
     what = assist.stage_file_change(target, old, body)
@@ -207,7 +207,8 @@ def start_edit(spec: str, target: Path | None = None) -> str:
 
     def run(ctx) -> str | None:
         ctx.progress(f"working on {target.name}")
-        old = target.read_text(errors="replace") if target.is_file() else ""
+        from jarvis.core import editor
+        old = editor.read(target)  # what VS Code shows now (unsaved edits included)
         body = generate(spec, target, old)
         ctx.check()
         if not body.strip():
@@ -251,7 +252,8 @@ def code_to_file(request: str = "", path: str = "", code: str = "") -> str:
     if target is None:
         return "error: open the file in VS Code (or give its full path), then ask again"
     target = Path(target)
-    old = target.read_text(errors="replace") if target.is_file() else ""
+    from jarvis.core import editor
+    old = editor.read(target)  # what VS Code shows now (unsaved edits included)
     spec = _spec(request) or (request.strip() if re.search(r"\b(?:complete|finish)\b", request or "", re.I) else "")
     body = code_only(code) if code.strip() else "" if spec else latest_code()  # "put it in test.py": the code we have
     if not body.strip() and not code.strip():

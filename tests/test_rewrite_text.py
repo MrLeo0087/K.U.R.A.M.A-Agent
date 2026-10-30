@@ -25,7 +25,7 @@ def desk(monkeypatch):
             st["pasted"] = st["clip"]
     monkeypatch.setattr(rewrite, "_xclip", xclip)
     monkeypatch.setattr(rewrite, "_activate", lambda w: st["acts"].append(w))
-    monkeypatch.setattr(rewrite, "_window_name", lambda w: "ChatGPT - Brave")
+    monkeypatch.setattr(rewrite, "_window_name", lambda w, limit=60: "ChatGPT - Brave")
     monkeypatch.setattr(rewrite.time, "sleep", lambda s: None)
     monkeypatch.setattr(rewrite, "transform", lambda t, i: "The cat sat." if t == "teh cat sat" else "WRONG")
     monkeypatch.setattr(uiagent, "active_class", lambda: "brave-browser")
@@ -89,7 +89,7 @@ def test_typed_request_uses_the_highlight_made_outside_kurama(monkeypatch):
     rewrite._LAST["ts"] -= 3600
     monkeypatch.setattr(rewrite, "_xclip", lambda args, text=None: "")
     monkeypatch.setattr("jarvis.core.uiagent.active_class", lambda: "code")
-    monkeypatch.setattr(rewrite, "_window_name", lambda wid: "x")
+    monkeypatch.setattr(rewrite, "_window_name", lambda wid, limit=60: "x")
     monkeypatch.setattr(rewrite.time, "sleep", lambda s: None)
     assert isinstance(rewrite.grab(), str) and ("activate", 7) in keys
 

@@ -8,7 +8,7 @@ def desk(monkeypatch):
     st = {"pasted": None, "sel": "teh cat sat"}
     monkeypatch.setattr(rewrite, "grab", lambda: rewrite.Grab(st["sel"], 7, False, False, "Doc"))
     monkeypatch.setattr(rewrite, "grab_cursor", lambda: rewrite.Grab("", 7, False, False, "main.py - KURAMA - VS Code"))
-    monkeypatch.setattr(rewrite, "put", lambda g, new: st.__setitem__("pasted", new))
+    monkeypatch.setattr(rewrite, "put", lambda g, new: st.__setitem__("pasted", new) or True)  # True: it was placed
     monkeypatch.setattr(rewrite, "_xclip", lambda a, text=None: "")
     calls = []
 
@@ -240,7 +240,7 @@ def test_format_whole_file_waits_for_yes(desk, tmp_path, monkeypatch):
     f.write_text("def add(a,b):\n  return a+b\n")
     monkeypatch.setattr(assist, "open_file_in_editor", lambda: f)
     monkeypatch.setattr(rewrite, "target_window", lambda: (7, False))
-    monkeypatch.setattr(rewrite, "_window_name", lambda wid: "calc.py - x - Visual Studio Code")
+    monkeypatch.setattr(rewrite, "_window_name", lambda wid, limit=60: "calc.py - x - Visual Studio Code")
     monkeypatch.setattr(assist, "_llm", lambda *a, **k: "def add(a, b):\n    return a + b")
     assert assist.run("improve", "improve my whole code") == "Improving the selected code in calc.py…"
     assert _wait_pending() and assist.apply_pending_code() == "Replaced in calc.py."

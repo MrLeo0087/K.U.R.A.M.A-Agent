@@ -20,3 +20,12 @@ chrome.windows.onFocusChanged.addListener((w) => { if (w !== chrome.windows.WIND
 chrome.windows.onRemoved.addListener(async () => { if (!(await chrome.windows.getAll()).length) send("", ""); });
 chrome.runtime.onStartup.addListener(report);
 chrome.runtime.onInstalled.addListener(report);
+
+// the highlighted text from a page (selection.js): passed on to KURAMA as it is
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  if (!msg || msg.kind !== "selection" || !sender.tab) return;
+  fetch("http://127.0.0.1:8000/api/v1/context/selection", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text: msg.text || "", url: msg.url || "", title: msg.title || "" }),
+  }).catch(() => {});
+});

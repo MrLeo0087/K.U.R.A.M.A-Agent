@@ -9,7 +9,7 @@ def desk(monkeypatch):
     monkeypatch.setattr(config, "FASTPATH", True)
     st = {"sel": "", "title": "Claude Code - Brave", "page": ("https://claude.com/claude-code", "Claude Code")}
     monkeypatch.setattr(rewrite, "target_window", lambda: (5, False))
-    monkeypatch.setattr(rewrite, "_window_name", lambda wid: st["title"])
+    monkeypatch.setattr(rewrite, "_window_name", lambda wid, limit=60: st["title"])
     monkeypatch.setattr(rewrite, "grab", lambda: rewrite.Grab(st["sel"], 5, False, False, st["title"]) if st["sel"]
                         else "I couldn't see any highlighted text")
     monkeypatch.setattr(rewrite, "_xclip", lambda args, text: None)

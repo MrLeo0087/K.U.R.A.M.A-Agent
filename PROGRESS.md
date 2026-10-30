@@ -360,11 +360,13 @@ titles > 60 chars). (5) tool bugs: budget never saved (asked back, AI said "set"
 an item, "empty the list" removed one, contacts saved as a memory note, habits merged, quiz = 1 question then forgotten.
 Phases (one at a time, owner tests after each):
 - [x] A foundations (below)
-- [ ] B VS Code extension: exact open file, selection + range, unsaved state; browser selection via browser_ext
+- [x] B VS Code extension: exact open file, selection + range, unsaved state; browser selection via browser_ext
 - [ ] C routing by meaning: context first (selection/editor/page = automatic focus, owner's "modes" idea without
       picking a mode), assist/code regexes -> meaning examples, gate always on, wrong patterns removed (e.g. eval #176
       'Stop tracking laptop' -> habits delete, a pattern bug)
-- [ ] D code agent: one path for explain / improve / complete / write into file / new project
+- [ ] D coding agent as its own project (owner: 'like Claude Code, for daily real work'): explain / change the
+      selection, write into the open file without a path, whole projects (files, requirements, run, fix), laptop-only
+      powers; token friendly
 - [ ] E tools, each with multi-turn live scenarios: money + contacts; read later, notes, quiz, study, habits; power,
       folder lock, calculator, open apps/sites/text; Telegram/phone, safety
 - [ ] F live end-to-end scenario run for every tool through the API (small batches: Groq free tier)
@@ -381,3 +383,15 @@ Phases (one at a time, owner tests after each):
       tests never write into data/ (DATA_DIR + LOG_DIR are tmp; WORDNET_DB constant). 1004 tests pass; scorecard 65%
       instant / 99% right (#176 is an old pattern bug, Phase C) / router 92%. Needs a KURAMA restart (the server keeps
       the old learned rows in memory and would write them back).
+- [x] 2026-10-30 Phase B: VS Code extension 'KURAMA editor link' (vscode_ext/, installed with
+      scripts/install_vscode_ext.sh -> data/kurama-editor-link.vsix): each window keeps
+      ~/.local/share/kurama/vscode/<pid>.json current (file, selection text + range, cursor, unsaved edits, project
+      root; written only on change, nothing polls) and serves edits on 127.0.0.1 (random port + token in that 0600
+      file): text / replace_all / replace_range (with an 'expect' guard) / replace_text / insert, one Ctrl+Z undoes,
+      saved only when the file had no unsaved edits. jarvis/core/editor.py reads it; open_file_in_editor, context
+      (selection + 'lines 12-30'), rewrite.grab/grab_cursor/put (no window switch, no Ctrl+C/V, refuses to paste if
+      the code changed meanwhile), code_to_file, the assist apply paths and the formatter read the LIVE buffer and
+      write through the editor. Browser: browser_ext 1.1 sends the highlighted text (selection.js -> background ->
+      POST /api/v1/context/selection, memory only, KURAMA's own page ignored); grab uses it for a browser window.
+      Without the extensions everything falls back to the old guess. Checked against the real VS Code (read,
+      replace_all, replace_text, the expect guard). 1011 tests, scorecard unchanged (65% / 99% / 92%).

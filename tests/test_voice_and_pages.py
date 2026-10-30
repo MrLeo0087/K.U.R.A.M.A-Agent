@@ -39,7 +39,7 @@ def test_page_questions_read_the_current_tab(monkeypatch):
         assert fastpath.match(q).args == {"action": "summary"}, q
     from jarvis.core import pageread, llm, rewrite
     monkeypatch.setattr(rewrite, "target_window", lambda: (5, False))
-    monkeypatch.setattr(rewrite, "_window_name", lambda wid: "Usage - GroqCloud - Brave")
+    monkeypatch.setattr(rewrite, "_window_name", lambda wid, limit=60: "Usage - GroqCloud - Brave")
     monkeypatch.setattr(readlater, "current_page", lambda title: ("https://console.groq.com/usage", "Usage - GroqCloud"))
     from jarvis.tools.general import read_webpage
     monkeypatch.setattr(read_webpage, "read_webpage", lambda url, max_chars=3000: "Usage\n" + "tokens per day 1234. " * 40)

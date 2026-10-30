@@ -9,7 +9,7 @@ def rl(tmp_path, monkeypatch):
     monkeypatch.setattr(readlater, "_title_for", lambda url: "Title of " + url.rsplit("/", 1)[-1])
     st = {"sel": "", "title": "Some page - Brave"}
     monkeypatch.setattr(rewrite, "target_window", lambda: (5, False))
-    monkeypatch.setattr(rewrite, "_window_name", lambda wid: st["title"])
+    monkeypatch.setattr(rewrite, "_window_name", lambda wid, limit=60: st["title"])
     monkeypatch.setattr(rewrite, "grab", lambda: rewrite.Grab(st["sel"], 5, False, False, st["title"]) if st["sel"]
                         else "I couldn't see any highlighted text")
     opened = []

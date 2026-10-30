@@ -1,0 +1,13 @@
+{
+  "name": "kurama-editor-link",
+  "displayName": "KURAMA editor link",
+  "description": "Tells KURAMA (on this laptop only) which file is open and what is selected, and lets it put code into the editor (Ctrl+Z undoes it).",
+  "version": "1.0.0",
+  "publisher": "kurama",
+  "license": "UNLICENSED",
+  "engines": { "vscode": "^1.80.0" },
+  "categories": ["Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./extension.js",
+  "extensionKind": ["ui", "workspace"]
+}

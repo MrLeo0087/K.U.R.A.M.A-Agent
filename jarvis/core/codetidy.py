@@ -60,8 +60,9 @@ def _syntax_hint(err: str, f: Path) -> str:
 
 
 def format_file(f: Path) -> str:
+    from jarvis.core import editor
     ext = f.suffix.lower()
-    text = f.read_text(errors="replace")
+    text = editor.read(f)  # what VS Code shows (unsaved edits included)
     if ext in (".py", ".pyi"):
         ruff = _ruff()
         if not ruff:
@@ -81,8 +82,8 @@ def format_file(f: Path) -> str:
     if new == text:
         return f"{f.name} is already well formatted."
     _backup(f, text)
-    f.write_text(new, encoding="utf-8")
-    return f"Formatted {f.name} ({_changed_lines(text, new)} lines changed)."
+    how = editor.save_text(f, new)
+    return f"Formatted {f.name} ({_changed_lines(text, new)} lines changed)." + (" Ctrl+Z in VS Code undoes it." if how == "editor" else "")
 
 
 def check_file(f: Path, fix: bool = False) -> str:

@@ -21,7 +21,7 @@ import re
 import textwrap
 from pathlib import Path
 
-from jarvis.core import config, rewrite
+from jarvis.core import config, editor, rewrite
 
 log = logging.getLogger(__name__)
 LANGS = {"ne": "Nepali (Devanagari script)", "hi": "Hindi (Devanagari script)", "en": "English"}
@@ -165,7 +165,7 @@ def use_code(g, feedback: str = "") -> str:
     import time
     f = open_file_in_editor()
     name = f.name if f else _short(getattr(g, "title", ""))
-    whole = f.read_text(errors="replace") if f and f.is_file() else ""
+    whole = editor.read(f) if f and f.is_file() else ""
     sel = g.text if getattr(g, "text", "").strip() else whole
     if not sel.strip():
         return "Highlight the function in VS Code (or open its file), then ask again."
@@ -221,6 +221,14 @@ def apply_use() -> str:
     block, f = u["block"], Path(u["file"]) if u["file"] else None
     imports = [ln for ln in block.splitlines() if re.match(r"(?:import|from)\s+\w", ln)]
     dirty = u["title"].lstrip().startswith(("●", "•"))
+    if f and editor._holder(f) is not None:  # the editor link: added in VS Code itself (unsaved edits kept, Ctrl+Z)
+        whole = editor.read(f)
+        missing = [i for i in imports if i not in whole]
+        body = "\n".join(ln for ln in block.splitlines() if ln not in imports)
+        new = ("\n".join(missing) + "\n" if missing else "") + whole.rstrip("\n") + "\n\n\n" + body.strip("\n") + "\n"
+        if editor.save_text(f, new) == "editor":
+            return f"Added at the end of {f.name}. Ctrl+Z in VS Code undoes it. Press Run (or: python {f.name})."
+        return f"Added at the end of {f.name}. Press Run in VS Code (or: python {f.name})."
     if f and f.is_file() and not dirty:
         whole = f.read_text(errors="replace")
         backup = Path(config.DATA_DIR) / "code_backups" / f"{f.name}.{int(time.time())}.bak"
@@ -366,7 +374,7 @@ def ask(sel: str, request: str, source: str = "", lang: str = "") -> str:
     reply = _offer_more(reply, "ask", sel, request, source, lang)
     if code and mod and _TESTS_REQ.search(request or ""):  # tests: run them before handing them over
         f = open_file_in_editor()
-        disk = f.read_text(errors="replace") if f and f.is_file() else ""
+        disk = editor.read(f) if f and f.is_file() else ""
         module = disk if re.search(r"\bdef\s+\w+|\bclass\s+\w+", disk) else sel  # unsaved editor: the selection
         reply = verify_tests(reply, module, mod)
     return reply
@@ -514,7 +522,7 @@ def _layout(old: str, f: Path | None) -> tuple[str, str, str]:
     """(lead, base, code0): the whitespace before the selection on its first line, the block's base indentation and
     the selection re-based to level 0 (what the model sees)."""
     lead = ""
-    text = f.read_text(errors="replace") if f and f.is_file() else ""
+    text = editor.read(f) if f and f.is_file() else ""
     if text and text.count(old) == 1:
         i = text.index(old)
         before = text[text.rfind("\n", 0, i) + 1: i]
@@ -533,7 +541,7 @@ def _context(f: Path | None, old: str, chars: int = 1500) -> str:
     """A little of the file around the selection, so the model knows the names it uses."""
     if not f or not f.is_file():
         return ""
-    text = f.read_text(errors="replace")
+    text = editor.read(f)
     i = text.find(old)
     if i < 0:
         return ""
@@ -550,6 +558,8 @@ def open_file_in_editor() -> Path | None:
     from jarvis.core import rewrite as rw
     wid, _ = rw.target_window()
     title = rw._window_name(wid, limit=400) if wid else ""  # whole title: a long one was cut before the app name
+    if (st := editor.for_window(title)) is not None:  # the editor link says exactly which file (any folder / name)
+        return Path(st["file"]) if st.get("file") else None
     if not (vs := vscode_title(title)):
         return None
     from jarvis.core.paths import smart_path
@@ -575,7 +585,7 @@ def write_code(request: str) -> str:
     lang_name = _EXT_LANG.get(f.suffix.lower(), "") if f else ""
     context = ""
     if f and f.is_file() and f.stat().st_size < 400_000:
-        context = f.read_text(errors="replace")[:6000]
+        context = editor.read(f)[:6000]
     code = _strip_fence(_llm(
         "You write code to insert at the user's cursor. Return ONLY the code (no explanation, no markdown fences), "
         "complete and runnable, matching the existing file's style and imports."
@@ -587,7 +597,8 @@ def write_code(request: str) -> str:
     g = rewrite.grab_cursor()
     if isinstance(g, str):
         return g + "\n\n" + code
-    rewrite.put(g, code + "\n")
+    if not rewrite.put(g, code + "\n"):
+        return "The file changed meanwhile, so I didn't add it: the code is on your clipboard (Ctrl+V)."
     lines = code.count("\n") + 1
     return (f"Wrote {lines} lines of {lang_name or 'code'} at your cursor in {_short(g.title)}. Control Z in the "
             f"editor undoes it.")
@@ -598,7 +609,7 @@ def explain_file(path: Path, lang: str = "") -> str:
         return f"error: {path} isn't a file"
     if path.stat().st_size > 2_000_000:
         return f"{path.name} is too big to explain in one go; select the part you want explained."
-    text = path.read_text(errors="replace")
+    text = editor.read(path)
     head = f"{path.name} ({len(text.splitlines())} lines)"
     if path.suffix.lower() in _EXT_LANG and path.suffix.lower() != ".md":
         body = explain_code(text, lang, name=path.name)
@@ -724,13 +735,28 @@ def apply_pending_code() -> str:
     if p.get("whole"):  # a whole-file change (complete / write code into the file): the file on disk, backup kept
         from jarvis.tools.general.code_to_file import _backup, _dirty_note
         f = Path(p["file"])
-        cur = f.read_text(errors="replace") if f.is_file() else ""
+        cur = editor.read(f)
         if cur.strip():
             _backup(f, cur)
-        f.write_text(p["new"], encoding="utf-8")
-        return f"Added to {f.name}." + _dirty_note(f)
+        how = editor.save_text(f, p["new"])
+        return f"Added to {f.name}." + (" Ctrl+Z in VS Code undoes it." if how == "editor" else _dirty_note(f))
     lead = p.get("lead", "")
     f = Path(p["file"]) if p["file"] else None
+    if f is not None and editor._holder(f) is not None:  # the editor link: replace exactly that code in VS Code
+        live = editor.read(f)
+        if live.count(p["old"]) == 1:
+            i = live.index(p["old"])
+            old, new = p["old"], p["new"]
+            if lead and live[max(0, i - len(lead)):i] == lead and new.startswith(lead):
+                new = new[len(lead):]  # the selection began after the line's own spaces: they stay
+            if editor.replace_once(f, old, new):
+                backup = Path(config.DATA_DIR) / "code_backups" / f"{f.name}.{int(__import__('time').time())}.bak"
+                backup.parent.mkdir(parents=True, exist_ok=True)
+                backup.write_text(live, encoding="utf-8")
+                return f"Replaced in {f.name}. Ctrl+Z in VS Code undoes it."
+        if p["old"] not in live:
+            rewrite._xclip(["-selection", "clipboard"], p["new"])
+            return f"That code isn't in {f.name} anymore, so I put the new code on your clipboard (Ctrl+V where you want it)."
     dirty = p["title"].lstrip().startswith(("●", "•"))  # unsaved edits in the editor: don't write the file under it
     if f and f.is_file() and not dirty:
         text = f.read_text(errors="replace")
@@ -747,8 +773,7 @@ def apply_pending_code() -> str:
             return f"Replaced in {f.name}."
     paste = p["new"][len(lead):] if lead and p["new"].startswith(lead) else p["new"]  # the line's spaces stay
     again = rewrite.grab()
-    if isinstance(again, rewrite.Grab) and again.text.strip() == p["old"].strip():
-        rewrite.put(again, paste)
+    if isinstance(again, rewrite.Grab) and again.text.strip() == p["old"].strip() and rewrite.put(again, paste):
         return "Replaced. Ctrl+Z undoes it."
     rewrite._xclip(["-selection", "clipboard"], paste)
     return "The code isn't selected anymore, so I put the new code on your clipboard: select the old code, Ctrl+V."
@@ -771,7 +796,7 @@ def improve_whole_file(request: str) -> str:
     f = open_file_in_editor()
     if f is None or not f.is_file():
         return "Open the file in VS Code first, then ask again."
-    text = f.read_text(errors="replace")
+    text = editor.read(f)
     if not text.strip():
         return f"{f.name} is empty."
     if len(text) > WHOLE_MAX_CHARS:
@@ -880,12 +905,14 @@ def run(action: str, request: str = "", lang: str = "", replace: bool = False, p
             new = rewrite.transform(sel, request or "fix grammar and make it clearer")
         if not new:
             return "error: nothing came back; the selection was not changed"
-        rewrite.put(g, new)
+        if not rewrite.put(g, new):
+            return "The text changed meanwhile, so I didn't replace it: the new version is on your clipboard (Ctrl+V)."
         return "Replaced. Ctrl+Z undoes it."
     if action == "translate":
         out = translate(sel, lang or "ne")
         if replace:
-            rewrite.put(g, out)
+            if not rewrite.put(g, out):
+                return "The text changed meanwhile, so I didn't replace it: the new version is on your clipboard (Ctrl+V)."
             return f"Replaced with the {LANGS.get(lang or 'ne', '').split(' ')[0]} translation."
         rewrite._xclip(["-selection", "clipboard"], out)
         return out + "\n(Copied. Say 'replace it' to put it in place.)"

@@ -17,6 +17,7 @@ from __future__ import annotations
 import logging
 import subprocess
 import time
+from pathlib import Path
 
 log = logging.getLogger(__name__)
 MAX_CHARS = 6000
@@ -125,11 +126,38 @@ def remembered() -> "Grab | None":
     return Grab(text, _LAST["wid"], False, uiagent.family(_LAST["cls"]) == "terminal", _LAST["title"] or "that window")
 
 
+def _from_browser(wid: int, in_front: bool) -> "Grab | None":
+    """A browser with the KURAMA extension: the text highlighted on its page (no window switch, no Ctrl+C)."""
+    from jarvis.core import browsertab
+    title = _window_name(wid, limit=400)
+    if not any(b in title for b in ("Brave", "Chrome", "Chromium")):
+        return None
+    text = browsertab.selection(title)
+    return Grab(text, wid, in_front, False, _window_name(wid)) if text.strip() and len(text) <= MAX_CHARS else None
+
+
 class Grab:
     """The highlighted text, copied from the app the user works in, and where it came from."""
 
-    def __init__(self, text: str, wid: int | None, in_front: bool, term: bool, title: str):
+    def __init__(self, text: str, wid: int | None, in_front: bool, term: bool, title: str, editor: dict | None = None):
         self.text, self.wid, self.in_front, self.term, self.title = text, wid, in_front, term, title
+        self.editor = editor  # VS Code with the editor link: its state when grabbed (file, selection range)
+
+
+def _from_editor(wid: int, in_front: bool) -> "Grab | str | None":
+    """VS Code with the editor link: the exact selection (no window switch, no Ctrl+C), or why there is none.
+    None: not VS Code / no link (the caller uses the old way)."""
+    from jarvis.core import editor
+    title = _window_name(wid, limit=400)
+    st = editor.for_window(title)
+    if st is None:
+        return None
+    name = Path(st.get("file") or "").name or "VS Code"
+    if not (st.get("selection") or "").strip():
+        if (st.get("selection_chars") or 0) > 0:
+            return f"That selection in {name} is too long ({st['selection_chars']} characters). Select a smaller part."
+        return f"Nothing is highlighted in {name}. Select the code or text there, then ask again."
+    return Grab(st["selection"], wid, in_front, False, _window_name(wid), editor=st)
 
 
 def grab() -> Grab | str:
@@ -137,6 +165,10 @@ def grab() -> Grab | str:
     changes when text is selected inside KURAMA). Returns a Grab, or a message for the user."""
     from jarvis.core import uiagent
     wid, in_front = target_window()
+    if wid is not None and (ed := _from_editor(wid, in_front)) is not None:
+        return ed
+    if wid is not None and (br := _from_browser(wid, in_front)) is not None:
+        return br
     if not in_front and (mem := remembered()):  # typed in KURAMA: what was highlighted out there, no switching
         return mem
     if wid is None:
@@ -167,6 +199,9 @@ def grab_cursor() -> Grab | str:
     wid, in_front = target_window()
     if wid is None:
         return "I couldn't find the editor window. Click where the code should go, then ask again."
+    from jarvis.core import editor
+    if (st := editor.for_window(_window_name(wid, limit=400))) is not None:  # the editor link inserts at its cursor
+        return Grab("", wid, in_front, False, _window_name(wid), editor=st)
     if not in_front:
         _activate(wid)
         time.sleep(0.35)
@@ -174,16 +209,27 @@ def grab_cursor() -> Grab | str:
     return Grab("", wid, in_front, term, _window_name(wid))
 
 
-def put(g: Grab, new: str) -> None:
+def put(g: Grab, new: str) -> bool:
     """Paste `new` over the (still highlighted) selection / at the cursor of the grabbed window; it also stays on
-    the clipboard."""
+    the clipboard. VS Code with the editor link: replaced in the editor itself, exactly the range that was selected
+    (even if the cursor moved meanwhile), one Ctrl+Z undoes it."""
     from jarvis.core import uiagent
     _xclip(["-selection", "clipboard"], new)
+    if g.editor is not None:
+        from jarvis.core import editor
+        st, f = g.editor, g.editor.get("file") or ""
+        r = (editor.edit(st, "replace_range", file=f, range=[st["sel"]["start"], st["sel"]["end"]], expect=g.text, text=new)
+             if g.text and st.get("sel") else editor.edit(st, "insert", file=f, at=st.get("cursor"), text=new))
+        if r.get("ok"):
+            return True
+        log.info("editor link edit failed: %s", r.get("error"))
+        return False  # the code changed under it: never paste over whatever is selected now (it's on the clipboard)
     if not g.in_front and g.wid is not None:
         _activate(g.wid)  # the LLM call took a moment: make sure the document is still in front
         time.sleep(0.2)
     uiagent.key("ctrl+shift+v" if g.term else "ctrl+v")
     time.sleep(0.3)
+    return True
 
 
 def rewrite(instruction: str, text: str = "") -> str:
@@ -196,6 +242,7 @@ def rewrite(instruction: str, text: str = "") -> str:
     new = transform(g.text, instruction)
     if not new:
         return "error: the rewrite came back empty; nothing was changed"
-    put(g, new)
+    if not put(g, new):
+        return f"The text in '{g.title}' changed meanwhile, so I didn't replace it: the new text is on your clipboard.\n\n{new}"
     return (f"Replaced the highlighted text in '{g.title}' ({len(new.split())} words). If it couldn't be "
             f"replaced there (read-only text), it is on your clipboard: press Ctrl+V where you want it.\n\n{new}")

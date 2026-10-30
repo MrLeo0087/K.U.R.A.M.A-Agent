@@ -389,6 +389,14 @@ async def context_tab(request: Request):
     return {"ok": True}
 
 
+@router.post("/context/selection", summary="The browser extension: the text highlighted on the page (memory only)")
+async def context_selection(request: Request):
+    from jarvis.core import browsertab
+    d = await request.json()
+    browsertab.put_selection(str(d.get("text") or ""), str(d.get("url") or ""), str(d.get("title") or ""))
+    return {"ok": True}
+
+
 @router.post("/downloads/{wid}/{action}", summary="Download bar buttons: pause, resume or delete (0 tokens)")
 async def download_control(wid: int, action: str):
     from jarvis.core import ytdl
