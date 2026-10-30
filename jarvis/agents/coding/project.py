@@ -3,8 +3,8 @@
 2. One smart call writes only the template's code files (small, ~2-3k tokens); requirements + README come from the
    template (+ any extra packages the AI names). Where: "here / in this project" = the folder open in VS Code
    (a sub-folder when it already has files), else ~/projects/<name>. Never over an existing folder.
-3. .venv + requirements (PyTorch: the CPU-only wheels), opened in VS Code, run once (only python / uvicorn /
-   flask / streamlit / pytest); a crash there is the failure 'fix it' fixes. Steps 2-3 run as a background job.
+3. Opened in VS Code. NOTHING is installed and nothing is run (owner: they choose the venv and install themselves);
+   requirements.txt + README (how to install, CPU-only PyTorch, how to run). Steps 2-3 run as a background job.
 """
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ import re
 import subprocess
 from pathlib import Path
 
-from jarvis.agents.coding import blocks, templates, terminal
+from jarvis.agents.coding import blocks, templates
 from jarvis.core import config
 
 _SYS = ("You write small, effective, runnable code for a new project. Write ONLY these files (no others): {files}. "
@@ -88,43 +88,23 @@ def build(ctx, description: str, t: templates.Template, root: Path) -> str | Non
         p.write_text(code.get(rel) or (what + "\n" if rel.startswith(".") else f"# {what}\n"), encoding="utf-8")
     if reqs:
         (root / "requirements.txt").write_text("\n".join(reqs) + "\n")
-    (root / "README.md").write_text(f"# {root.name}\n\n{description}\n\n## Run\n\n```bash\n"
-                                    + ("python3 -m venv .venv && source .venv/bin/activate\npip install -r requirements.txt\n"
-                                       if reqs else "") + f"{t.run}\n```\n")
-    py = str(root / ".venv" / "bin" / "python")
-    if reqs:
-        ctx.progress("making the venv and installing " + ", ".join(reqs)[:80])
-        _run(["python3", "-m", "venv", ".venv"], root, 120)
-        torch_pkgs = [r for r in reqs if re.match(r"(?:torch|torchvision|torchaudio)\b", r)]
-        rest = [r for r in reqs if r not in torch_pkgs]
-        steps = ([[py, "-m", "pip", "install", "-q", *torch_pkgs, "--index-url", "https://download.pytorch.org/whl/cpu"]]
-                 if torch_pkgs else []) + ([[py, "-m", "pip", "install", "-q", *rest]] if rest else [])
-        for cmd in steps:
-            ctx.check()
-            rc, out = _run(cmd, root, config.AGENT_PIP_TIMEOUT_S)
-            if rc != 0:
-                terminal.record(" ".join(cmd), str(root), rc, out)
-                ctx.progress(f"» {root.name} is written ({root}), but installing the packages failed. Say 'fix it'.")
-                return str(root)
+    torch_pkgs = [r for r in reqs if re.match(r"(?:torch|torchvision|torchaudio)\b", r)]
+    install = ""
+    if reqs:  # owner: never installed by KURAMA (they pick their own venv); the README says how
+        install = ("pip install -r requirements.txt\n" if not torch_pkgs else
+                   f"pip install {' '.join(torch_pkgs)} --index-url https://download.pytorch.org/whl/cpu  # CPU-only PyTorch\n"
+                   + (f"pip install {' '.join(r for r in reqs if r not in torch_pkgs)}\n" if len(reqs) > len(torch_pkgs) else ""))
+    (root / "README.md").write_text(
+        f"# {root.name}\n\n{description}\n\n## Files\n\n" + "".join(f"- `{rel}`: {what}\n" for rel, what in t.files.items())
+        + (f"\n## Install (in the venv you want)\n\n```bash\n{install}```\n" if install else "")
+        + f"\n## Run\n\n```bash\n{t.run}\n```\n")
     from jarvis.tools.general import _sys
     try:
         _sys.run(["code", str(root)], timeout=15)
     except _sys.SysError:
         pass
-    if t.kind == "web" or not _SAFE_RUN.fullmatch(t.run):
-        ctx.progress(f"» {root.name} is ready in {root} (opened in VS Code). Run it with: {t.run}")
-        return str(root)
-    run_cmd = re.sub(r"^python3?\b", py, t.run) if reqs else t.run
-    if reqs:
-        run_cmd = re.sub(r"^(uvicorn|flask|streamlit|pytest)\b", rf"{root}/.venv/bin/\1", run_cmd)
-    ctx.progress(f"running it once: {t.run}")
-    rc, out = _run(["bash", "-lc", run_cmd], root, config.AGENT_FIRST_RUN_S)
-    if rc in (0, -9):
-        ctx.progress(f"» {root.name} is ready in {root} (opened in VS Code)." + (" It started fine." if rc == -9 else "")
-                     + f" Run it with: {t.run}")
-    else:
-        terminal.record(run_cmd, str(root), rc, out)
-        ctx.progress(f"» {root.name} is ready in {root}, but the first run crashed. Say 'fix it' and I'll fix it.")
+    ctx.progress(f"» {root.name} is ready in {root} (opened in VS Code): {', '.join([*t.files, 'requirements.txt', 'README.md'])}. "
+                 f"Nothing was installed: the README says how{' (CPU-only PyTorch)' if torch_pkgs else ''}. Run it with: {t.run}")
     return str(root)
 
 
@@ -146,5 +126,5 @@ def start(description: str, name: str = "", where_: str = "", confirmed: bool = 
         started.append(job.id)  # the dashboard watches it and says when it's ready
     files = ", ".join([*t.files, *(["requirements.txt"] if t.requirements else []), "README.md"])
     return (f"Plan ({t.title}): {root} — {files}"
-            f"{'; PyTorch CPU-only' if t.torch else ''}. Building it now in the background (~{est / 1000:.1f}k tokens); "
+            f". Writing it now in the background, nothing gets installed (~{est / 1000:.1f}k tokens); "
             f"I'll tell you when it's ready.")

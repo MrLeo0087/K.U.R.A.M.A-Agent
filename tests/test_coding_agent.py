@@ -121,9 +121,10 @@ def test_new_project_plan_first_then_small_code_cpu_torch_and_here(tmp_path, mon
     assert "model.py" in sent[0][0]["content"] and "train.py" in sent[0][0]["content"]  # only the template's files
     assert (root / "model.py").read_text() == "class Net: pass\n"
     assert (root / "requirements.txt").read_text().split() == ["torch", "torchvision", "tqdm", "pillow"]
-    torch_cmd = next(c for c in calls if "torch" in c)
-    assert "https://download.pytorch.org/whl/cpu" in torch_cmd and "pillow" not in torch_cmd  # CPU wheels only
-    assert ["code", str(root)] in calls and ctx.msgs[-1].startswith("» cnn_retrain is ready")
+    assert calls == [["code", str(root)]]  # owner: nothing installed, no venv, nothing run
+    readme = (root / "README.md").read_text()
+    assert "download.pytorch.org/whl/cpu" in readme and "pip install tqdm pillow" in readme and "python train.py" in readme
+    assert ctx.msgs[-1].startswith("» cnn_retrain is ready") and "Nothing was installed" in ctx.msgs[-1]
 
 
 def test_a_big_background_call_never_waits_forever():
