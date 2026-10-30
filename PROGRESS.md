@@ -496,3 +496,10 @@ Phases (one at a time, owner tests after each):
       yes/no answer is logged with who gave it (button / typed / voice / barge / sleep, POST /confirm 'via'), and a
       question denied because the page closed the chat or by timeout is logged too (data/logs/server.log) — to find
       why "shutdown now" was declined 4-13 s after asking (the server side was verified to wait correctly).
+- [x] 2026-10-30 Repair step 3, SHUTDOWN ROOT CAUSE (proven): the yes/no question never reached the page. The server
+      sent it at once (curl), but WebKit (the dashboard / mini chat) holds back small chunks of a streamed response,
+      and a question is the one moment the stream then waits — so the page showed thinking dots, no Yes/No, and the
+      turn ended "declined" when the page closed it (owner's next message / restart; server log: "denied: the page
+      closed the chat"). Reproduced in an offscreen WebKit page of the mini chat: no card; with the fix the card
+      shows and the No button answers ("answered False via 'button'"). Fix: chat SSE adds a 4 KB comment after a
+      confirm event (ignored by the page). This was also behind earlier "stuck" yes/no tools (folder lock, folders).

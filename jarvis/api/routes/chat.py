@@ -40,6 +40,7 @@ def norm_lang(v: object) -> str | None:
 
 
 SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+_FLUSH = ":" + " " * 4096 + "\n\n"  # SSE comment (ignored by the page), big enough to leave WebKit's buffer
 
 
 @router.post("/chat", summary="Chat turn, streamed as Server-Sent Events",
@@ -63,6 +64,8 @@ async def chat(body: ChatIn, request: Request):
                 if ev is None:
                     break
                 yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
+                if ev.get("type") in ("confirm", "confirm_timeout"):  # WebKit holds back small chunks of a stream
+                    yield _FLUSH  # that then waits (a yes/no): an SSE comment pushes the question out at once
         finally:
             turn.closed = True
             engine.deny_pending(turn)
