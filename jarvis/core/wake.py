@@ -433,6 +433,7 @@ class WakeListener:
             return None
         if not self.guard.allow():
             self.skipped += 1
+            wake_log(f"skipped {burst.dur_s:.1f}s burst: over {config.WAKE_MAX_CHECKS_PER_MIN} checks/min")
             return None
         self.checks += 1
         pcm = burst.pcm
@@ -442,9 +443,11 @@ class WakeListener:
         heard = self.recognizer.text(pcm)
         if config.WAKE_DEBUG:
             print(f"[wake check {self.recognizer.last_engine}: {heard!r} {burst.dur_s:.1f}s]", flush=True)
+        hit = match_wake(heard) if heard else None
+        wake_log(f"check {burst.dur_s:.1f}s {self.recognizer.last_engine}: {heard!r} -> "
+                 f"{'WAKE' + (' + ' + repr(hit.command) if hit.command else '') if hit else 'no match'}")
         if not heard:
             return None
-        hit = match_wake(heard)
         if hit is None:
             return None
         if not (hit.command or long):
@@ -468,6 +471,7 @@ class WakeListener:
                 pass
 
         self.detector.reset()
+        loud, loud_at = 0.0, time.monotonic()  # near-misses: the loudest sound that stayed under the wake floor
         with self.stream_factory(cb, config.AUDIO_SAMPLE_RATE, config.VAD_FRAME_MS):
             last_idle = time.monotonic()
             while not stop.is_set():
@@ -486,12 +490,33 @@ class WakeListener:
                     self.detector.reset()
                     continue
                 burst = self.detector.push(f)
+                rms = audio.rms(f)
+                floor = getattr(self.detector, "min_rms", 0) or 0
+                if floor and floor * 0.35 <= rms < floor:
+                    loud = max(loud, rms)
+                if loud and time.monotonic() - loud_at >= 30:  # at most one line per 30 s
+                    wake_log(f"near-miss: loudest sound {loud:.0f} < wake floor {floor:.0f} (too quiet to check)")
+                    loud, loud_at = 0.0, time.monotonic()
                 if burst is None:
                     continue
                 ev = self.check(burst)
                 if ev is not None:
                     return ev
         return None
+
+
+def wake_log(line: str) -> None:
+    """data/logs/wake.log: every wake check (heard text, match), rate-limit skips and near-misses: the evidence for
+    'the wake word rarely works' (kept under ~200 KB)."""
+    try:
+        path = config.LOG_DIR / "wake.log"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.exists() and path.stat().st_size > 200_000:
+            path.write_text("".join(path.read_text(encoding="utf-8").splitlines(True)[-800:]), encoding="utf-8")
+        with path.open("a", encoding="utf-8") as fh:
+            fh.write(time.strftime("%m-%d %H:%M:%S ") + line + "\n")
+    except OSError:
+        pass
 
 
 def _drain(q: queue.Queue) -> None:

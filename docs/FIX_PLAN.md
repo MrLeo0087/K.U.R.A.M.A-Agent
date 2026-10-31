@@ -44,7 +44,7 @@ Night Shift step 2 (Safe Copy) waits until this plan is done.
    durable via the Long Job Engine), and the reply says "I'll send it when it's written"; writing jobs move onto
    the Long Job Engine (caps, steps, resume) keeping the same files; quick sub-tasks on the fast model unless they
    need reasoning; retry the same request once on the tool-name glitch. 0 extra tokens; fewer per multi-task.
-2. **Voice: stop dropping real speech** (problem 5) + turn on the wake log (problem 9). Decide by the forced en/ne/hi
+2. **Voice: stop dropping real speech** (problem 5) + turn on the wake log (problem 9). DONE 2026-11-01 (also: mic input was 39%). Decide by the forced en/ne/hi
    pass's own confidence instead of Whisper's language label; keep real noise dropped (tests from the stt.log cases).
 3. **Wake word** (after a day of wake.log): fix what the log shows. Likely: "KURAMA", "hey KURAMA", "wake up",
    "KURAMA wake up" all wake, matched by sound (phonetic) not spelling; loudness floor adapted to the room. If

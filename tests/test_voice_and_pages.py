@@ -263,3 +263,12 @@ def test_generated_tests_are_run_and_fixed(monkeypatch):
     for no in ("No no, leave it", "don't add it", "nope."):
         assert fastpath.yes_no(no) == "no", no
     assert fastpath.yes_no("open youtube") == ""
+
+
+@pytest.mark.parametrize("text,raw,lp", [("Namaste, Kurama.", "polish", -0.62), ("Sot down to laptop.", "tamil", -0.89),
+                                         ("Hel Kurama", "korean", -0.93), ("Timi Nepali Ma Bolo Sokso?", "bengali", -0.72)])
+def test_forced_pass_text_is_not_dropped_for_the_auto_label(text, raw, lp):
+    """stt.log 10-30: real speech from the forced English / Nepali pass was dropped because the AUTO pass said Tamil."""
+    auto = T("garbled", raw, -1.0)
+    best = T(text, raw, lp)  # a different pass (forced language)
+    assert stt.not_ours(best, auto) == ""

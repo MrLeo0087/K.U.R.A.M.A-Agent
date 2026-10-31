@@ -269,7 +269,12 @@ def not_ours(best: Transcript, auto: Transcript) -> str:
     if _OTHER_SCRIPT.search(text):  # 'Продолжение следует...' (Cyrillic), Tamil, Chinese...
         return "other script"
     lp = best.logprob
-    if auto.raw_lang.strip().lower() not in LANG_MAP and lp is not None and lp < config.STT_FOREIGN_MAX_LOGPROB:
+    # Whisper's language label is about the AUTO pass: when the text we keep came from a forced English / Nepali
+    # pass, that label says nothing about it (stt.log 10-30: 'Namaste, Kurama.', 'Sot down to laptop.', 'Hel Kurama'
+    # were real speech labelled Polish / Tamil / Korean and dropped)
+    # (real speech there scored -0.62 .. -0.93; Tamil-labelled nonsense -1.24: a forced pass keeps the -1.0 floor)
+    floor = config.STT_FOREIGN_MAX_LOGPROB if best is auto else config.STT_GARBAGE_LOGPROB
+    if auto.raw_lang.strip().lower() not in LANG_MAP and lp is not None and lp < floor:
         return f"{auto.raw_lang or '?'} at low confidence"  # 'E aí' (Portuguese), Tamil-labelled nonsense
     if lp is not None and lp < config.STT_GARBAGE_LOGPROB and len(text.split()) <= 4:
         return "short and unsure"  # 'The', 'RUN'

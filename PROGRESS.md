@@ -613,3 +613,11 @@ Phases (one at a time, owner tests after each):
       (config.QUEUE_EXAMPLES): a request that may mean "add for later" is decided by the AI, never auto-started; the
       read-later shortcut steps aside when the job list is the closer meaning. Live: "add a job for later: write a
       short poem about Pokhara" -> added, waiting, nothing running. Scorecard 65/100/90 (router -1: one case).
+- [x] 2026-11-01 FIX_PLAN step 2, VOICE (causes measured): (1) "I have to speak very loud": the laptop mic input was
+      at 39% (-24 dB): room noise 20, normal speech near the page's talk floor (0.016) and under the wake floor
+      (900 int16). Set to 70% (-9 dB, ~3x louder); room noise at 70% = 65, far under the floors (no false triggers).
+      Changeable in Settings > Voice (mic volume). (2) Real speech dropped (stt.log: 'Namaste, Kurama.', 'Sot down to
+      laptop.', 'Hel Kurama'): the 'foreign language + confidence < -0.6' drop used the AUTO pass's label even when
+      the text kept came from the forced English / Nepali pass; now that pass only needs > -1.0 (real speech scored
+      -0.62..-0.93, nonsense -1.24). (3) data/logs/wake.log for step 3: every wake check (heard, match), rate-limit
+      skips, near-misses (too quiet to check). Also: job list adds of several jobs are split; 'result N' = list job.
