@@ -1555,3 +1555,35 @@ body.mini .m-lookp input[type="checkbox"] { accent-color: var(--m-acc); width: 1
 /* workspace window: the same glass (its title bar stays the system one) */
 body.mini.wsonly .chat { border-radius: 0; border: 0; box-shadow: none; }
 body.mini.wsonly .mws, body.mini.wsonly .mws-body { background: transparent; }
+
+/* ---- 2026-10-31 owner: tiny one-row header, slim input box, no suggestions ---- */
+body.mini .chat > .suggest { display: none !important; }
+body.mini .chat-head { flex-wrap: nowrap !important; min-height: 0; gap: 1px; padding: 5px 6px 5px 10px; overflow: hidden; }
+body.mini .chat-head::after { display: none !important; }
+body.mini .m-traffic { gap: 5px; margin-right: 7px; }
+body.mini .tl { width: 10px; height: 10px; }
+body.mini .m-logo { width: 15px; height: 15px; margin-right: 5px; }
+body.mini #chat-title { font-size: 12px; }
+body.mini #chat-state { margin: 0 auto 0 5px; }
+body.mini #chat-state i { width: 6px; height: 6px; }
+html body.mini #agent-switch { order: 4 !important; margin: 0 2px 0 0; padding: 2px; border-radius: 8px; }
+body.mini .agent-switch button { width: 24px; height: 20px; border-radius: 6px; }
+body.mini .agent-switch button svg { width: 13px; height: 13px; }
+body.mini #m-ws { order: 5 !important; } body.mini #btn-clear { order: 6 !important; } body.mini #btn-settings { order: 7 !important; }
+body.mini #m-look { order: 8 !important; } body.mini .m-lang { order: 9 !important; } body.mini #btn-voice { order: 10 !important; }
+body.mini #btn-power-mini { order: 11 !important; margin-left: 1px; }
+body.mini .chat-head .icon-btn { width: 24px; height: 24px; border-radius: 7px; }
+body.mini .chat-head .icon-btn svg { width: 14px; height: 14px; }
+body.mini .m-lang { height: 24px; padding: 0 3px 0 4px; border-radius: 7px; }
+body.mini .m-lang svg { width: 14px; height: 14px; }
+body.mini .m-lang select { font-size: 10.5px; padding: 0 1px; }
+body.mini .m-lookp { top: 36px !important; }
+@media (max-width: 439px) { body.mini #chat-title { display: none; } }
+@media (max-width: 359px) { body.mini .m-lang select { display: none; } }
+body.mini .ask { margin: 0 8px 8px; padding: 3px 3px 3px 4px; border-radius: 17px; }
+body.mini .ask .seg button, body.mini .ask .mute-btn { width: 26px; height: 26px; }
+body.mini .ask .seg button svg, body.mini .ask .mute-btn svg { width: 14px; height: 14px; }
+body.mini .ask #m-conv::before { top: 7px; bottom: 7px; }
+body.mini .ask textarea { min-height: 26px; margin-left: 4px; padding: 4px 6px; font-size: 13.5px; }
+body.mini .send { width: 28px; height: 28px; box-shadow: 0 3px 10px rgba(110, 123, 255, 0.3) !important; }
+body.mini .send svg { width: 14px; height: 14px; }

@@ -560,3 +560,6 @@ Phases (one at a time, owner tests after each):
       shadows; route/tier/tok/ms is one quiet line under the card. Yellow dot = compact view (answers only), red =
       hide, green = full KURAMA. Look: blur 0-100 px (note above 50: square corners), glass light 20-150%, corners,
       tint 0-100%, tint colour.
+- [x] 2026-10-31 Mini: one-row tiny header (36 css px, was ~92: 10 px dots, 15 px logo, 24 px buttons, title hidden
+      under 440 css px), slim input box (36 css px: 26 px mic/talk/text, 28 px send), suggestions removed from the
+      panel (no chips, no /suggest calls).

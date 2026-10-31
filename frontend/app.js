@@ -1689,7 +1689,7 @@ document.addEventListener("click", (e) => { if (e.target.id === "open-sched") { 
 // They change every 3 minutes and after each answer, never every 10 s dashboard refresh.
 let sugg = [], suggAt = 0;
 async function loadSuggest(force = false) {
-  if ((MINI && document.hidden) || (!force && Date.now() - suggAt < 180000)) return;
+  if (MINI || (!force && Date.now() - suggAt < 180000)) return; // the mini panel shows no suggestions (owner)
   suggAt = Date.now();
   try { sugg = (await api.suggest(4)).items || []; } catch { /* keep the old ones */ }
   renderSuggest();
@@ -2755,7 +2755,7 @@ if (MINI && !WSONLY) {
   atBottom();
   $("m-zoom").onclick = () => $("btn-full").click();
   // look: blur (Blur my Shell, system-wide for the whitelisted windows), corner radius (page + blur edge), tint (page)
-  const look = Object.assign({ blur: 40, light: 90, corner: 15, tint: 58, color: "#101328", sugg: true }, S.look || {});
+  const look = Object.assign({ blur: 40, light: 90, corner: 15, tint: 58, color: "#101328" }, S.look || {});
   if (look.blur === 80 && !S.look?.light) look.blur = 40; // the old 0-100 scale (80 = radius 40)
   const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)).join(", ");
   const label = { blur: (v) => v + " px", light: (v) => v + "%", tint: (v) => v + "%", corner: (v) => (v ? v + " px" : "square") };
@@ -2763,9 +2763,8 @@ if (MINI && !WSONLY) {
     B.style.setProperty("--m-r", look.corner + "px");
     B.style.setProperty("--m-tint", (look.tint / 100).toFixed(2));
     B.style.setProperty("--m-tint-rgb", rgb(look.color));
-    B.classList.toggle("no-sugg", !look.sugg);
     for (const k of Object.keys(label)) { $("lk-" + k).value = look[k]; $("lk-" + k + "-v").textContent = label[k](look[k]); }
-    $("lk-color").value = look.color; $("lk-sugg").checked = !!look.sugg;
+    $("lk-color").value = look.color;
     $("lk-note").textContent = look.blur > 50 && look.corner ? "Above 50 px the blur's corners turn square." : "";
   };
   let glassT = 0;
@@ -2779,7 +2778,6 @@ if (MINI && !WSONLY) {
     if (k !== "tint") pushGlass();
   });
   $("lk-color").addEventListener("input", (e) => { look.color = e.target.value; save(); });
-  $("lk-sugg").addEventListener("change", (e) => { look.sugg = e.target.checked; save(); });
   $("m-look").onclick = (e) => { e.stopPropagation(); $("m-lookp").hidden = !$("m-lookp").hidden; };
   document.addEventListener("click", (e) => { if (!e.target.closest("#m-lookp, #m-look")) $("m-lookp").hidden = true; });
   applyLook();
@@ -2821,8 +2819,7 @@ if (MINI && !WSONLY) {
     jobsKey = ""; pollJobs();
   });
   setInterval(pollJobs, 5000); pollJobs();
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) { pollJobs(); loadSuggest(); } });
-  loadSuggest(true);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) pollJobs(); });
 }
 
 // the laptop's echo canceller runs only while this page records (voice / talk mode), never in text mode
