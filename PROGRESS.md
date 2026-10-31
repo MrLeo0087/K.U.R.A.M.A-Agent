@@ -682,3 +682,8 @@ Phases (one at a time, owner tests after each):
       now any selected element whose name is a real entry of the open folder counts (cell / row / list or grid item;
       the sidebar can't match), and the raw selected elements are logged (sel_raw) as proof. Opening a folder was
       already right (newone read correctly). Needs the owner's live check: select a folder, ask.
+- [x] 2026-11-01 Files selection, 2nd live test (fm.log): the selection WAS read ("Tara/newone") plus a stray
+      "Tara" (the path bar button reports its full path as its name) -> the AI got "Selected: newone, Tara" and picked
+      Tara; and the "send this folder" shortcut used KURAMA's remembered folder (Tara, set by the too-big listing),
+      never the Files app. Now: names with "/" are ignored; the shortcut resolves "this" like every tool
+      (pasted path > Files selection / open folder > remembered folder).

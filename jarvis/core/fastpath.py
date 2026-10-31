@@ -340,7 +340,8 @@ def findfile_intent(t: str) -> Intent | None:
 
 def _focus_intent() -> Intent | None:
     from jarvis.core import focus
-    fp = focus.get_path()
+    ref = focus.refer("this")  # the same order as every tool: a pasted path, what's selected / open in Files when
+    fp = str(ref) if ref is not None else focus.get_path()  # it's the latest app, then KURAMA's remembered folder
     if not fp:
         return None
     return Intent("sendfile", "send_file_telegram", "telegram", {"path": fp}, fp.rstrip("/").rsplit("/", 1)[-1])

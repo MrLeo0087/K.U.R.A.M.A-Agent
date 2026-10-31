@@ -111,7 +111,7 @@ def _selected(title: str, folder: str, folders: list[str] | None = None) -> tupl
                     walk(a.get_child_at_index(k), depth + 1)
             walk(win)
     _SELECTED_RAW[:] = raw[:20]  # evidence for the log
-    names = list(dict.fromkeys(n for _, n in raw))  # only real entries of the folder count (not the sidebar's "Home")
+    names = list(dict.fromkeys(n for _, n in raw if "/" not in n))  # entries only: never the path bar's full path
     for base in [folder] + [f for f in (folders or []) if f != folder]:
         hits = [str(Path(base) / n) for n in names if (Path(base) / n).exists()]
         if hits:

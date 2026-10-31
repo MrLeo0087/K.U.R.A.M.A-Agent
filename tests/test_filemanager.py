@@ -32,3 +32,13 @@ def test_helper_script_runs_and_never_raises():
                        text=True, timeout=10)
     d = json.loads(p.stdout.strip().splitlines()[-1])
     assert set(d) >= {"top", "folder", "selected"}
+
+
+def test_send_this_folder_shortcut_uses_the_files_selection(monkeypatch, tmp_path):
+    from jarvis.core import fastpath
+    sel = tmp_path / "newone"
+    sel.mkdir()
+    focus.set_path(str(tmp_path))  # KURAMA remembered the parent (the old shortcut sent this)
+    fake(monkeypatch, "files", str(tmp_path), [str(sel)])
+    it = fastpath._focus_intent()
+    assert it is not None and it.args["path"] == str(sel)
