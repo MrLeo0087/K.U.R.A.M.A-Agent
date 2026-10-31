@@ -233,6 +233,7 @@ HOTKEY_PTT = os.getenv("JARVIS_HOTKEY", "<ctrl>+<alt>+j")  # press to talk (togg
 # Hold-to-talk anywhere (jarvis/core/ptt.py, in the API server): hold the key, speak, let go. pynput key name.
 PTT_ENABLED = os.getenv("KURAMA_PTT", "1").lower() not in ("0", "false", "no", "off")
 PTT_KEY = os.getenv("KURAMA_PTT_KEY", "super+z")  # hold Super+Z: free in GNOME, never reaches apps (Ctrl+Space = VS Code suggest)
+PTT_DISMISS_KEY = os.getenv("KURAMA_PTT_DISMISS", "super+x")  # close the reply caption now + stop speaking
 PTT_DEBOUNCE_S = 0.15  # a held Space auto-repeats (release+press pairs): a release counts after this quiet gap
 PTT_MIN_HOLD_S = 0.35  # shorter taps are ignored (0 tokens)
 VOICE_MAX_TOKENS = 200

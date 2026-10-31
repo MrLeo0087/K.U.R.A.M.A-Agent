@@ -686,6 +686,7 @@ class Mini:
         self.size_timer = 0
         self.anim, self.phase = 0, 0.0  # the busy animation's timer and step
         self.anim_ms, self.fader = 0, 0
+        self.ptt_active = False  # a hold-to-talk key is down right now
         self.logo = None
         with contextlib.suppress(Exception):  # KURAMA's fox on the button (frontend/kurama-logo.svg)
             self.logo = GdkPixbuf.Pixbuf.new_from_file_at_size(
@@ -926,9 +927,18 @@ class Mini:
     def ptt(self, state: str) -> None:
         """Hold-to-talk from jarvis/core/ptt.py: down = listen (panel stays closed: an invisible, click-through
         page records and the caption beside the button shows what you said and the reply), up = send, cancel."""
+        if state == "dismiss":  # Super+X: close the caption now and stop the spoken reply
+            if self.caption is not None:
+                self.caption.hide()
+            if self.view is not None:
+                run_js(self.view, "window.kuramaPTT && window.kuramaPTT(-2)")
+            if self.ghost and not self.ptt_active:
+                GLib.timeout_add(300, self.end_ghost_if_idle)
+            return
         js = {"down": 1, "up": 0, "cancel": -1}.get(state)
         if js is None:
             return
+        self.ptt_active = state == "down"
         if self.open:  # the chat is open: it all happens there
             run_js(self.view, f"window.kuramaPTT && window.kuramaPTT({js})")
             return
@@ -1076,6 +1086,8 @@ class Mini:
         self.bubble.queue_draw()
 
     def end_ghost_if_idle(self):
+        if self.ptt_active:  # a new hold-to-talk started meanwhile: never hide its page mid-recording
+            return False
         if self.ghost and not self.talking and self.state not in BUSY_STATES and self.panel is not None:
             self.end_ghost(keep_caption=True)
         return False
@@ -1202,11 +1214,13 @@ class Caption:
     streams in; it fades out a few seconds after the reply is done. Click it to open the chat."""
 
     CSS = b"""
-    .kcap { background-color: rgba(9, 10, 16, 0.94); border: 1px solid rgba(255, 122, 26, 0.55);
-            border-radius: 16px; padding: 10px 14px; }
-    .kcap .you { color: rgba(255, 255, 255, 0.55); font-size: 10pt; font-style: italic; }
-    .kcap .bot { color: #f4f1ec; font-size: 11pt; }
-    .kcap label { font-family: Ubuntu, "Noto Sans", sans-serif; }
+    .kcap { background-image: linear-gradient(160deg, rgba(110, 123, 255, 0.20), rgba(16, 19, 40, 0.55) 55%,
+                                                      rgba(139, 92, 246, 0.16));
+            background-color: rgba(16, 19, 40, 0.50); border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 15px; padding: 11px 15px; }
+    .kcap .you { color: rgba(226, 230, 255, 0.62); font-size: 9.5pt; }
+    .kcap .bot { color: #f4f5ff; font-size: 10.5pt; }
+    .kcap label { font-family: "Ubuntu Sans", Ubuntu, "Noto Sans", sans-serif; }
     """
 
     def __init__(self, mini: Mini) -> None:
@@ -1215,12 +1229,13 @@ class Caption:
         css = Gtk.CssProvider()
         css.load_from_data(self.CSS)
         w = self.win = Gtk.Window(title="KURAMA caption")
+        w.set_wmclass("kurama-mini", "KURAMA-mini")  # glass: Blur my Shell blurs behind it (a DOCK window never is)
         w.get_style_context().add_provider_for_screen(w.get_screen(), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
         w.set_decorated(False)
         w.set_resizable(False)
         w.set_skip_taskbar_hint(True)
         w.set_skip_pager_hint(True)
-        w.set_type_hint(Gdk.WindowTypeHint.DOCK)
+        w.set_focus_on_map(False)
         w.set_keep_above(True)
         w.set_accept_focus(False)
         w.stick()

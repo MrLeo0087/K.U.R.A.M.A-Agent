@@ -52,7 +52,8 @@ class Holder:
     Down: the main key is pressed while every modifier is held. Up: a modifier is released, or the main key is
     released and not pressed again within PTT_DEBOUNCE_S (a held Space auto-repeats as release+press pairs)."""
 
-    def __init__(self, combo: str, tell=_tell, now=time.monotonic, min_hold: float | None = None, schedule=None):
+    def __init__(self, combo: str, tell=_tell, now=time.monotonic, min_hold: float | None = None, schedule=None,
+                 dismiss: str = ""):
         parts = [_norm(p.strip()) for p in combo.split("+") if p.strip()]
         self.main, self.mods = parts[-1], set(parts[:-1])
         self.tell, self.now = tell, now
@@ -62,9 +63,16 @@ class Holder:
         self.down_at: float | None = None
         self.spoiled = False
         self.pending = None  # the delayed "main key really released" check
+        dparts = [_norm(p.strip()) for p in (dismiss or "").split("+") if p.strip()]
+        self.dismiss = (set(dparts[:-1]), dparts[-1]) if dparts else None
 
     def press(self, name: str) -> None:
         n = _norm(name)
+        if self.dismiss and n == self.dismiss[1] and self.dismiss[0] <= self.held and self.down_at is None:
+            if n not in self.held:  # Super+X: close the caption / stop speaking (once per press, not on repeat)
+                self.tell("dismiss")
+            self.held.add(n)
+            return
         if n == self.main and self.down_at is not None:  # auto-repeat while holding: not a release
             self._cancel_pending()
         elif n == self.main and self.mods <= self.held:
@@ -124,7 +132,7 @@ def start() -> bool:
         except Exception as e:  # noqa: BLE001
             log.warning("hold-to-talk off: pynput unavailable (%s)", e)
             return False
-        h = Holder(config.PTT_KEY)
+        h = Holder(config.PTT_KEY, dismiss=config.PTT_DISMISS_KEY)
         _listener = keyboard.Listener(on_press=lambda k: h.press(_name(k)), on_release=lambda k: h.release(_name(k)))
         _listener.daemon = True
         _listener.start()

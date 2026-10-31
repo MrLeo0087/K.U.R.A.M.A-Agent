@@ -572,3 +572,7 @@ Phases (one at a time, owner tests after each):
       Header back to two rows (row 1: dots, logo, KURAMA, power; row 2: tools, 24 px, tight). Font: Inter bundled
       (frontend/fonts, SIL OFL, 352 KB, loaded once) as default; Look > Font: Inter / Ubuntu Sans / Noto Sans /
       JetBrains Mono.
+- [x] 2026-10-31 Hold-to-talk fixes: the reply caption beside the button is glass (it was a DOCK window, which Blur
+      my Shell never blurs: now a normal keep-above, never-focused window of class KURAMA-mini, indigo glass style);
+      fast repeated Super+Z no longer sticks (the page's latest key event wins while the mic is starting; the window
+      never hides the page while a new hold is down); Super+X closes the caption at once and stops the spoken reply.

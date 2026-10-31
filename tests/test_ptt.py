@@ -65,3 +65,15 @@ def test_super_z():
     h.press("cmd"); h.press("z"); h.release("z"); h.press("z")  # auto-repeat
     t[0] = 1; h.release("cmd")
     assert told == ["down", "up"]
+
+
+def test_dismiss_and_fast_repeats():
+    told, t, timers = [], [0.0], []
+    h = ptt.Holder("super+z", tell=told.append, now=lambda: t[0], min_hold=0.35,
+                   schedule=lambda d, fn: timers.append(FakeTimer(fn)) or timers[-1], dismiss="super+x")
+    h.press("cmd"); h.press("x"); h.press("x"); h.release("x"); h.release("cmd")  # repeat: one dismiss
+    assert told == ["dismiss"]
+    told.clear()
+    for _ in range(3):  # quick taps: each down ends in a cancel, never a stuck "down"
+        h.press("cmd"); h.press("z"); t[0] += 0.1; h.release("cmd")
+    assert told == ["down", "cancel"] * 3

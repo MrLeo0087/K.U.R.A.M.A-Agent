@@ -2026,21 +2026,27 @@ function miniCaption(who, text, done = false) {
 }
 // Hold-to-talk (global key, see jarvis/core/ptt.py): the host calls kuramaPTT(1) on key down, (0) on release
 // (send what was said), (-1) to drop it (the key was part of a shortcut). Works with the panel open or closed.
-let pttOn = false;
+let pttOn = false, pttWant = null, pttStarting = false;
 window.kuramaPTT = async (v) => {
+  if (v === -2) { player.stop(); return; } // Super+X: stop the spoken reply (the host hides the caption)
+  pttWant = v; // the latest key event wins: fast presses never leave the mic on
   if (v === 1) {
-    if (recording) return;
+    if (recording || pttStarting) return;
+    pttStarting = true;
     audioCtx();
-    try { await mic.start(); } catch (e) { miniCaption("bot", micError(e), true); return; }
+    try { await mic.start(); } catch (e) { pttStarting = false; miniCaption("bot", micError(e), true); return; }
+    pttStarting = false;
+    if (pttWant === -1) { mic.stop(); return; } // let go / cancelled while the mic was starting
     player.stop();
     recorder.start(); recording = pttOn = true; recSecs = 0;
     updateState();
     miniCaption("you", "Listening…");
+    if (pttWant === 0) window.kuramaPTT(0); // released while starting: finish now
     return;
   }
-  if (!pttOn) return;
+  if (!pttOn) return; // up / cancel with nothing recording (or still starting: handled above)
   pttOn = false; recording = false;
-  if (v === -1) { recorder.cancel(); mic.stop(); updateState(); miniCaption("you", " ", true); return; }
+  if (v === -1) { recorder.cancel(); mic.stop(); updateState(); return; }
   sttBusy = true; updateState(); // the host keeps the hidden panel alive while this says "thinking"
   const blob = await recorder.stop();
   mic.stop();
@@ -2049,7 +2055,6 @@ window.kuramaPTT = async (v) => {
   sttBusy = false;
   const text = (r?.text || "").trim();
   if (!text) { updateState(); miniCaption("bot", "Didn't catch that.", true); return; }
-  if (S.mute === undefined || !S.mute) audioCtx();
   sendChat(text, { voice: true, speak: !S.mute, lang: r.lang || S.lang });
 };
 function miniCaptionSoon(get) { // streamed reply: at most ~4 updates a second
