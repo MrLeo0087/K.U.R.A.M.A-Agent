@@ -15,6 +15,6 @@ def find_capability(need: str) -> str:
     from jarvis.core import selfknow
     hits = selfknow.find_tools(need)
     if not hits:
-        return ("no built-in tool matches; options: search the web for how-to steps, or offer to build a small new "
-                "tool with toolsmith (ask the user first)")
+        return ("no built-in tool matches; options: search the web for how-to steps, or build a small new tool with "
+                "make_tool (it asks the user itself with a Yes/No box: don't ask in chat first)")
     return "\n".join(f"- {name} ({group}): {desc}" for group, name, desc in hits)

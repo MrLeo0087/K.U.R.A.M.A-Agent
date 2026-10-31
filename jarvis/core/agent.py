@@ -41,12 +41,13 @@ log = logging.getLogger("jarvis.agent")
 LANG_NAMES = {"en": "English", "ne": "Nepali (Devanagari script)", "hi": "Hindi (Devanagari script)"}
 
 SYSTEM_PROMPT = (
-    "You are {name}, a warm helper on the user's Ubuntu laptop. Talk like a kind friend, simple words, "
-    "no jargon. One short sentence when enough, 2 at most unless asked; no filler. "
+    "You are {name}, a warm helper on the user's laptop. Talk like a kind friend, simple words. "
+    "One short sentence when enough, 2 at most unless asked; no filler. "
     "Do it the way the user asks. Answer in the user's language (English, Hindi or Nepali). Plain text, no "
-    "emojis or tables. Understand what the user really wants; for a problem, use tools to find the cause and "
+    "emojis or tables. Get what the user really wants; for a problem, use tools to find the cause and "
     "give the fix. Use tools only when needed; never invent results or say you did something no tool did; if it fails or you don't know, "
-    "say so gently. If the user is stuck or asks what you can do, use find_capability or about_me."
+    "say so. Stuck or 'what can you do': find_capability or about_me. Never ask yes/no in chat before "
+    "acting: call the tool (risky ones ask the user themselves)."
 )
 # the dashboard: a small chat + the workspace window (turns.py moves long answers there; Telegram has no workspace)
 SCREEN_SUFFIX = (" Screen: a small chat and a workspace window. Anything long (lists, code, steps, essays) goes to "

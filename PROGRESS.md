@@ -641,3 +641,10 @@ Phases (one at a time, owner tests after each):
       cases said with a selection are tagged and get the text area like the agent does; 13 routing-only cases from
       the traces ("groups"). Left: 2 STT garbles, a folder name, a Devanagari headline, "15 plus 27" (the calculator
       shortcut answers it). Live: "still now complete downlaod ?" -> download tool, right answer, fast tier.
+- [x] 2026-11-01 FIX_PLAN step 5, yes/no loops: the 10-30 loop (4x "yes", up to 6.9k tokens) was write_file answering
+      "already exists; ask the user, then call again with overwrite" -> the AI asked in chat, each "yes" a new turn
+      that hit the same refusal (fixed 10-30: write_file asks with the real Yes/No box). Same class left: find_capability
+      told the AI to "ask the user first" before make_tool, which asks with the box itself (a double ask) -> reworded;
+      and the base prompt now says never ask yes/no in chat before acting (risky tools ask themselves); prompt kept
+      under 250 tokens by trimming filler. Live: a write into an existing file -> a real Yes/No card, "no" ->
+      nothing written, honest reply, no loop. (Seen: it used run_command for a /tmp path instead of the files tool.)

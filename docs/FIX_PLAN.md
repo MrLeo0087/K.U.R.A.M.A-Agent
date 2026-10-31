@@ -52,7 +52,7 @@ Night Shift step 2 (Safe Copy) waits until this plan is done.
    0 tokens, no Groq limit; ~50 MB RAM, measured before adopting) does the first check, Whisper only confirms.
 4. **Router misses + scorecard** (problems 7, 8): DONE 2026-11-01 (98% router). add the old trace phrasings (3+ wordings each) to the eval cases,
    fix by meaning (router examples / tool descriptions), never word rules; scorecard isolated from the live desktop.
-5. **Plain-text yes/no** (problem 10): replay 3 cases (~5k tokens), then: risky actions always use the real yes/no
+5. **Plain-text yes/no** (problem 10): DONE 2026-11-01. replay 3 cases (~5k tokens), then: risky actions always use the real yes/no
    card, the AI never asks in text.
 6. **Mini KURAMA UI**: today the panel is an opaque square window (scripts/kurama_wallpaper.py, ensure_panel) and the
    page draws border-radius 0, so corners can only be sharp. Plan: transparent window (GNOME X11 compositor
