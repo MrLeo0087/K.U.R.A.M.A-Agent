@@ -204,6 +204,7 @@ WAKE_MAX_CHECKS_PER_MIN = int(os.getenv("JARVIS_WAKE_CHECKS_PER_MIN", "12"))
 # Wake bursts must be this loud (room noise sent 11 bursts/min to Google at the turn-VAD level of 900).
 WAKE_MIN_RMS = float(os.getenv("JARVIS_WAKE_MIN_RMS", "900"))  # lower = hears a quieter/farther "KURAMA"
 WAKE_MATCH_RATIO = 0.7  # difflib ratio for wake-name tokens (lower = more forgiving of mishearings)
+WAKE_PHRASES = ("start system", "start the system", "system start", "start kurama system")  # wake without the name
 WAKE_UP_ALONE = os.getenv("JARVIS_WAKE_UP_ALONE", "1").lower() not in ("0", "false", "no", "off")  # "wake up" wakes
 WAKE_NAME_ALONE = os.getenv("JARVIS_WAKE_NAME_ALONE", "1").lower() not in ("0", "false", "no", "off")
 WAKE_BURST_MIN_S = 0.4  # speech bursts outside this range are never recognized

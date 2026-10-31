@@ -2133,6 +2133,8 @@ const WAKE_NAMES = ["kurama", "karama", "corama", "kuruma", "kurma", "koorama", 
 function wakeRest(text) { // null = no wake phrase; else what came after it ("wake up kurama, open youtube" -> "open youtube")
   const names = [...WAKE_NAMES, botName.toLowerCase()].map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
   const lead = "(?:(?:wake|woke|wakey|awake)(?:\\s*(?:up|off|of|now|please)){0,3}|hey|hello|hi|ok(?:ay)?|utho?|उठ\\S*)";
+  const bare = text.match(/^\s*(?:(?:wake|woke)\s*up|start\s+(?:the\s+)?system|system\s+start)\b[\s,!.]*/i); // no name needed
+  if (bare) return text.slice(bare[0].length).replace(/^[\s,.!?]+/, "");
   const m = text.match(new RegExp(`${lead}?[\\s,]*(?:${names})\\b[\\s,!.]*(?:(?:wake|woke)(?:\\s*(?:up|off|now)){0,2})?[\\s,!.]*`, "i"));
   if (!m) return null;
   const said = m[0].toLowerCase();

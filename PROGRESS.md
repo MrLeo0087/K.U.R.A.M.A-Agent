@@ -657,3 +657,11 @@ Phases (one at a time, owner tests after each):
       before KURAMA's remembered path). So "open this folder in VS Code", "send this folder to Telegram" (zipped),
       "copy this folder path", "analyze the code of this folder" (also from Telegram) act on it. Nothing runs while
       idle. Not live-tested: needs the owner to select something in Files (I don't drive the screen).
+- [x] 2026-11-01 FIX_PLAN step 3, WAKE WORD (owner: "hey KURAMA" works; "wake up KURAMA", "KURAMA wake up", "wake up",
+      "start system" should too). Found: the page's fallback matcher needed the name ("wake up" alone failed there);
+      "start system" wasn't a wake phrase; a misheard name FIRST ("Karma, wake up", "Corama wake up") was refused (only
+      the exact name may lead); a real "hey KURAMA" heard as "Uy, Karp, Kurama." (wake.log) was refused. Now: fixed
+      extra phrases (config.WAKE_PHRASES: start system / start the system / ...); misheard name + "wake up" wakes; a
+      short burst (<= 4 words) with the exact name wakes when the words before it are garble, not English ("I told
+      KURAMA" still doesn't: jarvis/core/words.py, system dictionary on first need); page fallback accepts "wake up" /
+      "start system" alone. Mic input raised to 70% earlier (39% kept the wake floor out of reach).

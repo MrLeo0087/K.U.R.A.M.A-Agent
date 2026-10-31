@@ -168,6 +168,10 @@ def match_wake(text: str, name_alone: bool | None = None) -> WakeHit | None:
             if n:
                 cmd = _rest(toks, owner, start + lead + n)
                 return WakeHit("" if _only_wake(cmd) else cmd, text)
+        n = _name_at(w, start)  # a misheard name FOLLOWED by "wake up" ("Karma, wake up", "Corama wake up")
+        if n and _wake_lead(w, start + n) >= 2:
+            cmd = _rest(toks, owner, start + n + _wake_lead(w, start + n))
+            return WakeHit("" if _only_wake(cmd) else cmd, text)
         if name_alone:
             n = _name_at(w, start, CANON, 0.85)  # only the real name may lead a command
             if n:
@@ -177,6 +181,18 @@ def match_wake(text: str, name_alone: bool | None = None) -> WakeHit | None:
         n = _name_at(w, 0)
         if n == len(w):
             return WakeHit("", text)
+    if name_alone and len(w) <= 4:  # a short burst holding the real name: misheard words around it are still a wake
+        from jarvis.core.words import is_word
+        for i in range(1, len(w)):  # ("Uy, Karp, Kurama." was the owner saying "hey KURAMA"; wake.log 11-01) — only
+            n = _name_at(w, i, CANON, 0.85)  # when the words before it are garble: "I told KURAMA" talks ABOUT it
+            if n and not any(is_word(x) for x in w[:i]):
+                cmd = _rest(toks, owner, i + n)
+                return WakeHit("" if _only_wake(cmd) else cmd, text)
+    norm = " ".join(w)
+    for ph in config.WAKE_PHRASES:  # extra wake phrases without the name ("start system"; config)
+        if norm == ph or norm.startswith(ph + " "):
+            cmd = _rest(toks, owner, len(ph.split()))
+            return WakeHit("" if _only_wake(cmd) else cmd, text)
     if config.WAKE_UP_ALONE:  # "wake up" on its own (or "wake up, open youtube") is the main wake phrase too
         for start in range(min(2, len(w))):
             if start == 1 and w[0] not in LEAD_FILLERS:

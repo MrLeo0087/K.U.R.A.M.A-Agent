@@ -314,3 +314,19 @@ def test_awake_stop_alone_is_ignored(monkeypatch):
     heard = iter([stt.Transcript("stop", "en", "m"), stt.Transcript("bye kurama", "en", "m")])
     monkeypatch.setattr(loop, "listen", lambda **kw: next(heard), raising=False)
     assert loop.awake() == "sleep" and loop.responded == []
+
+
+import pytest as _pt
+
+
+@_pt.mark.parametrize("text,cmd", [("Wake up Kurama", ""), ("Kurama wake up", ""), ("Wake up", ""), ("Start system", ""),
+                                   ("Start the system, open youtube", "open youtube"), ("Karma, wake up", ""),
+                                   ("Corama wake up", ""), ("Uy, Karp, Kurama.", ""), ("Hey Kurama", "")])
+def test_owner_wake_phrases_2026_11_01(text, cmd):
+    hit = wake.match_wake(text)
+    assert hit is not None and hit.command == cmd
+
+
+@_pt.mark.parametrize("text", ["I told KURAMA", "Karma is a concept", "the system is slow", "open the system settings"])
+def test_still_not_a_wake(text):
+    assert wake.match_wake(text) is None

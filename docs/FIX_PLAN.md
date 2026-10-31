@@ -46,7 +46,7 @@ Night Shift step 2 (Safe Copy) waits until this plan is done.
    need reasoning; retry the same request once on the tool-name glitch. 0 extra tokens; fewer per multi-task.
 2. **Voice: stop dropping real speech** (problem 5) + turn on the wake log (problem 9). DONE 2026-11-01 (also: mic input was 39%). Decide by the forced en/ne/hi
    pass's own confidence instead of Whisper's language label; keep real noise dropped (tests from the stt.log cases).
-3. **Wake word** (after a day of wake.log): fix what the log shows. Likely: "KURAMA", "hey KURAMA", "wake up",
+3. **Wake word** (after a day of wake.log): DONE 2026-11-01 (phrases + mishearings; mic 70%). fix what the log shows. Likely: "KURAMA", "hey KURAMA", "wake up",
    "KURAMA wake up" all wake, matched by sound (phonetic) not spelling; loudness floor adapted to the room. If
    Whisper-per-burst is the limit, a local keyword spotter (Vosk small model with a fixed phrase list: no torch,
    0 tokens, no Groq limit; ~50 MB RAM, measured before adopting) does the first check, Whisper only confirms.
