@@ -121,6 +121,12 @@ def refer(text: str) -> Path | None:
     if not t or is_anaphora(t):
         if (pasted := said_path()) is not None:  # "/home/leo/Documents  organize this folder": that path
             return pasted
+        try:  # the Files app, when it is the latest app: its selected item, else its open folder
+            from jarvis.core import filemanager
+            if (fm := filemanager.current()) is not None:
+                return fm
+        except Exception:  # noqa: BLE001
+            pass
         if (p := get_path(config.FOCUS_TTL_H * 3600)) and Path(p).exists():
             return Path(p)
         return cwd()

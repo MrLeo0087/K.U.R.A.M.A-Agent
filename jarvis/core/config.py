@@ -370,6 +370,7 @@ SEMANTIC_MIN = 0.66  # best similarity needed to trust a group (bge-small cosine
 SEMANTIC_MARGIN = 0.03  # runners-up this close to the best one are sent too
 SEMANTIC_ADD_MIN = 0.76  # with keyword matches, a different group is added only when this sure
 SEMANTIC_OVER_CHAT = 0.03  # a group must beat the best plain-chat example by this much
+FILES_CONTEXT = os.getenv("KURAMA_FILES_CONTEXT", "1").lower() not in ("0", "false", "no", "off")  # Files app context
 MEANING_GATE_MARGIN = 0.15  # a shortcut runs only if its area scores within this of the best area (by meaning)
 # Shortcuts whose pattern takes ANY words as their subject (live search: "show <team> result") must also be (nearly)
 # the best area by meaning: "show job 1 result" made "job 1" a sports team (web 0.72 vs jobs/schedule 0.75).

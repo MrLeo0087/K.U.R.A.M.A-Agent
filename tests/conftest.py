@@ -33,6 +33,7 @@ def tmp_store(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "FASTPATH", False)  # LLM-path tests stay on the LLM path; fastpath tests enable it
     monkeypatch.setattr(config, "SEMANTIC_ROUTER", False)
     monkeypatch.setattr(config, "CONTEXT", False)  # never read the real desktop (an open VS Code changed the tools)
+    monkeypatch.setattr(config, "FILES_CONTEXT", False)  # ...nor the real Files app
     monkeypatch.setattr(config, "TRAINING_KEEP_AWAKE", False)  # never start a real systemd-inhibit from a test  # no embedding model in tests unless a test opts in
     # many tests drive the generic tool loop with get_time: the model words its answer there (opt back in per test)
     monkeypatch.setattr(config, "DIRECT_REPLY_TOOLS", {k: v for k, v in config.DIRECT_REPLY_TOOLS.items() if k != "get_time"})

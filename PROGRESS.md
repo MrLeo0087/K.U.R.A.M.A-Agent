@@ -648,3 +648,12 @@ Phases (one at a time, owner tests after each):
       and the base prompt now says never ask yes/no in chat before acting (risky tools ask themselves); prompt kept
       under 250 tokens by trimming filler. Live: a write into an existing file -> a real Yes/No card, "no" ->
       nothing written, honest reply, no loop. (Seen: it used run_command for a /tmp path instead of the files tool.)
+- [x] 2026-11-01 FILES APP CONTEXT (owner: "this folder" in the file manager, like the VS Code file / browser tab):
+      scripts/kurama_fm.py (system python3, on demand, ~0.1 s): which of Files / VS Code / browser was used last (GTK
+      window stack + wmctrl), the Files window's folder (D-Bus FileManager1.OpenWindowsWithLocations) and, only when
+      Files is the latest app, what is selected in it (accessibility tree, table cells in SELECTED state). jarvis/core/
+      filemanager.py caches it 2 s; the context line says "Open in Files: <folder>. Selected there: <paths>" and
+      focus.refer ("this folder / it / here") uses the selected item, else the open folder (after a pasted path,
+      before KURAMA's remembered path). So "open this folder in VS Code", "send this folder to Telegram" (zipped),
+      "copy this folder path", "analyze the code of this folder" (also from Telegram) act on it. Nothing runs while
+      idle. Not live-tested: needs the owner to select something in Files (I don't drive the screen).

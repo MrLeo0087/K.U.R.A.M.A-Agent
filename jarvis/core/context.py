@@ -69,6 +69,12 @@ def snapshot() -> dict:
 
 def line() -> str:
     """One short sentence for the system prompt ('' when nothing useful is open)."""
+    try:  # the Files app first when it is the app the user used last ("open this folder in VS Code")
+        from jarvis.core import filemanager
+        if fm := filemanager.line():
+            return fm
+    except Exception:  # noqa: BLE001
+        pass
     s = snapshot()
     if s["file"] is not None:
         txt = f"Open in VS Code: {s['file'].name} ({s['file'].parent.name})."
