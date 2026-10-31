@@ -668,7 +668,7 @@ def pttlog(line: str) -> None:
     try:
         path = STATE_FILE.parent / "logs" / "ptt.log"
         with path.open("a", encoding="utf-8") as fh:
-            fh.write(time.strftime("%H:%M:%S.") + f"{time.time() % 1:.2f}"[2:] + " window " + line + "\n")
+            fh.write(time.strftime("%m-%d %H:%M:%S.") + f"{time.time() % 1:.2f}"[2:] + " window " + line + "\n")
     except OSError:
         pass
 

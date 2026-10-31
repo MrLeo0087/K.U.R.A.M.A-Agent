@@ -130,6 +130,72 @@ def report(rows: list[dict], days: float) -> str:
     return "\n".join(out)
 
 
+# --- the side logs (voice, wake word, hold-to-talk, Files app, job list): problems the traces don't show ---
+def _log_lines(path: Path, days: float) -> list[tuple[float, str]]:
+    """(timestamp, line) of a log whose lines start with 'MM-DD HH:MM:SS' (the year is assumed current)."""
+    if not path.exists():
+        return []
+    out, cutoff, year = [], time.time() - days * 86400, time.localtime().tm_year
+    for ln in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        m = re.match(r"(\d\d-\d\d \d\d:\d\d:\d\d)", ln)
+        if not m:
+            continue
+        try:
+            ts = time.mktime(time.strptime(f"{year}-{m.group(1)}", "%Y-%m-%d %H:%M:%S"))
+        except ValueError:
+            continue
+        if ts >= cutoff:
+            out.append((ts, ln))
+    return out
+
+
+def side_report(days: float) -> str:
+    from jarvis.core import config
+    logs, out = Path(config.LOG_DIR), []
+
+    def section(title: str, lines: list[str]) -> None:
+        out.append(f"\n## {title}")
+        out.extend(lines or ["  (nothing)"])
+
+    stt = _log_lines(Path(config.STT_LOG), days)
+    dropped = [ln for _, ln in stt if "DROPPED" in ln]
+    empty = [ln for _, ln in stt if ln.rstrip().endswith("''")]
+    section(f"Speech-to-text ({len(stt)} recognitions, data/logs/stt.log)",
+            [f"  dropped as noise / not ours: {len(dropped)}; heard nothing: {len(empty)}"]
+            + [f"  DROPPED: {ln[:110]}" for ln in dropped[-6:]])
+    wake = _log_lines(logs / "wake.log", days)
+    woke = [ln for _, ln in wake if "-> WAKE" in ln]
+    miss = [ln for _, ln in wake if "no match" in ln]
+    quiet = [ln for _, ln in wake if "near-miss" in ln]
+    skip = [ln for _, ln in wake if "skipped" in ln]
+    section(f"Wake word ({len(wake)} lines, data/logs/wake.log)",
+            [f"  woke: {len(woke)}; heard but no match: {len(miss)}; too quiet: {len(quiet)}; rate-limited: {len(skip)}"]
+            + [f"  no match: {ln[15:120]}" for ln in miss[-6:]] + [f"  {ln[15:120]}" for ln in quiet[-3:]])
+    ptt = _log_lines(logs / "ptt.log", days)
+    downs = sum(1 for _, ln in ptt if "server key down" in ln)
+    held_hide = [ln for _, ln in ptt if "hide skipped: key held" in ln or "caption hidden by" in ln]
+    micfail = [ln for _, ln in ptt if "mic failed" in ln]
+    waking = [ln for _, ln in ptt if "Getting ready" in ln or "waking up" in ln]
+    section(f"Hold-to-talk ({downs} holds, data/logs/ptt.log)",
+            [f"  caption hides (check those during a hold): {len(held_hide)}; mic failed: {len(micfail)}; "
+             f"page was reloading: {len(waking)}"] + [f"  {ln[:120]}" for ln in (held_hide + micfail)[-6:]])
+    fm = _log_lines(logs / "fm.log", days)
+    multi = [ln for _, ln in fm if '"pick": ["top by creation order"' in ln or '"pick": ["title"' in ln]
+    section(f"Files app context ({len(fm)} reads, data/logs/fm.log)",
+            [f"  several Files windows (window guessed, not focused): {len(multi)}"] + [f"  {ln[:160]}" for ln in multi[-3:]])
+    try:
+        from jarvis.core import store
+        store.init()
+        q = store.queue_list()
+        bad = [r for r in q if r["status"] == "failed"]
+        section(f"Job list ({len(q)} jobs)",
+                ["  " + ", ".join(f"{k} {sum(1 for r in q if r['status'] == k)}" for k in ("waiting", "queued", "running", "done", "failed"))]
+                + [f"  failed #{r['n']} (tries {r['tries']}): {short(r['text'], 50)!r} -> {short(r['note'] or '', 80)}" for r in bad[-5:]])
+    except Exception as e:  # noqa: BLE001
+        section("Job list", [f"  (couldn't read: {e})"])
+    return "\n".join(out)
+
+
 def show(db: Path, tid: str) -> str:
     c = sqlite3.connect(str(db))
     c.row_factory = sqlite3.Row
@@ -179,6 +245,7 @@ def main() -> int:
         print(f"wrote {len(rows)} rows to {a.csv}")
         return 0
     print(report(rows, a.days))
+    print(side_report(a.days))
     return 0
 
 

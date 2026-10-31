@@ -11,7 +11,6 @@ from __future__ import annotations
 import logging
 import re
 import threading
-import time
 
 from jarvis.core import config, store
 
@@ -117,7 +116,7 @@ def start(which: str = "") -> str:
     names = "; ".join(f"{r['n']}. {r['text'][:40]}" for r in rows[:5])
     if any(j.kind == "queue" for j in jobs.get_manager().active()):
         return f"Added to the run that's already going: {names}."
-    job = longjobs.submit(f"job list run", run_queue, {}, kind="queue",
+    job = longjobs.submit("job list run", run_queue, {}, kind="queue",
                           max_tokens=config.QUEUE_MAX_TOKENS, max_minutes=config.QUEUE_MAX_MINUTES)
     return (f"Starting {len(rows)} job(s) one by one (background job #{job.id}): {names}. I'll message you on the "
             "laptop and Telegram as each one finishes.")

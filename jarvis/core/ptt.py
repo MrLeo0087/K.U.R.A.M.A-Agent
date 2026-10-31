@@ -55,7 +55,7 @@ def pttlog(line: str) -> None:
         if path.exists() and path.stat().st_size > 100_000:
             path.write_text("".join(path.read_text(encoding="utf-8").splitlines(True)[-400:]), encoding="utf-8")
         with path.open("a", encoding="utf-8") as fh:
-            fh.write(time.strftime("%H:%M:%S.") + f"{time.time() % 1:.2f}"[2:] + " server " + line + "\n")
+            fh.write(time.strftime("%m-%d %H:%M:%S.") + f"{time.time() % 1:.2f}"[2:] + " server " + line + "\n")
     except OSError:
         pass
 

@@ -62,7 +62,6 @@ def _inside(p: Path, files: list[Path]) -> str:
 def zip_dir(path: str | Path) -> Path:
     """Zip a folder (skipping junk like venv/.git/node_modules) into data/outputs/zips, for sending to Telegram.
     Raises ValueError if the folder is missing, outside the allowed roots, or the content exceeds the size limit."""
-    import time
     import zipfile
 
     p = _files.resolve(str(path))
@@ -70,7 +69,6 @@ def zip_dir(path: str | Path) -> Path:
         raise ValueError(f"I can only send folders from your home folder or your data disks, not {p}")
     if not p.is_dir():
         raise ValueError(f"{p} isn't a folder")
-    cap = config.TELEGRAM_FILE_MAX_MB * 1024 * 1024
     hard = config.SHARE_MAX_MB * 1024 * 1024  # over Telegram's 50 MB the zip goes up as a download link (gofile.io,
     #                                            multi-GB): the owner wants that every time, up to this size
     files, total = [], 0
@@ -211,23 +209,6 @@ def send_file_telegram(path: str = "", caption: str = "", pick: int = 0) -> str:
     # a bare NAME ("phone", "clz_project", "report.pdf"): find it with EXACT-match preference — never fuzzy to "Python"
     want = "folder" if re.search(r"\b(?:folder|directory|dir)\b", raw, re.I) else "file"
     return find_and_send(cleaned, want=want)
-
-
-TEXT_EXT = {".md", ".txt", ".py", ".json", ".csv", ".log", ".js", ".html", ".css", ".sh", ".yaml", ".yml"}
-
-
-def _as_text(p: Path, data: bytes, caption: str = "") -> str | None:
-    """Fallback when Telegram refuses the upload (seen 2026-10-31: HTTP 500 on every upload, messages fine): a small
-    text file is sent as messages. None when it isn't a small text file or the messages fail too."""
-    if p.suffix.lower() not in TEXT_EXT or len(data) > 16_000:
-        return None
-    text = data.decode("utf-8", errors="replace").strip()
-    parts = [text[i:i + 3500] for i in range(0, len(text), 3500)] or [""]
-    head = f"📄 {p.name} (Telegram refused the file upload, so here is its text{', ' + caption if caption else ''}):"
-    for i, part in enumerate(parts):
-        if not notify.telegram_send((head + "\n\n" if i == 0 else "") + part):
-            return None
-    return f"Telegram refused the file upload (its server error), so I sent {p.name} as {len(parts)} text message(s)."
 
 
 def deliver(p: Path, caption: str = "") -> str:
