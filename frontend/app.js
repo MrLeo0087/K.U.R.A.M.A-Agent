@@ -1999,7 +1999,11 @@ window.kuramaMiniWake = (rest = "") => { // minimized: the host heard "KURAMA / 
 window.kuramaMiniShown = (on, keepTalking = false) => { // mini panel opened / hidden
   miniGhost = !on && keepTalking; // talk mode, or a reply still on its way (any mode), goes on with the panel closed
   document.body.classList.toggle("paused", !on); // freeze CSS animations while hidden
-  if (on) { input.focus(); return; }
+  if (on) {
+    const c = document.querySelector(".chat"); // a short rise-in as the window fades in
+    c.classList.remove("enter"); void c.offsetWidth; c.classList.add("enter");
+    input.focus(); return;
+  }
   if (miniGhost) { saveMiniLog(); return; }
   if (recording) cancelRecording();
   if (conv.on) setMode("text"); // never keep listening while the panel is hidden
@@ -2742,24 +2746,40 @@ if (MINI && !WSONLY) {
   const B = document.body;
   if (params.get("opaque") === "1") B.classList.add("opaque"); // no compositor: no see-through window
   $("m-close").onclick = () => $("btn-hide").click();
-  $("m-min").onclick = () => $("btn-hide").click();
+  $("m-min").onclick = () => { S.compact = !S.compact; saveSettings(S); B.classList.toggle("compact", !!S.compact); };
+  B.classList.toggle("compact", !!S.compact);
+  const logEl = $("log"), chatEl = logEl.closest(".chat");
+  const atBottom = () => chatEl.classList.toggle("at-bottom", logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 40);
+  logEl.addEventListener("scroll", atBottom, { passive: true });
+  new MutationObserver(atBottom).observe(logEl, { childList: true });
+  atBottom();
   $("m-zoom").onclick = () => $("btn-full").click();
   // look: blur (Blur my Shell, system-wide for the whitelisted windows), corner radius (page + blur edge), tint (page)
-  const look = Object.assign({ blur: 80, corner: 15, tint: 58 }, S.look || {});
+  const look = Object.assign({ blur: 40, light: 90, corner: 15, tint: 58, color: "#101328", sugg: true }, S.look || {});
+  if (look.blur === 80 && !S.look?.light) look.blur = 40; // the old 0-100 scale (80 = radius 40)
+  const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)).join(", ");
+  const label = { blur: (v) => v + " px", light: (v) => v + "%", tint: (v) => v + "%", corner: (v) => (v ? v + " px" : "square") };
   const applyLook = () => {
     B.style.setProperty("--m-r", look.corner + "px");
     B.style.setProperty("--m-tint", (look.tint / 100).toFixed(2));
-    for (const k of ["blur", "corner", "tint"]) { $("lk-" + k).value = look[k]; $("lk-" + k + "-v").textContent = k === "corner" ? (look.corner ? look.corner + " px" : "square") : look[k] + "%"; }
+    B.style.setProperty("--m-tint-rgb", rgb(look.color));
+    B.classList.toggle("no-sugg", !look.sugg);
+    for (const k of Object.keys(label)) { $("lk-" + k).value = look[k]; $("lk-" + k + "-v").textContent = label[k](look[k]); }
+    $("lk-color").value = look.color; $("lk-sugg").checked = !!look.sugg;
+    $("lk-note").textContent = look.blur > 50 && look.corner ? "Above 50 px the blur's corners turn square." : "";
   };
   let glassT = 0;
   const pushGlass = () => { clearTimeout(glassT); glassT = setTimeout(async () => {
-    try { const r = await api.setGlass(look.blur, Math.round(look.corner * (window.devicePixelRatio || 1))); $("lk-note").textContent = r.ok ? "" : "Blur: " + (r.error || "not available"); }
+    try { const r = await api.setGlass(look.blur, Math.round(look.corner * (window.devicePixelRatio || 1)), look.light); if (!r.ok) $("lk-note").textContent = "Blur: " + (r.error || "not available"); }
     catch { $("lk-note").textContent = "Blur: KURAMA offline"; }
   }, 400); };
-  for (const k of ["blur", "corner", "tint"]) $("lk-" + k).addEventListener("input", (e) => {
-    look[k] = +e.target.value; S.look = { ...look }; saveSettings(S); applyLook();
+  const save = () => { S.look = { ...look }; saveSettings(S); applyLook(); };
+  for (const k of Object.keys(label)) $("lk-" + k).addEventListener("input", (e) => {
+    look[k] = +e.target.value; save();
     if (k !== "tint") pushGlass();
   });
+  $("lk-color").addEventListener("input", (e) => { look.color = e.target.value; save(); });
+  $("lk-sugg").addEventListener("change", (e) => { look.sugg = e.target.checked; save(); });
   $("m-look").onclick = (e) => { e.stopPropagation(); $("m-lookp").hidden = !$("m-lookp").hidden; };
   document.addEventListener("click", (e) => { if (!e.target.closest("#m-lookp, #m-look")) $("m-lookp").hidden = true; });
   applyLook();

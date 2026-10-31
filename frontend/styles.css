@@ -1382,7 +1382,7 @@ body.mini .chat {
   background:
     radial-gradient(120% 60% at 0% 0%, rgba(110, 123, 255, 0.16), transparent 60%),
     radial-gradient(90% 50% at 100% 100%, rgba(139, 92, 246, 0.14), transparent 60%),
-    rgba(16, 19, 40, var(--m-tint, 0.58));
+    rgba(var(--m-tint-rgb, 16, 19, 40), var(--m-tint, 0.58));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10);
 }
 body.mini.opaque .chat { background-color: rgb(18, 20, 38); }
@@ -1459,17 +1459,16 @@ body.mini .msg.user::after { content: ""; flex: none; width: 30px; height: 30px;
 body.mini .msg.user { flex-direction: row-reverse; }
 body.mini .msg.user .body { max-width: 82%; }
 body.mini .msg.user .text { padding: 10px 15px; border-radius: 18px; border: 1px solid rgba(255, 255, 255, 0.10);
-  background: linear-gradient(180deg, rgba(120, 132, 255, 0.20), rgba(120, 132, 255, 0.12)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06); }
+  background: linear-gradient(180deg, rgba(120, 132, 255, 0.22), rgba(120, 132, 255, 0.13));
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.07); }
 body.mini .msg.user.voice .who::before { content: ""; }
 /* KURAMA: the answer sits in a glass card; its details (route, tokens...) close the card */
-body.mini .msg.bot .text { padding: 12px 15px; border-radius: 16px 16px 0 0; border: 1px solid var(--m-line); border-bottom: 0;
-  background: rgba(255, 255, 255, 0.055); }
-body.mini .msg.bot .meta { margin: 0; padding: 0 15px 12px; border-radius: 0 0 16px 16px; border: 1px solid var(--m-line); border-top: 0;
-  background: rgba(255, 255, 255, 0.055); }
+body.mini .msg.bot .text { padding: 12px 15px; border-radius: 16px; border: 1px solid var(--m-line);
+  background: rgba(255, 255, 255, 0.06); box-shadow: 0 8px 22px rgba(0, 0, 0, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.06); }
+body.mini .msg.bot .meta { margin: 6px 0 0 4px; padding: 0; gap: 0 10px; border: 0; background: none; opacity: 0.75; }
 body.mini .msg.bot .meta:empty { display: none; }
-body.mini .msg.bot .body:has(.meta:empty) .text { border-radius: 16px; border-bottom: 1px solid var(--m-line); }
-body.mini .msg.bot .meta .chip { height: 22px; display: inline-flex; align-items: center; gap: 4px; padding: 0 9px; border-radius: 11px;
-  border: 1px solid var(--m-line); background: rgba(255, 255, 255, 0.04); color: var(--m-sub); font-size: 11px; }
+body.mini .msg.bot .meta .chip { height: auto; display: inline; padding: 0; border: 0; border-radius: 0; background: none; color: var(--m-dim);
+  font-size: 10.5px; font-variant-numeric: tabular-nums; }
 body.mini .msg.bot .meta .chip b { color: var(--m-dim); font-weight: 500; }
 /* tools that ran: outlined pills, colour by position, red when failed */
 body.mini .chips:not(:empty) { margin-bottom: 8px; gap: 6px; }
@@ -1502,14 +1501,15 @@ body.mini .mj.paused .mj-bar { background: var(--m-dim); }
 /* ---- quick asks (0 tokens): one row above the box, hidden while typing ---- */
 body.mini .chat > .suggest { display: flex; flex-wrap: nowrap; justify-content: flex-start; gap: 6px; padding: 0 12px 8px; overflow-x: auto; scrollbar-width: none; }
 body.mini .chat > .suggest::-webkit-scrollbar { display: none; }
-body.mini .chat > .suggest:empty, body.mini .chat:has(#input:not(:placeholder-shown)) > .suggest { display: none; }
+body.mini .chat > .suggest:empty, body.mini .chat:has(#input:not(:placeholder-shown)) > .suggest,
+body.mini .chat:not(.at-bottom) > .suggest, body.mini.no-sugg .chat > .suggest { display: none; } /* only at the end of the chat */
 body.mini .chat > .suggest button { flex: none; height: 28px; padding: 0 12px; border-radius: 14px; border: 1px solid var(--m-line);
   background: rgba(255, 255, 255, 0.06); color: var(--m-sub); font: 400 12.5px var(--m-font); white-space: nowrap; transition: none; }
 body.mini .chat > .suggest button:hover { background: var(--m-fill-2); color: var(--m-text); }
 
 /* ---- the box: one big rounded field, mic | talk | text | send ---- */
 body.mini .ask { align-items: center; gap: 0; margin: 0 12px 12px; padding: 6px 6px 6px 8px; border: 1px solid var(--m-hair);
-  border-radius: 22px; background: rgba(255, 255, 255, 0.07); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06); }
+  border-radius: 22px; background: rgba(255, 255, 255, 0.07); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.07); }
 body.mini .ask:focus-within { border-color: rgba(150, 160, 255, 0.55); }
 body.mini .ask .seg { padding: 0; gap: 0; background: transparent; border: 0; }
 body.mini .ask .seg::before, body.mini .ask .seg::after { display: none !important; }
@@ -1539,3 +1539,19 @@ body.mini .send.stop { background: linear-gradient(135deg, #ff6b6b, #e5484d); bo
 
 @media (max-width: 379px) { body.mini .messages { padding: 12px 10px 8px; } body.mini .ask, body.mini .m-jobs { margin-left: 8px; margin-right: 8px; } }
 @media (max-height: 440px) { body.mini .chat > .suggest { display: none; } }
+
+/* details line: "route self · tier fastpath · tok 0" reads as one quiet line */
+body.mini .msg.bot .meta .chip + .chip::before { content: "·"; margin-right: 10px; color: var(--m-dim); }
+/* yellow dot: compact view (answers only) */
+body.mini.compact .chips, body.mini.compact .msg.bot .meta { display: none !important; }
+body.mini.compact .messages { gap: 10px; }
+body.mini.compact .msg .who { margin-bottom: 4px; }
+/* open: a short rise as the window fades in (one-shot) */
+@keyframes m-enter { from { opacity: 0; transform: translateY(8px) scale(0.985); } to { opacity: 1; transform: none; } }
+body.mini .chat.enter { animation: m-enter 0.2s cubic-bezier(0.22, 1, 0.36, 1) both; }
+body.mini .m-lookp label.row { grid-template-columns: 1fr auto; align-items: center; }
+body.mini .m-lookp input[type="color"] { width: 34px; height: 22px; padding: 0; border: 1px solid var(--m-hair); border-radius: 6px; background: none; }
+body.mini .m-lookp input[type="checkbox"] { accent-color: var(--m-acc); width: 16px; height: 16px; }
+/* workspace window: the same glass (its title bar stays the system one) */
+body.mini.wsonly .chat { border-radius: 0; border: 0; box-shadow: none; }
+body.mini.wsonly .mws, body.mini.wsonly .mws-body { background: transparent; }

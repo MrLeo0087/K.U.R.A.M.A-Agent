@@ -83,7 +83,7 @@ export class Api {
   outputUrl(name) { return this.url(`/api/v1/outputs/file?name=${encodeURIComponent(name)}`, true); }
   cancelJob(id) { return this.request(`/api/v1/jobs/${encodeURIComponent(id)}/cancel`, { method: "POST", body: {} }); }
   glass() { return this.request("/api/v1/ui/glass"); }
-  setGlass(blur, corner) { return this.request("/api/v1/ui/glass", { method: "POST", body: { blur, corner } }); }
+  setGlass(blur, corner, light) { return this.request("/api/v1/ui/glass", { method: "POST", body: { blur, corner, light } }); }
   activeJobs() { return this.request("/api/v1/jobs?limit=4&status=queued,running,paused"); }
   pauseJob(id) { return this.request(`/api/v1/jobs/${encodeURIComponent(id)}/pause`, { method: "POST", body: {} }); }
   resumeJob(id) { return this.request(`/api/v1/jobs/${encodeURIComponent(id)}/resume`, { method: "POST", body: {} }); }

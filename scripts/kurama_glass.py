@@ -22,7 +22,7 @@ PIPE = "pipeline_kurama_glass"  # used only when no pipeline below exists
 # "Default rounded - duplicate" on this laptop. A new id works after the next login.
 REUSE = ("pipeline_75755336945823",)
 CLASS = "KURAMA-mini"
-MAX_RADIUS = 50  # blur radius at strength 100 (above ~50 the extension adds a blur pass that smears its round corners square; tested)
+MAX_RADIUS = 100  # strength = blur radius in px (above ~50 the extension adds a pass that smears its round corners square; tested)
 BRIGHTNESS = 0.9  # the panel's own tint does the darkening
 
 
@@ -68,7 +68,8 @@ def state() -> dict:
     radius = float((eff[0].get("params") or {}).get("unscaled_radius", 40))
     return {"ok": True, "blur": _strength(radius), "radius": radius, "pipeline": apps.get_string("pipeline"),
             "listed": CLASS in apps.get_strv("whitelist"), "on": apps.get_boolean("blur"),
-            "corner": apps.get_int("corner-radius")}
+            "corner": apps.get_int("corner-radius"),
+            "light": round(100 * float((eff[0].get("params") or {}).get("brightness", BRIGHTNESS)))}
 
 
 def _pipe(pipes: dict, apps) -> str:
@@ -80,7 +81,7 @@ def _pipe(pipes: dict, apps) -> str:
     for k in ("panel", "dash-to-dock", "overview", "appfolder", "lockscreen", "screenshot", "window-list",
               "coverflow-alt-tab"):
         s = _settings(f"{BASE}.{k}")
-        if s is not None and "pipeline" in s.list_keys():
+        if s is not None and s.settings_schema.has_key("pipeline"):
             used.add(s.get_string("pipeline"))
     for pid in REUSE:
         if pid in pipes and pid not in used:
@@ -88,7 +89,7 @@ def _pipe(pipes: dict, apps) -> str:
     return PIPE
 
 
-def apply(strength: int | None = None, corner: int | None = None) -> dict:
+def apply(strength: int | None = None, corner: int | None = None, light: int | None = None) -> dict:
     from gi.repository import Gio
     g, apps = _settings(BASE), _settings(BASE + ".applications")
     if g is None or apps is None:
@@ -99,7 +100,8 @@ def apply(strength: int | None = None, corner: int | None = None) -> dict:
     params = dict(effs[0].get("params") or {})
     old = params.get("unscaled_radius", 40)
     radius = int(old if strength is None else round(max(0, min(100, strength)) * MAX_RADIUS / 100))
-    params.update(unscaled_radius=radius, brightness=BRIGHTNESS)
+    params.update(unscaled_radius=radius, brightness=float(params.get("brightness", BRIGHTNESS)) if light is None
+                  else max(0.2, min(1.5, light / 100)))
     pipes[pid] = {"name": "KURAMA glass", "effects": [{**effs[0], "type": "dual_kawase_blur", "params": params}]}
     if pid != PIPE:
         pipes.pop(PIPE, None)  # an earlier runtime-made entry (square corners): not needed
@@ -120,8 +122,9 @@ def apply(strength: int | None = None, corner: int | None = None) -> dict:
 
 if __name__ == "__main__":
     try:
-        if len(sys.argv) > 2 and sys.argv[1] == "set":  # set <blur> [<corner px>]
-            out = apply(int(float(sys.argv[2])), int(float(sys.argv[3])) if len(sys.argv) > 3 else None)
+        if len(sys.argv) > 2 and sys.argv[1] == "set":  # set <blur px> [<corner px> [<light %>]]
+            nums = [int(float(a)) for a in sys.argv[2:5]] + [None, None]
+            out = apply(nums[0], nums[1], nums[2])
         elif len(sys.argv) > 1 and sys.argv[1] == "setup":
             out = apply(None)
         else:

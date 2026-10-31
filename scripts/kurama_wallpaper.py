@@ -65,6 +65,7 @@ MINI_HOTKEY = os.getenv("KURAMA_MINI_HOTKEY", "<Control><Alt>k")  # opens / hide
 ALERT_POLL_S = 5  # mini KURAMA checks for new alerts this often (one tiny local request)
 PID_FILE = STATE_FILE.with_name("wallpaper.pid")  # the shortcut signals this process (SIGUSR1)
 BUSY_STATES = ("listening", "capturing", "thinking", "speaking")  # closing the panel now keeps it alive
+IDLE_ANIM_MS = 125  # the button's slow idle ring (0 = still)
 WS_W, WS_H = 480, 620  # mini workspace window
 PANEL_KEEP_S = 180  # a hidden panel is closed after this long (frees its page); reopening restores the chat
 CAPTION_W = 340  # reply caption next to the button while talking with the panel closed
@@ -676,6 +677,11 @@ class Mini:
         self.talking = False  # the panel's page is in talk mode
         self.size_timer = 0
         self.anim, self.phase = 0, 0.0  # the busy animation's timer and step
+        self.anim_ms, self.fader = 0, 0
+        self.logo = None
+        with contextlib.suppress(Exception):  # KURAMA's fox on the button (frontend/kurama-logo.svg)
+            self.logo = GdkPixbuf.Pixbuf.new_from_file_at_size(
+                str(Path(__file__).resolve().parent.parent / "frontend" / "kurama-logo.svg"), 24, 24)
         self.ghost = False  # panel "closed" but still alive (invisible, click-through) so talk mode keeps going
         self.state = "idle"  # voice state shown by the ring while ghosted
         self.caption = None  # Caption window, made on first use
@@ -713,6 +719,7 @@ class Mini:
             x, y = wa.x + wa.width - BUBBLE - 18, wa.y + int(wa.height * 0.62)
         b.move(clamp(x, wa.x, wa.x + wa.width - BUBBLE), clamp(y, wa.y, wa.y + wa.height - BUBBLE))
         b.show_all()
+        GLib.idle_add(lambda: self.animate(False) and False)  # the button's slow idle ring
 
     @property
     def open(self) -> bool:
@@ -752,53 +759,93 @@ class Mini:
 
     # ---------- the button ----------
     def on_draw(self, _w, cr):
+        """A glass disc (translucent indigo, light from the top-left, thin rim), the fox logo, and a gradient ring
+        that slowly turns (idle) or runs in the state's colour (listening / thinking / speaking)."""
         c = BUBBLE / 2
         cr.set_operator(cairo.OPERATOR_SOURCE)
         cr.set_source_rgba(0, 0, 0, 0)
         cr.paint()
         cr.set_operator(cairo.OPERATOR_OVER)
-        cr.arc(c, c, c - 1, 0, 2 * math.pi)
-        cr.set_source_rgba(0.035, 0.037, 0.06, 0.94)
-        cr.fill()
         busy = self.state in BUSY_STATES
-        pulse = 0.5 + 0.5 * math.sin(self.phase) if busy else 0.0  # thinking / speaking: a soft breathing glow
-        glow = cairo.RadialGradient(c, c, c * 0.3, c, c, c)
-        glow.add_color_stop_rgba(0, 1, 0.43, 0.08, (0.38 if self.hover or self.open else 0.22) + 0.2 * pulse)
-        glow.add_color_stop_rgba(1, 1, 0.43, 0.08, 0)
-        cr.arc(c, c, c - 1, 0, 2 * math.pi)
-        cr.set_source(glow)
+        lit = self.hover or self.open
+        pulse = 0.5 + 0.5 * math.sin(self.phase * (1 if busy else 0.5))
+        halo = cairo.RadialGradient(c, c, c * 0.55, c, c, c)  # soft outer glow, breathing
+        halo.add_color_stop_rgba(0, 0.43, 0.48, 1, 0)
+        halo.add_color_stop_rgba(0.75, 0.48, 0.42, 1, (0.16 if lit else 0.08) + 0.10 * pulse)
+        halo.add_color_stop_rgba(1, 0.48, 0.42, 1, 0)
+        cr.arc(c, c, c, 0, 2 * math.pi)
+        cr.set_source(halo)
         cr.fill()
-        core = cairo.RadialGradient(c * 0.86, c * 0.8, 1, c, c, c * 0.42)  # the KURAMA orb
-        core.add_color_stop_rgb(0, 1, 0.82, 0.6)
-        core.add_color_stop_rgb(0.5, 1, 0.48, 0.1)
-        core.add_color_stop_rgb(1, 0.64, 0.23, 0)
-        cr.arc(c, c, c * 0.36, 0, 2 * math.pi)
-        cr.set_source(core)
+        r = c - 5
+        body = cairo.LinearGradient(0, 0, 0, BUBBLE)  # the glass: see-through indigo
+        body.add_color_stop_rgba(0, 0.16, 0.17, 0.34, 0.72)
+        body.add_color_stop_rgba(1, 0.06, 0.07, 0.16, 0.80)
+        cr.arc(c, c, r, 0, 2 * math.pi)
+        cr.set_source(body)
         cr.fill()
+        shine = cairo.RadialGradient(c * 0.7, c * 0.45, 1, c * 0.7, c * 0.45, r)  # light on the glass
+        shine.add_color_stop_rgba(0, 1, 1, 1, 0.22 if lit else 0.15)
+        shine.add_color_stop_rgba(1, 1, 1, 1, 0)
+        cr.arc(c, c, r, 0, 2 * math.pi)
+        cr.set_source(shine)
+        cr.fill()
+        if self.logo is not None:  # KURAMA's fox
+            lw = self.logo.get_width()
+            Gdk.cairo_set_source_pixbuf(cr, self.logo, c - lw / 2, c - lw / 2 + 1)
+            cr.paint_with_alpha(1 if lit else 0.92)
         ring = RING.get(self.state) if self.ghost or busy else None
-        cr.set_line_width(2.4 if ring else 1.6)
-        cr.set_dash([c * 0.9, c * 0.3] if busy else [] if ring else [c * 0.62, c * 0.22], self.phase * c * 0.6)
+        a = self.phase * (0.9 if busy else 0.35)
+        grad = cairo.LinearGradient(c + r * math.cos(a), c + r * math.sin(a), c - r * math.cos(a), c - r * math.sin(a))
         if ring:
-            cr.set_source_rgba(*ring, 1)
+            grad.add_color_stop_rgba(0, *ring, 1)
+            grad.add_color_stop_rgba(1, *ring, 0.15)
         else:
-            cr.set_source_rgba(1, 0.48, 0.1, 1 if self.hover or self.open else 0.7)
-        cr.arc(c, c, c - 4, -math.pi / 2, 1.5 * math.pi)
+            grad.add_color_stop_rgba(0, 0.55, 0.64, 1, 0.95 if lit else 0.8)
+            grad.add_color_stop_rgba(0.5, 0.62, 0.4, 1, 0.55)
+            grad.add_color_stop_rgba(1, 1, 1, 1, 0.12)
+        cr.set_line_width(2.2 if ring or lit else 1.6)
+        cr.arc(c, c, r, 0, 2 * math.pi)
+        cr.set_source(grad)
         cr.stroke()
         return True
 
     def animate(self, on: bool) -> None:
-        """While thinking / speaking: redraw the button ~20 times a second (stops when idle: no CPU at rest)."""
-        if on and not self.anim:
-            self.anim = GLib.timeout_add(50, self._tick)
-        elif not on and self.anim:
+        """Busy (listening / thinking / speaking): ~20 redraws a second. Idle: the ring turns slowly at ~8 a second
+        (a 56 px drawing: negligible CPU)."""
+        want = 50 if on else IDLE_ANIM_MS
+        if self.anim and self.anim_ms == want:
+            return
+        if self.anim:
             GLib.source_remove(self.anim)
             self.anim = 0
-            self.bubble.queue_draw()
+        if want:
+            self.anim, self.anim_ms = GLib.timeout_add(want, self._tick), want
+        self.bubble.queue_draw()
 
     def _tick(self) -> bool:
-        self.phase = (self.phase + 0.16) % (2 * math.pi * 10)
+        self.phase = (self.phase + (0.16 if self.anim_ms == 50 else 0.1)) % (2 * math.pi * 20)
         self.bubble.queue_draw()
         return True
+
+    def fade(self, win, show: bool, then=None) -> None:
+        """A short fade (~140 ms) when the panel opens / closes."""
+        if self.fader:
+            GLib.source_remove(self.fader)
+            self.fader = 0
+        step = [0]
+
+        def tick():
+            step[0] += 1
+            t = min(1.0, step[0] / 7)
+            win.set_opacity(t if show else 1 - t)
+            if t >= 1:
+                self.fader = 0
+                if then:
+                    then()
+                return False
+            return True
+        win.set_opacity(0 if show else 1)
+        self.fader = GLib.timeout_add(20, tick)
 
     def set_hover(self, on: bool) -> None:
         self.hover = on
@@ -899,13 +946,27 @@ class Mini:
         p.add(v)
 
     def beside(self, w: int, h: int, top: bool = False) -> tuple[int, int]:
-        """Where a w x h window goes next to the button: towards the middle of the screen."""
+        """Where a w x h window goes next to the button without ever covering it: the side towards the middle of
+        the screen first, then the other side, then above / below."""
         bx, by = self.bubble.get_position()
         wa = workarea()
-        left = bx + BUBBLE / 2 > wa.x + wa.width / 2
-        x = bx - w - 10 if left else bx + BUBBLE + 10
-        y = by if top else by + BUBBLE - h
-        return clamp(x, wa.x + 8, wa.x + wa.width - w - 8), clamp(y, wa.y + 8, wa.y + wa.height - h - 8)
+        gap = 10
+        cx = clamp(bx + BUBBLE // 2 - w // 2, wa.x + 8, wa.x + wa.width - w - 8)
+        cy = by if top else by + BUBBLE - h
+        towards_left = bx + BUBBLE / 2 > wa.x + wa.width / 2
+        sides = [(bx - w - gap, cy), (bx + BUBBLE + gap, cy)]
+        if not towards_left:
+            sides.reverse()
+        cands = sides + [(cx, by - h - gap), (cx, by + BUBBLE + gap)]
+        best = None
+        for x, y in cands:
+            x2 = clamp(x, wa.x + 8, wa.x + wa.width - w - 8)
+            y2 = clamp(y, wa.y + 8, wa.y + wa.height - h - 8)
+            covers = x2 < bx + BUBBLE and bx < x2 + w and y2 < by + BUBBLE and by < y2 + h
+            if not covers:
+                return x2, y2
+            best = best or (x2, y2)
+        return best
 
     def place_panel(self) -> None:
         self.panel.move(*self.beside(*self.panel.get_size()))
@@ -920,6 +981,7 @@ class Mini:
         self.ensure_panel()
         self.panel.show_all()
         self.place_panel()
+        self.fade(self.panel, True)
         self.panel.present_with_time(time or Gtk.get_current_event_time())
         run_js(self.view, "window.kuramaMiniShown && window.kuramaMiniShown(true)")
         self.bubble.queue_draw()
@@ -934,9 +996,15 @@ class Mini:
             self.panel.input_shape_combine_region(cairo.Region())  # empty: clicks go through
         elif self.open:
             run_js(self.view, "window.kuramaMiniShown && window.kuramaMiniShown(false)")  # stops the mic, saves the chat
-            self.panel.hide()
-            if not self.reaper:
-                self.reaper = GLib.timeout_add_seconds(PANEL_KEEP_S, self.drop_panel)
+
+            def gone():
+                if self.panel is not None:
+                    self.panel.hide()
+                    self.panel.set_opacity(1)
+                    if not self.reaper:
+                        self.reaper = GLib.timeout_add_seconds(PANEL_KEEP_S, self.drop_panel)
+                    self.bubble.queue_draw()
+            self.fade(self.panel, False, gone)
         self.bubble.queue_draw()
 
     def unghost(self, hide_caption: bool = True) -> None:
@@ -1039,13 +1107,19 @@ class Mini:
                 self.ws.present()
             return
         w = self.ws = Gtk.Window(title="KURAMA · Workspace")
+        w.set_wmclass("kurama-mini", "KURAMA-mini")  # same glass as the chat panel (Blur my Shell)
+        wsvis = w.get_screen().get_rgba_visual()
+        if wsvis is not None:
+            w.set_visual(wsvis)
+            w.set_app_paintable(True)
+            w.connect("draw", clear_window)
         w.set_default_size(WS_W, min(WS_H, workarea().height - 60))
         w.set_skip_pager_hint(True)
         with contextlib.suppress(Exception):
             w.set_icon_name("folder-documents")
         v = self.ws_view = WebKit2.WebView(web_context=self.wp.ctx, user_content_manager=self.wp.ucm)
         v.set_settings(self.wp.settings)
-        v.set_background_color(Gdk.RGBA(0.043, 0.047, 0.078, 1))
+        v.set_background_color(Gdk.RGBA(0, 0, 0, 0) if wsvis is not None else Gdk.RGBA(0.07, 0.08, 0.16, 1))
         v.connect("decide-policy", self.wp.on_policy)
         u = urlsplit(self.wp.url)
         v.load_uri(f"{u.scheme}://{u.netloc}/?mini=1&ws=1")  # the workspace-only page: no chat, no mic

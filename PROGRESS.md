@@ -551,3 +551,12 @@ Phases (one at a time, owner tests after each):
       "Default rounded - duplicate"); radius above ~50 also smears the corners square -> strength 100 = radius 50.
       Mini panel: Look popover (blur 0-100, corners 0 = square .. 30 px, tint 20-100%) saved in the page settings; corner
       radius is sent to the extension too, so blur edge and panel edge match. Text-mode button back.
+- [x] 2026-10-31 Mini polish (owner's list): the floating button is a glass disc (translucent indigo, top-left light,
+      fox logo, gradient ring turning slowly at 8 fps idle / 20 fps busy in the state colour; ~1% CPU of the window
+      script; no real backdrop blur there: Blur my Shell has one corner radius for all windows, a circle would get a
+      blurred square). Panel opens/closes with a 140 ms fade + 0.2 s rise; placed beside the button and never over
+      it (other side, then above/below). Workspace window: same glass (KURAMA-mini class, transparent). Quick-ask
+      chips only at the end of the chat (scrolled up: hidden) + on/off in Look. Answer card and your bubble have drop
+      shadows; route/tier/tok/ms is one quiet line under the card. Yellow dot = compact view (answers only), red =
+      hide, green = full KURAMA. Look: blur 0-100 px (note above 50: square corners), glass light 20-150%, corners,
+      tint 0-100%, tint colour.

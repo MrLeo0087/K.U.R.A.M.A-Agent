@@ -129,7 +129,7 @@
         <div class="chat-head">
           <span class="m-traffic mini-on" role="group" aria-label="Window">
             <button id="m-close" type="button" class="tl r" aria-label="Hide chat" title="Hide · Esc"></button>
-            <button id="m-min" type="button" class="tl y" aria-label="Minimize to the button" title="Minimize"></button>
+            <button id="m-min" type="button" class="tl y" aria-label="Compact view" title="Compact view · hides tool and detail lines"></button>
             <button id="m-zoom" type="button" class="tl g" aria-label="Open full KURAMA" title="Full KURAMA"></button>
           </span>
           <img class="m-logo mini-on" src="kurama-logo.svg" alt="" width="20" height="20">
@@ -152,9 +152,12 @@
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3s6 6.4 6 10.5A6 6 0 0 1 6 13.5C6 9.4 12 3 12 3z"/><path d="M9.5 14.5a2.5 2.5 0 0 0 2.5 2.5"/></svg>
             </button>
             <div id="m-lookp" class="m-lookp" hidden>
-              <label>Blur <output id="lk-blur-v"></output><input id="lk-blur" type="range" min="0" max="100" step="5"></label>
+              <label>Blur <output id="lk-blur-v"></output><input id="lk-blur" type="range" min="0" max="100" step="1"></label>
+              <label>Glass light <output id="lk-light-v"></output><input id="lk-light" type="range" min="20" max="150" step="1"></label>
               <label>Corners <output id="lk-corner-v"></output><input id="lk-corner" type="range" min="0" max="30" step="1"></label>
-              <label>Tint <output id="lk-tint-v"></output><input id="lk-tint" type="range" min="20" max="100" step="5"></label>
+              <label>Tint <output id="lk-tint-v"></output><input id="lk-tint" type="range" min="0" max="100" step="1"></label>
+              <label class="row">Tint colour <input id="lk-color" type="color"></label>
+              <label class="row">Quick asks <input id="lk-sugg" type="checkbox"></label>
               <small id="lk-note"></small>
             </div>
             <label class="m-lang mini-on" title="Language you speak"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h9M7.5 3v2M5 5c0 4 2.5 7 6 8.5M10 5c0 3.5-2.5 7-6.5 9M13 21l4.5-10 4.5 10M14.6 17.5h5.8"/></svg>

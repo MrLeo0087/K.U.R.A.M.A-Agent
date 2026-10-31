@@ -87,8 +87,9 @@ def _glass(*args: str) -> dict:
 
 
 class GlassIn(BaseModel):
-    blur: int = Field(80, ge=0, le=100)
+    blur: int = Field(40, ge=0, le=100)  # blur radius px
     corner: int = Field(15, ge=0, le=40)
+    light: int = Field(90, ge=20, le=150)  # brightness of the blurred backdrop, %
 
 
 @router.get("/ui/glass", summary="Blur strength + corner radius behind the mini panel")
@@ -98,7 +99,7 @@ async def glass_get():
 
 @router.post("/ui/glass", summary="Set the blur strength (0-100) and corner radius (px) behind the mini panel")
 async def glass_set(body: GlassIn):
-    return await run_in_threadpool(_glass, "set", str(body.blur), str(body.corner))
+    return await run_in_threadpool(_glass, "set", str(body.blur), str(body.corner), str(body.light))
 
 
 @router.get("/jobs/{job_id}/steps", summary="A long job's step log (oldest first)")
