@@ -63,6 +63,15 @@ def _share_token(token: str) -> None:
         pass
 
 
+def _recover_long_jobs() -> None:
+    """Long jobs a crash / restart left unfinished continue from their last checkpoint (0 work when none)."""
+    try:
+        from jarvis.core import longjobs
+        longjobs.recover()
+    except Exception as e:
+        logging.getLogger("jarvis.api").warning("long job recovery failed: %s", e)
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     s = settings or settings_mod.from_env()
     engine = Engine(s)
@@ -76,6 +85,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if config.WORKERS_IN_SERVER:
                 from jarvis.workers import inproc
                 inproc.start()
+            threading.Thread(target=_recover_long_jobs, name="kurama-longjobs", daemon=True).start()
         yield
         if config.WORKERS_IN_SERVER:
             from jarvis.workers import inproc

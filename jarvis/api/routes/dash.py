@@ -98,7 +98,7 @@ def _now() -> list[dict]:
         elif w["kind"] == "web":
             items.append({"kind": "web", "id": w["id"], "title": f"Watching {w['label']}",
                           "sub": f"{st.get('changes', 0)} change(s)", "right": f"{float(st.get('every', 3600)) / 60:.0f} min"})
-    for j in store.jobs_list(4, ("queued", "running")):
+    for j in store.jobs_list(4, ("queued", "running", "paused")):
         items.append({"kind": "job", "id": j["id"], "title": j["title"][:60], "sub": j.get("progress") or j["status"],
                       "right": f"#{j['id']}"})
     from jarvis.core import guard, lecture

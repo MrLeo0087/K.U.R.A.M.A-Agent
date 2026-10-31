@@ -14,12 +14,14 @@ from jarvis.tools.general.resume_job import resume_job
 
 
 @tool(group="jobs", safety="safe",
-      description="Background jobs: list them, show one's result, cancel one, or resume an interrupted writing job.")
-def jobs(action: Literal["list", "result", "cancel", "resume"] = "list", job: str = "") -> str:
+      description="Background jobs: list them, show one's result, cancel one, pause a long job, or resume "
+                  "(continue a paused / interrupted / stopped job).")
+def jobs(action: Literal["list", "result", "cancel", "pause", "resume"] = "list", job: str = "") -> str:
     """Manage background jobs.
 
     Args:
-        action: list = all jobs and progress, result = a job's output, cancel = stop one, resume = continue one.
+        action: list = all jobs and progress, result = a job's output and steps, cancel = stop one,
+            pause = pause a long job, resume = continue one.
         job: The job's id or words from its title (cancel with no job = the latest running one).
     """
     if action == "result":
@@ -30,6 +32,9 @@ def jobs(action: Literal["list", "result", "cancel", "resume"] = "list", job: st
         return cancel_job(job)
     if action == "resume":
         return resume_job(job)
+    if action == "pause":
+        from jarvis.core import longjobs
+        return longjobs.pause(job)
     return list_jobs()
 
 

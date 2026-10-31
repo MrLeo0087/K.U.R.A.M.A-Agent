@@ -82,6 +82,14 @@ CREATE TABLE IF NOT EXISTS errors (
     sig TEXT PRIMARY KEY, error TEXT, kind TEXT, explanation TEXT, fix TEXT, where_ TEXT,
     count INTEGER DEFAULT 1, first_seen REAL, last_seen REAL
 );
+CREATE TABLE IF NOT EXISTS job_state (
+    job_id INTEGER PRIMARY KEY, fn TEXT NOT NULL, params TEXT, state TEXT, caps TEXT,
+    used_s REAL DEFAULT 0, owner TEXT, paused INTEGER DEFAULT 0, origin TEXT, updated REAL
+);
+CREATE TABLE IF NOT EXISTS job_steps (
+    id INTEGER PRIMARY KEY, job_id INTEGER NOT NULL, ts REAL NOT NULL, text TEXT, tokens INTEGER DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_job_steps_job ON job_steps(job_id, id);
 """
 # P7: FTS5 over chat messages (external content, kept in sync by triggers).
 _MESSAGES_FTS = """
@@ -293,6 +301,58 @@ def job_update(job_id: int, **fields: Any) -> None:
         return
     _exec(f"UPDATE jobs SET {', '.join(c + '=?' for c in cols)} WHERE id=?",
           tuple(fields[c] for c in cols) + (job_id,))
+
+
+# --- long jobs (jarvis/core/longjobs.py): durable state, checkpoints, step log ---
+JOB_STATE_FIELDS = ("fn", "params", "state", "caps", "used_s", "owner", "paused", "origin")
+
+
+def job_state_insert(job_id: int, **fields: Any) -> None:
+    cols = ["job_id", "updated"] + [k for k in fields if k in JOB_STATE_FIELDS]
+    vals = (job_id, time.time()) + tuple(fields[k] for k in cols[2:])
+    _exec(f"INSERT OR REPLACE INTO job_state({','.join(cols)}) VALUES ({','.join('?' * len(cols))})", vals)
+
+
+def job_state_update(job_id: int, **fields: Any) -> None:
+    cols = [k for k in fields if k in JOB_STATE_FIELDS]
+    if cols:
+        _exec(f"UPDATE job_state SET {', '.join(c + '=?' for c in cols)}, updated=? WHERE job_id=?",
+              tuple(fields[c] for c in cols) + (time.time(), job_id))
+
+
+def job_state_get(job_id: int) -> dict | None:
+    rows = _exec("SELECT * FROM job_state WHERE job_id=?", (job_id,))
+    return dict(rows[0]) if rows else None
+
+
+def job_state_ids() -> set[int]:
+    return {int(r[0]) for r in _exec("SELECT job_id FROM job_state")}
+
+
+def job_state_claim(job_id: int, old_owner: str | None, new_owner: str) -> bool:
+    """Compare-and-swap the owner (one process resumes a job, never two)."""
+    with _lock:
+        if _conn is None:
+            init(_path)
+        cur = _conn.execute("UPDATE job_state SET owner=?, updated=? WHERE job_id=? AND owner IS ?",  # type: ignore[union-attr]
+                            (new_owner, time.time(), job_id, old_owner))
+        return cur.rowcount == 1
+
+
+def job_step_add(job_id: int, text: str, tokens: int = 0, keep: int = 300) -> None:
+    with _lock:
+        if _conn is None:
+            init(_path)
+        cur = _conn.execute("INSERT INTO job_steps(job_id, ts, text, tokens) VALUES (?,?,?,?)",  # type: ignore[union-attr]
+                            (job_id, time.time(), text, tokens))
+        if cur.lastrowid and cur.lastrowid % 50 == 0:  # prune now and then: the newest `keep` steps per job
+            _conn.execute("DELETE FROM job_steps WHERE job_id=? AND id <= (SELECT id FROM job_steps WHERE "  # type: ignore[union-attr]
+                          "job_id=? ORDER BY id DESC LIMIT 1 OFFSET ?)", (job_id, job_id, keep))
+
+
+def job_steps(job_id: int, limit: int = 20) -> list[dict]:
+    rows = _exec("SELECT ts, text, tokens FROM job_steps WHERE job_id=? ORDER BY id DESC LIMIT ?", (job_id, limit))
+    return [dict(r) for r in reversed(rows)]
 
 
 def job_get(job_id: int) -> dict | None:

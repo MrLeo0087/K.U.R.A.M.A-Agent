@@ -74,6 +74,25 @@ async def job_cancel(job_id: int):
     return {"ok": True, "id": job_id, "status": getattr(job, "status", None)}
 
 
+@router.get("/jobs/{job_id}/steps", summary="A long job's step log (oldest first)")
+async def job_steps(job_id: int, limit: int = Query(30, ge=1, le=300)):
+    from jarvis.core import longjobs
+    return {"id": job_id, "long": await run_in_threadpool(longjobs.is_long, job_id),
+            "steps": await run_in_threadpool(longjobs.steps, job_id, limit)}
+
+
+@router.post("/jobs/{job_id}/pause", summary="Pause a long job (it stops at its next step)")
+async def job_pause(job_id: int):
+    from jarvis.core import longjobs
+    return {"ok": True, "text": await run_in_threadpool(longjobs.pause, job_id)}
+
+
+@router.post("/jobs/{job_id}/resume", summary="Continue a paused / interrupted / stopped job")
+async def job_resume(job_id: int):
+    from jarvis.core import jobs as jobs_mod
+    return {"ok": True, "text": await run_in_threadpool(jobs_mod.resume, job_id)}
+
+
 @router.get("/alerts", summary="Recent alerts (newest first) + unread count")
 async def alerts(limit: int = Query(20, ge=1, le=200)):
     from jarvis.core import store

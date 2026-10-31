@@ -32,7 +32,7 @@ def _running(kind: str) -> dict | None:
     kinds = KIND_OF_JOB.get(kind)
     if kinds == ():
         return None
-    for r in store.jobs_list(10, ("queued", "running")):
+    for r in store.jobs_list(10, ("queued", "running", "paused")):
         if kinds is None or r.get("kind") in kinds:
             return r
     return None

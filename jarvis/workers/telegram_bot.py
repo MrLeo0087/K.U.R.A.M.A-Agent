@@ -581,7 +581,7 @@ def status_text() -> str:
     lines = [resource_guard.summary()]
     watches = store.watches_list(("active",), 10)
     lines.append("Watches: " + ("; ".join(process_watch.describe(w) for w in watches) if watches else "none"))
-    active = store.jobs_list(5, ("queued", "running"))
+    active = store.jobs_list(5, ("queued", "running", "paused"))
     lines.append("Jobs: " + ("; ".join(f"#{r['id']} {r['title']} ({r['status']})" for r in active)
                              if active else "none running"))
     lines.append(status.summary())

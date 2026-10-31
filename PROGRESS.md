@@ -507,3 +507,16 @@ Phases (one at a time, owner tests after each):
       longer depends on the stream for a question: while a chat turn is open and the stream is quiet (> 0.8 s), it
       asks GET /api/v1/confirm/pending every second and shows the question (same card, never twice). Probed in an
       offscreen WebKit for both the mini chat and the full dashboard: card shown, No answered via 'button'.
+- [x] 2026-10-31 Night Shift step 1, LONG JOB ENGINE (jarvis/core/longjobs.py on top of jobs.JobManager; plan in
+      docs/NIGHT_SHIFT.md): a long job is a top-level fn(ctx, params) whose params + checkpoints (ctx.checkpoint ->
+      ctx.state) live in SQLite (job_state); a crash / quit / restart resumes it in the SAME job id from the last
+      checkpoint (server start: longjobs.recover(); the owner = pid + start time, so one process resumes it, never
+      two). Caps per job: tokens (its own LLM calls, purpose ctx.purpose), running minutes (paused time doesn't count),
+      optional end time -> status "stopped"; "resume job N" adds one more cap's worth. Pauses by itself on low free
+      RAM (< 500 MB), battery < 30% unplugged, or needs_power + charger out; "pause job N" / "resume job N" (jobs
+      tool, also POST /api/v1/jobs/{id}/pause|resume, GET /jobs/{id}/steps). Step log (job_steps), heavy=True = one
+      CPU-heavy long job at a time, own thread pool (never queues essays behind it). 0 tokens; nothing runs while idle.
+      Live: a 12-step job hard-killed (kill -9) after 3 checkpoints was resumed by the restarted server at step 4 and
+      finished. 1051 tests (tests/test_longjobs.py 14). Scorecard 65 / 100 / 91 = same as the unchanged HEAD
+      (measured in a worktree with the live VS Code file / highlight blanked: the scorecard reads the live desktop
+      context, which shows up as 4 "text.selected" mistakes while a file is open in VS Code; not isolated yet).

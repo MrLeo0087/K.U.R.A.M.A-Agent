@@ -20,13 +20,20 @@ from jarvis.core import config, ratelimit, store
 
 log = logging.getLogger("jarvis.jobs")
 
-ACTIVE = ("queued", "running")
+ACTIVE = ("queued", "running", "paused")
 INTERRUPTED_QUIT = "interrupted (KURAMA quit)"
 INTERRUPTED_RESTART = "interrupted (KURAMA restarted)"
+# Long jobs (longjobs.py) only: "interrupted" = KURAMA quit mid-job (resumed on the next start),
+# "stopped" = a time / token cap or the hard end time was reached (the user may resume it with more budget).
+INTERRUPTED, STOPPED = "interrupted", "stopped"
 
 
 class JobCancelled(Exception):
     """Raised inside a job when its cancel event is set."""
+
+
+class JobStopped(Exception):
+    """Raised inside a long job when it hits its time / token cap or its hard end time."""
 
 
 @dataclass
@@ -44,13 +51,16 @@ class Job:
     origin: str = ""  # "telegram" when asked from the phone: the result goes back there
     created: float = field(default_factory=time.time)
     finished: float | None = None
+    durable: bool = False  # a long job (longjobs.py): checkpointed, resumed after a restart
+    interrupted: bool = False  # set when KURAMA quits while it runs
     cancel_event: threading.Event = field(default_factory=threading.Event, repr=False)
+    pause_event: threading.Event = field(default_factory=threading.Event, repr=False)
     future: Future | None = field(default=None, repr=False)
 
     def describe(self) -> str:
         extra = f", {self.progress}" if self.progress and self.status in ACTIVE else ""
         out = f", saved to {self.output_path}" if self.output_path and self.status == "done" else ""
-        err = f", {self.error[:80]}" if self.error and self.status == "failed" else ""
+        err = f", {self.error[:80]}" if self.error and self.status in ("failed", STOPPED, INTERRUPTED) else ""
         return f"#{self.id} {self.status}: {self.title}{extra}{out}{err}"
 
 
@@ -94,13 +104,17 @@ class JobManager:
     def __init__(self, max_workers: int | None = None):
         self.max_workers = max_workers or config.JOBS_MAX_WORKERS
         self._pool = ThreadPoolExecutor(max_workers=self.max_workers, thread_name_prefix="job")
+        # long jobs get their own threads so hours-long work never queues essays / quick jobs behind it
+        self._long_pool = ThreadPoolExecutor(max_workers=config.LONG_JOBS_MAX_WORKERS, thread_name_prefix="longjob")
         self._jobs: dict[int, Job] = {}
         self._lock = threading.Lock()
         self._callbacks: list[Callable[[Job], None]] = []
-        try:  # jobs left running by a previous process can never finish
+        try:  # jobs left running by a previous process can never finish (long jobs: longjobs.recover())
+            durable = store.job_state_ids()
             for row in store.jobs_list(50, ACTIVE):
-                store.job_update(row["id"], status="failed", error=INTERRUPTED_RESTART,
-                                 finished=time.time())
+                if row["id"] not in durable:
+                    store.job_update(row["id"], status="failed", error=INTERRUPTED_RESTART,
+                                     finished=time.time())
         except Exception as e:
             log.warning("could not clean stale jobs: %s", e)
 
@@ -114,14 +128,25 @@ class JobManager:
             self._callbacks.remove(cb)
 
     # --- lifecycle ---
-    def submit(self, title: str, kind: str, fn: JobFn, request: str = "", lang: str = "en") -> Job:
-        jid = store.job_insert(title, kind, request)
-        job = Job(jid, title, kind, request, lang or "en")
-        try:
-            from jarvis.core import safety
-            job.origin = safety.context().get("channel") or ""
-        except Exception:
-            pass
+    def submit(self, title: str, kind: str, fn: JobFn, request: str = "", lang: str = "en", *,
+               job_id: int | None = None, durable: bool = False, origin: str | None = None,
+               on_created: Callable[[Job], None] | None = None) -> Job:
+        """Run fn(ctx) in the background. Long jobs (longjobs.submit) pass durable=True, on_created (saves
+        their state before the thread can start) and, when resumed, their existing job_id."""
+        if job_id is None:
+            jid = store.job_insert(title, kind, request)
+        else:
+            jid = int(job_id)
+            store.job_update(jid, status="queued", finished=None, error="", progress="")
+        job = Job(jid, title, kind, request, lang or "en", durable=durable)
+        if origin is not None:
+            job.origin = origin
+        else:
+            try:
+                from jarvis.core import safety
+                job.origin = safety.context().get("channel") or ""
+            except Exception:
+                pass
         if job.origin == "telegram":
             _send_after[jid] = True  # asked from the phone: the result itself goes back to the phone
         with self._lock:
@@ -133,7 +158,9 @@ class JobManager:
                 started.append(jid)
         except Exception:
             pass
-        job.future = self._pool.submit(self._run, job, fn)
+        if on_created is not None:
+            on_created(job)
+        job.future = (self._long_pool if durable else self._pool).submit(self._run, job, fn)
         log.info("started job #%d (%s): %s", jid, kind, title)
         return job
 
@@ -161,6 +188,9 @@ class JobManager:
             status = "cancelled" if job.cancel_event.is_set() else "done"
         except (JobCancelled, ratelimit.Cancelled):
             status = "cancelled"
+        except JobStopped as e:
+            job.error = str(e)
+            status = "cancelled" if job.cancel_event.is_set() else STOPPED
         except Exception as e:  # a failing job must never take KURAMA down
             log.exception("job #%d failed", job.id)
             job.error = f"{type(e).__name__}: {e}"
@@ -189,6 +219,8 @@ class JobManager:
         return True
 
     def _finish(self, job: Job, ctx: JobContext, status: str) -> None:
+        if job.durable and job.interrupted and status in ("cancelled", "failed"):
+            status, job.error = INTERRUPTED, INTERRUPTED_QUIT  # resumed from its checkpoint on the next start
         job.status, job.finished = status, time.time()
         ctx.refresh_tokens()
         self._save(job, status=status, finished=job.finished, output_path=job.output_path,
@@ -263,8 +295,10 @@ class JobManager:
         if cancel:
             for j in self.active():
                 j.error = j.error or INTERRUPTED_QUIT  # P9b: resumable writing jobs are offered on restart
+                j.interrupted = True
                 j.cancel_event.set()
         self._pool.shutdown(wait=wait, cancel_futures=cancel)
+        self._long_pool.shutdown(wait=wait, cancel_futures=cancel)
 
 
 def _from_row(row: dict) -> Job:
@@ -488,7 +522,13 @@ def resume(query: str | int) -> str:
 
     from jarvis.core import writer
 
+    from jarvis.core import longjobs
+
     digits = str(query).strip().lower().replace("job", "").strip().lstrip("#")
+    if digits.isdigit() and longjobs.is_long(int(digits)):
+        return longjobs.resume(int(digits))
+    if not digits.isdigit() and (latest := longjobs.latest_resumable()) is not None:
+        return longjobs.resume(latest)
     if not digits.isdigit():
         rows = _resumable()
         if not rows:

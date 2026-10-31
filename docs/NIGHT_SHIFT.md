@@ -23,7 +23,7 @@ VS Code, browser tab, training runs), runs all day, and reaches the owner's phon
 
 ## Step order
 ### Foundation (0 tokens except the Brain)
-1. **Long Job Engine**: durable jobs that survive crashes and KURAMA restarts (state + checkpoints in SQLite/data),
+1. **Long Job Engine** (DONE 2026-10-31: jarvis/core/longjobs.py, see PROGRESS.md): durable jobs that survive crashes and KURAMA restarts (state + checkpoints in SQLite/data),
    resume, per-job time/token caps, pause on low RAM / battery < 30% / not charging (night), step log, cancel.
    Extends jobs.py; never blocks the voice loop or chat.
 2. **Safe Copy**: a job works on a copy of the project (git worktree when it's a git repo, else a copy in

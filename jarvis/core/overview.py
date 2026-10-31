@@ -42,7 +42,7 @@ def status_all() -> str:
     parts: list[str] = []
     if tl := training_lines():
         parts.append("Training:\n" + "\n".join(tl))
-    jobs = store.jobs_list(5, ("queued", "running"))
+    jobs = store.jobs_list(5, ("queued", "running", "paused"))
     if jobs:
         parts.append("Jobs: " + "; ".join(f"#{j['id']} {j['title'][:40]} ({j['status']}"
                                           + (f", {j['progress']}" if j.get("progress") else "") + ")" for j in jobs))

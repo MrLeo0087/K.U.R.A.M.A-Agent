@@ -118,7 +118,7 @@ class StatusCollector:
             if p.exists():
                 out["workers"] = json.loads(p.read_text())
         with contextlib.suppress(Exception):
-            jobs = store.jobs_list(self.s.status_jobs, ("queued", "running"))
+            jobs = store.jobs_list(self.s.status_jobs, ("queued", "running", "paused"))
             out["jobs"] = {"running": sum(j.get("status") == "running" for j in jobs),
                            "queued": sum(j.get("status") == "queued" for j in jobs),
                            "items": [{k: j.get(k) for k in ("id", "title", "kind", "status", "progress", "created")}

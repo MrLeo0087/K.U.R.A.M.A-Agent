@@ -1062,6 +1062,16 @@ JOB_MIN_FREE_MB = int(os.getenv("JARVIS_JOB_MIN_FREE_MB", "800"))  # queued jobs
 JOB_MAX_LOAD_PER_CORE = 1.5  # ...or while the 1-min load average exceeds cores x this
 JOB_RECHECK_S = 10.0
 JOB_MAX_WAIT_S = 600.0  # then they start anyway (with a note)
+# Long Job Engine (longjobs.py; Night Shift foundation): durable, checkpointed, resumed after a restart,
+# per-job time/token caps, paused while RAM is short / battery is low / (needs_power) not charging.
+LONG_JOBS_MAX_WORKERS = 2  # own threads; at most ONE CPU-heavy long job runs at a time (heavy=True)
+LONG_JOB_DEFAULT_TOKENS = 4000  # token cap when the caller gives none (= AGENT_ASK_ABOVE_TOKENS)
+LONG_JOB_DEFAULT_MINUTES = 60  # running-time cap when the caller gives none (paused time doesn't count)
+LONG_JOB_PAUSE_FREE_MB = int(os.getenv("JARVIS_LONG_JOB_PAUSE_FREE_MB", "500"))  # pause below this free RAM
+LONG_JOB_PAUSE_BATTERY = 30  # pause below this battery % while not charging
+LONG_JOB_RECHECK_S = 15.0  # while paused: re-check every this many seconds
+LONG_JOB_PROBE_S = 5.0  # RAM / battery / pause flag / tokens checked at most this often while running
+LONG_JOB_AUTO_RESUME = os.getenv("JARVIS_LONG_JOB_AUTO_RESUME", "1").lower() not in ("0", "false", "no", "off")
 
 # --- agents (jarvis/agents): off until the owner turns one on ---
 AGENT_MARKER = Path(os.getenv("KURAMA_AGENT_MARKER", str(Path.home() / ".local" / "share" / "kurama" / "agent")))

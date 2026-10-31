@@ -12,7 +12,7 @@ TABLE = {
     "can_you": Act("find_capability", lambda a: {"need": a.get("text")}),
     "rename": Act("set_my_name", lambda a: {"name": a.get("text")}),
     "mode": Act("power_mode", lambda a: {"mode": a.get("text", "status")}),
-    "jobs": Act("jobs", lambda a: {"action": a.get("text", "list") if a.get("text") in ("list", "result", "cancel", "resume") else "list"}),
+    "jobs": Act("jobs", lambda a: {"action": a.get("text", "list") if a.get("text") in ("list", "result", "cancel", "pause", "resume") else "list"}),
     "clear_chat": Act("reset_kurama", lambda a: {"level": "chat"}),
     "mute_alerts": Act("mute_alerts", lambda a: {"action": "on", "minutes": a.get("text", "")}),
     "remote": Act("remote_desktop", lambda a: {"stop": (a.get("text") or "").lower() in ("stop", "off")}),
@@ -30,6 +30,6 @@ def kurama(action: Literal["about", "can_you", "rename", "mode", "jobs", "clear_
 
     Args:
         action: What to do.
-        text: The topic / the need / the new name / the mode / list|result|cancel / minutes / stop / the task.
+        text: The topic / the need / the new name / the mode / list|result|cancel|pause|resume / minutes / stop / the task.
     """
     return run(TABLE, {"action": action, "text": text})
