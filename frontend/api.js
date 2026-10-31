@@ -82,6 +82,8 @@ export class Api {
   clearOutputs() { return this.request("/api/v1/outputs/clear", { method: "POST", body: {} }); }
   outputUrl(name) { return this.url(`/api/v1/outputs/file?name=${encodeURIComponent(name)}`, true); }
   cancelJob(id) { return this.request(`/api/v1/jobs/${encodeURIComponent(id)}/cancel`, { method: "POST", body: {} }); }
+  shortcuts() { return this.request("/api/v1/ui/shortcuts"); }
+  setShortcuts(key, dismiss) { return this.request("/api/v1/ui/shortcuts", { method: "POST", body: { key, dismiss } }); }
   glass() { return this.request("/api/v1/ui/glass"); }
   setGlass(blur, corner, light) { return this.request("/api/v1/ui/glass", { method: "POST", body: { blur, corner, light } }); }
   activeJobs() { return this.request("/api/v1/jobs?limit=4&status=queued,running,paused"); }

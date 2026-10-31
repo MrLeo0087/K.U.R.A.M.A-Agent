@@ -118,3 +118,23 @@ def test_either_shift_talks_and_double_tap_dismisses():
     h.press("shift"); h.press("a"); fire(timers); h.release("a"); h.release("shift")  # typing a capital A
     t[0] = 3; h.press("shift_l"); t[0] = 3.1; h.release("shift_l"); h.press("shift_r"); t[0] = 3.2; h.release("shift_r")
     assert told == ["down", "up", "dismiss"]
+
+
+def test_settings_file_wins_and_bad_combos_refused(monkeypatch, tmp_path):
+    monkeypatch.setattr(ptt, "SETTINGS_FILE", tmp_path / "ptt.json")
+    monkeypatch.setattr(ptt, "start", lambda: True)
+    monkeypatch.setattr(ptt, "stop", lambda: None)
+    assert ptt.apply("rm -rf", "double")["ok"] is False
+    r = ptt.apply("Super+Z", "super+x")
+    assert r["ok"] and ptt.settings()["key"] == "super+z" and ptt.settings()["dismiss"] == "super+x"
+
+
+def test_ctrl_talks_double_shift_dismisses():
+    told, t, timers = [], [0.0], []
+    h = ptt.Holder("ctrl", tell=told.append, now=lambda: t[0], min_hold=0.0,
+                   schedule=lambda d, fn: timers.append(FakeTimer(fn)) or timers[-1], dismiss="double:shift")
+    h.press("ctrl_l"); t[0] = 0.3; fire(timers); t[0] = 1; h.release("ctrl_l")
+    t[0] = 2; h.press("shift"); t[0] = 2.1; h.release("shift"); h.press("shift_r"); t[0] = 2.2; h.release("shift_r")
+    t[0] = 4; h.press("shift"); h.press("a"); h.release("a"); h.release("shift")  # capital letters: nothing
+    h.press("shift"); t[0] = 4.1; h.release("shift")
+    assert told == ["down", "up", "dismiss"]

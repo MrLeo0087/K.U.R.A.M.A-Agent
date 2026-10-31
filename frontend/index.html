@@ -333,6 +333,15 @@
           <option value="hi">हिन्दी (Hindi)</option>
         </select>
       </label>
+      <fieldset class="set-keys"><legend>Shortcuts</legend>
+        <label>Hold to talk <small>hold it alone, speak, let go · e.g. shift, ctrl_l, alt_r, super+z</small>
+          <input id="set-ptt-key" list="ptt-key-list" autocomplete="off" spellcheck="false"></label>
+        <label>Close the reply <small>double:shift = double-tap Shift · double = double-tap the talk key · or a combo like super+x</small>
+          <input id="set-ptt-dismiss" list="ptt-dis-list" autocomplete="off" spellcheck="false"></label>
+        <datalist id="ptt-key-list"><option value="ctrl"><option value="ctrl_l"><option value="ctrl_r"><option value="alt_r"><option value="super+z"></datalist>
+        <datalist id="ptt-dis-list"><option value="double:shift"><option value="double"><option value="super+x"></datalist>
+        <small id="set-gnome-keys"></small>
+      </fieldset>
       <label class="check"><input id="set-wake" type="checkbox"><span>Wake word <small>talk mode on at start, asleep until “wake up KURAMA”; “sleep now” to sleep</small></span></label>
       <label class="check"><input id="set-hear" type="checkbox"><span>Let KURAMA hear the laptop's own sound <small>OFF (recommended): music, videos and KURAMA's voice are removed from what the mic hears, so it understands you while music plays · ON: KURAMA hears everything (use it only to transcribe a video or song)</small></span></label>
       <label class="check"><input id="set-low" type="checkbox"><span>Low power <small>static orb, CSS glow only</small></span></label>

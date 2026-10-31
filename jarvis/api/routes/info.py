@@ -102,6 +102,41 @@ async def glass_set(body: GlassIn):
     return await run_in_threadpool(_glass, "set", str(body.blur), str(body.corner), str(body.light))
 
 
+class PttIn(BaseModel):
+    key: str = Field("shift", max_length=40)
+    dismiss: str = Field("double", max_length=40)
+    enabled: bool = True
+
+
+@router.get("/ui/shortcuts", summary="KURAMA's shortcuts: hold-to-talk + close-reply (here) and the GNOME ones")
+async def shortcuts_get():
+    from jarvis.core import ptt
+
+    def gnome() -> list[dict]:
+        import subprocess
+        base = "org.gnome.settings-daemon.plugins.media-keys"
+        out = []
+        try:
+            paths = subprocess.run(["gsettings", "get", base, "custom-keybindings"], capture_output=True, text=True,
+                                   timeout=5).stdout.strip().replace("@as ", "")
+            for p in json.loads(paths.replace("'", '"')) if paths.startswith("[") else []:
+                get = lambda k: subprocess.run(["gsettings", "get", f"{base}.custom-keybinding:{p}", k],  # noqa: E731
+                                               capture_output=True, text=True, timeout=5).stdout.strip().strip("'")
+                name = get("name")
+                if "KURAMA" in name.upper():
+                    out.append({"name": name, "binding": get("binding")})
+        except Exception:  # noqa: BLE001
+            pass
+        return out
+    return {**ptt.settings(), "gnome": await run_in_threadpool(gnome)}
+
+
+@router.post("/ui/shortcuts", summary="Change the hold-to-talk key and the close-reply action (applies at once)")
+async def shortcuts_set(body: PttIn):
+    from jarvis.core import ptt
+    return await run_in_threadpool(ptt.apply, body.key, body.dismiss, body.enabled)
+
+
 @router.get("/jobs/{job_id}/steps", summary="A long job's step log (oldest first)")
 async def job_steps(job_id: int, limit: int = Query(30, ge=1, le=300)):
     from jarvis.core import longjobs

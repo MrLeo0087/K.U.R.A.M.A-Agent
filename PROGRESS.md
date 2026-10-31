@@ -580,3 +580,9 @@ Phases (one at a time, owner tests after each):
       alone, so Ctrl+C / any Ctrl shortcut never listens), let go = send; double-tap Left Ctrl = close the reply caption
       + stop speaking. The Fn key can't be used (handled by the keyboard itself, never reaches Linux). Combos still
       work via KURAMA_PTT_KEY / KURAMA_PTT_DISMISS in .env (now shift / double: either Shift, hold = talk, double-tap = close).
+- [x] 2026-10-31 Shortcuts final (owner): hold Ctrl (either side) alone 0.3 s = talk, let go = send; double-tap Shift
+      (either side; Shift+letter never counts) = close the reply + stop speaking. Changeable in KURAMA Settings >
+      Shortcuts (GET/POST /api/v1/ui/shortcuts, saved in data/ptt.json, applied at once; .env KURAMA_PTT_KEY /
+      KURAMA_PTT_DISMISS are the defaults); that section also lists the GNOME ones (mini chat, on/off) and says where
+      to change them. Hold-to-talk can't be a GNOME custom shortcut (GNOME only sees the press, and a bare Shift/Ctrl
+      binding would be grabbed from typing).

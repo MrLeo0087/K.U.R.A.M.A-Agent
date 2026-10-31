@@ -63,8 +63,14 @@ class Holder:
         self.down_at: float | None = None
         self.spoiled = False
         self.pending = None  # the delayed "main key really released" check
-        self.double = (dismiss or "").strip().lower() == "double"  # double-tap the talk key = dismiss
-        dparts = [] if self.double else [_norm(p.strip()) for p in (dismiss or "").split("+") if p.strip()]
+        d = (dismiss or "").strip().lower()
+        self.double = d == "double"  # double-tap the talk key = dismiss
+        # "double:shift" = double-tap ANOTHER key (Shift) = dismiss
+        self.dtap_key = _norm(d.split(":", 1)[1]) if d.startswith("double:") else None
+        self.dtap_at: float | None = None
+        self.dtap_clean = False
+        self.dtap_last = -1e9
+        dparts = [] if (self.double or self.dtap_key) else [_norm(p.strip()) for p in d.split("+") if p.strip()]
         self.dismiss = (set(dparts[:-1]), dparts[-1]) if dparts else None
         # one modifier alone (e.g. Left Ctrl): listen only after it is held alone this long, so Ctrl+C never does
         self.solo = not self.mods and self.main in ("ctrl", "alt", "shift", "cmd")
@@ -74,6 +80,7 @@ class Holder:
 
     def press(self, name: str) -> None:
         n = _norm(name)
+        self._dtap_press(n)
         if self.solo:
             self._solo_press(n)
             return
@@ -94,6 +101,7 @@ class Holder:
 
     def release(self, name: str) -> None:
         n = _norm(name)
+        self._dtap_release(n)
         if self.solo:
             self._solo_release(n)
             return
@@ -105,6 +113,30 @@ class Holder:
         elif n == self.main:
             self._cancel_pending()
             self.pending = self.schedule(config.PTT_DEBOUNCE_S, self._finish)
+
+    # ---- double-tap of another key (dismiss "double:shift") ----
+    def _dtap_press(self, n: str) -> None:
+        if not self.dtap_key:
+            return
+        if n == self.dtap_key:
+            if self.dtap_at is None:
+                self.dtap_at, self.dtap_clean = self.now(), True
+        else:  # another key in between (Shift+A = a capital letter): not a tap
+            self.dtap_clean, self.dtap_last = False, -1e9
+
+    def _dtap_release(self, n: str) -> None:
+        if not self.dtap_key or n != self.dtap_key or self.dtap_at is None:
+            return
+        held, self.dtap_at = self.now() - self.dtap_at, None
+        if not self.dtap_clean or held >= config.PTT_START_DELAY_S:
+            self.dtap_last = -1e9
+            return
+        now = self.now()
+        if now - self.dtap_last <= config.PTT_DOUBLE_TAP_S:
+            self.dtap_last = -1e9
+            self.tell("dismiss")
+        else:
+            self.dtap_last = now
 
     # ---- one modifier alone: hold = talk (after PTT_START_DELAY_S), double-tap = dismiss ----
     def _solo_press(self, n: str) -> None:
@@ -175,10 +207,42 @@ def _name(key) -> str:
     return getattr(key, "name", None) or (getattr(key, "char", None) or "").lower()
 
 
+SETTINGS_FILE = config.DATA_DIR / "ptt.json"  # set from KURAMA's Settings > Shortcuts (wins over .env)
+
+
+def settings() -> dict:
+    """The talk key and the close-reply action in use: data/ptt.json, else .env / config."""
+    import json
+    out = {"key": config.PTT_KEY, "dismiss": config.PTT_DISMISS_KEY, "enabled": config.PTT_ENABLED}
+    with contextlib.suppress(OSError, ValueError):
+        out.update({k: v for k, v in json.loads(SETTINGS_FILE.read_text(encoding="utf-8")).items() if k in out})
+    return out
+
+
+def _valid(combo: str) -> bool:
+    parts = [p.strip() for p in (combo or "").lower().split("+")]
+    return bool(parts) and all(p and len(p) <= 12 and p.replace("_", "").isalnum() for p in parts)
+
+
+def apply(key: str, dismiss: str, enabled: bool = True) -> dict:
+    """Save new shortcuts and restart the key watcher at once (no KURAMA restart)."""
+    import json
+    key, dismiss = (key or "").strip().lower(), (dismiss or "").strip().lower()
+    if not _valid(key):
+        return {"ok": False, "error": f"not a key or combo: {key!r} (e.g. shift, ctrl_l, super+z)"}
+    if dismiss not in ("double", "") and not _valid(dismiss.removeprefix("double:")):
+        return {"ok": False, "error": f"not a key or combo: {dismiss!r} (e.g. double, super+x)"}
+    SETTINGS_FILE.write_text(json.dumps({"key": key, "dismiss": dismiss, "enabled": bool(enabled)}), encoding="utf-8")
+    stop()
+    on = start()
+    return {"ok": True, **settings(), "running": on}
+
+
 def start() -> bool:
     """Start the key watcher once (server start). False when disabled or no X11 keyboard access."""
     global _listener
-    if not config.PTT_ENABLED:
+    cfg = settings()
+    if not cfg["enabled"]:
         return False
     with _lock:
         if _listener is not None:
@@ -188,13 +252,13 @@ def start() -> bool:
         except Exception as e:  # noqa: BLE001
             log.warning("hold-to-talk off: pynput unavailable (%s)", e)
             return False
-        h = Holder(config.PTT_KEY, dismiss=config.PTT_DISMISS_KEY)
+        h = Holder(cfg["key"], dismiss=cfg["dismiss"])
         _listener = keyboard.Listener(on_press=lambda k: h.press(_name(k)), on_release=lambda k: h.release(_name(k)))
         _listener.daemon = True
         _listener.start()
-        log.info("hold-to-talk on: hold %s and speak", config.PTT_KEY)
+        log.info("hold-to-talk on: hold %s and speak", cfg["key"])
         with contextlib.suppress(OSError):  # proof it runs (the window ignores this state)
-            STATE_FILE.write_text(f"ready {time.time():.3f} {config.PTT_KEY}\n", encoding="utf-8")
+            STATE_FILE.write_text(f"ready {time.time():.3f} {cfg['key']}\n", encoding="utf-8")
         return True
 
 

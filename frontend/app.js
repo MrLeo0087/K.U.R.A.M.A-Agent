@@ -2363,6 +2363,12 @@ function openSettings(msg) {
   $("set-hear").checked = mic.hearDevice;
   api.deviceSound().then((d) => { $("set-hear").checked = !!d.hear; $("set-hear").disabled = d.available === false; }).catch(() => {});
   $("set-lang").value = S.lang || "auto";
+  api.shortcuts().then((k) => {
+    $("set-ptt-key").value = k.key; $("set-ptt-dismiss").value = k.dismiss;
+    $("set-ptt-key").dataset.was = k.key; $("set-ptt-dismiss").dataset.was = k.dismiss;
+    $("set-gnome-keys").textContent = (k.gnome || []).map((g) => `${g.name}: ${g.binding}`).join(" · ") +
+      ((k.gnome || []).length ? " — change these in Settings › Keyboard › Custom Shortcuts" : "");
+  }).catch(() => {});
   $("set-msg").textContent = msg || "";
   loadMemory();
   loadVoice();
@@ -2496,6 +2502,11 @@ $("set-form").addEventListener("submit", (e) => {
   }
   S.lang = $("set-lang").value;
   saveSettings(S);
+  const pk = $("set-ptt-key"), pd = $("set-ptt-dismiss");
+  if (pk.value.trim() && (pk.value.trim() !== pk.dataset.was || pd.value.trim() !== pd.dataset.was)) {
+    api.setShortcuts(pk.value.trim(), pd.value.trim()).then((r) => toast(r.ok ? `Hold ${r.key} to talk${r.dismiss === "double" ? `, double-tap it to close` : r.dismiss ? `, ${r.dismiss} closes` : ""}.` : r.error))
+      .catch(() => toast("Couldn't reach KURAMA to change the shortcuts."));
+  }
   const nm = $("set-name").value.trim();
   if (nm && nm !== botName) api.setName(nm).then((r) => { setBotName(r.name); toast(`My name is ${r.name} now.`); })
     .catch(() => toast("That name didn't work: use 2-24 letters."));
