@@ -14,16 +14,29 @@ from jarvis.tools.general.resume_job import resume_job
 
 
 @tool(group="jobs", safety="safe",
-      description="Background jobs: list them, show one's result, cancel one, pause a long job, or resume "
-                  "(continue a paused / interrupted / stopped job).")
-def jobs(action: Literal["list", "result", "cancel", "pause", "resume"] = "list", job: str = "") -> str:
-    """Manage background jobs.
+      description="KURAMA's jobs. Its job LIST (things the user wants KURAMA to do later, not run yet): add, edit, "
+                  "remove, start (run the waiting ones now, or one). Background jobs: list, result, cancel, pause, "
+                  "resume.")
+def jobs(action: Literal["list", "add", "edit", "remove", "start", "result", "cancel", "pause", "resume"] = "list",
+         job: str = "", text: str = "") -> str:
+    """Manage KURAMA's job list and background jobs.
 
     Args:
-        action: list = all jobs and progress, result = a job's output and steps, cancel = stop one,
-            pause = pause a long job, resume = continue one.
-        job: The job's id or words from its title (cancel with no job = the latest running one).
+        action: list = the job list + running jobs; add = keep a job for later (text = what to do; nothing runs);
+            edit = change job `job` to `text`; remove = drop job `job` ("done" = all finished ones); start = work
+            on the waiting jobs now (or just `job`); result / cancel / pause / resume = a background job.
+        job: The job's number (list number or background job id), or words from its title.
+        text: For add / edit: what the job should do, in the user's words.
     """
+    from jarvis.core import jobqueue
+    if action == "add":
+        return jobqueue.add(text or job)
+    if action == "edit":
+        return jobqueue.edit(job, text)
+    if action == "remove":
+        return jobqueue.remove(job)
+    if action == "start":
+        return jobqueue.start(job)
     if action == "result":
         if not job.strip().lstrip("#").isdigit():
             return "error: give the job's number, e.g. 12"
@@ -35,7 +48,8 @@ def jobs(action: Literal["list", "result", "cancel", "pause", "resume"] = "list"
     if action == "pause":
         from jarvis.core import longjobs
         return longjobs.pause(job)
-    return list_jobs()
+    running = list_jobs()
+    return jobqueue.show() + ("\n\nBackground jobs:\n" + running if running != "no background jobs" else "")
 
 
 alias("list_jobs", "jobs", action="list")

@@ -231,6 +231,14 @@ def _start_job(spec: str, target: Path) -> str:
     return start_edit(spec, target)
 
 
+# Never write generated code into secrets / settings / data files: the open file was .env and a calculator was
+# staged into it (2026-10-31). Named explicitly or just open in VS Code, these are refused.
+_PROTECTED = re.compile(r"^(?:\.env(?:\..*)?|.*\.(?:pem|key|crt|p12|pfx|kdbx|sqlite3?|db)|id_(?:rsa|ed25519|ecdsa)(?:\.pub)?|"
+                        r"credentials(?:\..*)?|secrets?(?:\..*)?|\.netrc|\.npmrc|\.pypirc)$", re.I)
+_CODE_EXT = {".py", ".js", ".ts", ".tsx", ".jsx", ".html", ".css", ".java", ".c", ".h", ".cpp", ".hpp", ".go", ".rs",
+             ".sh", ".rb", ".php", ".kt", ".swift", ".cs", ".lua", ".r", ".m", ".dart", ".vue", ".svelte", ".sql", ".ipynb"}
+
+
 def _target(path: str) -> Path | None:
     from jarvis.core import assist, context
     if path.strip():
@@ -239,7 +247,10 @@ def _target(path: str) -> Path | None:
             return p
         from jarvis.core.paths import smart_path
         return smart_path(path.strip(), want="file") or None
-    return context.snapshot().get("file") or assist.open_file_in_editor()
+    f = context.snapshot().get("file") or assist.open_file_in_editor()
+    if f is not None and Path(f).suffix.lower() not in _CODE_EXT and Path(f).stat().st_size > 0:
+        return None  # the open file isn't code (.env, notes, settings): don't write code into it
+    return f
 
 
 @tool(group="clipboard", safety="safe",
@@ -257,8 +268,11 @@ def code_to_file(request: str = "", path: str = "", code: str = "") -> str:
     from jarvis.core.writer import code_only
     target = _target(path)
     if target is None:
-        return "error: open the file in VS Code (or give its full path), then ask again"
+        return ("error: the file open in VS Code isn't a code file, so I won't put code into it. Say which file "
+                "(e.g. 'put it in calculator.py') or open a code file, then ask again")
     target = Path(target)
+    if _PROTECTED.match(target.name):
+        return f"error: {target.name} holds secrets or settings; I never write generated code into it"
     from jarvis.core import editor
     old = editor.read(target)  # what VS Code shows now (unsaved edits included)
     spec = _spec(request) or (request.strip() if re.search(r"\b(?:complete|finish)\b", request or "", re.I) else "")

@@ -126,3 +126,14 @@ def test_dependency_doctor_outdated_handles_failure(monkeypatch):
         raise dependency_doctor._proc.ProcError("python3 timed out after 25s")
     monkeypatch.setattr(dependency_doctor._proc, "run", boom)
     assert dependency_doctor.outdated("python3").startswith("skipped")
+
+
+def test_code_never_goes_into_env_or_non_code_open_file(tmp_path, monkeypatch):
+    from jarvis.core import context
+    from jarvis.tools.general import code_to_file as ctf
+    env = tmp_path / ".env"
+    env.write_text("GROQ_API_KEY=secret\n")
+    monkeypatch.setattr(context, "snapshot", lambda *a, **k: {"file": env})
+    out = ctf.code_to_file("simple python calculator")
+    assert out.startswith("error:") and env.read_text() == "GROQ_API_KEY=secret\n"
+    assert "secrets" in ctf.code_to_file("calculator", path=str(env))

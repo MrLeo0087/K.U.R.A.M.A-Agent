@@ -86,6 +86,10 @@ CREATE TABLE IF NOT EXISTS job_state (
     job_id INTEGER PRIMARY KEY, fn TEXT NOT NULL, params TEXT, state TEXT, caps TEXT,
     used_s REAL DEFAULT 0, owner TEXT, paused INTEGER DEFAULT 0, origin TEXT, updated REAL
 );
+CREATE TABLE IF NOT EXISTS job_queue (
+    n INTEGER PRIMARY KEY, text TEXT NOT NULL, status TEXT DEFAULT 'waiting', created REAL, updated REAL,
+    tries INTEGER DEFAULT 0, note TEXT DEFAULT '', job_id INTEGER
+);
 CREATE TABLE IF NOT EXISTS job_steps (
     id INTEGER PRIMARY KEY, job_id INTEGER NOT NULL, ts REAL NOT NULL, text TEXT, tokens INTEGER DEFAULT 0
 );
@@ -301,6 +305,49 @@ def job_update(job_id: int, **fields: Any) -> None:
         return
     _exec(f"UPDATE jobs SET {', '.join(c + '=?' for c in cols)} WHERE id=?",
           tuple(fields[c] for c in cols) + (job_id,))
+
+
+# --- KURAMA's job list (jarvis/core/jobqueue.py) ---
+QUEUE_FIELDS = ("text", "status", "tries", "note", "job_id")
+
+
+def queue_add(text: str) -> int:
+    with _lock:
+        if _conn is None:
+            init(_path)
+        now = time.time()
+        return int(_conn.execute("INSERT INTO job_queue(text, status, created, updated) VALUES (?,?,?,?)",  # type: ignore[union-attr]
+                                 (text, "waiting", now, now)).lastrowid)
+
+
+def queue_list(statuses: tuple[str, ...] | None = None) -> list[dict]:
+    if statuses:
+        rows = _exec(f"SELECT * FROM job_queue WHERE status IN ({','.join('?' * len(statuses))}) ORDER BY n", statuses)
+    else:
+        rows = _exec("SELECT * FROM job_queue ORDER BY n")
+    return [dict(r) for r in rows]
+
+
+def queue_get(n: int) -> dict | None:
+    rows = _exec("SELECT * FROM job_queue WHERE n=?", (n,))
+    return dict(rows[0]) if rows else None
+
+
+def queue_update(n: int, **fields: Any) -> None:
+    cols = [k for k in fields if k in QUEUE_FIELDS]
+    if cols:
+        _exec(f"UPDATE job_queue SET {', '.join(c + '=?' for c in cols)}, updated=? WHERE n=?",
+              tuple(fields[c] for c in cols) + (time.time(), n))
+
+
+def queue_delete(n: int) -> None:
+    _exec("DELETE FROM job_queue WHERE n=?", (n,))
+
+
+def queue_delete_status(statuses: tuple[str, ...]) -> int:
+    k = len(queue_list(statuses))
+    _exec(f"DELETE FROM job_queue WHERE status IN ({','.join('?' * len(statuses))})", statuses)
+    return k
 
 
 # --- long jobs (jarvis/core/longjobs.py): durable state, checkpoints, step log ---

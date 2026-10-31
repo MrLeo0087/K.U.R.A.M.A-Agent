@@ -469,7 +469,9 @@ ROUTER_EXAMPLES: dict[str, tuple[str, ...]] = {
     "memory": ("remember that my wifi password is", "what did I tell you about", "what did we discuss last time"),
     "knowledge": ("how does my code handle this", "find where my project loads the config", "explain my repo"),
     "usage": ("how many tokens did I use", "give me a summary of today"),
-    "jobs": ("write a detailed report in the background", "how is my background job going", "cancel the job"),
+    "jobs": ("write a detailed report in the background", "how is my background job going", "cancel the job",
+             "add a job for later: write an essay about Nepal", "show my job list", "start working on my jobs",
+             "remove job 2 from your list", "change job 3 to research black holes"),
     "watch": ("tell me when the training is done", "notify me when this process exits", "watch this log file",
               "how is my model training going", "start training and keep an eye on it", "connect my colab notebook",
               "is the training still running"),
@@ -1076,6 +1078,29 @@ JOB_MAX_WAIT_S = 600.0  # then they start anyway (with a note)
 # Long Job Engine (longjobs.py; Night Shift foundation): durable, checkpointed, resumed after a restart,
 # per-job time/token caps, paused while RAM is short / battery is low / (needs_power) not charging.
 LONG_JOBS_MAX_WORKERS = 2  # own threads; at most ONE CPU-heavy long job runs at a time (heavy=True)
+# "keep this for later" vs "do it now" (planner.queue_meant, by meaning): a job-list add must never start the work
+QUEUE_EXAMPLES: dict[str, tuple[str, ...]] = {
+    "later": ("add a job: write an essay about Nepal", "keep this job for later", "put this in your job list",
+              "add to my job list: research black holes and send it to telegram", "save this as a job, don't start it",
+              "remember this job for later: make a presentation about AI", "add job write python code for a calculator",
+              "note a job for you: summarize my lecture notes", "for later: clean up my desktop files",
+              "queue this task, do it later: translate my notes to Nepali", "a job for you when I say start: back up my photos",
+              "don't do it now, just add it: download the lecture playlist", "job for later, compare three laptops under 1 lakh",
+              "add these to your jobs: email draft, budget sheet", "put on your to-do for later: fix the bug in main.py"),
+    "now": ("write an essay about Nepal", "research black holes and send it to telegram", "make a presentation about AI",
+            "generate an image of a dog", "write python code for a calculator", "start working on my jobs",
+            "summarize my lecture notes", "list my jobs", "make a ppt about global warming", "clean up my desktop files",
+            "translate my notes to Nepali", "back up my photos now", "download the lecture playlist",
+            "compare three laptops under 1 lakh", "fix the bug in main.py", "create a budget sheet for this month",
+            "organize my downloads folder", "show my job list", "remove job 2"),
+}
+READLATER_EXAMPLES = ("save this page for later", "read this later", "save this video for later",
+                      "add this link to my reading list", "keep this tab to read later", "watch this later",
+                      "save this article to read tonight", "put this website in my read later list")
+QUEUE_NOW_MARGIN = 0.04  # clearly 'do it now' below this (planner.queue_meant)
+QUEUE_RETRIES = 3  # a job in KURAMA's job list: tries when the failure looks temporary (network, AI limits)
+QUEUE_MAX_TOKENS = 80000  # the whole job-list run's hard cap (each essay also has its own writer cap)
+QUEUE_MAX_MINUTES = 240
 WRITER_JOB_MAX_TOKENS = 60000  # an essay / report / code job's hard cap (a 3,000-word essay is ~10-15k)
 LONG_JOB_DEFAULT_TOKENS = 4000  # token cap when the caller gives none (= AGENT_ASK_ABOVE_TOKENS)
 LONG_JOB_DEFAULT_MINUTES = 60  # running-time cap when the caller gives none (paused time doesn't count)

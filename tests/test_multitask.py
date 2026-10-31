@@ -390,3 +390,22 @@ def test_parts_that_are_all_shortcuts_skip_the_planner_call(monkeypatch):
     assert p.method == "rules" and [t["text"] for t in p.tasks] == ["what's the weather in Pokhara", "what time is it"]
     assert not any("depends_on" in t for t in p.tasks)  # the 'it' in 'what time is it' points at nothing
     assert planner.refers_back("open it") and not planner.refers_back("is it raining in Pokhara")
+
+
+def test_numbered_items_stay_independent_but_deps_inside_an_item_stay():
+    from jarvis.core import planner
+    text = ("list the job 1. generate image 2. write essay about nepal and save it on a .md file and send that md "
+            "file to telegram 3. Genrate simple python code for calculator")
+    tasks = [{"text": "generate image", "kind": "quick"},
+             {"text": "write essay about Nepal, save it on a .md file and send that md file to telegram", "kind": "long",
+              "depends_on": [0]},
+             {"text": "generate simple python code for calculator", "kind": "long", "depends_on": [1]}]
+    out = planner.add_dependencies(tasks, text)
+    assert all("depends_on" not in t for t in out)
+    text2 = ("1. generate image of dog, 2. write essay about nepal in detail, 3. send a detail report on black hole "
+             "then make a .md file and send it to telegram")
+    tasks2 = [{"text": "generate image of dog", "kind": "quick"}, {"text": "write essay about Nepal in detail", "kind": "long"},
+              {"text": "send a detailed report on black hole", "kind": "quick"},
+              {"text": "make a .md file and send it to telegram", "kind": "quick", "depends_on": [2]}]
+    out2 = planner.add_dependencies(tasks2, text2)
+    assert out2[3].get("depends_on") == [2] and "depends_on" not in out2[1]

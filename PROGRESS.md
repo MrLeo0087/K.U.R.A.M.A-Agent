@@ -599,3 +599,17 @@ Phases (one at a time, owner tests after each):
       clipboard area to every AI request; it no longer counts as a second task for the model choice (every request
       went to the 120b tier). Live: "result of job 1" -> kurama tool, right answer; "is job 1 done?" -> fast tier.
       1064 tests; scorecard 65/100/91 (unchanged). Not done: retry on gpt-oss's 'tool<|channel|>' name glitch (rare).
+- [x] 2026-11-01 From the owner's last requests (traces): (1) Telegram file uploads: Telegram answers HTTP 500 /
+      times out on uploads (curl too) yet DELIVERS the file -> one try only, never a retry or a text copy (they made
+      duplicates); on such an error KURAMA says it may have arrived and tells you on Telegram. (2) A background tool
+      job whose result is "error: ..." now ends FAILED (it said "done" and the AI claimed the essay was sent).
+      (3) Numbered requests ("1. ... 2. ... 3. ..."): dependencies the planner model invents ACROSS items are dropped
+      (image -> essay -> code were chained), within an item they stay. (4) code_to_file never writes into the open
+      file when it isn't code (.env was open: a calculator was staged into it; it expired unapplied) and never into
+      secrets (.env, keys, credentials). (5) KURAMA's JOB LIST (jarvis/core/jobqueue.py, table job_queue): add / list /
+      edit / remove keep jobs without running; "start" runs the waiting ones one by one in a durable long job
+      (retries up to 3 only on temporary failures, nothing that needs your yes, notices for start / done / failed +
+      summary on the laptop and Telegram). Jobs tool + kurama tool take the details ("edit 2 ..."). By meaning
+      (config.QUEUE_EXAMPLES): a request that may mean "add for later" is decided by the AI, never auto-started; the
+      read-later shortcut steps aside when the job list is the closer meaning. Live: "add a job for later: write a
+      short poem about Pokhara" -> added, waiting, nothing running. Scorecard 65/100/90 (router -1: one case).

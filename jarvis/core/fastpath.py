@@ -3179,11 +3179,22 @@ def daily_intent(text: str) -> Intent | None:
     return Intent(hit.name, hit.tool, hit.group, dict(hit.args)) if hit else None
 
 
+def semantic_ready() -> bool:
+    from jarvis.core import semantic
+    return semantic.ready()
+
+
 def match(text: str) -> Intent | None:
     """The single high-confidence intent for text whose meaning agrees (meaning_ok), or None."""
     it = agent_intent(text) or agent_coding_intent(text) or link_play_intent(text) or clean_intent(text) \
         or shutdown_later_intent(text) or to_file_intent(text) or selection_intent(text) \
         or _code_not_file(_match(text)) or daily_intent(text)
+    if it is not None and it.tool == "read_later" and semantic_ready():  # "add a job for later: write a poem" is
+        from jarvis.core import semantic  # KURAMA's job list, not the reading list: by meaning, job wins -> the AI
+        best = semantic.best_of(text, "job_vs_readlater", {"job": config.QUEUE_EXAMPLES["later"],
+                                                           "readlater": config.READLATER_EXAMPLES})
+        if best and best[0] == "job":
+            return None
     return it if it is None or meaning_ok(text, it) else None
 
 

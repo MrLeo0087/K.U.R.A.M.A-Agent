@@ -229,8 +229,8 @@ def _call_or_background(reg: registry.Registry, name: str, clean: Any, ctx: dict
         while not finished.wait(1.0):
             jc.check()  # "cancel job N" stops waiting (the tool thread itself can't be killed)
         res = box["res"]
-        if not res.ok:
-            raise RuntimeError(res.output[:300])
+        if not res.ok or res.output.lstrip().lower().startswith("error"):  # a tool's "error: ..." is a failure:
+            raise RuntimeError(res.output[:300])  # the job must say failed, never "done" (it said "sent" before)
         lang = ctx.get("lang") or "en"
         shelf = list(ctx.get("published") or [])
         if shelf:  # the tool already put its full result in the workspace

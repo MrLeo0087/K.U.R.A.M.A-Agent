@@ -131,6 +131,18 @@ _SCAFFOLD = re.compile(r"(?<![\w])(?:create|make|start|scaffold|set\s*up|init(?:
                        r"(?:project|app\s+skeleton|boilerplate|template)(?![\w])", re.I)
 
 
+def queue_meant(text: str) -> bool:
+    """The request MAY mean 'add this to KURAMA's job list for later' (local model, 0 tokens): True unless it is
+    clearly 'do it now' (now-examples closer than the later-examples by QUEUE_NOW_MARGIN). Measured 2026-10-31: every
+    'later' wording scored > -0.03, clear 'do it now' < -0.04; in between the AI decides. False if it can't judge."""
+    from jarvis.core import semantic
+    if not semantic.ready():
+        return False
+    later = semantic.best_of(text, "q_later", {"later": config.QUEUE_EXAMPLES["later"]})
+    now = semantic.best_of(text, "q_now", {"now": config.QUEUE_EXAMPLES["now"]})
+    return bool(later and now and later[1] - now[1] >= -config.QUEUE_NOW_MARGIN)
+
+
 def is_long_job(text: str) -> bool:
     if _SCAFFOLD.search(text) and target_words(text) is None:
         return False
@@ -256,12 +268,40 @@ def refers_back(text: str) -> bool:
     return bool(_REF.search(_DUMMY_IT.sub(" ", text)))
 
 
-def add_dependencies(tasks: list[dict]) -> list[dict]:
-    """Simple rule on top of the model's depends_on: a task that refers back depends on the previous one."""
+_ITEM = re.compile(r"(?:^|\s)\(?(\d{1,2})[.)]\s+")
+
+
+def _items_of(text: str, tasks: list[dict]) -> list[int | None]:
+    """Which numbered item ("1. ... 2. ...") of the request each task came from; None when not numbered."""
+    marks = [(m.start(), m.end()) for m in _ITEM.finditer(text or "")]
+    if len(marks) < 2:
+        return [None] * len(tasks)
+    low = (text or "").lower()
+    bounds = [(e, marks[k + 1][0] if k + 1 < len(marks) else len(low)) for k, (_, e) in enumerate(marks)]
+    out: list[int | None] = []
+    for t in tasks:
+        words = re.findall(r"[a-z0-9]+", t["text"].lower())[:3]
+        pos = -1
+        for n in range(len(words), 0, -1):  # the task's first words, as they appear in the request
+            m = re.search(r"\W+".join(map(re.escape, words[:n])), low)
+            if m:
+                pos = m.start()
+                break
+        out.append(next((k for k, (a, b) in enumerate(bounds) if a <= pos < b), None) if pos >= 0 else None)
+    return out
+
+
+def add_dependencies(tasks: list[dict], text: str = "") -> list[dict]:
+    """Simple rule on top of the model's depends_on: a task that refers back depends on the previous one. When the
+    user NUMBERED the tasks ("1. image 2. essay 3. code"), a dependency the model invents across items is dropped
+    (it chained all three, so the essay waited for the image); within one item it stays."""
+    items = _items_of(text, tasks)
     for i, t in enumerate(tasks):
         deps = {d for d in t.get("depends_on", []) if isinstance(d, int) and 0 <= d < i}
         if i and refers_back(t["text"]):
             deps.add(i - 1)
+        if items[i] is not None:  # numbered: only within the same item ("save it" in item 2 is item 2's own essay)
+            deps = {d for d in deps if items[d] is None or items[d] == items[i]}
         if deps:
             t["depends_on"] = sorted(deps)
         else:
@@ -387,6 +427,8 @@ def _shortcut_tasks(text: str) -> list[dict]:
 
 
 def plan(text: str) -> Plan:
+    if (is_multi(text) or is_long_job(text)) and queue_meant(text):  # "add a job: write an essay ...": the AI (with
+        return Plan([{"text": text, "kind": "quick"}], "single")  # the jobs tool) decides add vs do; never auto-start
     if not is_multi(text):
         return Plan([{"text": text, "kind": "long" if is_long_job(text) else "quick"}], "single")
     if quick := _shortcut_tasks(text):  # every part is a 0-token shortcut on its own: no planner call
@@ -399,7 +441,7 @@ def plan(text: str) -> Plan:
         tasks, method = [], "rules"
     if not tasks:
         tasks, method = _rule_tasks(text), "rules"
-    tasks = add_dependencies(merge_tails(tasks))
+    tasks = add_dependencies(merge_tails(tasks), text)
     if len(tasks) == 1 and tasks[0]["kind"] == "quick":
         tasks = [{"text": text, "kind": "quick"}]  # really one request: keep the user's wording
     return Plan(tasks, method)

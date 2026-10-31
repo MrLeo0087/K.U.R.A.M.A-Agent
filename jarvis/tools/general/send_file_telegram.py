@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import time
 from pathlib import Path
 
 from jarvis.core import config, notify
@@ -178,6 +179,23 @@ def send_file_telegram(path: str = "", caption: str = "", pick: int = 0) -> str:
     return find_and_send(cleaned, want=want)
 
 
+TEXT_EXT = {".md", ".txt", ".py", ".json", ".csv", ".log", ".js", ".html", ".css", ".sh", ".yaml", ".yml"}
+
+
+def _as_text(p: Path, data: bytes, caption: str = "") -> str | None:
+    """Fallback when Telegram refuses the upload (seen 2026-10-31: HTTP 500 on every upload, messages fine): a small
+    text file is sent as messages. None when it isn't a small text file or the messages fail too."""
+    if p.suffix.lower() not in TEXT_EXT or len(data) > 16_000:
+        return None
+    text = data.decode("utf-8", errors="replace").strip()
+    parts = [text[i:i + 3500] for i in range(0, len(text), 3500)] or [""]
+    head = f"📄 {p.name} (Telegram refused the file upload, so here is its text{', ' + caption if caption else ''}):"
+    for i, part in enumerate(parts):
+        if not notify.telegram_send((head + "\n\n" if i == 0 else "") + part):
+            return None
+    return f"Telegram refused the file upload (its server error), so I sent {p.name} as {len(parts)} text message(s)."
+
+
 def deliver(p: Path, caption: str = "") -> str:
     """Upload one checked file to the user's chat (photos as pictures, the rest as documents).
     A file over Telegram's limit is uploaded to a file host and sent as a download link instead."""
@@ -186,10 +204,15 @@ def deliver(p: Path, caption: str = "") -> str:
     photo = p.suffix.lower() in PHOTO_EXT and p.stat().st_size <= PHOTO_MAX
     method, field = ("sendPhoto", "photo") if photo else ("sendDocument", "document")
     payload = {"chat_id": config.TELEGRAM_CHAT_ID, **({"caption": caption[:1000]} if caption else {})}
-    try:
-        with open(p, "rb") as fh:
-            ok = notify.telegram_call(method, payload, files={field: (p.name, fh)})
+    data = p.read_bytes()  # bytes, not a file object: a known length
+    try:  # ONE try, never a retry: Telegram answered "500" / timed out yet DELIVERED the file (owner got duplicates)
+        ok = notify.telegram_call(method, payload, files={field: (p.name, data)}, timeout=60)
     except RuntimeError as e:
+        if re.search(r"\b5\d\d\b|Internal Server Error|Timeout|RemoteProtocol", str(e)):
+            notify.telegram_send(f"📄 {p.name}: Telegram gave an error while uploading, so it may or may not have "
+                                 f"arrived. If it's missing, say 'send it again'. (Saved on the laptop: {p})")
+            return (f"Telegram gave an error while uploading {p.name} (its server); it may still have arrived. "
+                    f"I told you on Telegram. Saved at {p}.")
         return f"error: Telegram didn't accept {p.name}: {e}"
     if not ok:
         return f"error: Telegram didn't accept {p.name} (check the bot token/chat id or your internet)"
