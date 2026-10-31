@@ -40,6 +40,7 @@ def _tell(state: str) -> bool:
 def _norm(name: str) -> str:
     """ctrl_l / ctrl_r -> ctrl, alt_gr -> alt, shift_r -> shift, cmd_l -> cmd; other keys as they are."""
     n = (name or "").lower()
+    n = {"super": "cmd", "win": "cmd", "meta": "cmd", "control": "ctrl"}.get(n, n)
     for m in ("ctrl", "alt", "shift", "cmd"):
         if n == m or n.startswith(m + "_"):
             return m

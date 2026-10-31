@@ -58,3 +58,10 @@ def test_single_key_still_works():
     h, told, t, timers = make("ctrl_r")
     h.press("ctrl_r"); t[0] = 1; h.release("ctrl_r")
     assert told == ["down", "up"]
+
+
+def test_super_z():
+    h, told, t, timers = make("super+z")
+    h.press("cmd"); h.press("z"); h.release("z"); h.press("z")  # auto-repeat
+    t[0] = 1; h.release("cmd")
+    assert told == ["down", "up"]

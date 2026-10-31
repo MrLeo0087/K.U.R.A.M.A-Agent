@@ -564,7 +564,7 @@ Phases (one at a time, owner tests after each):
       under 440 css px), slim input box (36 css px: 26 px mic/talk/text, 28 px send), suggestions removed from the
       panel (no chips, no /suggest calls).
 - [x] 2026-10-31 HOLD-TO-TALK anywhere (owner: opening the chat for "raise the volume" isn't practical; talk mode
-      listens all the time): hold Ctrl+Space (config.PTT_KEY; either Ctrl; Space auto-repeat debounced), speak, let go. jarvis/core/ptt.py (pynput in the API
+      listens all the time): hold Super+Z (config.PTT_KEY; free in GNOME and apps; auto-repeat debounced), speak, let go. jarvis/core/ptt.py (pynput in the API
       server, only wakes on key events) writes data/ptt.state + SIGUSR2 to the mini window; the hidden, click-through
       chat page records (same path as talk-mode-while-closed), on release transcribes and sends; the caption beside
       the KURAMA button shows "Listening…", your words and the reply (and it's spoken unless muted). A tap < 0.35 s or
