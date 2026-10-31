@@ -1,5 +1,74 @@
 # KURAMA: handoff for a new session
 
+## CURRENT STATE (2026-10-31) — read this first
+Owner's working rules (strict): limited budget on BOTH sides (Groq free tier for KURAMA, and the owner's Claude usage
+for you) -> investigate the root cause with evidence before changing code, one careful fix, test it, report briefly;
+no guessing/repeated attempts; one step at a time, each step leaves KURAMA working, then STOP for the owner to test.
+Fix the CLASS of problem, never one sentence. Routing by MEANING, never new word rules. You may restart KURAMA
+(scripts/kurama-power.sh off; on). Don't drive the owner's screen (no xdotool clicks/typing); offscreen WebKit checks
+are fine. COMMAND.md has the owner's own uncommitted edits: never commit or overwrite it.
+
+### How to find problems (do this, not repo-wide scans)
+- Traces: data/traces.db (table traces: text, path, intent, route, tools(+results), llm calls/errors, answer, ms) ->
+  `venv/bin/python scripts/trace_report.py --days 1` / `--show <id>`, or SQL over the last hours. MONITORING.md explains.
+- Server log: data/logs/server.log (yes/no answers are logged: "confirm <id> answered <bool> via 'button|typed|voice'",
+  "denied: the page closed the chat", "no answer in 120s"). Worker logs: data/logs/worker_*.log. STT: data/logs/stt.log.
+- Live check: `curl -sN -X POST http://127.0.0.1:8000/api/v1/chat -H 'Content-Type: application/json' -d '{"text":"..."}'`
+  (read events line by line; never `head -c`). UI bugs: load http://127.0.0.1:8000/?mini=1 (or /?lowpower=0&wallpaper=1)
+  in an offscreen Gtk/WebKit2 4.1 window with the SYSTEM python3, type into #input, submit #composer, read the DOM.
+- Tests: `venv/bin/python -m pytest -q` (~1040, ~100 s; run related files first). Scorecard: `venv/bin/python -m tests.eval.harness`
+  (66% instant / 100% right / router 92% must not drop). Real-model routing checks: run fastpath.match() in a script
+  with PYTHONPATH=. (the local bge-small model loads in ~2 s).
+
+### How routing works now (jarvis/core/fastpath.py match())
+agent_intent (agent on/off) -> agent_coding_intent (only while the coding agent is on) -> link_play / clean /
+shutdown_later / to_file -> selection_intent (highlighted text/code: action by MEANING via semantic.best_of over
+config.SELECTION_EXAMPLES) -> old regex intents (_match) -> daily_intent. Every pattern hit must pass meaning_ok
+(the meaning gate, always on). No hit -> the LangGraph agent with 1-3 routed tool groups (semantic router + learned
+wordings; learning only from self-contained successes). Context: VS Code editor link (vscode_ext/, jarvis/core/editor.py:
+exact file, selection, unsaved edits, edits through the editor) and Brave extension (browser_ext/: tab + highlighted
+text + editable flag). Yes/no: SSE confirm event + 4 KB flush + the page polls GET /api/v1/confirm/pending (WebKit
+held small stream chunks: that was the "shutdown stuck" root cause, fixed 2026-10-30).
+
+### Token-efficiency approach (keep it)
+Local work first (parse logs/errors, search, diff, run code: 0 tokens); send the AI only the relevant piece (crashing
+function, last log lines); small model for summaries/decisions, big model only for writing/fixing code; patches not
+whole files; error memory + caches; jobs > ~4k tokens ask first (AGENT_ASK_ABOVE_TOKENS); >= 65% of requests 0-token.
+
+### Done 2026-10-30/31 (details: PROGRESS.md "Transformation" + repair steps)
+Phase A foundations (yes/no never cancelled by side effects, whole-word yes/no, learning cleaned), B editor link +
+browser highlight, C selection-first by meaning + meaning gate always on + spoken math + free bare yes/no, D agents
+framework (jarvis/agents/) + coding agent (terminal crash -> pop-up in VS Code + mini chat with Fix it / Ask ChatGPT /
+Gemini / Claude; fix as reviewed change + undo; template projects with an EMPTY .venv, nothing installed; asks before
+big token jobs). Repairs: coding agent no longer hijacks editing requests / undoes by accident; a fix never overwrites
+a file with a fragment (blocks.patch_main); devutils shortcuts restored (name clash); rate-limit deadlock for big
+background calls; files/folders basics (create without asking, literal names, rename, open in VS Code, pasted path =
+"this folder"); shutdown yes/no now reaches the page.
+
+### Open decisions / next steps (ask the owner which; do ONE at a time)
+1. Merge the coding agent into normal tools (owner asked; proposal accepted in principle, not built): crash actions stay
+   0-token meaning shortcuts but AFTER selection/editing; pop-ups always on with a setting; undo near-exact only;
+   meaning model not pinned; remove the General/Coding switch; keep jarvis/agents for future agents.
+2. Offline /commands for every tool that works without internet (0 tokens), listed by /list, in COMMAND.md, suggested in
+   the UI and Telegram.
+3. Phase E: make every basic tool smooth with multi-turn live checks (files/organize, todo, schedule, telegram, media,
+   info, create, text, run command, calculate, date, goals, alarms/timers/stopwatch, weather, habits, contacts, quiz,
+   study notes, focus, kill app, power, screenshot, theme, tokens, images).
+4. Heavy tools then the NIGHT SHIFT AGENT (planned with the owner): foundation first = Long Job Engine (durable,
+   resumable, budgets), Safe Copy (agents work on a copy; one diff + yes in the morning), Agent Brain (plan -> act ->
+   check -> re-plan within a budget). Then Experiment Runner (ML, local + Kaggle), Make-It-Run, Test & Fix, Doc Writer,
+   Research, Study Builder, Media Worker, Data Doctor, Laptop Keeper, Project Guardian (snapshot bisect). Night shift:
+   queue by day, plan shown for a yes, runs overnight within token/time caps, code changes only in a copy, never
+   deletes/installs/pushes, morning report on Telegram + dashboard.
+5. Providers: CLAUDE.md says Groq only. Rotating several Groq accounts/keys (own or family's) to get past limits was
+   REFUSED (Groq terms; ban risk) — don't build it. A second provider for the night (e.g. Gemini API free tier, own
+   account) is the owner's decision; its free limits must be read from Google AI Studio (published numbers conflict).
+6. Unverified: chat auto-scrolling while scrolling another panel (CSS overscroll fix shipped, owner not confirmed).
+   ChatGPT auto-paste (browser_ext/bridge.js) unverified; owner said leave it.
+
+---
+
+
 Read this, then CLAUDE.md (hard rules) and the tail of PROGRESS.md. Don't re-explore the repo; grep for what you need.
 
 **v2 (2026-10-29):** the AI sees 17 general tools (`jarvis/tools/core/`) that call the specialised tools; to-dos are
