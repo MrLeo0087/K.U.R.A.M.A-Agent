@@ -665,3 +665,15 @@ Phases (one at a time, owner tests after each):
       short burst (<= 4 words) with the exact name wakes when the words before it are garble, not English ("I told
       KURAMA" still doesn't: jarvis/core/words.py, system dictionary on first need); page fallback accepts "wake up" /
       "start system" alone. Mic input raised to 70% earlier (39% kept the wake floor out of reach).
+- [x] 2026-11-01 From the owner's 00:58-01:00 traces: (1) "copy the path of this folder" copied /home/leo: the Files
+      helper guessed the window by title and looked the selection up under the wrong folder -> the selected names are
+      looked up under every open Files folder (the one that holds them wins); each Files read is logged to
+      data/logs/fm.log. (2) "open this folder in VS Code" opened VS Code alone: the AI put VS Code as target and the
+      folder in text -> apps opens THAT folder in VS Code. (3) A 2nd "copy the path" copied nothing: the model called
+      'clipboard' (not offered), Groq 400, retried WITHOUT tools -> a real KURAMA tool it calls is now offered and the
+      retry keeps tools. (4) "send this folder" (Tara, 11.7 GB) asked a vague question -> it lists what inside fits
+      (with sizes) and the folder becomes "here", so "send Notes" sends Tara/Notes. (5) Hold-to-talk / slow panel:
+      the hidden panel's page was closed 3 min after hiding; reopening reloaded it (empty glass box first) and a Ctrl
+      release during the reload was lost (stuck recording) -> kept 20 min; the panel shows only once its page is
+      loaded; during a reload only the LATEST key state counts ("I was just waking up, hold Ctrl again" if released).
+      Prompt: "no jargon" restored (an owner rule a test guards), another phrase trimmed.

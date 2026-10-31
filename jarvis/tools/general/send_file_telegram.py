@@ -33,6 +33,32 @@ def check_path(path: str) -> Path:
     return p
 
 
+def _inside(p: Path, files: list[Path]) -> str:
+    """What is in a too-big folder, with sizes, so the user can pick one ("send Notes"); the folder becomes "here"."""
+    sizes: dict[str, int] = {}
+    for f in files:
+        top = f.relative_to(p).parts[0]
+        try:
+            sizes[top] = sizes.get(top, 0) + f.stat().st_size
+        except OSError:
+            pass
+    cap = config.TELEGRAM_FILE_MAX_MB * 1024 * 1024 * 3  # zipped text/code shrinks a lot; photos / videos don't
+    fit = sorted((n for n in sizes if sizes[n] <= cap), key=lambda n: -sizes[n])[:8]
+    big = sorted((n for n in sizes if sizes[n] > cap), key=lambda n: -sizes[n])[:3]
+    mb = lambda n: f"{sizes[n] / 1048576:.0f} MB" if sizes[n] >= 1048576 else f"{max(1, sizes[n] // 1024)} KB"  # noqa: E731
+    try:
+        from jarvis.core import focus
+        focus.set_path(str(p))  # "send Notes" now means the Notes inside this folder
+    except Exception:  # noqa: BLE001
+        pass
+    parts = []
+    if fit:
+        parts.append("These inside it can be sent: " + ", ".join(f"{n} ({mb(n)})" for n in fit) + ".")
+    if big:
+        parts.append("Too big: " + ", ".join(f"{n} ({mb(n)})" for n in big) + ".")
+    return " ".join(parts) + " Which one should I send? (e.g. 'send " + (fit[0] if fit else "<name>") + "')"
+
+
 def zip_dir(path: str | Path) -> Path:
     """Zip a folder (skipping junk like venv/.git/node_modules) into data/outputs/zips, for sending to Telegram.
     Raises ValueError if the folder is missing, outside the allowed roots, or the content exceeds the size limit."""
@@ -58,9 +84,8 @@ def zip_dir(path: str | Path) -> Path:
     if not files:
         raise ValueError(f"the folder “{p.name}” is empty (or only junk), nothing to send")
     if total > hard:
-        raise ValueError(
-            f"“{p.name}” is about {total // (1024 * 1024)} MB — far over Telegram's {config.TELEGRAM_FILE_MAX_MB} MB "
-            f"limit even compressed. Tell me a specific sub-folder or file to send instead.")
+        raise ValueError(f"“{p.name}” is about {total // (1024 * 1024)} MB — far over Telegram's "
+                         f"{config.TELEGRAM_FILE_MAX_MB} MB limit even compressed. " + _inside(p, files))
     out_dir = Path(config.OUTPUTS_DIR) / "zips"
     out_dir.mkdir(parents=True, exist_ok=True)
     out = out_dir / f"{p.name}-{time.strftime('%Y%m%d-%H%M%S')}.zip"
@@ -153,6 +178,9 @@ def send_file_telegram(path: str = "", caption: str = "", pick: int = 0) -> str:
     if (ref := focus.refer(raw)) is not None:  # "this folder", "it", "the previous folder"
         raw = str(ref)
     cleaned = re.sub(r"\s*\bfolder\b\s*", " ", raw, flags=re.I).strip()
+    here = focus.cwd()  # a bare name inside the folder we're working in ("send Notes" after the list) comes first
+    if here is not None and cleaned and "/" not in cleaned and (here / cleaned).exists():
+        raw = str(here / cleaned)
     literal = Path(raw).expanduser()
     if literal.is_absolute() or raw.startswith("~"):  # an explicit path the user/model gave
         if literal.is_dir():

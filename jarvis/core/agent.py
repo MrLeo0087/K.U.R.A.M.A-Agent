@@ -41,8 +41,8 @@ log = logging.getLogger("jarvis.agent")
 LANG_NAMES = {"en": "English", "ne": "Nepali (Devanagari script)", "hi": "Hindi (Devanagari script)"}
 
 SYSTEM_PROMPT = (
-    "You are {name}, a warm helper on the user's laptop. Talk like a kind friend, simple words. "
-    "One short sentence when enough, 2 at most unless asked; no filler. "
+    "You are {name}, a warm helper on the user's laptop. Talk like a kind friend, simple words, no jargon. "
+    "One short sentence when enough, 2 at most unless asked. "
     "Do it the way the user asks. Answer in the user's language (English, Hindi or Nepali). Plain text, no "
     "emojis or tables. Get what the user really wants; for a problem, use tools to find the cause and "
     "give the fix. Use tools only when needed; never invent results or say you did something no tool did; if it fails or you don't know, "
@@ -342,6 +342,15 @@ class Agent:
             return False
         return self._meta_ok(state["user_text"])
 
+    @staticmethod
+    def _unoffered_tool(error: str, tools: list | None) -> Any | None:
+        """Groq 400 'attempted to call tool X which was not in request.tools': X if it is a real KURAMA tool."""
+        m = re.search(r"attempted to call tool '([A-Za-z0-9_]+)'", error)
+        if not m or not tools:
+            return None
+        t = registry.REGISTRY.tools.get(m.group(1))
+        return t if t is not None and all(getattr(x, "name", None) != t.name for x in tools) else None
+
     def _llm_node(self, state: AgentState) -> dict:
         tools = state.get("tools") or None
         rounds = state.get("rounds", 0)
@@ -364,12 +373,18 @@ class Agent:
                 raise
             # a tool-call / tool_choice 400 from Groq: retry once with NO tools so it answers in text; already
             # tool-less (the final round, where gpt-oss still tries to call a tool): answer from the tool results
-            log.warning("tool-call generation failed (%s); retrying without tools", str(e)[:120])
+            extra = self._unoffered_tool(str(e), tools)
+            if extra is not None:  # it called a real KURAMA tool we didn't offer ('clipboard': its old name in the
+                tools = [*tools, extra]  # history): offer that one too and retry WITH tools (it answered with no
+                kw = {**kw, "tools": tools}  # tool call before: "copy the path" copied nothing)
+                log.warning("model called the unoffered tool %s; retrying with it", extra.name)
+            else:
+                log.warning("tool-call generation failed (%s); retrying without tools", str(e)[:120])
             notools = {k: v for k, v in kw.items() if k != "tools"}
             try:
                 if not tools:
                     raise e
-                reply = self._chat(msgs, notools, state.get("stream", False), hold)
+                reply = self._chat(msgs, kw if extra is not None else notools, state.get("stream", False), hold)
             except llm.LLMError:  # still failing: answer from whatever the tools already returned
                 done = [str(m.content) for m in msgs if isinstance(m, ToolMessage) and m.name != meta.NAME
                         and not str(m.content).startswith("error")][-2:]
@@ -381,7 +396,7 @@ class Agent:
             calls = [{**tc, "id": tc.get("id") or f"call_{rounds}_{i}"} for i, tc in enumerate(calls)]
             bad = [{**tc, "id": tc.get("id") or f"bad_{rounds}_{i}"} for i, tc in enumerate(bad)]
             msg = AIMessage(content=reply.text, tool_calls=calls, invalid_tool_calls=bad)
-            return {"messages": msgs + [msg], "pending": calls + bad}
+            return {"messages": msgs + [msg], "pending": calls + bad, "tools": tools or state.get("tools") or []}
         answer = reply.text.strip() or (TOO_MANY_ROUNDS if ai.tool_calls else NO_ANSWER)
         answer = honest(answer, msgs)
         if hold and not last_round and meta.needs_tool(answer) and not self.last.get("denied") and (

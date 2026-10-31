@@ -30,6 +30,17 @@ def state() -> dict:
             out.update(json.loads(p.stdout.strip().splitlines()[-1]))
         except Exception as e:  # noqa: BLE001 - context is a bonus
             log.debug("files context unavailable: %s", e)
+    if out.get("top") == "files":  # evidence when "this folder" picks the wrong thing (kept small)
+        try:
+            path = config.LOG_DIR / "fm.log"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            if path.exists() and path.stat().st_size > 100_000:
+                path.write_text("".join(path.read_text(encoding="utf-8").splitlines(True)[-300:]), encoding="utf-8")
+            with path.open("a", encoding="utf-8") as fh:
+                fh.write(time.strftime("%m-%d %H:%M:%S ") + json.dumps(
+                    {k: out.get(k) for k in ("title", "folder", "selected", "folders")}) + "\n")
+        except OSError:
+            pass
     _cache = (time.monotonic(), out)
     return out
 

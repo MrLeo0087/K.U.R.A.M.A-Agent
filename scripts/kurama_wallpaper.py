@@ -67,7 +67,8 @@ PID_FILE = STATE_FILE.with_name("wallpaper.pid")  # the shortcut signals this pr
 BUSY_STATES = ("listening", "capturing", "thinking", "speaking")  # closing the panel now keeps it alive
 IDLE_ANIM_MS = 125  # the button's slow idle ring (0 = still)
 WS_W, WS_H = 480, 620  # mini workspace window
-PANEL_KEEP_S = 180  # a hidden panel is closed after this long (frees its page); reopening restores the chat
+PANEL_KEEP_S = 1200  # a hidden panel is closed after 20 min (frees its ~45 MB page): reopening / hold-to-talk
+#                     soon after is instant (at 3 min it reloaded: an empty glass box first, a lost Ctrl release)
 CAPTION_W = 340  # reply caption next to the button while talking with the panel closed
 RING = {"listening": (0.25, 0.85, 0.78), "capturing": (0.25, 0.95, 0.6), "thinking": (1, 0.75, 0.25),
         "speaking": (1, 0.55, 0.15)}  # button ring colour per voice state (talk mode, panel closed)
@@ -944,7 +945,6 @@ class Mini:
             return
         if state != "down" and not self.ghost:
             return
-        fresh = self.panel is None
         if state == "down":
             if self.reaper:
                 GLib.source_remove(self.reaper)
@@ -960,16 +960,27 @@ class Mini:
                 self.panel.show_all()
             if self.caption is None:
                 self.caption = Caption(self)
-            self.caption.show("you", "Listening…", False)
-        code = f"window.kuramaMiniShown && window.kuramaMiniShown(false, true); window.kuramaPTT && window.kuramaPTT({js})"
-        if fresh:
-            def loaded(view, event):
-                if event == WebKit2.LoadEvent.FINISHED:
-                    view.disconnect(hid)
-                    GLib.timeout_add(300, lambda: run_js(view, code) and False)
-            hid = self.view.connect("load-changed", loaded)
-        else:
-            run_js(self.view, code)
+            ready = getattr(self, "page_ready", False)
+            self.caption.show("you", "Listening…" if ready else "Getting ready… keep holding", False)
+        self.ptt_last = state
+        if getattr(self, "page_ready", False):
+            run_js(self.view, f"window.kuramaMiniShown && window.kuramaMiniShown(false, true); "
+                              f"window.kuramaPTT && window.kuramaPTT({js})")
+        elif not getattr(self, "ptt_waiting", False):  # the page is (re)loading: when it's there, only the LATEST
+            self.ptt_waiting = True  # key state counts (a release during the load was lost: a stuck recording)
+
+            def apply():
+                self.ptt_waiting = False
+                last = self.ptt_last
+                if last == "down":  # still held: start listening now
+                    run_js(self.view, "window.kuramaMiniShown && window.kuramaMiniShown(false, true); "
+                                      "window.kuramaPTT && window.kuramaPTT(1)")
+                    return
+                if last == "up" and self.caption is not None:
+                    self.caption.show("bot", "I was just waking up. Hold Ctrl again and speak.", True)
+                self.ptt_active = False
+                GLib.timeout_add(600, self.end_ghost_if_idle)
+            self.when_ready(apply)
         if state == "cancel":
             GLib.timeout_add(600, self.end_ghost_if_idle)
 
@@ -999,9 +1010,29 @@ class Mini:
         v.set_background_color(Gdk.RGBA(0, 0, 0, 0) if visual is not None else Gdk.RGBA(0.11, 0.11, 0.12, 1))
         v.connect("permission-request", self.wp.on_permission)
         v.connect("decide-policy", self.wp.on_policy)
+        self.page_ready, self.on_ready = False, []
+        v.connect("load-changed", self._page_loaded)
         u = urlsplit(self.wp.url)
         v.load_uri(f"{u.scheme}://{u.netloc}/?mini=1" + ("" if visual is not None else "&opaque=1"))
         p.add(v)
+
+    def _page_loaded(self, view, event) -> None:
+        if event != WebKit2.LoadEvent.FINISHED or self.page_ready:
+            return
+        def ready():  # a moment for the first paint, then whatever waited for the page
+            self.page_ready = True
+            waiting, self.on_ready = self.on_ready, []
+            for fn in waiting:
+                fn()
+            return False
+        GLib.timeout_add(250, ready)
+
+    def when_ready(self, fn) -> None:
+        """Run fn now if the panel's page is loaded, else as soon as it is."""
+        if getattr(self, "page_ready", False):
+            fn()
+        else:
+            self.on_ready.append(fn)
 
     def beside(self, w: int, h: int, top: bool = False) -> tuple[int, int]:
         """Where a w x h window goes next to the button without ever covering it: the side towards the middle of
@@ -1037,11 +1068,18 @@ class Mini:
             self.caption.hide()
         self.unghost()
         self.ensure_panel()
-        self.panel.show_all()
-        self.place_panel()
-        self.fade(self.panel, True)
-        self.panel.present_with_time(time or Gtk.get_current_event_time())
-        run_js(self.view, "window.kuramaMiniShown && window.kuramaMiniShown(true)")
+        stamp = time or Gtk.get_current_event_time()
+
+        def show():  # only once its page is there: a reloaded page showed an empty glass box first
+            if self.panel is None or self.ghost:
+                return
+            self.panel.show_all()
+            self.place_panel()
+            self.fade(self.panel, True)
+            self.panel.present_with_time(stamp)
+            run_js(self.view, "window.kuramaMiniShown && window.kuramaMiniShown(true)")
+            self.bubble.queue_draw()
+        self.when_ready(show)
         self.bubble.queue_draw()
 
     def hide_panel(self) -> None:

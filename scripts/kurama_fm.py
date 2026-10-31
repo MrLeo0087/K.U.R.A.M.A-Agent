@@ -74,8 +74,9 @@ def _folders() -> list[str]:
     return out
 
 
-def _selected(title: str, folder: str) -> list[str]:
-    """Names selected in the Files window titled `title` (accessibility tree), as paths under `folder`."""
+def _selected(title: str, folder: str, folders: list[str] | None = None) -> tuple[list[str], str]:
+    """Names selected in the Files window titled `title` (accessibility tree), as paths, and the folder they are in
+    (the window's folder, else any open Files folder that holds them: a wrong window guess copied /home/leo)."""
     try:
         gi.require_version("Atspi", "2.0")
         from gi.repository import Atspi
@@ -105,8 +106,12 @@ def _selected(title: str, folder: str) -> list[str]:
                 for k in range(a.get_child_count()):
                     walk(a.get_child_at_index(k), depth + 1)
             walk(win)
-    base = Path(folder)
-    return [str(base / n) for n in dict.fromkeys(names) if (base / n).exists()]
+    names = list(dict.fromkeys(names))
+    for base in [folder] + [f for f in (folders or []) if f != folder]:
+        hits = [str(Path(base) / n) for n in names if (Path(base) / n).exists()]
+        if hits:
+            return hits, base
+    return [], folder
 
 
 def main() -> dict:
@@ -117,9 +122,9 @@ def main() -> dict:
         folder = next((f for f in folders if title and Path(f).name == title.strip()), None) or \
                  next((f for f in folders if title and title.strip() in ("Home",) and f == str(Path.home())), None) or \
                  folders[0]
-    out = {"top": kind, "folder": folder, "selected": []}
+    out = {"top": kind, "folder": folder, "selected": [], "title": title, "folders": folders}
     if kind == "files" and folder:
-        out["selected"] = _selected(title, folder)
+        out["selected"], out["folder"] = _selected(title, folder, folders)
     return out
 
 

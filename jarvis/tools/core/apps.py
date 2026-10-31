@@ -14,6 +14,9 @@ def _open(a: dict) -> tuple[str, dict]:
     name = (a.get("target") or "").strip()
     if re.search(r"\b(?:vs\s*code|vscode|visual\s+studio\s+code|code|editor)\b", a.get("how") or "", re.I):
         return "open_path", {"path": name, "app": "vscode"}  # 'open Downloads in VS Code'
+    other = (a.get("text") or "").strip()
+    if re.fullmatch(r"(?:vs\s*code|vscode|visual\s+studio\s+code|code)", name, re.I) and other:
+        return "open_path", {"path": other, "app": "vscode"}  # target=VS Code + the folder in text: open THAT folder
     from jarvis.tools.general import _apps, open_url
     if re.search(r"\b(?:website|site|\.com|\.org|https?://|www\.)", name, re.I) or open_url.resolve(name):
         return "open_url", {"target": name}
