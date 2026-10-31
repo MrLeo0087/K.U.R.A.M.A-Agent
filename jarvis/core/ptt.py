@@ -1,9 +1,9 @@
-"""Hold-to-talk: hold one key (default Right Ctrl), speak, let go -> KURAMA hears it, without opening the chat.
+"""Hold-to-talk: hold a key combo (default Ctrl+Space), speak, let go -> KURAMA hears it, without opening the chat.
 
 Runs in the API server (pynput, X11, ~0 CPU: it only wakes on key events). On key down it writes "down" to
 data/ptt.state and sends SIGUSR2 to the mini window (scripts/kurama_wallpaper.py, pid in data/wallpaper.pid);
 the window's hidden chat page records, and on "up" transcribes and sends; what you said and the reply appear in
-the caption beside the KURAMA button. If another key is pressed while holding (Right Ctrl + C = a shortcut) or
+the caption beside the KURAMA button. If another key is pressed while holding (Ctrl + Space + C) or
 the hold is shorter than PTT_MIN_HOLD_S, it sends "cancel" instead: nothing is transcribed (0 tokens).
 """
 from __future__ import annotations
@@ -37,31 +37,73 @@ def _tell(state: str) -> bool:
         return False
 
 
-class Holder:
-    """Key events -> down / up / cancel (pure logic, testable without a keyboard)."""
+def _norm(name: str) -> str:
+    """ctrl_l / ctrl_r -> ctrl, alt_gr -> alt, shift_r -> shift, cmd_l -> cmd; other keys as they are."""
+    n = (name or "").lower()
+    for m in ("ctrl", "alt", "shift", "cmd"):
+        if n == m or n.startswith(m + "_"):
+            return m
+    return n
 
-    def __init__(self, key_name: str, tell=_tell, now=time.monotonic, min_hold: float | None = None):
-        self.key_name, self.tell, self.now = key_name, tell, now
+
+class Holder:
+    """Key events -> down / up / cancel (pure logic, testable without a keyboard). combo: "ctrl+space" or one key.
+    Down: the main key is pressed while every modifier is held. Up: a modifier is released, or the main key is
+    released and not pressed again within PTT_DEBOUNCE_S (a held Space auto-repeats as release+press pairs)."""
+
+    def __init__(self, combo: str, tell=_tell, now=time.monotonic, min_hold: float | None = None, schedule=None):
+        parts = [_norm(p.strip()) for p in combo.split("+") if p.strip()]
+        self.main, self.mods = parts[-1], set(parts[:-1])
+        self.tell, self.now = tell, now
         self.min_hold = config.PTT_MIN_HOLD_S if min_hold is None else min_hold
+        self.schedule = schedule or _timer
+        self.held: set[str] = set()
         self.down_at: float | None = None
         self.spoiled = False
+        self.pending = None  # the delayed "main key really released" check
 
     def press(self, name: str) -> None:
-        if name == self.key_name:
-            if self.down_at is None:  # X11 repeats: only the first press counts
-                self.down_at, self.spoiled = self.now(), False
-                self.tell("down")
-        elif self.down_at is not None and not self.spoiled:  # a shortcut, not talking
+        n = _norm(name)
+        if n == self.main and self.down_at is not None:  # auto-repeat while holding: not a release
+            self._cancel_pending()
+        elif n == self.main and self.mods <= self.held:
+            self.down_at, self.spoiled = self.now(), False
+            self.tell("down")
+        elif self.down_at is not None and n not in self.mods and not self.spoiled:  # a shortcut, not talking
             self.spoiled = True
             self.tell("cancel")
+        self.held.add(n)
 
     def release(self, name: str) -> None:
-        if name != self.key_name or self.down_at is None:
+        n = _norm(name)
+        self.held.discard(n)
+        if self.down_at is None:
+            return
+        if n in self.mods or n in ("ctrl", "alt", "shift", "cmd"):  # modifiers never auto-repeat
+            self._finish()
+        elif n == self.main:
+            self._cancel_pending()
+            self.pending = self.schedule(config.PTT_DEBOUNCE_S, self._finish)
+
+    def _cancel_pending(self) -> None:
+        if self.pending is not None:
+            self.pending.cancel()
+            self.pending = None
+
+    def _finish(self) -> None:
+        self._cancel_pending()
+        if self.down_at is None:
             return
         held, self.down_at = self.now() - self.down_at, None
-        if self.spoiled:
-            return
-        self.tell("up" if held >= self.min_hold else "cancel")
+        if not self.spoiled:
+            self.tell("up" if held >= self.min_hold else "cancel")
+
+
+def _timer(delay: float, fn):
+    t = threading.Timer(delay, fn)
+    t.daemon = True
+    t.start()
+    return t
 
 
 def _name(key) -> str:
