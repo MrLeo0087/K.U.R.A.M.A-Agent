@@ -1312,8 +1312,8 @@ def install_hotkey() -> None:
         r = subprocess.run(["gsettings", *args], capture_output=True, text=True, timeout=5)
         return r.stdout.strip()
     try:
-        if gs("get", key, "binding") == repr(MINI_HOTKEY):
-            return
+        if gs("get", key, "binding").strip("'\"") not in ("", "''"):  # already there (maybe changed by you
+            return  # in Settings > Keyboard > Custom Shortcuts): never overwrite it
         if gs("get", "org.gnome.shell.keybindings", "toggle-quick-settings") == "@as []":
             gs("set", "org.gnome.shell.keybindings", "toggle-quick-settings", "['<Super>s']")
         paths = gs("get", base, "custom-keybindings").replace("@as ", "")
