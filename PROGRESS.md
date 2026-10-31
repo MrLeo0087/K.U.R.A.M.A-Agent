@@ -695,3 +695,9 @@ Phases (one at a time, owner tests after each):
       "selected"/"highlighted" now count as pointing words (focus.is_anaphora), so it resolves to the selection.
       (3) Hold-to-talk stopping by itself: cause NOT proven yet -> data/logs/ptt.log records every step (key down /
       up / cancel, what the window did, page mic start / recording / stop, caption hidden, page hidden + why).
+- [x] 2026-11-01 (1) Hold-to-talk cut-out, PROVEN by ptt.log: key down 01:28:05.89, "caption hidden" 08.63, key up
+      10.63 — an auto-hide timer hid "Listening…" while Ctrl was held (all hides at .63 = GLib second timers). Now the
+      caption is never hidden while the key is held; each hide logs its caller (the timer's source isn't pinned yet).
+      (2) Big folders to Telegram: anything over ~2 GB raw was refused before zipping; the owner wants the zip + a
+      download link (gofile.io, multi-GB) every time -> up to config.SHARE_MAX_MB (20 GB), with a free-disk check.
+      Seen: the AI answered "too large" from history without calling the tool (honesty retry didn't catch a refusal).

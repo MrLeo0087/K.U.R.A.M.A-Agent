@@ -71,7 +71,8 @@ def zip_dir(path: str | Path) -> Path:
     if not p.is_dir():
         raise ValueError(f"{p} isn't a folder")
     cap = config.TELEGRAM_FILE_MAX_MB * 1024 * 1024
-    hard = cap * 40  # ~2 GB raw: above this, zipping it just to find out it won't fit is a waste
+    hard = config.SHARE_MAX_MB * 1024 * 1024  # over Telegram's 50 MB the zip goes up as a download link (gofile.io,
+    #                                            multi-GB): the owner wants that every time, up to this size
     files, total = [], 0
     for f in p.rglob("*"):
         if not f.is_file() or any(part in ZIP_SKIP for part in f.relative_to(p).parts):
@@ -88,6 +89,11 @@ def zip_dir(path: str | Path) -> Path:
                          f"{config.TELEGRAM_FILE_MAX_MB} MB limit even compressed. " + _inside(p, files))
     out_dir = Path(config.OUTPUTS_DIR) / "zips"
     out_dir.mkdir(parents=True, exist_ok=True)
+    import shutil
+    free = shutil.disk_usage(out_dir).free
+    if total > free * 0.9:  # the zip needs about as much space as the folder
+        raise ValueError(f"zipping “{p.name}” ({total // 1048576} MB) needs that much free space, but the disk only has "
+                         f"{free // 1048576} MB free")
     out = out_dir / f"{p.name}-{time.strftime('%Y%m%d-%H%M%S')}.zip"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:  # actually compress
         for f in files:

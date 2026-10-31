@@ -1352,7 +1352,12 @@ class Caption:
         self.win.move(*self.mini.beside(w, h))
 
     def hide(self):
-        pttlog("caption hidden")
+        if getattr(self.mini, "ptt_active", False):  # Ctrl is still held: "Listening…" must stay (ptt.log 01:28:05:
+            pttlog("caption hide skipped: key held")  # an old timer hid it 2.7 s into a hold)
+            self.timer = 0
+            return False
+        import traceback
+        pttlog("caption hidden by " + " < ".join(f.name for f in traceback.extract_stack()[-4:-1]))
         self.timer = 0
         self.win.hide()
         self.you.set_text("")

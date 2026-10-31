@@ -1115,6 +1115,7 @@ READLATER_EXAMPLES = ("save this page for later", "read this later", "save this 
                       "add this link to my reading list", "keep this tab to read later", "watch this later",
                       "save this article to read tonight", "put this website in my read later list")
 QUEUE_NOW_MARGIN = 0.04  # clearly 'do it now' below this (planner.queue_meant)
+SHARE_MAX_MB = int(os.getenv("KURAMA_SHARE_MAX_MB", "20000"))  # folders over Telegram's 50 MB: zip + link up to this
 QUEUE_ASK_S = 120  # a job that needs your yes asks on Telegram and waits this long (no answer = no)
 QUEUE_PARALLEL = 2  # while a job waits for your answer, the next one may run (at most this many at once)
 QUEUE_RETRIES = 3  # a job in KURAMA's job list: tries when the failure looks temporary (network, AI limits)
