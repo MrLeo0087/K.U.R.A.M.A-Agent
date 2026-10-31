@@ -55,8 +55,8 @@ def test_space_without_ctrl_short_tap_and_shortcut():
 
 
 def test_single_key_still_works():
-    h, told, t, timers = make("ctrl_r")
-    h.press("ctrl_r"); t[0] = 1; h.release("ctrl_r")
+    h, told, t, timers = make("ctrl_r")  # one modifier alone: listens after the start delay
+    h.press("ctrl_r"); t[0] = 0.3; fire(timers); t[0] = 1; h.release("ctrl_r")
     assert told == ["down", "up"]
 
 
@@ -77,3 +77,34 @@ def test_dismiss_and_fast_repeats():
     for _ in range(3):  # quick taps: each down ends in a cancel, never a stuck "down"
         h.press("cmd"); h.press("z"); t[0] += 0.1; h.release("cmd")
     assert told == ["down", "cancel"] * 3
+
+
+def solo():
+    told, t, timers = [], [0.0], []
+    h = ptt.Holder("ctrl_l", tell=told.append, now=lambda: t[0], min_hold=0.0,
+                   schedule=lambda d, fn: timers.append(FakeTimer(fn)) or timers[-1], dismiss="double")
+    return h, told, t, timers
+
+
+def test_left_ctrl_hold_talks_after_delay():
+    h, told, t, timers = solo()
+    h.press("ctrl_l"); t[0] = 0.3; fire(timers)
+    assert told == ["down"]
+    t[0] = 2; h.release("ctrl_l")
+    assert told == ["down", "up"]
+
+
+def test_ctrl_shortcut_never_listens():
+    h, told, t, timers = solo()
+    h.press("ctrl_l"); h.press("c"); fire(timers); t[0] = 1; h.release("c"); h.release("ctrl_l")
+    assert told == []
+
+
+def test_double_tap_dismisses_single_tap_does_nothing():
+    h, told, t, timers = solo()
+    h.press("ctrl_l"); t[0] = 0.1; h.release("ctrl_l")
+    assert told == []
+    t[0] = 0.3; h.press("ctrl_l"); t[0] = 0.4; h.release("ctrl_l")
+    assert told == ["dismiss"]
+    t[0] = 5; h.press("ctrl_l"); t[0] = 5.1; h.release("ctrl_l")  # a lone tap later: nothing
+    assert told == ["dismiss"]

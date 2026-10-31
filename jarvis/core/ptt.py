@@ -63,11 +63,20 @@ class Holder:
         self.down_at: float | None = None
         self.spoiled = False
         self.pending = None  # the delayed "main key really released" check
-        dparts = [_norm(p.strip()) for p in (dismiss or "").split("+") if p.strip()]
+        self.double = (dismiss or "").strip().lower() == "double"  # double-tap the talk key = dismiss
+        dparts = [] if self.double else [_norm(p.strip()) for p in (dismiss or "").split("+") if p.strip()]
         self.dismiss = (set(dparts[:-1]), dparts[-1]) if dparts else None
+        # one modifier alone (e.g. Left Ctrl): listen only after it is held alone this long, so Ctrl+C never does
+        self.solo = not self.mods and self.main in ("ctrl", "alt", "shift", "cmd")
+        self.waiting = None  # the delayed "start listening" while the solo key is held
+        self.pressed_at: float | None = None
+        self.last_tap = -1e9
 
     def press(self, name: str) -> None:
         n = _norm(name)
+        if self.solo:
+            self._solo_press(n)
+            return
         if self.dismiss and n == self.dismiss[1] and self.dismiss[0] <= self.held and self.down_at is None:
             if n not in self.held:  # Super+X: close the caption / stop speaking (once per press, not on repeat)
                 self.tell("dismiss")
@@ -85,6 +94,9 @@ class Holder:
 
     def release(self, name: str) -> None:
         n = _norm(name)
+        if self.solo:
+            self._solo_release(n)
+            return
         self.held.discard(n)
         if self.down_at is None:
             return
@@ -93,6 +105,50 @@ class Holder:
         elif n == self.main:
             self._cancel_pending()
             self.pending = self.schedule(config.PTT_DEBOUNCE_S, self._finish)
+
+    # ---- one modifier alone: hold = talk (after PTT_START_DELAY_S), double-tap = dismiss ----
+    def _solo_press(self, n: str) -> None:
+        if n == self.main:
+            if self.pressed_at is None:  # first press (a held modifier doesn't repeat, but be safe)
+                self.pressed_at, self.spoiled = self.now(), False
+                self.waiting = self.schedule(config.PTT_START_DELAY_S, self._solo_start)
+            return
+        if self.pressed_at is not None and not self.spoiled:  # Ctrl + another key = a shortcut
+            self.spoiled = True
+            if self.waiting is not None:
+                self.waiting.cancel()
+                self.waiting = None
+            if self.down_at is not None:
+                self.down_at = None
+                self.tell("cancel")
+        self.last_tap = -1e9
+
+    def _solo_start(self) -> None:
+        self.waiting = None
+        if self.pressed_at is not None and not self.spoiled and self.down_at is None:
+            self.down_at = self.now()
+            self.tell("down")
+
+    def _solo_release(self, n: str) -> None:
+        if n != self.main or self.pressed_at is None:
+            return
+        held, self.pressed_at = self.now() - self.pressed_at, None
+        if self.waiting is not None:
+            self.waiting.cancel()
+            self.waiting = None
+        if self.down_at is not None:  # it was listening: send
+            self.down_at = None
+            if not self.spoiled:
+                self.tell("up")
+            return
+        if self.spoiled or held >= config.PTT_START_DELAY_S:
+            return
+        now = self.now()  # a quick tap: two within PTT_DOUBLE_TAP_S = dismiss
+        if self.double and now - self.last_tap <= config.PTT_DOUBLE_TAP_S:
+            self.last_tap = -1e9
+            self.tell("dismiss")
+        else:
+            self.last_tap = now
 
     def _cancel_pending(self) -> None:
         if self.pending is not None:

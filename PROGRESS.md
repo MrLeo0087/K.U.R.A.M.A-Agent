@@ -576,3 +576,7 @@ Phases (one at a time, owner tests after each):
       my Shell never blurs: now a normal keep-above, never-focused window of class KURAMA-mini, indigo glass style);
       fast repeated Super+Z no longer sticks (the page's latest key event wins while the mic is starting; the window
       never hides the page while a new hold is down); Super+X closes the caption at once and stops the spoken reply.
+- [x] 2026-10-31 One-key talk (owner: two-key combos are annoying): hold Left Ctrl alone (listens after 0.3 s held
+      alone, so Ctrl+C / any Ctrl shortcut never listens), let go = send; double-tap Left Ctrl = close the reply caption
+      + stop speaking. The Fn key can't be used (handled by the keyboard itself, never reaches Linux). Combos still
+      work via KURAMA_PTT_KEY / KURAMA_PTT_DISMISS in .env (now ctrl_l / double).
