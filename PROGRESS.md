@@ -563,3 +563,12 @@ Phases (one at a time, owner tests after each):
 - [x] 2026-10-31 Mini: one-row tiny header (36 css px, was ~92: 10 px dots, 15 px logo, 24 px buttons, title hidden
       under 440 css px), slim input box (36 css px: 26 px mic/talk/text, 28 px send), suggestions removed from the
       panel (no chips, no /suggest calls).
+- [x] 2026-10-31 HOLD-TO-TALK anywhere (owner: opening the chat for "raise the volume" isn't practical; talk mode
+      listens all the time): hold Right Ctrl (config.PTT_KEY), speak, let go. jarvis/core/ptt.py (pynput in the API
+      server, only wakes on key events) writes data/ptt.state + SIGUSR2 to the mini window; the hidden, click-through
+      chat page records (same path as talk-mode-while-closed), on release transcribes and sends; the caption beside
+      the KURAMA button shows "Listening…", your words and the reply (and it's spoken unless muted). A tap < 0.35 s or
+      Right Ctrl + another key (a shortcut) = cancel, 0 tokens. With the chat open it works inside the chat.
+      Header back to two rows (row 1: dots, logo, KURAMA, power; row 2: tools, 24 px, tight). Font: Inter bundled
+      (frontend/fonts, SIL OFL, 352 KB, loaded once) as default; Look > Font: Inter / Ubuntu Sans / Noto Sans /
+      JetBrains Mono.

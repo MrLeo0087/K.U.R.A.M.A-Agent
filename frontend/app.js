@@ -2024,6 +2024,34 @@ function miniCaption(who, text, done = false) {
   clearTimeout(capTimer); capTimer = 0;
   hostSay("caption:" + JSON.stringify({ who, text, done }));
 }
+// Hold-to-talk (global key, see jarvis/core/ptt.py): the host calls kuramaPTT(1) on key down, (0) on release
+// (send what was said), (-1) to drop it (the key was part of a shortcut). Works with the panel open or closed.
+let pttOn = false;
+window.kuramaPTT = async (v) => {
+  if (v === 1) {
+    if (recording) return;
+    audioCtx();
+    try { await mic.start(); } catch (e) { miniCaption("bot", micError(e), true); return; }
+    player.stop();
+    recorder.start(); recording = pttOn = true; recSecs = 0;
+    updateState();
+    miniCaption("you", "Listening…");
+    return;
+  }
+  if (!pttOn) return;
+  pttOn = false; recording = false;
+  if (v === -1) { recorder.cancel(); mic.stop(); updateState(); miniCaption("you", " ", true); return; }
+  sttBusy = true; updateState(); // the host keeps the hidden panel alive while this says "thinking"
+  const blob = await recorder.stop();
+  mic.stop();
+  let r = null;
+  if (blob && blob.size >= 1200) { try { r = await api.stt(blob, S.lang); } catch { /* offline */ } }
+  sttBusy = false;
+  const text = (r?.text || "").trim();
+  if (!text) { updateState(); miniCaption("bot", "Didn't catch that.", true); return; }
+  if (S.mute === undefined || !S.mute) audioCtx();
+  sendChat(text, { voice: true, speak: !S.mute, lang: r.lang || S.lang });
+};
 function miniCaptionSoon(get) { // streamed reply: at most ~4 updates a second
   if (!capTimer) capTimer = setTimeout(() => { capTimer = 0; miniCaption("bot", get()); }, 250);
 }
@@ -2755,7 +2783,7 @@ if (MINI && !WSONLY) {
   atBottom();
   $("m-zoom").onclick = () => $("btn-full").click();
   // look: blur (Blur my Shell, system-wide for the whitelisted windows), corner radius (page + blur edge), tint (page)
-  const look = Object.assign({ blur: 40, light: 90, corner: 15, tint: 58, color: "#101328" }, S.look || {});
+  const look = Object.assign({ blur: 40, light: 90, corner: 15, tint: 58, color: "#101328", font: "inter" }, S.look || {});
   if (look.blur === 80 && !S.look?.light) look.blur = 40; // the old 0-100 scale (80 = radius 40)
   const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)).join(", ");
   const label = { blur: (v) => v + " px", light: (v) => v + "%", tint: (v) => v + "%", corner: (v) => (v ? v + " px" : "square") };
@@ -2765,6 +2793,7 @@ if (MINI && !WSONLY) {
     B.style.setProperty("--m-tint-rgb", rgb(look.color));
     for (const k of Object.keys(label)) { $("lk-" + k).value = look[k]; $("lk-" + k + "-v").textContent = label[k](look[k]); }
     $("lk-color").value = look.color;
+    $("lk-font").value = look.font; B.dataset.font = look.font;
     $("lk-note").textContent = look.blur > 50 && look.corner ? "Above 50 px the blur's corners turn square." : "";
   };
   let glassT = 0;
@@ -2778,6 +2807,7 @@ if (MINI && !WSONLY) {
     if (k !== "tint") pushGlass();
   });
   $("lk-color").addEventListener("input", (e) => { look.color = e.target.value; save(); });
+  $("lk-font").addEventListener("change", (e) => { look.font = e.target.value; save(); });
   $("m-look").onclick = (e) => { e.stopPropagation(); $("m-lookp").hidden = !$("m-lookp").hidden; };
   document.addEventListener("click", (e) => { if (!e.target.closest("#m-lookp, #m-look")) $("m-lookp").hidden = true; });
   applyLook();

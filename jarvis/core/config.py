@@ -230,6 +230,10 @@ TTS_DEFAULT_LANG = "en"
 
 # --- voice loop ---
 HOTKEY_PTT = os.getenv("JARVIS_HOTKEY", "<ctrl>+<alt>+j")  # press to talk (toggle)
+# Hold-to-talk anywhere (jarvis/core/ptt.py, in the API server): hold the key, speak, let go. pynput key name.
+PTT_ENABLED = os.getenv("KURAMA_PTT", "1").lower() not in ("0", "false", "no", "off")
+PTT_KEY = os.getenv("KURAMA_PTT_KEY", "ctrl_r")  # Right Ctrl (alone it does nothing in other apps)
+PTT_MIN_HOLD_S = 0.35  # shorter taps are ignored (0 tokens)
 VOICE_MAX_TOKENS = 200
 
 # --- agent (P3) ---

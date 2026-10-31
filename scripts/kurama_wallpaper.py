@@ -502,6 +502,14 @@ class Wallpaper:
         elif self.mini and msg.startswith(("talk:", "state:", "caption:", "ws:", "resize:")):  # only the mini panel sends these
             self.mini.on_page(msg)
 
+    def on_ptt(self):
+        """SIGUSR2 from the server's hold-to-talk key watcher: data/ptt.state says down / up / cancel."""
+        with contextlib.suppress(OSError, IndexError):
+            state = STATE_FILE.with_name("ptt.state").read_text().split()[0]
+            if self.mini is not None:
+                self.mini.ptt(state)
+        return True
+
     def toggle_mini(self):
         """Super+S: open the mini chat (minimizing the big dashboard first if it's up), or hide it."""
         if self.mini is None:
@@ -915,6 +923,44 @@ class Mini:
             run_js(self.view, js)
         return False
 
+    def ptt(self, state: str) -> None:
+        """Hold-to-talk from jarvis/core/ptt.py: down = listen (panel stays closed: an invisible, click-through
+        page records and the caption beside the button shows what you said and the reply), up = send, cancel."""
+        js = {"down": 1, "up": 0, "cancel": -1}.get(state)
+        if js is None:
+            return
+        if self.open:  # the chat is open: it all happens there
+            run_js(self.view, f"window.kuramaPTT && window.kuramaPTT({js})")
+            return
+        if state != "down" and not self.ghost:
+            return
+        fresh = self.panel is None
+        if state == "down":
+            if self.reaper:
+                GLib.source_remove(self.reaper)
+                self.reaper = 0
+            self.ensure_panel()
+            if not self.ghost:  # alive but invisible and click-through, like talk mode with the panel closed
+                self.ghost = True
+                self.panel.set_opacity(0)
+                self.panel.set_keep_above(False)
+                self.panel.show_all()
+                self.panel.input_shape_combine_region(cairo.Region())
+            if self.caption is None:
+                self.caption = Caption(self)
+            self.caption.show("you", "Listening…", False)
+        code = f"window.kuramaMiniShown && window.kuramaMiniShown(false, true); window.kuramaPTT && window.kuramaPTT({js})"
+        if fresh:
+            def loaded(view, event):
+                if event == WebKit2.LoadEvent.FINISHED:
+                    view.disconnect(hid)
+                    GLib.timeout_add(300, lambda: run_js(view, code) and False)
+            hid = self.view.connect("load-changed", loaded)
+        else:
+            run_js(self.view, code)
+        if state == "cancel":
+            GLib.timeout_add(600, self.end_ghost_if_idle)
+
     def ensure_panel(self) -> None:
         if self.panel is not None:
             return
@@ -1277,6 +1323,7 @@ def main() -> int:
         return 1
     wp = Wallpaper(a.url, a.window)
     GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGUSR1, wp.toggle_mini)
+    GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGUSR2, wp.on_ptt)  # hold-to-talk (jarvis/core/ptt.py)
     with contextlib.suppress(OSError):
         PID_FILE.write_text(str(os.getpid()))
     threading.Thread(target=install_hotkey, daemon=True).start()

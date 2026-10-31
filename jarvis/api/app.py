@@ -86,6 +86,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 from jarvis.workers import inproc
                 inproc.start()
             threading.Thread(target=_recover_long_jobs, name="kurama-longjobs", daemon=True).start()
+            try:  # hold Right Ctrl anywhere, speak, let go (captions beside the KURAMA button)
+                from jarvis.core import ptt
+                ptt.start()
+            except Exception as e:  # noqa: BLE001
+                logging.getLogger("jarvis.api").warning("hold-to-talk not started: %s", e)
         yield
         if config.WORKERS_IN_SERVER:
             from jarvis.workers import inproc

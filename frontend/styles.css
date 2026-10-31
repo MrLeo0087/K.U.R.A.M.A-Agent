@@ -1587,3 +1587,23 @@ body.mini .ask #m-conv::before { top: 7px; bottom: 7px; }
 body.mini .ask textarea { min-height: 26px; margin-left: 4px; padding: 4px 6px; font-size: 13.5px; }
 body.mini .send { width: 28px; height: 28px; box-shadow: 0 3px 10px rgba(110, 123, 255, 0.3) !important; }
 body.mini .send svg { width: 14px; height: 14px; }
+
+/* ---- fonts: Inter (bundled, SIL OFL, frontend/fonts) by default; Look > Font picks another ---- */
+@font-face { font-family: "Inter KURAMA"; src: url("fonts/InterVariable.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
+body.mini { --m-font: "Inter KURAMA", "Ubuntu Sans", sans-serif; font-feature-settings: "cv11", "ss01"; letter-spacing: -0.003em; }
+body.mini[data-font="ubuntu"] { --m-font: "Ubuntu Sans", "Ubuntu", sans-serif; font-feature-settings: normal; letter-spacing: 0; }
+body.mini[data-font="noto"] { --m-font: "Noto Sans", sans-serif; font-feature-settings: normal; letter-spacing: 0; }
+body.mini[data-font="mono"] { --m-font: "JetBrains Mono", monospace; font-feature-settings: normal; letter-spacing: 0; }
+body.mini .msg .text, body.mini .ask textarea, body.mini .chip, body.mini .who, body.mini .mj { font-family: var(--m-font); }
+body.mini .m-lookp select { border: 1px solid var(--m-hair); border-radius: 6px; background: rgba(255, 255, 255, 0.06); color: var(--m-text); font: 12px var(--m-font); padding: 1px 4px; }
+
+/* ---- header: row 1 = dots, logo, KURAMA, power; row 2 = the tools, small and close ---- */
+body.mini .chat-head { flex-wrap: wrap !important; row-gap: 3px; padding: 6px 6px 5px 10px; }
+body.mini #chat-title { display: inline !important; font-size: 12.5px; font-weight: 600; }
+body.mini #btn-power-mini { order: 3 !important; margin-left: auto; }
+body.mini #chat-state { order: 2 !important; margin: 0 0 0 6px; }
+body.mini .chat-head::after { display: block !important; content: ""; order: 3; flex-basis: 100%; height: 0; }
+body.mini #btn-power-mini { order: 2 !important; }
+html body.mini #agent-switch { order: 4 !important; margin-right: auto; }
+body.mini .m-lang select { display: inline !important; }
+body.mini .m-lookp { top: 62px !important; }
