@@ -579,4 +579,4 @@ Phases (one at a time, owner tests after each):
 - [x] 2026-10-31 One-key talk (owner: two-key combos are annoying): hold Left Ctrl alone (listens after 0.3 s held
       alone, so Ctrl+C / any Ctrl shortcut never listens), let go = send; double-tap Left Ctrl = close the reply caption
       + stop speaking. The Fn key can't be used (handled by the keyboard itself, never reaches Linux). Combos still
-      work via KURAMA_PTT_KEY / KURAMA_PTT_DISMISS in .env (now ctrl_l / double).
+      work via KURAMA_PTT_KEY / KURAMA_PTT_DISMISS in .env (now shift / double: either Shift, hold = talk, double-tap = close).

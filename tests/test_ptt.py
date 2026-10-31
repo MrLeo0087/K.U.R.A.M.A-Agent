@@ -108,3 +108,13 @@ def test_double_tap_dismisses_single_tap_does_nothing():
     assert told == ["dismiss"]
     t[0] = 5; h.press("ctrl_l"); t[0] = 5.1; h.release("ctrl_l")  # a lone tap later: nothing
     assert told == ["dismiss"]
+
+
+def test_either_shift_talks_and_double_tap_dismisses():
+    told, t, timers = [], [0.0], []
+    h = ptt.Holder("shift", tell=told.append, now=lambda: t[0], min_hold=0.0,
+                   schedule=lambda d, fn: timers.append(FakeTimer(fn)) or timers[-1], dismiss="double")
+    h.press("shift_r"); t[0] = 0.3; fire(timers); t[0] = 1; h.release("shift_r")
+    h.press("shift"); h.press("a"); fire(timers); h.release("a"); h.release("shift")  # typing a capital A
+    t[0] = 3; h.press("shift_l"); t[0] = 3.1; h.release("shift_l"); h.press("shift_r"); t[0] = 3.2; h.release("shift_r")
+    assert told == ["down", "up", "dismiss"]
