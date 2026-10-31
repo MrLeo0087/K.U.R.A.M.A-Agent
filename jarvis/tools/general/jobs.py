@@ -24,9 +24,10 @@ def jobs(action: Literal["list", "add", "edit", "remove", "start", "result", "ca
     Args:
         action: list = the job list + running jobs; add = keep a job for later (text = what to do; nothing runs);
             edit = change job `job` to `text`; remove = drop job `job` ("done" = all finished ones); start = work
-            on the waiting jobs now (or just `job`); result / cancel / pause / resume = a background job.
+            on the waiting jobs now (or just `job`); result = what job N produced (ALWAYS check it here, never do
+            the job again yourself); cancel / pause / resume = a background job.
         job: The job's number (list number or background job id), or words from its title.
-        text: For add / edit: what the job should do, in the user's words.
+        text: For add / edit: what the job should do, in the user's words (several jobs: separate them with ";").
     """
     from jarvis.core import jobqueue
     if action == "add":
@@ -38,6 +39,8 @@ def jobs(action: Literal["list", "add", "edit", "remove", "start", "result", "ca
     if action == "start":
         return jobqueue.start(job)
     if action == "result":
+        if (listed := jobqueue.result(job)) is not None and not job.strip().startswith("#"):
+            return listed  # the job LIST's numbers first ("#12" = a background job id)
         if not job.strip().lstrip("#").isdigit():
             return "error: give the job's number, e.g. 12"
         return job_result(int(job.strip().lstrip("#")))

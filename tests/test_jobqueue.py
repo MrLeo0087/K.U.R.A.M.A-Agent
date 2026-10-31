@@ -5,7 +5,7 @@ from jarvis.core import jobqueue, jobs, longjobs, store
 
 
 def test_add_list_edit_remove_never_runs():
-    assert "Added job 1" in jobqueue.add("write an essay about Nepal")
+    assert "1. write an essay about Nepal" in jobqueue.add("write an essay about Nepal")
     jobqueue.add("research black holes")
     assert "1. write an essay about Nepal — waiting" in jobqueue.show()
     assert "now: write it in Nepali" in jobqueue.edit("1", "write it in Nepali")
@@ -45,3 +45,14 @@ def test_kurama_tool_passes_job_details():
     assert _job_args("edit 2 write it in Nepali") == {"action": "edit", "job": "2", "text": "write it in Nepali"}
     assert _job_args("cancel 3") == {"action": "cancel", "job": "3"}
     assert _job_args("") == {"action": "list", "job": ""}
+
+
+def test_several_jobs_in_one_add_and_list_results():
+    out = jobqueue.add("what's the weather in Pokhara; add calculate 18% of 5600; add write a 4 line poem")
+    assert "Added 3 job(s)" in out
+    jobqueue.add("1. summarize notes 2. back up photos")
+    assert [r["text"] for r in store.queue_list()] == ["what's the weather in Pokhara", "calculate 18% of 5600",
+                                                       "write a 4 line poem", "summarize notes", "back up photos"]
+    store.queue_update(2, status="done", note="18% of 5600 is 1008")
+    from jarvis.tools.general.jobs import jobs as jobs_tool
+    assert "1008" in jobs_tool("result", "2") and "waiting" in jobs_tool("result", "1")

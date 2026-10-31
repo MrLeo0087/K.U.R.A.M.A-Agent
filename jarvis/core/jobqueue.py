@@ -25,13 +25,34 @@ def _rows(statuses: tuple[str, ...] | None = None) -> list[dict]:
     return store.queue_list(statuses)
 
 
+_SPLIT = re.compile(r"(?:^|\s)\(?\d{1,2}[.)]\s+|\s*;\s*(?:add\s+)?|\n+")
+
+
+def split_jobs(text: str) -> list[str]:
+    """'1. weather 2. calculate ...' / 'weather; add calculate ...' -> one job each (the AI passed four as one)."""
+    parts = [" ".join(p.split()).strip(" ,.") for p in _SPLIT.split(text or "")]
+    return [p for p in parts if len(p) > 2] or ([" ".join((text or "").split())] if (text or "").strip() else [])
+
+
 def add(text: str) -> str:
-    text = " ".join((text or "").split())
-    if not text:
+    items = split_jobs(text)
+    if not items:
         return "error: say what the job is, e.g. 'add a job: write an essay about Nepal'"
-    n = store.queue_add(text)
+    added = [(store.queue_add(t), t) for t in items]
     waiting = len(_rows((WAITING,)))
-    return f"Added job {n} to my list ({waiting} waiting): {text}. Say 'start the jobs' when you want me to work on them."
+    what = "; ".join(f"{n}. {t}" for n, t in added)
+    return (f"Added {len(added)} job(s) to my list ({waiting} waiting): {what}. Nothing runs until you say "
+            "'start the jobs'.")
+
+
+def result(n: str | int) -> str | None:
+    """What job n of the LIST produced (None when the list has no job n)."""
+    r = _find(n)
+    if r is None:
+        return None
+    if r["status"] == WAITING:
+        return f"Job {r['n']} ({r['text']}) hasn't run yet: it's waiting. Say 'start the jobs'."
+    return f"Job {r['n']} ({r['text']}) is {r['status']}" + (f": {r['note']}" if r.get("note") else ".")
 
 
 def show() -> str:
