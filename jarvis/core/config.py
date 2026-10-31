@@ -471,7 +471,7 @@ ROUTER_EXAMPLES: dict[str, tuple[str, ...]] = {
     "usage": ("how many tokens did I use", "give me a summary of today"),
     "jobs": ("write a detailed report in the background", "how is my background job going", "cancel the job",
              "add a job for later: write an essay about Nepal", "show my job list", "start working on my jobs",
-             "remove job 2 from your list", "change job 3 to research black holes"),
+             "change job 3 to research black holes"),
     "watch": ("tell me when the training is done", "notify me when this process exits", "watch this log file",
               "how is my model training going", "start training and keep an eye on it", "connect my colab notebook",
               "is the training still running"),
@@ -485,6 +485,21 @@ ROUTER_EXAMPLES: dict[str, tuple[str, ...]] = {
               "transcribe the lecture", "summarize the lecture", "what did the teacher say today",
               "what classes do I have tomorrow", "when is my next class", "test me on what I studied"),
 }
+# 2026-11-01 router misses (scorecard): areas with no example of these KINDS of wording (romanized Hindi / Nepali,
+# short questions, typos). Worded differently from the test cases on purpose.
+for _g, _ex in {
+    "clock": ("mujhe subah 7 baje jaga dena", "bholi bihana 5 baje uthau", "wake me up at 6 tomorrow"),
+    "media": ("gaana chalao", "song bajau na", "koi gaana lagao", "play some songs",
+              "how far is the video download", "did the youtube download complete", "show the download progress"),
+    "watch": ("is any training running right now", "is my model still training"),
+    "tracker": ("I drank 2 liters of water today", "finished 3 litres of water", "done 30 pushups today"),
+    "browser": ("show my read later list", "what's in my reading list",
+                "delete that saved link", "remove this link from my links", "forget the link I saved"),
+    "daily": ("what is 12 times 8", "how much is 250 minus 75"),
+    "screen": ("read what's on my screen", "what does my screen say"),
+    "image": ("make an audio of this text", "turn this paragraph into speech"),
+}.items():
+    ROUTER_EXAMPLES[_g] = ROUTER_EXAMPLES.get(_g, ()) + _ex
 ROUTER_URL_GROUP = "browser"  # group for messages containing a URL/domain
 ROUTER_SITE_OVER_APPS = True  # "open youtube": a known site/URL drops the apps group (browser wins)
 FASTPATH = os.getenv("JARVIS_FASTPATH", "1").lower() not in ("0", "false", "no", "off")  # regex intents, 0 tokens

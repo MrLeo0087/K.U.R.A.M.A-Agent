@@ -14,8 +14,8 @@ from jarvis.tools.general.resume_job import resume_job
 
 
 @tool(group="jobs", safety="safe",
-      description="KURAMA's jobs. Its job LIST (things the user wants KURAMA to do later, not run yet): add, edit, "
-                  "remove, start (run the waiting ones now, or one). Background jobs: list, result, cancel, pause, "
+      description="Background jobs and the job list (work the user saves for later, not run yet): add, edit, "
+                  "remove, start (run the waiting ones now, or one); a background job's list, result, cancel, pause, "
                   "resume.")
 def jobs(action: Literal["list", "add", "edit", "remove", "start", "result", "cancel", "pause", "resume"] = "list",
          job: str = "", text: str = "") -> str:

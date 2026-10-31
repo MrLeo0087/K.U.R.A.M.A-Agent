@@ -6,6 +6,7 @@ Pure chat routes to no groups, so no tool schemas are sent. Every decision is lo
 from __future__ import annotations
 
 import logging
+import difflib
 import re
 import time
 from dataclasses import dataclass, field
@@ -190,8 +191,54 @@ def classify(text: str, available: list[str]) -> tuple[list[str], bool]:
     return found, "reasoning" in out
 
 
+_vocab: set[str] | None = None
+
+
+def _known_words() -> set[str]:
+    """Words of KURAMA's own areas (router examples, rules, area descriptions): the targets of typo fixes."""
+    global _vocab
+    if _vocab is None:
+        src = [d for exs in config.ROUTER_EXAMPLES.values() for d in exs]
+        src += [k for ks in config.ROUTER_RULES.values() for k in ks]
+        src += list(config.TOOL_GROUP_DESCRIPTIONS.values())
+        _vocab = {w for d in src for w in re.findall(r"[a-z]{3,}", d.lower())}
+    return _vocab
+
+
+_english: frozenset[str] | None = None
+
+
+def _is_english(word: str) -> bool:
+    """A real English word ('there', 'lecture') is never 'fixed' (the system dictionary, loaded on first need)."""
+    global _english
+    if _english is None:
+        try:
+            with open("/usr/share/dict/words", encoding="utf-8", errors="ignore") as fh:
+                _english = frozenset(w.strip().lower() for w in fh if len(w.strip()) >= 5 and w.strip().isalpha())
+        except OSError:
+            _english = frozenset()
+    return word in _english
+
+
+def fix_typos(text: str) -> str:
+    """'Set alram', 'any traning', 'open youtbe', 'my budjet', 'complete downlaod': a word that is not one of KURAMA's
+    area words but is very close to one is read as it (for routing only; the AI still sees what you wrote). Names
+    (Pokhara, Tara) are close to none of them and stay."""
+    vocab = _known_words()
+
+    def fix(m: re.Match) -> str:
+        w = m.group(0)
+        low = w.lower()
+        if len(low) < 5 or low in vocab or _is_english(low):
+            return w
+        hit = difflib.get_close_matches(low, vocab, n=1, cutoff=0.8)
+        return hit[0] if hit and abs(len(hit[0]) - len(low)) <= 1 else w
+    return re.sub(r"[A-Za-z]+", fix, text or "")
+
+
 def route(text: str, log_it: bool = True) -> Route:
     t0 = time.monotonic()
+    text = fix_typos(text)
     available = registry.groups()
     r = Route(reasoning=needs_reasoning(text))
     if semantic.ready() and not is_small_talk(text) and (sem := [g for g in semantic.match(text) if g in available]):

@@ -21,7 +21,8 @@ def test_intent_map_knows_every_case_intent():
     known = set(harness.TOOL_INTENT.values()) | {"chat", "clarify", "multi", "todo.add", "todo.list", "todo.done",
                                                   "todo.delete", "todo.clear", "day.today", "reminder.list",
                                                   "reminder.cancel", "power.shutdown", "power.restart",
-                                                  "readlater.add", "readlater.list", "web.news", "remote"}
+                                                  "readlater.add", "readlater.list", "web.news", "remote",
+                                                  "route.areas"}  # routing-only cases (their "groups" are the answer)
     for c in harness.load():
         for intent in c.get("all") or [c["expect"]]:
             assert intent in known, (c["id"], intent)

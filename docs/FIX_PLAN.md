@@ -50,7 +50,7 @@ Night Shift step 2 (Safe Copy) waits until this plan is done.
    "KURAMA wake up" all wake, matched by sound (phonetic) not spelling; loudness floor adapted to the room. If
    Whisper-per-burst is the limit, a local keyword spotter (Vosk small model with a fixed phrase list: no torch,
    0 tokens, no Groq limit; ~50 MB RAM, measured before adopting) does the first check, Whisper only confirms.
-4. **Router misses + scorecard** (problems 7, 8): add the old trace phrasings (3+ wordings each) to the eval cases,
+4. **Router misses + scorecard** (problems 7, 8): DONE 2026-11-01 (98% router). add the old trace phrasings (3+ wordings each) to the eval cases,
    fix by meaning (router examples / tool descriptions), never word rules; scorecard isolated from the live desktop.
 5. **Plain-text yes/no** (problem 10): replay 3 cases (~5k tokens), then: risky actions always use the real yes/no
    card, the AI never asks in text.

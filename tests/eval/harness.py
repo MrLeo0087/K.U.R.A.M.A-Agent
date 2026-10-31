@@ -128,8 +128,12 @@ def load() -> list[dict]:
 
 def _isolated_store() -> None:
     """Score on an empty throwaway database: never the owner's real data (and no side effects)."""
-    from jarvis.core import store
+    from jarvis.core import context, rewrite, store
     store.init(Path(tempfile.mkdtemp(prefix="kurama-eval-")) / "eval.db")
+    # ...and never the owner's live desktop: a file open in VS Code / a highlight made the selection shortcut take
+    # requests (4 false "text.selected" mistakes) and the score depended on what happened to be open
+    rewrite.peek = lambda *a, **k: ""
+    context.snapshot = lambda *a, **k: {"file": None, "selection": None, "browser": None}
 
 
 # --- level 1: shortcut ---
@@ -139,6 +143,8 @@ def run_shortcut(cases: list[dict]) -> dict:
     handled = right = 0
     wrong, rows = [], []
     for c in cases:
+        if c["expect"].startswith("route."):  # a routing-only case (no shortcut is expected or judged)
+            continue
         it = None if planner.is_multi(c["text"]) else fastpath.match(c["text"])  # like the agent: several tasks -> planner
         if it is None:
             rows.append({"id": c["id"], "level": "shortcut", "got": None})
@@ -169,7 +175,7 @@ def _group_of(intent: str) -> set[str]:
 
 
 def run_route(cases: list[dict]) -> dict:
-    from jarvis.core import llm, registry, router
+    from jarvis.core import config, llm, registry, router
     registry.REGISTRY._ensure()
 
     def no_llm(*a, **k):
@@ -183,8 +189,10 @@ def run_route(cases: list[dict]) -> dict:
                 continue
             total += 1
             r = router.route(c["text"], log_it=False)
+            if c.get("context") == "selection" and "clipboard" not in r.groups:  # like agent._route_node: something
+                r = router.Route(["clipboard", *r.groups][:config.ROUTER_MAX_GROUPS], r.method)  # is highlighted
             parts = c.get("all") or [c["expect"]]
-            wants = [_group_of(p) for p in parts]
+            wants = [set(c["groups"])] if c.get("groups") else [_group_of(p) for p in parts]  # "groups": the areas
             want = set().union(*wants)
             good = all(w & set(r.groups) for w in wants)
             right += good
@@ -281,7 +289,8 @@ def main(argv: list[str] | None = None) -> int:
     sc = run_shortcut(cases)
     rt = run_route(cases)
     card = {"when": time.strftime("%Y-%m-%d %H:%M"), "cases": len(cases),
-            "shortcut": {"coverage": sc["handled"] / len(cases), "precision": sc["right"] / max(1, sc["handled"]),
+            "shortcut": {"coverage": sc["handled"] / max(1, sum(not c["expect"].startswith("route.") for c in cases)),
+                         "precision": sc["right"] / max(1, sc["handled"]),
                          "handled": sc["handled"], "wrong": sc["wrong"]},
             "route": {"recall": rt["right"] / max(1, rt["cases"]), "cases": rt["cases"], "misses": rt["misses"]}}
     if a.ai:

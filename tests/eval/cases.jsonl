@@ -138,10 +138,10 @@
 {"id": 138, "text": "Can you generate the image of a man?", "expect": "image.generate", "args": {}, "channel": "laptop"}
 {"id": 139, "text": "Generate an image of a misty hill in oil-paint style and send it to Telegram", "expect": "image.generate", "args": {"send_to_telegram": true}, "channel": "laptop"}
 {"id": 140, "text": "Can you generate a long essay about the Nepal in detail and send that essay in my telegram", "expect": "writing.job", "args": {}, "channel": "voice"}
-{"id": 141, "text": "Make the audio of this selected sentence.", "expect": "audio.make", "args": {}, "channel": "laptop"}
+{"id": 141, "text": "Make the audio of this selected sentence.", "expect": "audio.make", "args": {}, "channel": "laptop", "context": "selection"}
 {"id": 142, "text": "make pie chart of my spend and budget", "expect": "chart.make", "args": {}, "channel": "laptop"}
-{"id": 143, "text": "Explain this code service that I select.", "expect": "text.selected", "args": {}, "channel": "laptop"}
-{"id": 144, "text": "what is meaning of this sentence", "expect": "text.selected", "args": {}, "channel": "laptop"}
+{"id": 143, "text": "Explain this code service that I select.", "expect": "text.selected", "args": {}, "channel": "laptop", "context": "selection"}
+{"id": 144, "text": "what is meaning of this sentence", "expect": "text.selected", "args": {}, "channel": "laptop", "context": "selection"}
 {"id": 145, "text": "Can you fix this sentence and make it look better?", "expect": "text.selected", "args": {}, "channel": "laptop"}
 {"id": 146, "text": "KURAMA, convert this text into Nepali.", "expect": "text.selected", "args": {}, "channel": "laptop"}
 {"id": 147, "text": "i keep getting KeyError: 'label' in my dataloader", "expect": "code.fix", "args": {}, "channel": "laptop"}
@@ -209,7 +209,7 @@
 {"id": 209, "text": "where is this function", "expect": "code.find", "args": {}, "channel": "laptop"}
 {"id": 210, "text": "find the function load_state in this project", "expect": "code.find", "args": {}, "channel": "laptop"}
 {"id": 211, "text": "write this code in the open file", "expect": "code.to_file", "args": {}, "channel": "laptop"}
-{"id": 212, "text": "write a function that reverses a string in this file", "expect": "code.to_file", "args": {}, "channel": "laptop"}
+{"id": 212, "text": "write a function that reverses a string in this file", "expect": "code.to_file", "args": {}, "channel": "laptop", "context": "selection"}
 {"id": 213, "text": "thanks a lot", "expect": "chat", "args": {}, "channel": "laptop"}
 {"id": 214, "text": "how's your day been", "expect": "chat", "args": {}, "channel": "laptop"}
 {"id": 215, "text": "calculate 32 per of 100", "expect": "calculate", "args": {}, "channel": "laptop"}
@@ -217,3 +217,16 @@
 {"id": 217, "text": "what is 15 plus 27", "expect": "calculate", "args": {}, "channel": "laptop"}
 {"id": 218, "text": "square root of 144", "expect": "calculate", "args": {}, "channel": "laptop"}
 {"id": 219, "text": "youtube kholo", "expect": "open.site", "args": {}, "channel": "laptop"}
+{"id": 220, "text": "my budjet of this mosnth is 2k", "expect": "route.areas", "groups": ["tracker"], "args": {}, "channel": "laptop", "source": "traces 2026-10-29..11-01"}
+{"id": 221, "text": "my monthly budget is 15k", "expect": "route.areas", "groups": ["tracker"], "args": {}, "channel": "laptop", "source": "traces 2026-10-29..11-01"}
+{"id": 222, "text": "budget for november is 10000 rupees", "expect": "route.areas", "groups": ["tracker"], "args": {}, "channel": "laptop", "source": "traces 2026-10-29..11-01"}
+{"id": 223, "text": "remove that link", "expect": "route.areas", "groups": ["browser"], "args": {}, "channel": "laptop", "source": "traces 2026-10-29..11-01"}
+{"id": 224, "text": "delete my saved github link", "expect": "route.areas", "groups": ["browser"], "args": {}, "channel": "laptop", "source": "traces 2026-10-29..11-01"}
+{"id": 225, "text": "forget the link named google drive", "expect": "route.areas", "groups": ["browser"], "args": {}, "channel": "laptop", "source": "traces 2026-10-29..11-01"}
+{"id": 226, "text": "still now complete downlaod ?", "expect": "route.areas", "groups": ["media"], "args": {}, "channel": "laptop", "source": "traces 2026-10-29..11-01"}
+{"id": 227, "text": "is the youtube download done", "expect": "route.areas", "groups": ["media"], "args": {}, "channel": "laptop", "source": "traces 2026-10-29..11-01"}
+{"id": 228, "text": "how much is downloaded of my video", "expect": "route.areas", "groups": ["media"], "args": {}, "channel": "laptop", "source": "traces 2026-10-29..11-01"}
+{"id": 229, "text": "add a job for later: write a poem about Nepal", "expect": "route.areas", "groups": ["jobs"], "args": {}, "channel": "laptop", "source": "traces 2026-10-29..11-01"}
+{"id": 230, "text": "show my job list", "expect": "route.areas", "groups": ["jobs"], "args": {}, "channel": "laptop", "source": "traces 2026-10-29..11-01"}
+{"id": 231, "text": "start working on the jobs", "expect": "route.areas", "groups": ["jobs"], "args": {}, "channel": "laptop", "source": "traces 2026-10-29..11-01"}
+{"id": 232, "text": "result of job 2", "expect": "route.areas", "groups": ["jobs"], "args": {}, "channel": "laptop", "source": "traces 2026-10-29..11-01"}

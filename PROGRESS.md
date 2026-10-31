@@ -629,3 +629,15 @@ Phases (one at a time, owner tests after each):
       Live: 2 jobs added (nothing ran), "start the jobs" -> all 3 waiting done, notices on laptop + Telegram.
       Hold-to-talk flash: the caption window was shown before being placed (top-left for a moment) and a new hidden
       panel mapped before its opacity / click-through: both now set up before they appear.
+- [x] 2026-11-01 FIX_PLAN step 4, ROUTER (scorecard 90% -> 98%, instant 65% / 100% right): causes: (1) my jobs tool
+      description began "KURAMA's jobs" and every tool's first sentence is in the meaning index, so any request with
+      "Kurama" leaned to jobs ("Read this screen, Kurama", "clean kurama"); and the example "remove job 2 from your
+      list" took "remove the second task from my list" -> reworded / dropped. (2) Typos ("alram", "traning", "youtbe",
+      "budjet", "downlaod"): router.fix_typos reads a word that is not one of KURAMA's area words (router examples,
+      rules, descriptions) but very close to one as that word, for routing only; real English words (system
+      dictionary, loaded on first need) and names stay. (3) Areas without examples of romanized Hindi / Nepali, short
+      questions, read-later list, download status, saved-link removal: examples added (worded unlike the tests; a
+      duplicate dict key first dropped half of them). (4) Scorecard: never reads the live VS Code file / highlight;
+      cases said with a selection are tagged and get the text area like the agent does; 13 routing-only cases from
+      the traces ("groups"). Left: 2 STT garbles, a folder name, a Devanagari headline, "15 plus 27" (the calculator
+      shortcut answers it). Live: "still now complete downlaod ?" -> download tool, right answer, fast tier.
