@@ -621,3 +621,11 @@ Phases (one at a time, owner tests after each):
       the text kept came from the forced English / Nepali pass; now that pass only needs > -1.0 (real speech scored
       -0.62..-0.93, nonsense -1.24). (3) data/logs/wake.log for step 3: every wake check (heard, match), rate-limit
       skips, near-misses (too quiet to check). Also: job list adds of several jobs are split; 'result N' = list job.
+- [x] 2026-11-01 Job list for "start it and go outside": a job that needs your yes asks on Telegram and waits 2 min
+      (QUEUE_ASK_S); meanwhile the next job runs (QUEUE_PARALLEL 2); no answer = no (the job finds another way or
+      stops honestly). "start" marks jobs QUEUED and one runner takes every queued job (the AI passed "1 2" and only 1
+      ran; a 2nd start now joins the run). "Keep for later" vs "do now" and the read-later guard load the meaning
+      model when it's cold (~2 s) instead of letting a pattern guess (first request after a restart ran the jobs).
+      Live: 2 jobs added (nothing ran), "start the jobs" -> all 3 waiting done, notices on laptop + Telegram.
+      Hold-to-talk flash: the caption window was shown before being placed (top-left for a moment) and a new hidden
+      panel mapped before its opacity / click-through: both now set up before they appear.

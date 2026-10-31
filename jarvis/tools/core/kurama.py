@@ -48,7 +48,7 @@ def kurama(action: Literal["about", "can_you", "rename", "mode", "jobs", "clear_
     Args:
         action: What to do.
         text: The topic / the need / the new name / the mode / for jobs '<action> <details>': list | add <what to do; another job; ...> |
-            edit <n> <new text> | remove <n> | start [n] | result <n> (what job n produced: always check, never redo it) | cancel <n> | pause <n> | resume <n> /
+            edit <n> <new text> | remove <n> | start (all waiting) or start <n n ...> | result <n> (what job n produced: always check, never redo it) | cancel <n> | pause <n> | resume <n> /
             minutes / stop / the task.
     """
     return run(TABLE, {"action": action, "text": text})

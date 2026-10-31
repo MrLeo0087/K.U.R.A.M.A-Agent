@@ -24,7 +24,7 @@ def jobs(action: Literal["list", "add", "edit", "remove", "start", "result", "ca
     Args:
         action: list = the job list + running jobs; add = keep a job for later (text = what to do; nothing runs);
             edit = change job `job` to `text`; remove = drop job `job` ("done" = all finished ones); start = work
-            on the waiting jobs now (or just `job`); result = what job N produced (ALWAYS check it here, never do
+            on ALL waiting jobs now (give `job` only if the user named which: '2' or '1 3'); result = what job N produced (ALWAYS check it here, never do
             the job again yourself); cancel / pause / resume = a background job.
         job: The job's number (list number or background job id), or words from its title.
         text: For add / edit: what the job should do, in the user's words (several jobs: separate them with ";").

@@ -544,12 +544,12 @@ class TelegramBot(Worker):
         return self._agent
 
     # --- confirm hook (safety mode "telegram") ---
-    def confirm(self, prompt: str) -> bool:
+    def confirm(self, prompt: str, timeout: float | None = None) -> bool:
         from jarvis.core.safety import parse_yes_no
 
         with self._confirm_lock:
             self.send(f"{prompt}\nReply yes/no")
-            deadline = time.monotonic() + config.TELEGRAM_CONFIRM_TIMEOUT_S
+            deadline = time.monotonic() + (timeout or config.TELEGRAM_CONFIRM_TIMEOUT_S)
             while not self.stopping:
                 left = deadline - time.monotonic()
                 if left <= 0:

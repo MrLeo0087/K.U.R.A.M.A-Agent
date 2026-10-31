@@ -136,7 +136,7 @@ def queue_meant(text: str) -> bool:
     clearly 'do it now' (now-examples closer than the later-examples by QUEUE_NOW_MARGIN). Measured 2026-10-31: every
     'later' wording scored > -0.03, clear 'do it now' < -0.04; in between the AI decides. False if it can't judge."""
     from jarvis.core import semantic
-    if not semantic.ready():
+    if not semantic.ensure_ready():  # never guess this by a pattern: the model loads now (~2 s, once)
         return False
     later = semantic.best_of(text, "q_later", {"later": config.QUEUE_EXAMPLES["later"]})
     now = semantic.best_of(text, "q_now", {"now": config.QUEUE_EXAMPLES["now"]})

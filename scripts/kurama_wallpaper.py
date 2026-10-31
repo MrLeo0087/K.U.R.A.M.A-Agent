@@ -952,10 +952,12 @@ class Mini:
             self.ensure_panel()
             if not self.ghost:  # alive but invisible and click-through, like talk mode with the panel closed
                 self.ghost = True
-                self.panel.set_opacity(0)
-                self.panel.set_keep_above(False)
-                self.panel.show_all()
+                self.panel.realize()  # opacity / click-through set on the real window BEFORE it maps (a new panel
+                self.panel.set_opacity(0)  # flashed as a dark box for a moment on the first hold)
                 self.panel.input_shape_combine_region(cairo.Region())
+                self.panel.set_keep_above(False)
+                self.place_panel()
+                self.panel.show_all()
             if self.caption is None:
                 self.caption = Caption(self)
             self.caption.show("you", "Listening…", False)
@@ -1279,6 +1281,10 @@ class Caption:
         else:
             self.bot.set_text(text if len(text) <= 420 else text[:420].rsplit(" ", 1)[0] + "…")
         self.you.set_visible(bool(self.you.get_text()))
+        if not self.win.get_visible():  # place it BEFORE it appears: shown first, it flashed at the screen's top-left
+            self.win.get_child().show_all()
+            _, nat = self.win.get_preferred_size()
+            self.win.move(*self.mini.beside(CAPTION_W, max(40, nat.height)))
         self.win.show_all()
         self.win.resize(CAPTION_W, 1)  # shrink to the text
         self.place()

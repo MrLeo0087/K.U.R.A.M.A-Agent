@@ -13,6 +13,7 @@ import hashlib
 import logging
 import re
 import threading
+import time
 from typing import Any
 
 from jarvis.core import config
@@ -187,6 +188,21 @@ _last_text = ""  # ...and its text
 def ready() -> bool:
     """The model is loaded: asking by meaning costs ~10 ms (cold it takes seconds)."""
     return bool(config.SEMANTIC_ROUTER) and mode() != "off" and _embedder is not None and _embedder.loaded
+
+
+def ensure_ready(timeout: float = 6.0) -> bool:
+    """Load the model now (blocking, ~2 s once) for decisions that must not be guessed by a pattern ("keep this job
+    for later" vs "do it now"). False when the router is off or loading failed / took too long."""
+    if ready():
+        return True
+    if not config.SEMANTIC_ROUTER or mode() == "off":
+        return False
+    t0 = time.monotonic()
+    try:
+        scores("open youtube")
+    except Exception as e:  # noqa: BLE001
+        log.warning("semantic load failed: %s", e)
+    return ready() and time.monotonic() - t0 <= timeout + 30
 
 
 def warm_soon() -> None:
