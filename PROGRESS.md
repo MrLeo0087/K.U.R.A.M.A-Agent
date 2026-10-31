@@ -677,3 +677,8 @@ Phases (one at a time, owner tests after each):
       release during the reload was lost (stuck recording) -> kept 20 min; the panel shows only once its page is
       loaded; during a reload only the LATEST key state counts ("I was just waking up, hold Ctrl again" if released).
       Prompt: "no jargon" restored (an owner rule a test guards), another phrase trimmed.
+- [x] 2026-11-01 Files selection: fm.log proved it: Files showed Tara with "newone" selected, KURAMA read no selection
+      and used the open folder (Tara). The reader only checked one kind of element (an outer table cell) for SELECTED;
+      now any selected element whose name is a real entry of the open folder counts (cell / row / list or grid item;
+      the sidebar can't match), and the raw selected elements are logged (sel_raw) as proof. Opening a folder was
+      already right (newone read correctly). Needs the owner's live check: select a folder, ask.

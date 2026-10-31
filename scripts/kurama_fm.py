@@ -74,6 +74,9 @@ def _folders() -> list[str]:
     return out
 
 
+_SELECTED_RAW: list = []
+
+
 def _selected(title: str, folder: str, folders: list[str] | None = None) -> tuple[list[str], str]:
     """Names selected in the Files window titled `title` (accessibility tree), as paths, and the folder they are in
     (the window's folder, else any open Files folder that holds them: a wrong window guess copied /home/leo)."""
@@ -84,6 +87,7 @@ def _selected(title: str, folder: str, folders: list[str] | None = None) -> tupl
         return []
     desk = Atspi.get_desktop(0)
     names: list[str] = []
+    raw: list[tuple[str, str]] = []
     for i in range(desk.get_child_count()):
         app = desk.get_child_at_index(i)
         if not app or "nautilus" not in (app.get_name() or "").lower():
@@ -94,19 +98,20 @@ def _selected(title: str, folder: str, folders: list[str] | None = None) -> tupl
                 continue
             seen = [0]
 
-            def walk(a, depth=0):
-                if a is None or depth > 25 or seen[0] > 6000:
+            def walk(a, depth=0):  # ANY element marked selected (cell, row, list / grid item: it differs by view)
+                if a is None or depth > 30 or seen[0] > 8000:
                     return
                 seen[0] += 1
-                if a.get_role_name() == "table cell" and a.get_parent() is not None \
-                        and a.get_parent().get_role_name() == "table":
+                try:
                     if a.get_state_set().contains(Atspi.StateType.SELECTED) and a.get_name():
-                        names.append(a.get_name())
-                    return  # a row: its own children are the cell's parts
+                        raw.append((a.get_role_name(), a.get_name()))
+                except Exception:  # noqa: BLE001
+                    pass
                 for k in range(a.get_child_count()):
                     walk(a.get_child_at_index(k), depth + 1)
             walk(win)
-    names = list(dict.fromkeys(names))
+    _SELECTED_RAW[:] = raw[:20]  # evidence for the log
+    names = list(dict.fromkeys(n for _, n in raw))  # only real entries of the folder count (not the sidebar's "Home")
     for base in [folder] + [f for f in (folders or []) if f != folder]:
         hits = [str(Path(base) / n) for n in names if (Path(base) / n).exists()]
         if hits:
@@ -125,6 +130,7 @@ def main() -> dict:
     out = {"top": kind, "folder": folder, "selected": [], "title": title, "folders": folders}
     if kind == "files" and folder:
         out["selected"], out["folder"] = _selected(title, folder, folders)
+        out["sel_raw"] = _SELECTED_RAW
     return out
 
 
