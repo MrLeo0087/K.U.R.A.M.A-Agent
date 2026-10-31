@@ -148,6 +148,15 @@
             <button id="btn-find" class="icon-btn mini-off" type="button" aria-label="Find a tool (Ctrl+K)" title="Find a tool · Ctrl+K">
               <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
             </button>
+            <button id="m-look" class="icon-btn mini-on" type="button" aria-label="Look: blur, corners, tint" title="Look · blur, corners, tint">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3s6 6.4 6 10.5A6 6 0 0 1 6 13.5C6 9.4 12 3 12 3z"/><path d="M9.5 14.5a2.5 2.5 0 0 0 2.5 2.5"/></svg>
+            </button>
+            <div id="m-lookp" class="m-lookp" hidden>
+              <label>Blur <output id="lk-blur-v"></output><input id="lk-blur" type="range" min="0" max="100" step="5"></label>
+              <label>Corners <output id="lk-corner-v"></output><input id="lk-corner" type="range" min="0" max="30" step="1"></label>
+              <label>Tint <output id="lk-tint-v"></output><input id="lk-tint" type="range" min="20" max="100" step="5"></label>
+              <small id="lk-note"></small>
+            </div>
             <label class="m-lang mini-on" title="Language you speak"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h9M7.5 3v2M5 5c0 4 2.5 7 6 8.5M10 5c0 3.5-2.5 7-6.5 9M13 21l4.5-10 4.5 10M14.6 17.5h5.8"/></svg>
               <select id="m-lang" aria-label="Language"><option value="auto">Auto</option><option value="en">EN</option><option value="ne">NE</option><option value="hi">HI</option></select></label>
             <button id="btn-voice" class="icon-btn" type="button" aria-pressed="true" aria-label="KURAMA voice on (click to mute)" title="Voice on · click to mute">

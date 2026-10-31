@@ -2744,6 +2744,25 @@ if (MINI && !WSONLY) {
   $("m-close").onclick = () => $("btn-hide").click();
   $("m-min").onclick = () => $("btn-hide").click();
   $("m-zoom").onclick = () => $("btn-full").click();
+  // look: blur (Blur my Shell, system-wide for the whitelisted windows), corner radius (page + blur edge), tint (page)
+  const look = Object.assign({ blur: 80, corner: 15, tint: 58 }, S.look || {});
+  const applyLook = () => {
+    B.style.setProperty("--m-r", look.corner + "px");
+    B.style.setProperty("--m-tint", (look.tint / 100).toFixed(2));
+    for (const k of ["blur", "corner", "tint"]) { $("lk-" + k).value = look[k]; $("lk-" + k + "-v").textContent = k === "corner" ? (look.corner ? look.corner + " px" : "square") : look[k] + "%"; }
+  };
+  let glassT = 0;
+  const pushGlass = () => { clearTimeout(glassT); glassT = setTimeout(async () => {
+    try { const r = await api.setGlass(look.blur, Math.round(look.corner * (window.devicePixelRatio || 1))); $("lk-note").textContent = r.ok ? "" : "Blur: " + (r.error || "not available"); }
+    catch { $("lk-note").textContent = "Blur: KURAMA offline"; }
+  }, 400); };
+  for (const k of ["blur", "corner", "tint"]) $("lk-" + k).addEventListener("input", (e) => {
+    look[k] = +e.target.value; S.look = { ...look }; saveSettings(S); applyLook();
+    if (k !== "tint") pushGlass();
+  });
+  $("m-look").onclick = (e) => { e.stopPropagation(); $("m-lookp").hidden = !$("m-lookp").hidden; };
+  document.addEventListener("click", (e) => { if (!e.target.closest("#m-lookp, #m-look")) $("m-lookp").hidden = true; });
+  applyLook();
   const lang = $("m-lang");
   lang.value = S.lang || "auto";
   lang.onchange = () => { S.lang = lang.value; saveSettings(S); if ($("set-lang")) $("set-lang").value = S.lang; };

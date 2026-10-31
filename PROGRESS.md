@@ -543,3 +543,11 @@ Phases (one at a time, owner tests after each):
       failed), answer in a glass card with its route/tokens chips inside, your messages in a lifted bubble with a
       person badge, language picker (Auto/EN/NE/HI = the existing setting), big round input with gradient send.
       Static CSS only (no animations / backdrop-filter). Checked offscreen + live on the owner's screen.
+- [x] 2026-10-31 Mini glass, real cause of "no blur": Blur my Shell's application pipeline (migrated) had brightness 0
+      = a black box (proven with a clear test window of class KURAMA-mini AND Gnome-terminal: both black). New
+      scripts/kurama_glass.py (system python3 + PyGObject; GET/POST /api/v1/ui/glass) points app blur at a "KURAMA glass"
+      dual-Kawase pipeline (brightness 0.9), whitelists KURAMA-mini, dynamic-opacity off, opacity 255. Tested: a
+      pipeline ADDED while GNOME Shell runs blurs with square corners, so it reuses a login-time pipeline (the unused
+      "Default rounded - duplicate"); radius above ~50 also smears the corners square -> strength 100 = radius 50.
+      Mini panel: Look popover (blur 0-100, corners 0 = square .. 30 px, tint 20-100%) saved in the page settings; corner
+      radius is sent to the extension too, so blur edge and panel edge match. Text-mode button back.

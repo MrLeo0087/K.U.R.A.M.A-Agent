@@ -1382,7 +1382,7 @@ body.mini .chat {
   background:
     radial-gradient(120% 60% at 0% 0%, rgba(110, 123, 255, 0.16), transparent 60%),
     radial-gradient(90% 50% at 100% 100%, rgba(139, 92, 246, 0.14), transparent 60%),
-    rgba(16, 19, 40, 0.58);
+    rgba(16, 19, 40, var(--m-tint, 0.58));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10);
 }
 body.mini.opaque .chat { background-color: rgb(18, 20, 38); }
@@ -1513,7 +1513,16 @@ body.mini .ask { align-items: center; gap: 0; margin: 0 12px 12px; padding: 6px 
 body.mini .ask:focus-within { border-color: rgba(150, 160, 255, 0.55); }
 body.mini .ask .seg { padding: 0; gap: 0; background: transparent; border: 0; }
 body.mini .ask .seg::before, body.mini .ask .seg::after { display: none !important; }
-body.mini #m-text { display: none; }
+body.mini #m-look { order: 8; } body.mini .m-lang { order: 8; }
+body.mini .m-lookp { position: absolute; z-index: 30; top: 52px; right: 10px; width: 230px; padding: 12px 14px 10px; display: grid; gap: 10px;
+  border-radius: 14px; border: 1px solid var(--m-hair); background: rgba(22, 25, 50, 0.97); box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45); }
+body.mini .m-lookp[hidden] { display: none; }
+body.mini .m-lookp label { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; font-size: 12px; color: var(--m-sub); }
+body.mini .m-lookp output { color: var(--m-text); font-variant-numeric: tabular-nums; }
+body.mini .m-lookp input[type="range"] { grid-column: 1 / -1; width: 100%; accent-color: var(--m-acc); }
+body.mini .m-lookp small { color: var(--m-dim); font-size: 11px; }
+body.mini .m-lookp small:empty { display: none; }
+@media (max-width: 459px) { body.mini #m-look { order: 9; } body.mini .m-lookp { top: 92px; } }
 body.mini .ask .seg button, body.mini .ask .mute-btn { width: 34px; height: 34px; border-radius: 50%; background: transparent; box-shadow: none; color: var(--m-sub); transition: none; }
 body.mini .ask #m-conv { position: relative; }
 body.mini .ask #m-conv::before { content: ""; position: absolute; left: -1px; top: 9px; bottom: 9px; width: 1px; background: var(--m-hair); }

@@ -74,6 +74,33 @@ async def job_cancel(job_id: int):
     return {"ok": True, "id": job_id, "status": getattr(job, "status", None)}
 
 
+def _glass(*args: str) -> dict:
+    """scripts/kurama_glass.py (system python3 + PyGObject): the blur behind the mini panel (Blur my Shell)."""
+    import subprocess
+    from jarvis.core import config
+    try:
+        p = subprocess.run(["/usr/bin/python3", str(config.ROOT / "scripts" / "kurama_glass.py"), *args],
+                           capture_output=True, text=True, timeout=10)
+        return json.loads(p.stdout.strip().splitlines()[-1])
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": f"{type(e).__name__}: {e}"}
+
+
+class GlassIn(BaseModel):
+    blur: int = Field(80, ge=0, le=100)
+    corner: int = Field(15, ge=0, le=40)
+
+
+@router.get("/ui/glass", summary="Blur strength + corner radius behind the mini panel")
+async def glass_get():
+    return await run_in_threadpool(_glass, "get")
+
+
+@router.post("/ui/glass", summary="Set the blur strength (0-100) and corner radius (px) behind the mini panel")
+async def glass_set(body: GlassIn):
+    return await run_in_threadpool(_glass, "set", str(body.blur), str(body.corner))
+
+
 @router.get("/jobs/{job_id}/steps", summary="A long job's step log (oldest first)")
 async def job_steps(job_id: int, limit: int = Query(30, ge=1, le=300)):
     from jarvis.core import longjobs
