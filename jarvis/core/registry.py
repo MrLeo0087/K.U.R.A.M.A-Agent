@@ -280,7 +280,7 @@ class Registry:
             groups |= {g for n, cov in config.CORE_COVERS.items() if n in self.tools for g in cov}
         return sorted(groups)
 
-    def schemas_for(self, groups: list[str] | tuple[str, ...]) -> list[BaseTool]:
+    def schemas_for(self, groups: list[str] | tuple[str, ...], text: str = "") -> list[BaseTool]:
         """LangChain tools of the routed groups only (for bind_tools). v2 (config.CORE_TOOLS): the general tools that
         cover those groups; a group no general tool covers keeps its old tools."""
         self._ensure()
@@ -288,6 +288,10 @@ class Registry:
         if not config.CORE_TOOLS:
             return [t for t in self.tools.values() if group_of(t) in wanted]
         serving = {g: [n for n, cov in config.CORE_COVERS.items() if g in cov and n in self.tools] for g in groups}
+        if text:  # an area two general tools serve (jobs: create / kurama): the one whose MEANING fits goes first,
+            for g in groups:  # so it survives the CORE_MAX_TOOLS cap ("result of job 1" lost kurama to create)
+                if len(serving[g]) > 1:
+                    serving[g] = self._by_meaning(text, serving[g])
         core: list[str] = []
         for g in groups:  # each group's main general tool first (in the router's order)...
             if serving[g] and serving[g][0] not in core:
@@ -298,6 +302,16 @@ class Registry:
         covered = {g for g in groups if serving[g]}
         old = [t for t in self.tools.values() if group_of(t) in wanted - covered and group_of(t) != "core"]
         return [self.tools[n] for n in core] + old
+
+    def _by_meaning(self, text: str, names: list[str]) -> list[str]:
+        """names reordered: the general tool whose description is closest in meaning to text first (local model,
+        0 tokens); unchanged when the model can't judge."""
+        from jarvis.core import semantic
+        if not semantic.ready():  # never wait for the model to load in a request
+            return names
+        key = "core:" + ",".join(sorted(names))
+        best = semantic.best_of(text, key, {n: (self.tools[n].description,) for n in names})
+        return [best[0]] + [n for n in names if n != best[0]] if best else names
 
     def openai_schemas_for(self, groups: list[str] | tuple[str, ...]) -> list[dict]:
         return [schema_of(t) for t in self.schemas_for(groups)]

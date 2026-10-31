@@ -586,3 +586,16 @@ Phases (one at a time, owner tests after each):
       KURAMA_PTT_DISMISS are the defaults); that section also lists the GNOME ones (mini chat, on/off) and says where
       to change them. Hold-to-talk can't be a GNOME custom shortcut (GNOME only sees the press, and a bare Shift/Ctrl
       binding would be grabbed from typing).
+- [x] 2026-10-31 FIX_PLAN step 1, jobs + multi-task (causes proven first): (1) an area served by two general tools
+      took the first one in CORE_COVERS order ("jobs" -> create, which can't show a job), and the 3-tool cap dropped
+      kurama: now such tools are ordered by MEANING (request vs tool description, local model, 0 tokens;
+      registry.schemas_for(groups, text)); kurama's description names the job actions. (2) "show job 1 result" ran
+      the sports search: the meaning gate's 0.15 margin passes almost anything (scores cluster 0.70-0.78; tightening
+      it globally only lost instant shortcuts) -> free-text-subject shortcuts (live) must be within 0.02 of the best
+      area (config.MEANING_GATE_STRICT). (3) A chain step that only STARTS a background job: the next steps now become
+      a durable follow-up job that waits for it and runs on its real output file (agent.start_after_job / after_job;
+      it wrote a 41-char fake report.md before). (4) Writing jobs run on the Long Job Engine (writer.long_run:
+      checkpoint per section, auto-resume after restart, 60k token / 90 min cap). (5) The open VS Code adds the
+      clipboard area to every AI request; it no longer counts as a second task for the model choice (every request
+      went to the 120b tier). Live: "result of job 1" -> kurama tool, right answer; "is job 1 done?" -> fast tier.
+      1064 tests; scorecard 65/100/91 (unchanged). Not done: retry on gpt-oss's 'tool<|channel|>' name glitch (rare).

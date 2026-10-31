@@ -38,7 +38,7 @@ Night Shift step 2 (Safe Copy) waits until this plan is done.
     file-overwrite case). Some of this was fixed on 10-30 (typed-yes code workflow); replay 3 cases to confirm.
 
 ## Steps (one at a time; each: tests with fakes, related tests, full suite, scorecard, live check, commit, stop)
-1. **Jobs + multi-task correctness** (problems 1-4, 6). One general tool per area meaning (job status/cancel/pause/
+1. **Jobs + multi-task correctness** (problems 1-4, 6). DONE 2026-10-31 (PROGRESS.md). One general tool per area meaning (job status/cancel/pause/
    resume always reach the jobs tool; check every area covered twice); meaning gate for "result" shortcuts; a chain
    step that starts a background job makes the next steps WAIT for that job (follow-up runs on its output file,
    durable via the Long Job Engine), and the reply says "I'll send it when it's written"; writing jobs move onto

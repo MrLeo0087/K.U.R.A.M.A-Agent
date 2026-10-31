@@ -71,6 +71,7 @@ JOB_STARTED = {
 TASK_FAILED = "Sorry, I couldn't manage this part: {text}."
 PREV_RESULT = "\n(Result of the previous step, use it: {result})"
 PREV_RESULT_MAX = 1500
+AFTER_JOB = "I'll {text} as soon as job #{job} is finished (follow-up job #{follow})."
 DUPLICATE = "(duplicate) Already done earlier in this request, not run again: "
 
 
@@ -228,12 +229,24 @@ class Agent:
                              "answer": answer}]}
 
     def _chain_node(self, state: AgentState) -> dict:
-        """P7c: dependent tasks in order; each step sees the previous step's result."""
+        """P7c: dependent tasks in order; each step sees the previous step's result. A step that only STARTED a
+        background job (an essay, a report) has no result yet: the steps after it become a follow-up long job that
+        waits for that job and runs on its real output (they used to run at once on "started job #4" and invent it)."""
         mode, prev, out = state.get("mode", "text"), "", []
-        for t in state.get("chain") or []:
+        chain = state.get("chain") or []
+        for k, t in enumerate(chain):
+            before = set(jobs.get_manager().ids())
             answer = self._run_task(t["text"], mode, state.get("lang"), prev, request=state.get("user_text", ""))
             out.append({"idx": t.get("idx", 0), "kind": "quick", "text": t["text"], "answer": answer})
             prev = answer
+            started = sorted(set(jobs.get_manager().ids()) - before)
+            rest = chain[k + 1:]
+            if started and rest:
+                follow = start_after_job(started[-1], [r["text"] for r in rest], state.get("lang"))
+                for r in rest:
+                    out.append({"idx": r.get("idx", 0), "kind": "quick", "text": r["text"],
+                                "answer": AFTER_JOB.format(text=r["text"], job=started[-1], follow=follow.id)})
+                break
         self.last["chain"] = [r["idx"] for r in out]
         return {"results": out}
 
@@ -294,6 +307,7 @@ class Agent:
                                  r.method, r.reasoning, r.latency_ms)
         except Exception as e:  # noqa: BLE001
             log.warning("agent routing failed: %s", e)
+        routed = list(r.groups)  # what the request itself needs (before the editor's context area)
         try:  # code open in VS Code or text highlighted anywhere: the text/code tool is always offered (the context
             from jarvis.core import context, rewrite  # line says what is open / selected)
             if self.channel != "telegram" and "clipboard" not in r.groups and (
@@ -301,8 +315,11 @@ class Agent:
                 r = router.Route(["clipboard", *r.groups][: config.ROUTER_MAX_GROUPS], r.method, r.reasoning, r.latency_ms)
         except Exception as e:  # noqa: BLE001
             log.warning("editor context failed: %s", e)
-        tools: list[Any] = registry.schemas_for(r.groups) if r.groups else []
-        tier = "smart" if (len(r.groups) > 1 or r.reasoning or modes.ai_level() == "best") else "fast"
+        tools: list[Any] = registry.schemas_for(r.groups, state["user_text"]) if r.groups else []
+        # the clipboard area added above for the open editor is context, not a second task: it must not pick the big
+        # model (with VS Code open all day, every request went to the smart tier)
+        real = [g for g in r.groups if g != "clipboard"] if "clipboard" not in routed else r.groups
+        tier = "smart" if (len(real) > 1 or r.reasoning or modes.ai_level() == "best") else "fast"
         if tier == "fast" and not tools and state.get("mode") == "voice":
             tier = "voice"  # plain spoken chat: lowest time-to-first-token model
         if not tools and self._meta_ok(state["user_text"]):
@@ -916,3 +933,50 @@ def run(user_text: str, mode: str = "text", lang: str | None = None) -> str:
 
 def stream(user_text: str, mode: str = "text", lang: str | None = None) -> Iterator[str]:
     return get_agent().stream(user_text, mode=mode, lang=lang)
+
+
+# --- a multi-step request whose earlier step started a background job: the rest waits for it (durable) ---
+def start_after_job(job_id: int, texts: list[str], lang: str | None = None):
+    """A long job (survives restarts) that waits for job_id to finish, then runs `texts` in order, the first one
+    seeing that job's output file. Returns the job."""
+    from jarvis.core import longjobs
+    title = "then: " + "; ".join(texts)[:60] + f" (after job #{job_id})"
+    return longjobs.submit(title, after_job, {"wait": int(job_id), "tasks": texts, "lang": lang or ""},
+                           kind="follow", max_tokens=config.AGENT_ASK_ABOVE_TOKENS, max_minutes=120)
+
+
+def after_job(ctx, params: dict) -> str | None:
+    from jarvis.core import safety, store, writer
+    jid = int(params["wait"])
+    ctx.step(f"waiting for job #{jid}")
+    while True:
+        row = store.job_get(jid) or {}
+        if row.get("status") not in jobs.ACTIVE:
+            break
+        if ctx.job.cancel_event.wait(5):
+            ctx.check()
+        ctx.check()
+    if row.get("status") != "done" or not row.get("output_path"):
+        ctx.step(f"job #{jid} ended {row.get('status') or 'missing'}: nothing to do")
+        return None
+    path = str(row["output_path"])
+    try:
+        head = open(path, encoding="utf-8", errors="replace").read(PREV_RESULT_MAX)
+    except OSError:
+        head = ""
+    prev = f"Job #{jid} finished; its result is the file {path}. It begins: {head}"
+    bot = Agent(confirm=safety.deny_all, summarize_async=False, use_planner=False, persist=False)
+    answers = []
+    for i, text in enumerate(params.get("tasks") or []):
+        if i < int(ctx.state.get("done") or 0):  # resumed after a restart: this step already ran
+            continue
+        ctx.check()
+        ctx.step(f"step {i + 1}: {text[:60]}")
+        ans = bot._run_task(text, "text", params.get("lang") or None, prev, request=text)
+        answers.append(f"- {text}: {ans}")
+        prev = ans if i else f"{ans}\n(The file is {path}.)"
+        ctx.checkpoint(done=i + 1)
+    out = writer.output_path(ctx.job.title)
+    out.write_text(f"# {ctx.job.title}\n\n" + "\n".join(answers) + "\n", encoding="utf-8")
+    ctx.set_output(out)
+    return str(out)

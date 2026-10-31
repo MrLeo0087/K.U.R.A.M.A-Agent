@@ -22,7 +22,8 @@ TABLE = {
 
 @tool(group="core", safety="safe",
       description="About KURAMA: about (what you are, where things are stored), can_you (is there a way to do X), rename, "
-                  "mode (power mode), jobs (background jobs), clear_chat, mute_alerts, remote (remote desktop on/off), "
+                  "mode (power mode), jobs (background jobs: is it done, progress, result, list, cancel, pause, resume), "
+                  "clear_chat, mute_alerts, remote (remote desktop on/off), "
                   "make_tool (build a small new tool when nothing else fits).")
 def kurama(action: Literal["about", "can_you", "rename", "mode", "jobs", "clear_chat", "mute_alerts", "remote", "make_tool"],
            text: str = "") -> str:

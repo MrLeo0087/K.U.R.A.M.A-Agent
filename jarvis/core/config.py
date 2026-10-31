@@ -371,6 +371,9 @@ SEMANTIC_MARGIN = 0.03  # runners-up this close to the best one are sent too
 SEMANTIC_ADD_MIN = 0.76  # with keyword matches, a different group is added only when this sure
 SEMANTIC_OVER_CHAT = 0.03  # a group must beat the best plain-chat example by this much
 MEANING_GATE_MARGIN = 0.15  # a shortcut runs only if its area scores within this of the best area (by meaning)
+# Shortcuts whose pattern takes ANY words as their subject (live search: "show <team> result") must also be (nearly)
+# the best area by meaning: "show job 1 result" made "job 1" a sports team (web 0.72 vs jobs/schedule 0.75).
+MEANING_GATE_STRICT = {"live": 0.02}
 # Selection first (Phase C): when text/code is highlighted (VS Code / browser / another app), a request whose MEANING
 # is one of these actions is about the selection, whatever the words. Phrasings, never keywords.
 SELECTION_EXAMPLES: dict[str, tuple[str, ...]] = {
@@ -1073,6 +1076,7 @@ JOB_MAX_WAIT_S = 600.0  # then they start anyway (with a note)
 # Long Job Engine (longjobs.py; Night Shift foundation): durable, checkpointed, resumed after a restart,
 # per-job time/token caps, paused while RAM is short / battery is low / (needs_power) not charging.
 LONG_JOBS_MAX_WORKERS = 2  # own threads; at most ONE CPU-heavy long job runs at a time (heavy=True)
+WRITER_JOB_MAX_TOKENS = 60000  # an essay / report / code job's hard cap (a 3,000-word essay is ~10-15k)
 LONG_JOB_DEFAULT_TOKENS = 4000  # token cap when the caller gives none (= AGENT_ASK_ABOVE_TOKENS)
 LONG_JOB_DEFAULT_MINUTES = 60  # running-time cap when the caller gives none (paused time doesn't count)
 LONG_JOB_PAUSE_FREE_MB = int(os.getenv("JARVIS_LONG_JOB_PAUSE_FREE_MB", "500"))  # pause below this free RAM

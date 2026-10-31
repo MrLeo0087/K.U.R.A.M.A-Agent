@@ -3023,7 +3023,7 @@ def meaning_ok(text: str, it: Intent) -> bool:
     top = ranked[0][1]
     # always by meaning (Phase C): it used to apply only when the model was >= 0.85 sure, and most requests score
     # 0.70-0.80, so in practice the pattern alone decided
-    return best.get(it.group, 0.0) >= top - config.MEANING_GATE_MARGIN
+    return best.get(it.group, 0.0) >= top - config.MEANING_GATE_STRICT.get(it.name, config.MEANING_GATE_MARGIN)
 
 
 _CODE_THING = re.compile(r"\b(?:function|method|class|def|variable|func)\b", I)

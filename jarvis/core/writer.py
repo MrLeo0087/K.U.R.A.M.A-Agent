@@ -131,9 +131,21 @@ RESUME_PREFIX = "job_resume:"
 
 def _save_state(ctx, state: dict) -> None:
     try:
-        store.kv_set(f"{RESUME_PREFIX}{ctx.job.id}", json.dumps(state, ensure_ascii=False))
+        if hasattr(ctx, "checkpoint"):  # a long job (longjobs.py): it resumes by itself after a restart
+            ctx.checkpoint(writer=state)
+        else:
+            store.kv_set(f"{RESUME_PREFIX}{ctx.job.id}", json.dumps(state, ensure_ascii=False))
     except Exception as e:
         log.debug("resume state not saved: %s", e)
+
+
+def long_run(ctx, params: dict) -> str:
+    """Long Job Engine body for writing jobs: starts fresh, or continues from the last finished section."""
+    state = ctx.state.get("writer")
+    if state:
+        ctx.step(f"resuming at section {int(state.get('done') or 0) + 1}")
+        return resume(ctx, state)
+    return run(ctx, params["request"], params.get("lang") or "en", params.get("kind") or "write")
 
 
 def resume(ctx, state: dict) -> str:

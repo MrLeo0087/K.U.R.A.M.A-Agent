@@ -250,6 +250,11 @@ class JobManager:
         rows = store.jobs_list(limit)
         return [live.get(r["id"]) or _from_row(r) for r in rows]
 
+    def ids(self) -> list[int]:
+        """Ids of the jobs this process started (to see which ones a step just started)."""
+        with self._lock:
+            return list(self._jobs)
+
     def active(self) -> list[Job]:
         with self._lock:
             return [j for j in self._jobs.values() if j.status in ACTIVE]
@@ -448,7 +453,9 @@ def start_task(text: str, lang: str = "en") -> Job:
     title = planner.title_of(text)
     if kind == "scan":
         return get_manager().submit(title, kind, lambda ctx: _agent_job(ctx, text), text, lang)
-    return get_manager().submit(title, kind, lambda ctx: writer.run(ctx, text, lang, kind), text, lang)
+    from jarvis.core import longjobs  # writing: durable (resumes by itself after a restart), capped, step log
+    return longjobs.submit(title, writer.long_run, {"request": text, "lang": lang, "kind": kind}, kind=kind,
+                           request=text, lang=lang, max_tokens=config.WRITER_JOB_MAX_TOKENS, max_minutes=90)
 
 
 def _agent_job(ctx: JobContext, text: str) -> str:
