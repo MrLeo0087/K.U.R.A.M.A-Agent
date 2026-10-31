@@ -2736,13 +2736,17 @@ if (MINI && !WSONLY) {
   document.addEventListener("mousedown", (e) => { const ed = e.button === 0 && edgeAt(e); if (ed && hostSay("resize:" + ed)) e.preventDefault(); }, true);
 }
 
-// mini chat v3: glass while the panel isn't focused (Blur my Shell blurs behind it then), solid while typing
-// (its "dynamic opacity" drops the blur on the focused window); background jobs as a small strip; 0-token chips.
+// mini chat: a glass panel (the blur behind it is Blur my Shell's, always on), mac-style window dots,
+// a language picker, background jobs as a small strip, 0-token quick asks.
 if (MINI && !WSONLY) {
   const B = document.body;
   if (params.get("opaque") === "1") B.classList.add("opaque"); // no compositor: no see-through window
-  const focus = () => B.classList.toggle("win-focus", document.hasFocus());
-  addEventListener("focus", focus); addEventListener("blur", focus); focus();
+  $("m-close").onclick = () => $("btn-hide").click();
+  $("m-min").onclick = () => $("btn-hide").click();
+  $("m-zoom").onclick = () => $("btn-full").click();
+  const lang = $("m-lang");
+  lang.value = S.lang || "auto";
+  lang.onchange = () => { S.lang = lang.value; saveSettings(S); if ($("set-lang")) $("set-lang").value = S.lang; };
   const box = $("m-jobs");
   let jobsKey = "", armed = 0;
   const frac = (p) => { const m = /(\d+)\s*\/\s*(\d+)/.exec(p || ""); return m && +m[2] ? Math.min(1, +m[1] / +m[2]) : null; };

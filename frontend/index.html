@@ -127,6 +127,12 @@
 
       <section class="card chat" aria-label="Conversation">
         <div class="chat-head">
+          <span class="m-traffic mini-on" role="group" aria-label="Window">
+            <button id="m-close" type="button" class="tl r" aria-label="Hide chat" title="Hide · Esc"></button>
+            <button id="m-min" type="button" class="tl y" aria-label="Minimize to the button" title="Minimize"></button>
+            <button id="m-zoom" type="button" class="tl g" aria-label="Open full KURAMA" title="Full KURAMA"></button>
+          </span>
+          <img class="m-logo mini-on" src="kurama-logo.svg" alt="" width="20" height="20">
           <span id="chat-title" class="card-title">Conversation</span>
           <span class="head-tools">
             <span id="chat-state" class="chat-state" role="status"><i></i><span>Connecting</span></span>
@@ -142,6 +148,8 @@
             <button id="btn-find" class="icon-btn mini-off" type="button" aria-label="Find a tool (Ctrl+K)" title="Find a tool · Ctrl+K">
               <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
             </button>
+            <label class="m-lang mini-on" title="Language you speak"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h9M7.5 3v2M5 5c0 4 2.5 7 6 8.5M10 5c0 3.5-2.5 7-6.5 9M13 21l4.5-10 4.5 10M14.6 17.5h5.8"/></svg>
+              <select id="m-lang" aria-label="Language"><option value="auto">Auto</option><option value="en">EN</option><option value="ne">NE</option><option value="hi">HI</option></select></label>
             <button id="btn-voice" class="icon-btn" type="button" aria-pressed="true" aria-label="KURAMA voice on (click to mute)" title="Voice on · click to mute">
               <svg class="v-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>
               <svg class="v-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M17 9l5 6M22 9l-5 6"/></svg>

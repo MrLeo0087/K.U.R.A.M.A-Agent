@@ -531,3 +531,15 @@ Phases (one at a time, owner tests after each):
       Chat/Code switch; job strip (queued/running/paused jobs, step progress bar, pause/continue for long jobs,
       double-click cancel; polled every 5 s only while visible); 0-token quick-ask chips (hidden while typing / short
       panels). Checked in offscreen WebKit (glass + focused previews), UI tests pass; live window needs the owner.
+- [x] 2026-10-31 Mini KURAMA v4 (owner: v3 had no blur and text jumped on hover; wanted the macOS-glass mock with
+      KURAMA's own logo). Causes found live (panel opened with KURAMA's own SIGUSR1 shortcut, screen region captured):
+      (1) Blur my Shell's "dynamic opacity" removes the blur from the FOCUSED window and the page never got WebKit's
+      focus events to go solid, so the panel was see-through without blur while in use -> dynamic-opacity off and
+      opacity 255 (the owner's terminal keeps its own 14% transparency, now also blurred when focused, crisper text);
+      (2) the v3 hover reveal of name/time changed message height -> text jumped; (3) the header had min-height 48 px,
+      which let a long chat squeeze it (row 2 slid over the messages) -> header/strip/chips/box flex: none.
+      New look: mac window dots (close/minimize = hide, green = full KURAMA), fox logo (frontend/kurama-logo.svg, also
+      on every KURAMA message), indigo glass tint with soft static gradients, tool pills (blue/violet/green, red when
+      failed), answer in a glass card with its route/tokens chips inside, your messages in a lifted bubble with a
+      person badge, language picker (Auto/EN/NE/HI = the existing setting), big round input with gradient send.
+      Static CSS only (no animations / backdrop-filter). Checked offscreen + live on the owner's screen.

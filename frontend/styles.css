@@ -1355,131 +1355,178 @@ body.mini .agent-select { display: inline-block !important; }
 body.mini .agent-select { width: auto; min-width: 0; padding: 0 4px 0 8px; font: 700 13px var(--code); }
 
 /* =====================================================================================================
-   Mini KURAMA v3 (2026-10-31): a quiet glass panel. Transparent window + round corners drawn here; the blur
-   behind it comes from GNOME's Blur my Shell (window class KURAMA-mini), never from CSS backdrop-filter
-   (WebKitGTK has no GPU path: that would cost CPU). Glass while the panel isn't focused, near-solid while
-   typing (the extension drops the blur on the focused window). One neutral palette, one accent, no glow.
+   Mini KURAMA (2026-10-31, v4): a macOS-style glass panel. The window is transparent; this page draws the
+   rounded panel with a translucent indigo tint. The blur of what is behind it comes from GNOME's Blur my Shell
+   (window class KURAMA-mini, always on), never from CSS backdrop-filter (no GPU path in WebKitGTK = CPU cost).
+   Everything is static: no animations, no hover that changes layout (that made text jump).
    ===================================================================================================== */
 body.mini {
-  --m-r: 15px; /* = Blur my Shell's corner radius, so the blur and the panel share one edge */
-  --m-glass: rgba(32, 32, 36, 0.52);
-  --m-solid: rgba(30, 30, 33, 0.965);
-  --m-hair: rgba(255, 255, 255, 0.13);
-  --m-line: rgba(255, 255, 255, 0.07);
+  --m-r: 15px; /* = Blur my Shell's corner radius: blur and panel share one edge */
+  --m-text: #f4f5ff;
+  --m-sub: rgba(226, 230, 255, 0.70);
+  --m-dim: rgba(226, 230, 255, 0.45);
+  --m-hair: rgba(255, 255, 255, 0.14);
+  --m-line: rgba(255, 255, 255, 0.08);
   --m-fill: rgba(255, 255, 255, 0.07);
   --m-fill-2: rgba(255, 255, 255, 0.12);
-  --m-text: #f3f3f5;
-  --m-sub: rgba(235, 235, 245, 0.64);
-  --m-dim: rgba(235, 235, 245, 0.38);
-  --m-acc: #ff9f0a;
+  --m-acc: #6e7bff; --m-acc-2: #8b5cf6;
+  --m-blue: #6ea8ff; --m-violet: #b38cff; --m-green: #b7e36b; --m-ok: #34d399; --m-bad: #ff6b6b;
   --m-font: "Ubuntu Sans", "Inter", "Cantarell", "Noto Sans", sans-serif;
   background: transparent !important; color: var(--m-text); font-family: var(--m-font);
-  -webkit-font-smoothing: antialiased;
 }
 html:has(body.mini) { background: transparent !important; }
 body.mini .layout, body.mini .center { background: transparent; }
+body.mini .chat::before, body.mini .chat::after, body.mini .bg-glow { display: none !important; }
 body.mini .chat {
-  border-radius: var(--m-r); border: 1px solid var(--m-hair); background: var(--m-glass);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07); transition: background-color 0.18s ease;
+  border-radius: var(--m-r); border: 1px solid var(--m-hair); animation: none;
+  background:
+    radial-gradient(120% 60% at 0% 0%, rgba(110, 123, 255, 0.16), transparent 60%),
+    radial-gradient(90% 50% at 100% 100%, rgba(139, 92, 246, 0.14), transparent 60%),
+    rgba(16, 19, 40, 0.58);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10);
 }
-body.mini.win-focus .chat, body.mini.opaque .chat { background: var(--m-solid); }
-body.mini .chat::before, body.mini .chat::after, body.mini .bg-glow { display: none !important; } /* no HUD brackets / glow */
+body.mini.opaque .chat { background-color: rgb(18, 20, 38); }
 
-/* header: name + state on the left, controls on the right; two rows only when narrow */
-body.mini .chat-head { gap: 4px; padding: 7px 8px 7px 14px; border-bottom: 1px solid var(--m-line); flex-wrap: nowrap; min-height: 44px; }
+/* ---- header: window dots, logo + name, tool group, then power ---- */
+body.mini .chat-head { display: flex; flex-wrap: nowrap; align-items: center; gap: 4px; min-height: 48px;
+  padding: 8px 10px 8px 14px; border-bottom: 1px solid var(--m-line); }
 body.mini .chat-head::after { display: none; }
-body.mini #chat-title { order: 1; margin: 0; font: 600 13px/1 var(--m-font); letter-spacing: 0.01em; color: var(--m-text); text-transform: none; }
-body.mini #chat-state { order: 2; margin: 0 auto 0 8px; font-size: 12px; color: var(--m-dim); gap: 6px; }
-body.mini #chat-state i { width: 6px; height: 6px; box-shadow: none !important; }
-body.mini #chat-state.ok i { background: #32d74b; }
+body.mini .head-tools { display: contents; }
+/* only the message list may shrink: a long chat squeezed the header (row 2 slid over the messages) */
+body.mini .chat-head, body.mini .m-jobs, body.mini .chat > .suggest, body.mini .ask { flex: none; }
+body.mini .m-traffic { order: 0; display: inline-flex !important; gap: 7px; margin-right: 10px; }
+body.mini .tl { width: 12px; height: 12px; padding: 0; border-radius: 50%; border: 0; cursor: pointer;
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.35); }
+body.mini .tl.r { background: #ff5f57; } body.mini .tl.y { background: #febc2e; } body.mini .tl.g { background: #28c840; }
+body.mini .tl:hover { filter: brightness(1.12); }
+body.mini .m-logo { order: 1; display: inline-block !important; width: 20px; height: 20px; margin-right: 7px; }
+body.mini #chat-title { order: 2; margin: 0; font: 600 14px/1 var(--m-font); letter-spacing: 0.01em; color: var(--m-text); text-transform: none; }
+body.mini #chat-state { order: 3; margin: 0 auto 0 7px; gap: 0; }
+body.mini #chat-state > span { display: none; }
+body.mini #chat-state i { width: 7px; height: 7px; box-shadow: none !important; animation: none !important; }
+body.mini #chat-state.ok i { background: var(--m-ok); }
 body.mini #chat-state.live i, body.mini #chat-state.busy i { background: var(--m-acc); }
-html body.mini #agent-switch { display: inline-flex !important; order: 3; margin-right: 4px; }
-html body.mini .agent-select { display: none !important; }
-body.mini #m-ws { order: 4; } body.mini #btn-clear { order: 5; } body.mini #btn-settings { order: 6; }
-body.mini #btn-voice { order: 7; } body.mini #btn-power-mini { order: 8; } body.mini #btn-hide { order: 9; }
-body.mini .chat-head .icon-btn { width: 28px; height: 28px; border-radius: 7px; color: var(--m-sub); }
-body.mini .chat-head .icon-btn svg { width: 15px; height: 15px; stroke-width: 1.7; }
+html body.mini #agent-switch { display: inline-flex !important; order: 4; }
+html body.mini .agent-select, body.mini #btn-hide, body.mini #btn-full { display: none !important; }
+body.mini #m-ws { order: 5; } body.mini #btn-clear { order: 6; } body.mini #btn-settings { order: 7; }
+body.mini .m-lang { order: 8; } body.mini #btn-voice { order: 9; } body.mini #btn-power-mini { order: 10; margin-left: 2px; }
+body.mini .chat-head .icon-btn { width: 30px; height: 30px; border-radius: 9px; color: var(--m-sub); background: transparent; transition: none; }
+body.mini .chat-head .icon-btn svg { width: 16px; height: 16px; stroke-width: 1.7; }
 body.mini .chat-head .icon-btn:hover { color: var(--m-text); background: var(--m-fill); }
-body.mini #btn-power-mini.armed { color: #ff453a; background: rgba(255, 69, 58, 0.14); }
+body.mini #btn-power-mini.armed { color: var(--m-bad); background: rgba(255, 107, 107, 0.15); }
 body.mini #btn-voice[aria-pressed="false"] { color: var(--m-dim); }
-body.mini .agent-switch { padding: 2px; gap: 0; border-radius: 8px; background: var(--m-fill); border: 0; }
-body.mini .agent-switch button { height: 24px; padding: 0 7px; border-radius: 6px; border: 0; background: transparent; color: var(--m-sub);
-  display: inline-flex; align-items: center; gap: 5px; font: 500 12px var(--m-font); box-shadow: none; }
-body.mini .agent-switch button svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+body.mini .agent-switch { gap: 2px; padding: 3px; border-radius: 11px; background: var(--m-fill); border: 1px solid var(--m-line); }
+body.mini .agent-switch button { width: 30px; height: 26px; padding: 0; justify-content: center; border-radius: 8px; border: 0; background: transparent;
+  color: var(--m-sub); display: inline-flex; align-items: center; box-shadow: none; transition: none; }
 body.mini .agent-switch button span { display: none; }
-body.mini .agent-switch button[aria-checked="true"] { background: var(--m-fill-2); color: var(--m-text); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25); }
-@media (min-width: 520px) { body.mini .agent-switch button span { display: inline; } }
-@media (max-width: 419px) { body.mini #chat-state > span { display: none; } } /* the dot says it; the text is in the tooltip */
-@media (max-width: 359px) {
-  body.mini .chat-head { flex-wrap: wrap; row-gap: 2px; }
-  body.mini #btn-voice { order: 3; } body.mini #btn-power-mini { order: 4; } body.mini #btn-hide { order: 5; }
-  body.mini .chat-head::after { display: block; content: ""; order: 6; flex-basis: 100%; height: 0; }
-  html body.mini #agent-switch { order: 7; margin-right: auto; }
-  body.mini #m-ws { order: 8; } body.mini #btn-clear { order: 9; } body.mini #btn-settings { order: 10; }
+body.mini .agent-switch button svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+body.mini .agent-switch button[aria-checked="true"] { color: #fff; background: linear-gradient(180deg, rgba(110, 123, 255, 0.55), rgba(110, 123, 255, 0.35));
+  box-shadow: inset 0 0 0 1px rgba(150, 160, 255, 0.45); }
+body.mini .m-lang { display: inline-flex !important; align-items: center; gap: 1px; height: 30px; padding: 0 4px 0 7px; border-radius: 9px; color: var(--m-sub); cursor: pointer; }
+body.mini .m-lang:hover { background: var(--m-fill); color: var(--m-text); }
+body.mini .m-lang svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+body.mini .m-lang select { appearance: none; border: 0; background: transparent; color: inherit; font: 500 11.5px var(--m-font); padding: 0 2px; cursor: pointer; outline: none; }
+body.mini .m-lang select option { background: #1a1d36; color: var(--m-text); }
+
+/* narrow panel (the screen runs at 1.25x: a 477 px panel is ~380 css px): two calm rows */
+@media (max-width: 459px) {
+  body.mini .chat-head { flex-wrap: wrap; row-gap: 6px; padding-bottom: 7px; }
+  body.mini #btn-power-mini { order: 3; margin-left: auto; }
+  body.mini #chat-state { margin-right: 0; }
+  body.mini .chat-head::after { display: block; content: ""; order: 4; flex-basis: 100%; height: 0; }
+  html body.mini #agent-switch { order: 5; margin-right: auto; }
+  body.mini #m-ws { order: 6; } body.mini #btn-clear { order: 7; } body.mini #btn-settings { order: 8; }
+  body.mini .m-lang { order: 9; } body.mini #btn-voice { order: 10; }
 }
 
-/* messages: plain text for KURAMA, a soft neutral bubble for you; names/times only on hover */
-body.mini .messages { padding: 14px 14px 8px; gap: 14px; scrollbar-width: thin; }
-body.mini .messages::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.14); }
-body.mini .msg { animation: none; gap: 0; }
+/* ---- messages ---- */
+body.mini .messages { padding: 16px 14px 10px; gap: 16px; }
+body.mini .messages::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.16); }
+body.mini .msg { animation: none !important; gap: 10px; }
 body.mini .msg .avatar { display: none; }
-body.mini .msg .who { height: 0; margin: 0; overflow: hidden; opacity: 0; font-size: 10.5px; color: var(--m-dim); transition: opacity 0.15s; }
-body.mini .msg:hover .who { height: auto; margin-bottom: 3px; opacity: 1; }
-body.mini .msg .text { font-size: 13.5px; line-height: 1.5; color: var(--m-text); }
+body.mini .msg .who { display: flex; align-items: center; gap: 6px; margin: 0 0 7px; font-size: 12px; color: var(--m-dim); letter-spacing: 0.02em; }
+body.mini .msg.bot .who::before { content: ""; flex: none; width: 15px; height: 15px; background: url("kurama-logo.svg") center / contain no-repeat; }
+body.mini .msg.user .who { display: none; }
+body.mini .msg .text { font-size: 14px; line-height: 1.55; color: var(--m-text); }
 body.mini .msg .text strong, body.mini .msg .text b { color: #fff; font-weight: 600; }
-body.mini .msg .text a { color: var(--m-acc); }
-body.mini .msg .text code { background: var(--m-fill); }
-body.mini .msg .text pre { background: rgba(0, 0, 0, 0.32); border-color: var(--m-line); border-radius: 9px; }
-body.mini .msg.user .body { max-width: 84%; }
-body.mini .msg.user .text { padding: 7px 12px; border-radius: 15px 15px 5px 15px; background: var(--m-fill-2); border: 0; color: var(--m-text); box-shadow: none; }
+body.mini .msg .text a { color: var(--m-blue); }
+body.mini .msg .text code { background: rgba(255, 255, 255, 0.09); }
+body.mini .msg .text pre { background: rgba(0, 0, 0, 0.30); border-color: var(--m-line); border-radius: 10px; }
+/* you: a soft lifted bubble with a small person badge */
+body.mini .msg.user { align-items: flex-start; }
+body.mini .msg.user::after { content: ""; flex: none; width: 30px; height: 30px; border-radius: 50%; margin-top: 2px;
+  background: rgba(255, 255, 255, 0.10) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23dfe3ff'%3E%3Ccircle cx='12' cy='9' r='4'/%3E%3Cpath d='M4.5 20c.8-4 4-6 7.5-6s6.7 2 7.5 6z'/%3E%3C/svg%3E") center / 17px no-repeat; order: 1; }
+body.mini .msg.user { flex-direction: row-reverse; }
+body.mini .msg.user .body { max-width: 82%; }
+body.mini .msg.user .text { padding: 10px 15px; border-radius: 18px; border: 1px solid rgba(255, 255, 255, 0.10);
+  background: linear-gradient(180deg, rgba(120, 132, 255, 0.20), rgba(120, 132, 255, 0.12)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06); }
 body.mini .msg.user.voice .who::before { content: ""; }
-body.mini .dots i { background: var(--m-sub); }
-body.mini .confirm { border-radius: 11px; border-color: var(--m-hair); background: var(--m-fill); }
-body.mini .meta .act, body.mini .chips > * { border-radius: 7px; }
+/* KURAMA: the answer sits in a glass card; its details (route, tokens...) close the card */
+body.mini .msg.bot .text { padding: 12px 15px; border-radius: 16px 16px 0 0; border: 1px solid var(--m-line); border-bottom: 0;
+  background: rgba(255, 255, 255, 0.055); }
+body.mini .msg.bot .meta { margin: 0; padding: 0 15px 12px; border-radius: 0 0 16px 16px; border: 1px solid var(--m-line); border-top: 0;
+  background: rgba(255, 255, 255, 0.055); }
+body.mini .msg.bot .meta:empty { display: none; }
+body.mini .msg.bot .body:has(.meta:empty) .text { border-radius: 16px; border-bottom: 1px solid var(--m-line); }
+body.mini .msg.bot .meta .chip { height: 22px; display: inline-flex; align-items: center; gap: 4px; padding: 0 9px; border-radius: 11px;
+  border: 1px solid var(--m-line); background: rgba(255, 255, 255, 0.04); color: var(--m-sub); font-size: 11px; }
+body.mini .msg.bot .meta .chip b { color: var(--m-dim); font-weight: 500; }
+/* tools that ran: outlined pills, colour by position, red when failed */
+body.mini .chips:not(:empty) { margin-bottom: 8px; gap: 6px; }
+body.mini .chip.tool { height: 24px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border-radius: 12px; font-size: 12px;
+  color: var(--m-blue); border: 1px solid rgba(110, 168, 255, 0.45); background: rgba(110, 168, 255, 0.08); }
+body.mini .chip.tool::before { content: ""; width: 13px; height: 13px; background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2'%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3Cpath d='M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1'/%3E%3C/svg%3E") center / contain no-repeat; }
+body.mini .chip.tool:nth-child(3n+2) { color: var(--m-violet); border-color: rgba(179, 140, 255, 0.45); background: rgba(179, 140, 255, 0.08); }
+body.mini .chip.tool:nth-child(3n) { color: var(--m-green); border-color: rgba(183, 227, 107, 0.45); background: rgba(183, 227, 107, 0.07); }
+body.mini .chip.tool.fail { color: var(--m-bad); border-color: rgba(255, 107, 107, 0.45); background: rgba(255, 107, 107, 0.08); }
+body.mini .dots i { background: var(--m-sub); animation-duration: 1.4s; }
+body.mini .confirm { border-radius: 14px; border-color: var(--m-hair); background: rgba(255, 255, 255, 0.06); }
+body.mini .note { color: var(--m-sub); }
 
-/* background jobs: one quiet line each, thin progress underneath */
-body.mini .m-jobs { display: flex; flex-direction: column; gap: 4px; margin: 0 10px 6px; }
+/* ---- background jobs: a quiet line each, thin progress underneath ---- */
+body.mini .m-jobs { display: flex; flex-direction: column; gap: 5px; margin: 0 12px 8px; }
 body.mini .m-jobs[hidden] { display: none; }
-body.mini .mj { position: relative; display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 4px 0 10px;
-  border-radius: 9px; background: var(--m-fill); overflow: hidden; font-size: 12px; }
+body.mini .mj { position: relative; display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 5px 0 12px;
+  border-radius: 11px; border: 1px solid var(--m-line); background: rgba(255, 255, 255, 0.06); overflow: hidden; font-size: 12.5px; }
 body.mini .mj-t { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--m-text); }
-body.mini .mj-p { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--m-dim); font-variant-numeric: tabular-nums; }
-body.mini .mj-b { flex: none; width: 22px; height: 22px; display: grid; place-items: center; border: 0; border-radius: 6px; background: transparent; color: var(--m-sub); cursor: pointer; }
+body.mini .mj-p { flex: none; max-width: 42%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--m-dim); font-variant-numeric: tabular-nums; }
+body.mini .mj-b { flex: none; width: 24px; height: 24px; display: grid; place-items: center; border: 0; border-radius: 7px; background: transparent; color: var(--m-sub); cursor: pointer; }
 body.mini .mj-b svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 body.mini .mj-b:hover { background: var(--m-fill-2); color: var(--m-text); }
-body.mini .mj-b.armed { color: #ff453a; background: rgba(255, 69, 58, 0.16); }
-body.mini .mj-bar { position: absolute; left: 0; bottom: 0; height: 2px; width: calc(var(--f) * 100%); background: var(--m-acc); opacity: 0.85; }
-body.mini .mj-bar.ind { width: 100%; opacity: 0.25; } /* no step count: a faint full line, no animation (CPU) */
-body.mini .mj.paused .mj-bar { background: var(--m-sub); }
+body.mini .mj-b.armed { color: var(--m-bad); background: rgba(255, 107, 107, 0.16); }
+body.mini .mj-bar { position: absolute; left: 0; bottom: 0; height: 2px; width: calc(var(--f) * 100%); background: linear-gradient(90deg, var(--m-acc), var(--m-acc-2)); }
+body.mini .mj-bar.ind { width: 100%; opacity: 0.3; }
+body.mini .mj.paused .mj-bar { background: var(--m-dim); }
 
-/* quick asks (0 tokens): one scrolling row above the box, hidden while you type */
-body.mini .chat > .suggest { display: flex; flex-wrap: nowrap; justify-content: flex-start; gap: 6px; padding: 0 10px 6px; overflow-x: auto; scrollbar-width: none; }
+/* ---- quick asks (0 tokens): one row above the box, hidden while typing ---- */
+body.mini .chat > .suggest { display: flex; flex-wrap: nowrap; justify-content: flex-start; gap: 6px; padding: 0 12px 8px; overflow-x: auto; scrollbar-width: none; }
 body.mini .chat > .suggest::-webkit-scrollbar { display: none; }
 body.mini .chat > .suggest:empty, body.mini .chat:has(#input:not(:placeholder-shown)) > .suggest { display: none; }
-body.mini .chat > .suggest button { flex: none; height: 26px; padding: 0 11px; border-radius: 13px; border: 0; background: var(--m-fill);
-  color: var(--m-sub); font: 400 12px var(--m-font); white-space: nowrap; }
+body.mini .chat > .suggest button { flex: none; height: 28px; padding: 0 12px; border-radius: 14px; border: 1px solid var(--m-line);
+  background: rgba(255, 255, 255, 0.06); color: var(--m-sub); font: 400 12.5px var(--m-font); white-space: nowrap; transition: none; }
 body.mini .chat > .suggest button:hover { background: var(--m-fill-2); color: var(--m-text); }
 
-/* the box: one rounded field holding the input modes, the text and the send button */
-body.mini .ask { position: relative; align-items: center; gap: 2px; margin: 0 10px 10px; padding: 4px; border: 1px solid var(--m-hair);
-  border-radius: 12px; background: rgba(255, 255, 255, 0.05); border-top: 1px solid var(--m-hair); }
-body.mini .ask:focus-within { border-color: rgba(255, 255, 255, 0.24); }
+/* ---- the box: one big rounded field, mic | talk | text | send ---- */
+body.mini .ask { align-items: center; gap: 0; margin: 0 12px 12px; padding: 6px 6px 6px 8px; border: 1px solid var(--m-hair);
+  border-radius: 22px; background: rgba(255, 255, 255, 0.07); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06); }
+body.mini .ask:focus-within { border-color: rgba(150, 160, 255, 0.55); }
 body.mini .ask .seg { padding: 0; gap: 0; background: transparent; border: 0; }
-body.mini .ask .seg::before, body.mini .ask .seg::after { display: none !important; } /* no sliding glow */
-body.mini .ask .seg button, body.mini .ask .mute-btn { width: 28px; height: 28px; border-radius: 7px; background: transparent; box-shadow: none; color: var(--m-dim); }
+body.mini .ask .seg::before, body.mini .ask .seg::after { display: none !important; }
+body.mini #m-text { display: none; }
+body.mini .ask .seg button, body.mini .ask .mute-btn { width: 34px; height: 34px; border-radius: 50%; background: transparent; box-shadow: none; color: var(--m-sub); transition: none; }
+body.mini .ask #m-conv { position: relative; }
+body.mini .ask #m-conv::before { content: ""; position: absolute; left: -1px; top: 9px; bottom: 9px; width: 1px; background: var(--m-hair); }
 body.mini .ask .seg button:hover, body.mini .ask .mute-btn:hover { color: var(--m-text); background: var(--m-fill); }
-body.mini .ask .seg button[aria-pressed="true"] { color: var(--m-text); background: var(--m-fill); box-shadow: none; }
-body.mini .ask .seg button svg, body.mini .ask .mute-btn svg { width: 15px; height: 15px; }
-body.mini #m-text { display: none; } /* typing is the default; mic / talk switch away and back */
-body.mini .ask textarea { min-height: 28px; padding: 5px 6px; border: 0 !important; border-radius: 0; background: transparent !important;
-  font: 400 13.5px/1.4 var(--m-font); color: var(--m-text); box-shadow: none !important; }
+body.mini .ask .seg button[aria-pressed="true"] { color: #fff; background: rgba(110, 123, 255, 0.30); box-shadow: none; }
+body.mini .ask .seg button svg, body.mini .ask .mute-btn svg { width: 18px; height: 18px; }
+body.mini .ask textarea { min-height: 34px; margin-left: 6px; padding: 7px 8px; border: 0 !important; border-left: 1px solid var(--m-hair) !important;
+  border-radius: 0; background: transparent !important; font: 400 14px/1.4 var(--m-font); color: var(--m-text); box-shadow: none !important; }
 body.mini .ask textarea::placeholder { color: var(--m-dim); }
-body.mini .send { width: 28px; height: 28px; flex: none; border-radius: 50%; border: 0; background: var(--m-fill-2); color: var(--m-sub);
-  box-shadow: none !important; animation: none !important; transition: background-color 0.15s, color 0.15s; }
-body.mini .send svg { width: 14px; height: 14px; stroke-width: 2.2; }
-body.mini .ask:has(#input:not(:placeholder-shown)) .send, body.mini .send.stop, body.mini .ask.busy .send { background: var(--m-acc); color: #1c1c1e; }
+body.mini .send { width: 38px; height: 38px; flex: none; border-radius: 50%; border: 0; color: #fff; animation: none !important; transition: none;
+  background: linear-gradient(135deg, var(--m-acc), var(--m-acc-2)); box-shadow: 0 4px 14px rgba(110, 123, 255, 0.35) !important; }
+body.mini .send svg { width: 17px; height: 17px; stroke-width: 2.3; }
+body.mini .send.stop { background: linear-gradient(135deg, #ff6b6b, #e5484d); box-shadow: none !important; }
 
-/* small panels: tighter; very short: no quick asks */
-@media (max-width: 379px) { body.mini .messages { padding: 12px 10px 6px; } body.mini .ask, body.mini .m-jobs { margin-left: 8px; margin-right: 8px; } }
+@media (max-width: 379px) { body.mini .messages { padding: 12px 10px 8px; } body.mini .ask, body.mini .m-jobs { margin-left: 8px; margin-right: 8px; } }
 @media (max-height: 440px) { body.mini .chat > .suggest { display: none; } }
-@media (min-width: 560px) { body.mini .messages { padding-left: 20px; padding-right: 20px; } body.mini .msg.user .body { max-width: 72%; } }
