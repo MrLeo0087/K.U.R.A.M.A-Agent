@@ -97,7 +97,7 @@ def previous() -> Path | None:
 
 def is_anaphora(text: str) -> bool:
     """True when `text` just points back ('this', 'it', 'that folder', 'here') rather than naming something."""
-    t = re.sub(r"\b(?:folder|file|directory|dir|one|document|zip)\b", " ", (text or "").lower())
+    t = re.sub(r"\b(?:folder|file|directory|dir|one|document|zip|selected|highlighted)\b", " ", (text or "").lower())
     t = " ".join(t.split()).strip(" .")
     return t in ANAPHORA
 

@@ -38,7 +38,7 @@ def state() -> dict:
                 path.write_text("".join(path.read_text(encoding="utf-8").splitlines(True)[-300:]), encoding="utf-8")
             with path.open("a", encoding="utf-8") as fh:
                 fh.write(time.strftime("%m-%d %H:%M:%S ") + json.dumps(
-                    {k: out.get(k) for k in ("title", "folder", "selected", "folders", "sel_raw")}) + "\n")
+                    {k: out.get(k) for k in ("title", "folder", "selected", "folders", "sel_raw", "pick")}) + "\n")
         except OSError:
             pass
     _cache = (time.monotonic(), out)

@@ -687,3 +687,11 @@ Phases (one at a time, owner tests after each):
       Tara; and the "send this folder" shortcut used KURAMA's remembered folder (Tara, set by the too-big listing),
       never the Files app. Now: names with "/" are ignored; the shortcut resolves "this" like every tool
       (pasted path > Files selection / open folder > remembered folder).
+- [x] 2026-11-01 Files, 3rd live test — causes proven before fixing: (1) TWO Files windows were open, both "Tara",
+      both full screen (wmctrl): the reader merged both windows' selections (newone from one, OCR_CODE from the
+      other; fm.log sel_raw), so the AI got two items and fell back to Tara. Now ONE window is read: the focused one,
+      else the top one matched by creation order (X ids grow; accessibility frames are listed in creation order;
+      fm.log "pick" records which rule chose it). (2) "Send this selected file" searched the disk for "this selected":
+      "selected"/"highlighted" now count as pointing words (focus.is_anaphora), so it resolves to the selection.
+      (3) Hold-to-talk stopping by itself: cause NOT proven yet -> data/logs/ptt.log records every step (key down /
+      up / cancel, what the window did, page mic start / recording / stop, caption hidden, page hidden + why).

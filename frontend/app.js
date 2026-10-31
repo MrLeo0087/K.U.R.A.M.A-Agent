@@ -2030,15 +2030,17 @@ let pttOn = false, pttWant = null, pttStarting = false;
 window.kuramaPTT = async (v) => {
   if (v === -2) { player.stop(); return; } // Super+X: stop the spoken reply (the host hides the caption)
   pttWant = v; // the latest key event wins: fast presses never leave the mic on
+  hostSay(`pttlog:${v} (recording=${recording}, starting=${pttStarting})`);
   if (v === 1) {
     if (recording || pttStarting) return;
     pttStarting = true;
     audioCtx();
-    try { await mic.start(); } catch (e) { pttStarting = false; miniCaption("bot", micError(e), true); return; }
+    try { await mic.start(); } catch (e) { pttStarting = false; hostSay("pttlog:mic failed " + (e?.name || e)); miniCaption("bot", micError(e), true); return; }
     pttStarting = false;
     if (pttWant === -1) { mic.stop(); return; } // let go / cancelled while the mic was starting
     player.stop();
     recorder.start(); recording = pttOn = true; recSecs = 0;
+    hostSay("pttlog:recording");
     updateState();
     miniCaption("you", "Listening…");
     if (pttWant === 0) window.kuramaPTT(0); // released while starting: finish now
@@ -2050,6 +2052,7 @@ window.kuramaPTT = async (v) => {
   sttBusy = true; updateState(); // the host keeps the hidden panel alive while this says "thinking"
   const blob = await recorder.stop();
   mic.stop();
+  hostSay(`pttlog:stopped, ${blob ? blob.size : 0} bytes`);
   let r = null;
   if (blob && blob.size >= 1200) { try { r = await api.stt(blob, S.lang); } catch { /* offline */ } }
   sttBusy = false;

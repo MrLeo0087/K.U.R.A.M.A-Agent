@@ -338,6 +338,11 @@ def findfile_intent(t: str) -> Intent | None:
     return Intent("findfile", "find_files", "filesearch", {"query": q, "kind": kind}, q)
 
 
+def focus_is_anaphora(text: str) -> bool:
+    from jarvis.core import focus
+    return focus.is_anaphora(text)
+
+
 def _focus_intent() -> Intent | None:
     from jarvis.core import focus
     ref = focus.refer("this")  # the same order as every tool: a pasted path, what's selected / open in Files when
@@ -364,8 +369,8 @@ def sendfile_intent(t: str) -> Intent | None:
         return None
     if re.fullmatch(r"(?:a\s+|the\s+)?(?:camera|webcam|laptop\s+camera)", tgt, I):  # 'send me a camera photo' = the webcam
         return None
-    if re.fullmatch(r"(?:it|that|this|them|the)", tgt, I):  # anaphora target -> the folder we're talking about
-        return _focus_intent()
+    if re.fullmatch(r"(?:it|that|this|them|the)", tgt, I) or focus_is_anaphora(tgt):  # 'this', 'this selected file'
+        return _focus_intent()  # -> what is selected / open (it searched the disk for "this selected")
     path = f"{tgt} in {loc}" if loc else tgt
     return Intent("sendfile", "send_file_telegram", "telegram", {"path": path}, tgt)
 

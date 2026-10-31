@@ -42,3 +42,14 @@ def test_send_this_folder_shortcut_uses_the_files_selection(monkeypatch, tmp_pat
     fake(monkeypatch, "files", str(tmp_path), [str(sel)])
     it = fastpath._focus_intent()
     assert it is not None and it.args["path"] == str(sel)
+
+
+def test_send_this_selected_file_points_at_the_selection(monkeypatch, tmp_path):
+    from jarvis.core import config, fastpath
+    monkeypatch.setattr(config, "FASTPATH", True)
+    f = tmp_path / "report.pdf"
+    f.write_text("x")
+    fake(monkeypatch, "files", str(tmp_path), [str(f)])
+    for t in ("Send this selected file to Telegram.", "send the selected folder to telegram"):
+        it = fastpath.match(t)
+        assert it is not None and it.args["path"] == str(f), t

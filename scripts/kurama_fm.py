@@ -21,6 +21,10 @@ KINDS = {"org.gnome.nautilus": "files", "code": "vscode", "brave-browser": "brow
          "firefox": "browser", "chromium": "browser"}
 
 
+_TOP_XID = [0]
+_PICK: list = []  # how the window was chosen (evidence for the log)
+
+
 def _classes() -> dict[int, tuple[str, str]]:
     """xid -> (kind, title) for Files / VS Code / browser windows (wmctrl)."""
     out = {}
@@ -51,8 +55,14 @@ def _top() -> tuple[str | None, str]:
         except Exception:  # noqa: BLE001
             continue
         if xid in known:
+            _TOP_XID[0] = xid
             return known[xid]
     return None, ""
+
+
+def _naut_xids() -> list[int]:
+    """Files windows' X ids in creation order (an X id grows with each new window)."""
+    return sorted(x for x, (k, _) in _classes().items() if k == "files")
 
 
 def _folders() -> list[str]:
@@ -92,10 +102,20 @@ def _selected(title: str, folder: str, folders: list[str] | None = None) -> tupl
         app = desk.get_child_at_index(i)
         if not app or "nautilus" not in (app.get_name() or "").lower():
             continue
-        for w in range(app.get_child_count()):
-            win = app.get_child_at_index(w)
-            if win is None or (title and (win.get_name() or "") != title and app.get_child_count() > 1):
-                continue
+        frames = [app.get_child_at_index(w) for w in range(app.get_child_count())]
+        frames = [f for f in frames if f is not None]
+        pick = [f for f in frames if f.get_state_set().contains(Atspi.StateType.ACTIVE)]  # the focused one
+        why = "active"
+        if not pick and len(frames) > 1:  # several windows (two were both "Tara", full screen): the TOP one,
+            xids = _naut_xids()  # matched by creation order (frames are listed in the order they were made)
+            if len(xids) == len(frames) and _TOP_XID[0] in xids:
+                pick, why = [frames[xids.index(_TOP_XID[0])]], "top by creation order"
+            else:
+                pick, why = [f for f in frames if (f.get_name() or "") == title][:1], "title"
+        if not pick:
+            pick, why = frames[:1], "only window"
+        _PICK[:] = [why, len(frames)]
+        for win in pick:
             seen = [0]
 
             def walk(a, depth=0):  # ANY element marked selected (cell, row, list / grid item: it differs by view)
@@ -131,6 +151,7 @@ def main() -> dict:
     if kind == "files" and folder:
         out["selected"], out["folder"] = _selected(title, folder, folders)
         out["sel_raw"] = _SELECTED_RAW
+        out["pick"] = _PICK
     return out
 
 

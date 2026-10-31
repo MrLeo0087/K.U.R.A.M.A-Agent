@@ -27,6 +27,7 @@ _lock = threading.Lock()
 
 def _tell(state: str) -> bool:
     """Write the state and poke the mini window. False when it isn't running."""
+    pttlog(f"key {state}")
     try:
         STATE_FILE.write_text(f"{state} {time.time():.3f}\n", encoding="utf-8")
         pid = int(PID_FILE.read_text().strip())
@@ -45,6 +46,18 @@ def _norm(name: str) -> str:
         if n == m or n.startswith(m + "_"):
             return m
     return n
+
+
+def pttlog(line: str) -> None:
+    """data/logs/ptt.log: every hold-to-talk step (key, window, page) — evidence when it stops by itself."""
+    try:
+        path = config.LOG_DIR / "ptt.log"
+        if path.exists() and path.stat().st_size > 100_000:
+            path.write_text("".join(path.read_text(encoding="utf-8").splitlines(True)[-400:]), encoding="utf-8")
+        with path.open("a", encoding="utf-8") as fh:
+            fh.write(time.strftime("%H:%M:%S.") + f"{time.time() % 1:.2f}"[2:] + " server " + line + "\n")
+    except OSError:
+        pass
 
 
 class Holder:

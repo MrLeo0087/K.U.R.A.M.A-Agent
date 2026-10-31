@@ -663,6 +663,16 @@ class WakeBridge:
                 time.sleep(5)
 
 
+def pttlog(line: str) -> None:
+    """data/logs/ptt.log (shared with the server's key watcher): what the window did for hold-to-talk."""
+    try:
+        path = STATE_FILE.parent / "logs" / "ptt.log"
+        with path.open("a", encoding="utf-8") as fh:
+            fh.write(time.strftime("%H:%M:%S.") + f"{time.time() % 1:.2f}"[2:] + " window " + line + "\n")
+    except OSError:
+        pass
+
+
 def clear_window(_w, cr) -> bool:
     """Paint a transparent window clear, then let its child (the page) draw on top."""
     cr.set_operator(cairo.OPERATOR_SOURCE)
@@ -760,6 +770,8 @@ class Mini:
                 self.panel.begin_resize_drag(edge, 1, x, y, Gtk.get_current_event_time())
         elif kind == "ws":  # the panel asks for its workspace window (button, or a finished job with a result)
             self.open_ws(focus=rest != "quiet")
+        elif kind == "pttlog":
+            pttlog("page " + rest)
         elif kind == "caption" and self.ghost:
             with contextlib.suppress(ValueError, TypeError):
                 d = json.loads(rest)
@@ -939,6 +951,8 @@ class Mini:
         js = {"down": 1, "up": 0, "cancel": -1}.get(state)
         if js is None:
             return
+        pttlog(f"got {state}: open={self.open} ghost={self.ghost} ready={getattr(self, 'page_ready', False)} "
+               f"busy={self.state}")
         self.ptt_active = state == "down"
         if self.open:  # the chat is open: it all happens there
             run_js(self.view, f"window.kuramaPTT && window.kuramaPTT({js})")
@@ -1118,6 +1132,7 @@ class Mini:
 
     def end_ghost(self, keep_caption: bool = False) -> None:
         """The closed-but-alive panel has nothing left to do: hide it for real (its page stops the mic, saves the chat)."""
+        pttlog(f"end_ghost (keep_caption={keep_caption}, state={self.state}, ptt_active={self.ptt_active})")
         self.panel.hide()
         self.unghost(hide_caption=not keep_caption)
         run_js(self.view, "window.kuramaMiniShown && window.kuramaMiniShown(false)")
@@ -1337,6 +1352,7 @@ class Caption:
         self.win.move(*self.mini.beside(w, h))
 
     def hide(self):
+        pttlog("caption hidden")
         self.timer = 0
         self.win.hide()
         self.you.set_text("")
