@@ -653,6 +653,15 @@ class WakeBridge:
                 time.sleep(5)
 
 
+def clear_window(_w, cr) -> bool:
+    """Paint a transparent window clear, then let its child (the page) draw on top."""
+    cr.set_operator(cairo.OPERATOR_SOURCE)
+    cr.set_source_rgba(0, 0, 0, 0)
+    cr.paint()
+    cr.set_operator(cairo.OPERATOR_OVER)
+    return False
+
+
 class Mini:
     """Mini KURAMA: a round button above every window (drag to move, click = chat, right-click = menu) and a
     small chat panel. The panel's WebView shares the wallpaper's web process (related-view), so it adds little
@@ -863,6 +872,12 @@ class Mini:
         if self.panel is not None:
             return
         p = self.panel = Gtk.Window(title="KURAMA")
+        p.set_wmclass("kurama-mini", "KURAMA-mini")  # its own class: Blur my Shell blurs only this window
+        visual = p.get_screen().get_rgba_visual()
+        if visual is not None:  # transparent window: the page draws round corners + glass (needs a compositor)
+            p.set_visual(visual)
+            p.set_app_paintable(True)
+            p.connect("draw", clear_window)
         p.set_decorated(False)
         p.set_skip_taskbar_hint(True)
         p.set_skip_pager_hint(True)
@@ -876,11 +891,11 @@ class Mini:
         p.connect("delete-event", lambda *_: self.hide_panel() or True)
         v = self.view = WebKit2.WebView(web_context=self.wp.ctx, user_content_manager=self.wp.ucm)
         v.set_settings(self.wp.settings)
-        v.set_background_color(Gdk.RGBA(0.024, 0.027, 0.043, 1))
+        v.set_background_color(Gdk.RGBA(0, 0, 0, 0) if visual is not None else Gdk.RGBA(0.11, 0.11, 0.12, 1))
         v.connect("permission-request", self.wp.on_permission)
         v.connect("decide-policy", self.wp.on_policy)
         u = urlsplit(self.wp.url)
-        v.load_uri(f"{u.scheme}://{u.netloc}/?mini=1")
+        v.load_uri(f"{u.scheme}://{u.netloc}/?mini=1" + ("" if visual is not None else "&opaque=1"))
         p.add(v)
 
     def beside(self, w: int, h: int, top: bool = False) -> tuple[int, int]:

@@ -520,3 +520,14 @@ Phases (one at a time, owner tests after each):
       finished. 1051 tests (tests/test_longjobs.py 14). Scorecard 65 / 100 / 91 = same as the unchanged HEAD
       (measured in a worktree with the live VS Code file / highlight blanked: the scorecard reads the live desktop
       context, which shows up as 4 "text.selected" mistakes while a file is open in VS Code; not isolated yet).
+- [x] 2026-10-31 FIX_PLAN step 6 first (owner's choice: the UI he sees all day), MINI KURAMA v3: the panel window
+      is now transparent (RGBA visual, own WM class KURAMA-mini) and the page draws a 15 px round glass panel; the blur
+      behind it is GNOME's Blur my Shell (already installed; KURAMA-mini added to its application whitelist via
+      gsettings, no CSS backdrop-filter = no extra CPU in WebKitGTK). Its "dynamic opacity" (owner's existing setting,
+      also used by the terminal) drops the blur on the focused window, so the page is glass when not focused and
+      near-solid while typing (window focus class). New look: neutral graphite palette, one accent (#ff9f0a), Ubuntu
+      Sans, no orange glow / avatar / emoji select / sliding radial highlight; names+times on hover; one-row header
+      (two rows under 360 css px; the screen runs at 1.25x so the default 477 px panel is 381 css px); segmented
+      Chat/Code switch; job strip (queued/running/paused jobs, step progress bar, pause/continue for long jobs,
+      double-click cancel; polled every 5 s only while visible); 0-token quick-ask chips (hidden while typing / short
+      panels). Checked in offscreen WebKit (glass + focused previews), UI tests pass; live window needs the owner.

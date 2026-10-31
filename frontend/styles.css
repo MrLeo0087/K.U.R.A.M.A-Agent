@@ -1353,3 +1353,133 @@ body.mini #agent-select { order: 9; margin-left: 4px; } body.mini #btn-voice { o
 body.mini #agent-switch { display: none !important; }
 body.mini .agent-select { display: inline-block !important; }
 body.mini .agent-select { width: auto; min-width: 0; padding: 0 4px 0 8px; font: 700 13px var(--code); }
+
+/* =====================================================================================================
+   Mini KURAMA v3 (2026-10-31): a quiet glass panel. Transparent window + round corners drawn here; the blur
+   behind it comes from GNOME's Blur my Shell (window class KURAMA-mini), never from CSS backdrop-filter
+   (WebKitGTK has no GPU path: that would cost CPU). Glass while the panel isn't focused, near-solid while
+   typing (the extension drops the blur on the focused window). One neutral palette, one accent, no glow.
+   ===================================================================================================== */
+body.mini {
+  --m-r: 15px; /* = Blur my Shell's corner radius, so the blur and the panel share one edge */
+  --m-glass: rgba(32, 32, 36, 0.52);
+  --m-solid: rgba(30, 30, 33, 0.965);
+  --m-hair: rgba(255, 255, 255, 0.13);
+  --m-line: rgba(255, 255, 255, 0.07);
+  --m-fill: rgba(255, 255, 255, 0.07);
+  --m-fill-2: rgba(255, 255, 255, 0.12);
+  --m-text: #f3f3f5;
+  --m-sub: rgba(235, 235, 245, 0.64);
+  --m-dim: rgba(235, 235, 245, 0.38);
+  --m-acc: #ff9f0a;
+  --m-font: "Ubuntu Sans", "Inter", "Cantarell", "Noto Sans", sans-serif;
+  background: transparent !important; color: var(--m-text); font-family: var(--m-font);
+  -webkit-font-smoothing: antialiased;
+}
+html:has(body.mini) { background: transparent !important; }
+body.mini .layout, body.mini .center { background: transparent; }
+body.mini .chat {
+  border-radius: var(--m-r); border: 1px solid var(--m-hair); background: var(--m-glass);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07); transition: background-color 0.18s ease;
+}
+body.mini.win-focus .chat, body.mini.opaque .chat { background: var(--m-solid); }
+body.mini .chat::before, body.mini .chat::after, body.mini .bg-glow { display: none !important; } /* no HUD brackets / glow */
+
+/* header: name + state on the left, controls on the right; two rows only when narrow */
+body.mini .chat-head { gap: 4px; padding: 7px 8px 7px 14px; border-bottom: 1px solid var(--m-line); flex-wrap: nowrap; min-height: 44px; }
+body.mini .chat-head::after { display: none; }
+body.mini #chat-title { order: 1; margin: 0; font: 600 13px/1 var(--m-font); letter-spacing: 0.01em; color: var(--m-text); text-transform: none; }
+body.mini #chat-state { order: 2; margin: 0 auto 0 8px; font-size: 12px; color: var(--m-dim); gap: 6px; }
+body.mini #chat-state i { width: 6px; height: 6px; box-shadow: none !important; }
+body.mini #chat-state.ok i { background: #32d74b; }
+body.mini #chat-state.live i, body.mini #chat-state.busy i { background: var(--m-acc); }
+html body.mini #agent-switch { display: inline-flex !important; order: 3; margin-right: 4px; }
+html body.mini .agent-select { display: none !important; }
+body.mini #m-ws { order: 4; } body.mini #btn-clear { order: 5; } body.mini #btn-settings { order: 6; }
+body.mini #btn-voice { order: 7; } body.mini #btn-power-mini { order: 8; } body.mini #btn-hide { order: 9; }
+body.mini .chat-head .icon-btn { width: 28px; height: 28px; border-radius: 7px; color: var(--m-sub); }
+body.mini .chat-head .icon-btn svg { width: 15px; height: 15px; stroke-width: 1.7; }
+body.mini .chat-head .icon-btn:hover { color: var(--m-text); background: var(--m-fill); }
+body.mini #btn-power-mini.armed { color: #ff453a; background: rgba(255, 69, 58, 0.14); }
+body.mini #btn-voice[aria-pressed="false"] { color: var(--m-dim); }
+body.mini .agent-switch { padding: 2px; gap: 0; border-radius: 8px; background: var(--m-fill); border: 0; }
+body.mini .agent-switch button { height: 24px; padding: 0 7px; border-radius: 6px; border: 0; background: transparent; color: var(--m-sub);
+  display: inline-flex; align-items: center; gap: 5px; font: 500 12px var(--m-font); box-shadow: none; }
+body.mini .agent-switch button svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+body.mini .agent-switch button span { display: none; }
+body.mini .agent-switch button[aria-checked="true"] { background: var(--m-fill-2); color: var(--m-text); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25); }
+@media (min-width: 520px) { body.mini .agent-switch button span { display: inline; } }
+@media (max-width: 419px) { body.mini #chat-state > span { display: none; } } /* the dot says it; the text is in the tooltip */
+@media (max-width: 359px) {
+  body.mini .chat-head { flex-wrap: wrap; row-gap: 2px; }
+  body.mini #btn-voice { order: 3; } body.mini #btn-power-mini { order: 4; } body.mini #btn-hide { order: 5; }
+  body.mini .chat-head::after { display: block; content: ""; order: 6; flex-basis: 100%; height: 0; }
+  html body.mini #agent-switch { order: 7; margin-right: auto; }
+  body.mini #m-ws { order: 8; } body.mini #btn-clear { order: 9; } body.mini #btn-settings { order: 10; }
+}
+
+/* messages: plain text for KURAMA, a soft neutral bubble for you; names/times only on hover */
+body.mini .messages { padding: 14px 14px 8px; gap: 14px; scrollbar-width: thin; }
+body.mini .messages::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.14); }
+body.mini .msg { animation: none; gap: 0; }
+body.mini .msg .avatar { display: none; }
+body.mini .msg .who { height: 0; margin: 0; overflow: hidden; opacity: 0; font-size: 10.5px; color: var(--m-dim); transition: opacity 0.15s; }
+body.mini .msg:hover .who { height: auto; margin-bottom: 3px; opacity: 1; }
+body.mini .msg .text { font-size: 13.5px; line-height: 1.5; color: var(--m-text); }
+body.mini .msg .text strong, body.mini .msg .text b { color: #fff; font-weight: 600; }
+body.mini .msg .text a { color: var(--m-acc); }
+body.mini .msg .text code { background: var(--m-fill); }
+body.mini .msg .text pre { background: rgba(0, 0, 0, 0.32); border-color: var(--m-line); border-radius: 9px; }
+body.mini .msg.user .body { max-width: 84%; }
+body.mini .msg.user .text { padding: 7px 12px; border-radius: 15px 15px 5px 15px; background: var(--m-fill-2); border: 0; color: var(--m-text); box-shadow: none; }
+body.mini .msg.user.voice .who::before { content: ""; }
+body.mini .dots i { background: var(--m-sub); }
+body.mini .confirm { border-radius: 11px; border-color: var(--m-hair); background: var(--m-fill); }
+body.mini .meta .act, body.mini .chips > * { border-radius: 7px; }
+
+/* background jobs: one quiet line each, thin progress underneath */
+body.mini .m-jobs { display: flex; flex-direction: column; gap: 4px; margin: 0 10px 6px; }
+body.mini .m-jobs[hidden] { display: none; }
+body.mini .mj { position: relative; display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 4px 0 10px;
+  border-radius: 9px; background: var(--m-fill); overflow: hidden; font-size: 12px; }
+body.mini .mj-t { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--m-text); }
+body.mini .mj-p { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--m-dim); font-variant-numeric: tabular-nums; }
+body.mini .mj-b { flex: none; width: 22px; height: 22px; display: grid; place-items: center; border: 0; border-radius: 6px; background: transparent; color: var(--m-sub); cursor: pointer; }
+body.mini .mj-b svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+body.mini .mj-b:hover { background: var(--m-fill-2); color: var(--m-text); }
+body.mini .mj-b.armed { color: #ff453a; background: rgba(255, 69, 58, 0.16); }
+body.mini .mj-bar { position: absolute; left: 0; bottom: 0; height: 2px; width: calc(var(--f) * 100%); background: var(--m-acc); opacity: 0.85; }
+body.mini .mj-bar.ind { width: 100%; opacity: 0.25; } /* no step count: a faint full line, no animation (CPU) */
+body.mini .mj.paused .mj-bar { background: var(--m-sub); }
+
+/* quick asks (0 tokens): one scrolling row above the box, hidden while you type */
+body.mini .chat > .suggest { display: flex; flex-wrap: nowrap; justify-content: flex-start; gap: 6px; padding: 0 10px 6px; overflow-x: auto; scrollbar-width: none; }
+body.mini .chat > .suggest::-webkit-scrollbar { display: none; }
+body.mini .chat > .suggest:empty, body.mini .chat:has(#input:not(:placeholder-shown)) > .suggest { display: none; }
+body.mini .chat > .suggest button { flex: none; height: 26px; padding: 0 11px; border-radius: 13px; border: 0; background: var(--m-fill);
+  color: var(--m-sub); font: 400 12px var(--m-font); white-space: nowrap; }
+body.mini .chat > .suggest button:hover { background: var(--m-fill-2); color: var(--m-text); }
+
+/* the box: one rounded field holding the input modes, the text and the send button */
+body.mini .ask { position: relative; align-items: center; gap: 2px; margin: 0 10px 10px; padding: 4px; border: 1px solid var(--m-hair);
+  border-radius: 12px; background: rgba(255, 255, 255, 0.05); border-top: 1px solid var(--m-hair); }
+body.mini .ask:focus-within { border-color: rgba(255, 255, 255, 0.24); }
+body.mini .ask .seg { padding: 0; gap: 0; background: transparent; border: 0; }
+body.mini .ask .seg::before, body.mini .ask .seg::after { display: none !important; } /* no sliding glow */
+body.mini .ask .seg button, body.mini .ask .mute-btn { width: 28px; height: 28px; border-radius: 7px; background: transparent; box-shadow: none; color: var(--m-dim); }
+body.mini .ask .seg button:hover, body.mini .ask .mute-btn:hover { color: var(--m-text); background: var(--m-fill); }
+body.mini .ask .seg button[aria-pressed="true"] { color: var(--m-text); background: var(--m-fill); box-shadow: none; }
+body.mini .ask .seg button svg, body.mini .ask .mute-btn svg { width: 15px; height: 15px; }
+body.mini #m-text { display: none; } /* typing is the default; mic / talk switch away and back */
+body.mini .ask textarea { min-height: 28px; padding: 5px 6px; border: 0 !important; border-radius: 0; background: transparent !important;
+  font: 400 13.5px/1.4 var(--m-font); color: var(--m-text); box-shadow: none !important; }
+body.mini .ask textarea::placeholder { color: var(--m-dim); }
+body.mini .send { width: 28px; height: 28px; flex: none; border-radius: 50%; border: 0; background: var(--m-fill-2); color: var(--m-sub);
+  box-shadow: none !important; animation: none !important; transition: background-color 0.15s, color 0.15s; }
+body.mini .send svg { width: 14px; height: 14px; stroke-width: 2.2; }
+body.mini .ask:has(#input:not(:placeholder-shown)) .send, body.mini .send.stop, body.mini .ask.busy .send { background: var(--m-acc); color: #1c1c1e; }
+
+/* small panels: tighter; very short: no quick asks */
+@media (max-width: 379px) { body.mini .messages { padding: 12px 10px 6px; } body.mini .ask, body.mini .m-jobs { margin-left: 8px; margin-right: 8px; } }
+@media (max-height: 440px) { body.mini .chat > .suggest { display: none; } }
+@media (min-width: 560px) { body.mini .messages { padding-left: 20px; padding-right: 20px; } body.mini .msg.user .body { max-width: 72%; } }

@@ -115,6 +115,7 @@ function updateState() {
   const chip = $("chat-state");
   chip.className = "chat-state " + (online === false ? "bad" : st === "thinking" ? "busy" : st === "idle" ? (online ? "ok" : "") : "live");
   chip.lastElementChild.textContent = online === false ? "Offline" : online === null ? "Connecting" : CHIP[st];
+  chip.title = chip.lastElementChild.textContent; // the narrow panel shows only the dot
   $("send").classList.toggle("stop", busy);
   $("send").setAttribute("aria-label", busy ? "Stop" : "Send");
   $("m-mic").classList.toggle("rec", recording);
@@ -1688,7 +1689,7 @@ document.addEventListener("click", (e) => { if (e.target.id === "open-sched") { 
 // They change every 3 minutes and after each answer, never every 10 s dashboard refresh.
 let sugg = [], suggAt = 0;
 async function loadSuggest(force = false) {
-  if (MINI || (!force && Date.now() - suggAt < 180000)) return;
+  if ((MINI && document.hidden) || (!force && Date.now() - suggAt < 180000)) return;
   suggAt = Date.now();
   try { sugg = (await api.suggest(4)).items || []; } catch { /* keep the old ones */ }
   renderSuggest();
@@ -2733,6 +2734,52 @@ if (MINI && !WSONLY) {
     if (ed !== cur) { cur = ed; document.documentElement.style.cursor = ed ? CUR[ed] + "-resize" : ""; }
   }, { passive: true });
   document.addEventListener("mousedown", (e) => { const ed = e.button === 0 && edgeAt(e); if (ed && hostSay("resize:" + ed)) e.preventDefault(); }, true);
+}
+
+// mini chat v3: glass while the panel isn't focused (Blur my Shell blurs behind it then), solid while typing
+// (its "dynamic opacity" drops the blur on the focused window); background jobs as a small strip; 0-token chips.
+if (MINI && !WSONLY) {
+  const B = document.body;
+  if (params.get("opaque") === "1") B.classList.add("opaque"); // no compositor: no see-through window
+  const focus = () => B.classList.toggle("win-focus", document.hasFocus());
+  addEventListener("focus", focus); addEventListener("blur", focus); focus();
+  const box = $("m-jobs");
+  let jobsKey = "", armed = 0;
+  const frac = (p) => { const m = /(\d+)\s*\/\s*(\d+)/.exec(p || ""); return m && +m[2] ? Math.min(1, +m[1] / +m[2]) : null; };
+  const row = (j) => {
+    const f = frac(j.progress);
+    const paused = j.status === "paused";
+    return `<div class="mj${paused ? " paused" : ""}" data-id="${j.id}">
+      <span class="mj-t" title="${esc(j.title)}">${esc(j.title)}</span>
+      <span class="mj-p">${esc(paused ? (j.progress || "paused") : (j.progress || j.status))}</span>
+      ${j.kind === "long" ? `<button type="button" class="mj-b" data-jact="${paused ? "resume" : "pause"}" title="${paused ? "Continue" : "Pause"}" aria-label="${paused ? "Continue" : "Pause"} job">${paused
+        ? '<svg viewBox="0 0 24 24"><path d="M8 5l11 7-11 7z"/></svg>' : '<svg viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></svg>'}</button>` : ""}
+      <button type="button" class="mj-b x" data-jact="cancel" title="Cancel (click twice)" aria-label="Cancel job"><svg viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></svg></button>
+      <i class="mj-bar${f === null ? " ind" : ""}" style="--f:${f ?? 0.35}"></i></div>`;
+  };
+  const pollJobs = async () => {
+    if (document.hidden) return;
+    try {
+      const items = (await api.activeJobs()).jobs || [];
+      const key = JSON.stringify(items.map((j) => [j.id, j.status, j.progress]));
+      if (key === jobsKey) return;
+      jobsKey = key;
+      box.innerHTML = items.slice(0, 3).map(row).join("");
+      box.hidden = !items.length;
+    } catch { /* offline: keep the last view */ }
+  };
+  box.addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-jact]");
+    if (!b) return;
+    const id = +b.closest(".mj").dataset.id, act = b.dataset.jact;
+    if (act === "cancel" && armed !== id) { armed = id; b.classList.add("armed"); setTimeout(() => { armed = 0; b.classList.remove("armed"); }, 3000); return; }
+    armed = 0;
+    try { await (act === "cancel" ? api.cancelJob(id) : act === "pause" ? api.pauseJob(id) : api.resumeJob(id)); } catch { /* the next poll shows the truth */ }
+    jobsKey = ""; pollJobs();
+  });
+  setInterval(pollJobs, 5000); pollJobs();
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) { pollJobs(); loadSuggest(); } });
+  loadSuggest(true);
 }
 
 // the laptop's echo canceller runs only while this page records (voice / talk mode), never in text mode
