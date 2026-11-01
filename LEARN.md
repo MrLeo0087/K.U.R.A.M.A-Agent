@@ -43,7 +43,7 @@ hangs on. Later sections are reference: come back to them when you need them.
 ## 1. What KURAMA is, in one page
 
 KURAMA is a personal assistant that runs all day on one laptop (Ubuntu, X11, 8 GB RAM, no GPU). You talk to it by
-typing, by voice (wake word, talk mode, hold Ctrl), or from your phone through Telegram. It can do 130+ things:
+typing, by voice (wake word, talk mode, hold Alt), or from your phone through Telegram. It can do 130+ things:
 open apps, control the laptop, manage files, reminders, to-dos, money, links, music, downloads, code help, web
 answers, and more.
 
@@ -171,7 +171,7 @@ and, in voice mode, speaks sentence by sentence (`frontend/voice.js` → `POST /
 |---|---|
 | **Voice in the page** | `frontend/voice.js` records → `POST /api/v1/stt` (`jarvis/api/routes/voice.py` → `jarvis/core/stt.py`, Groq Whisper) → text → the same `/chat` with `mode: "voice"` → the reply spoken. |
 | **Wake word** | `jarvis/api/routes/wake.py` runs `jarvis/core/wake.py` `WakeListener` (mic → voice activity → short Whisper check for "KURAMA") → the page starts listening. |
-| **Hold Ctrl** | `jarvis/core/ptt.py` (pynput key hook in the server) → the desktop window (`scripts/kurama_wallpaper.py`) shows the panel → the page records → same as voice. |
+| **Hold Alt** | `jarvis/core/ptt.py` (pynput key hook in the server) → the desktop window (`scripts/kurama_wallpaper.py`) shows the panel → the page records → same as voice. |
 | **Telegram** | `jarvis/workers/telegram_bot.py` polls Telegram → the same `Agent` with `channel="telegram"` → replies via the Bot API. |
 | **Terminal** | `python -m jarvis` → `jarvis/cli.py` → `Agent.run()`. Handy for debugging without the UI. |
 

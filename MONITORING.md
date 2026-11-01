@@ -135,7 +135,7 @@ every tool of that kind, not just the sentence in the trace.
   failures; notices on laptop + Telegram). "Keep for later" vs "do it now" is decided by meaning (cold model: it
   loads first).
 - **Voice:** mic input 70%; real speech from the forced English/Nepali pass is kept even when Whisper's auto pass
-  mislabels the language. **Hold Ctrl** (alone, 0.3 s) = talk, let go = send, **double-tap Shift** = close the reply
+  mislabels the language. **Hold Alt** (alone, 0.3 s; Ctrl until 11-01; the hidden panel is preloaded and kept, so the first hold never waits) = talk, let go = send, **double-tap Shift** = close the reply
   (KURAMA Settings > Shortcuts). Wake: "hey KURAMA", "KURAMA wake up", "wake up", "start system" + mishearings.
 - **Yes/no:** risky actions use the real Yes/No card; the AI never asks yes/no in chat first.
 - **Telegram files:** one upload try (Telegram may answer an error yet deliver: no duplicates); a folder zip <= 50 MB
@@ -165,8 +165,9 @@ every tool of that kind, not just the sentence in the trace.
   `data/logs/stt.log` lines with traces (a recognition with no trace = ignored or dropped).
 - **RAM**: `data/logs/worker_resource_guard.log`. Core should stay near 390 MB with the model loaded, ~140 MB without.
   Answers "Left the background apps running" = you said no to closing idle apps.
-- **Hold-to-talk**: `data/logs/ptt.log` "waking up" / page reloading lines (the panel page is kept 20 min; after that
-  the first hold reloads it).
+- **Hold-to-talk (Alt since 11-01)**: `data/logs/ptt.log`. The hidden panel is preloaded and never closed
+  ("panel page ready (shown=False)" ~8 s after start), so "Getting ready" should only appear right after a restart.
+  In VS Code a lone Alt may focus the menu bar (`window.customMenuBarAltFocus`).
 - **Still open from round 1**: Alt-Tab pressed but no switch (needs a look at what the window manager did); the AI
   sometimes refuses with its tools in hand ("I can't save without a URL"): more 0-token meaning actions are the fix.
 

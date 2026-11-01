@@ -747,3 +747,9 @@ Phases (one at a time, owner tests after each):
       sample and >= 150 MB (never the desktop's services, KURAMA or anything with a window). /clear ram | storage |
       kurama (also "/clear KURAMA", "/clear kurama storage") clean that; plain /clear keeps its meaning. "free RAM bro",
       "clear cache of kurama", "clean kurama storage" are 0-token by meaning. Slash commands use the text as typed.
+- [x] 2026-11-01 08:50 Hold-to-talk moves from Ctrl to a long **Alt** (owner: Ctrl is busy with shortcuts; .env
+      KURAMA_PTT_KEY=alt + config default). Alt+Tab / Alt+F4 / a tap never talk (tested); GNOME drags windows with
+      Super, so Alt is free. The "Getting ready… keep holding" wait was the hidden panel's page being reloaded (closed
+      after 20 min hidden, and after every restart; ptt.log 02:37: ~1.7 s). Now it is preloaded 8 s after start and
+      never closed: measured web process ~175 MB with it (it was ~200 MB earlier without; the page shares the
+      wallpaper's web process), idle CPU 0.2%; the hidden page polls nothing. kurama.zip (650 MB archive) deleted.

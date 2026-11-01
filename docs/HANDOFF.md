@@ -19,7 +19,7 @@ scorecard `venv/bin/python -m tests.eval.harness` (65% instant / 100% right / 98
 
 ### Done 2026-10-31 / 11-01 (details: PROGRESS.md, MONITORING.md "How KURAMA works now")
 Night Shift step 1 = Long Job Engine (jarvis/core/longjobs.py). Mini UI v4 (glass via Blur my Shell, Look controls,
-Inter font, job strip, tiny header, hold Ctrl to talk / double-tap Shift to close, KURAMA Settings > Shortcuts).
+Inter font, job strip, tiny header, hold Alt to talk (was Ctrl until 11-01) / double-tap Shift to close, KURAMA Settings > Shortcuts).
 FIX_PLAN steps 1-6 all DONE (docs/FIX_PLAN.md). Job list (jarvis/core/jobqueue.py: add/edit/remove/start, Telegram
 questions, retries, notices). Files app context (scripts/kurama_fm.py + jarvis/core/filemanager.py). Telegram: one
 upload try (no duplicates), big folders as gofile.io links. New side logs for evidence.

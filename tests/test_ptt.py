@@ -1,4 +1,6 @@
 """Hold-to-talk key logic (jarvis/core/ptt.py): no keyboard, no window, fake clock and timer."""
+import pytest
+
 from jarvis.core import ptt
 
 
@@ -138,3 +140,16 @@ def test_ctrl_talks_double_shift_dismisses():
     t[0] = 4; h.press("shift"); h.press("a"); h.release("a"); h.release("shift")  # capital letters: nothing
     h.press("shift"); t[0] = 4.1; h.release("shift")
     assert told == ["down", "up", "dismiss"]
+
+
+@pytest.mark.parametrize("key", ["alt_l", "alt_r", "alt"])
+def test_alt_held_alone_talks_alt_shortcuts_never_do(key):
+    """Owner 11-01: talk on a long Alt (Ctrl is busy with shortcuts). Alt+Tab / Alt+F4 / a quick tap: nothing."""
+    told, t, timers = [], [0.0], []
+    h = ptt.Holder("alt", tell=told.append, now=lambda: t[0], min_hold=0.0,
+                   schedule=lambda d, fn: timers.append(FakeTimer(fn)) or timers[-1], dismiss="double:shift")
+    h.press(key); t[0] = 0.3; fire(timers); t[0] = 1.5; h.release(key)          # long Alt: talk
+    t[0] = 3; h.press(key); h.press("tab"); h.release("tab"); t[0] = 3.6; fire(timers); h.release(key)  # Alt+Tab
+    t[0] = 5; h.press(key); h.press("f4"); h.release("f4"); h.release(key)        # Alt+F4
+    t[0] = 7; h.press(key); t[0] = 7.1; h.release(key)                            # a quick tap
+    assert told == ["down", "up"]

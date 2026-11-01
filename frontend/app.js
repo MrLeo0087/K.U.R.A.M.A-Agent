@@ -941,7 +941,8 @@ function renderAgent(a) {
   }
 }
 // the mini chat gets no status stream: it asks for the agent's news itself (a tiny request every 4 s)
-if (MINI) setInterval(async () => { if (!document.hidden) { try { renderAgent(await api.agentState()); } catch { /* offline */ } } }, 4000);
+let miniOpen = !MINI; // the mini panel is on screen (a hidden, preloaded panel polls nothing)
+if (MINI) setInterval(async () => { if (!document.hidden && (miniOpen || miniGhost)) { try { renderAgent(await api.agentState()); } catch { /* offline */ } } }, 4000);
 $("agent-select").onchange = async (ev) => { // the mini chat's drop-down
   const name = ev.target.value;
   try {
@@ -1998,6 +1999,7 @@ window.kuramaMiniWake = (rest = "") => { // minimized: the host heard "KURAMA / 
 };
 window.kuramaMiniShown = (on, keepTalking = false) => { // mini panel opened / hidden
   miniGhost = !on && keepTalking; // talk mode, or a reply still on its way (any mode), goes on with the panel closed
+  miniOpen = on;
   document.body.classList.toggle("paused", !on); // freeze CSS animations while hidden
   if (on) {
     const c = document.querySelector(".chat"); // a short rise-in as the window fades in

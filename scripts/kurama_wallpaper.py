@@ -67,8 +67,11 @@ PID_FILE = STATE_FILE.with_name("wallpaper.pid")  # the shortcut signals this pr
 BUSY_STATES = ("listening", "capturing", "thinking", "speaking")  # closing the panel now keeps it alive
 IDLE_ANIM_MS = 125  # the button's slow idle ring (0 = still)
 WS_W, WS_H = 480, 620  # mini workspace window
-PANEL_KEEP_S = 1200  # a hidden panel is closed after 20 min (frees its ~45 MB page): reopening / hold-to-talk
-#                     soon after is instant (at 3 min it reloaded: an empty glass box first, a lost Ctrl release)
+PANEL_KEEP_S = 0  # 0 = the hidden panel's page stays loaded and is preloaded at start (owner's choice 11-01: the
+#                  first hold after 20 min idle / a restart said "Getting ready… keep holding" for ~2 s while the
+#                  page reloaded; kept loaded it costs the measured RAM in PROGRESS.md and ~0 CPU: its animations
+#                  are frozen and its timers skip while hidden). >0 = close it after that many seconds hidden.
+PANEL_PRELOAD_S = 8  # load the hidden panel this long after start (after the wallpaper's own first paint)
 CAPTION_W = 340  # reply caption next to the button while talking with the panel closed
 RING = {"listening": (0.25, 0.85, 0.78), "capturing": (0.25, 0.95, 0.6), "thinking": (1, 0.75, 0.25),
         "speaking": (1, 0.55, 0.15)}  # button ring colour per voice state (talk mode, panel closed)
@@ -698,6 +701,8 @@ class Mini:
         self.anim, self.phase = 0, 0.0  # the busy animation's timer and step
         self.anim_ms, self.fader = 0, 0
         self.ptt_active = False  # a hold-to-talk key is down right now
+        if not PANEL_KEEP_S:  # the first hold-to-talk never waits for the page to load
+            GLib.timeout_add_seconds(PANEL_PRELOAD_S, self._preload)
         self.logo = None
         with contextlib.suppress(Exception):  # KURAMA's fox on the button (frontend/kurama-logo.svg)
             self.logo = GdkPixbuf.Pixbuf.new_from_file_at_size(
@@ -991,7 +996,7 @@ class Mini:
                                       "window.kuramaPTT && window.kuramaPTT(1)")
                     return
                 if last == "up" and self.caption is not None:
-                    self.caption.show("bot", "I was just waking up. Hold Ctrl again and speak.", True)
+                    self.caption.show("bot", "I was just waking up. Hold the talk key again and speak.", True)
                 self.ptt_active = False
                 GLib.timeout_add(600, self.end_ghost_if_idle)
             self.when_ready(apply)
@@ -1035,11 +1040,17 @@ class Mini:
             return
         def ready():  # a moment for the first paint, then whatever waited for the page
             self.page_ready = True
+            pttlog(f"panel page ready (shown={bool(self.panel and self.panel.get_visible())})")
             waiting, self.on_ready = self.on_ready, []
             for fn in waiting:
                 fn()
             return False
         GLib.timeout_add(250, ready)
+
+    def _preload(self) -> bool:
+        if self.panel is None:
+            self.ensure_panel()  # created hidden: nothing is shown until a click or a hold
+        return False
 
     def when_ready(self, fn) -> None:
         """Run fn now if the panel's page is loaded, else as soon as it is."""
@@ -1111,7 +1122,7 @@ class Mini:
                 if self.panel is not None:
                     self.panel.hide()
                     self.panel.set_opacity(1)
-                    if not self.reaper:
+                    if not self.reaper and PANEL_KEEP_S:
                         self.reaper = GLib.timeout_add_seconds(PANEL_KEEP_S, self.drop_panel)
                     self.bubble.queue_draw()
             self.fade(self.panel, False, gone)
@@ -1136,7 +1147,7 @@ class Mini:
         self.panel.hide()
         self.unghost(hide_caption=not keep_caption)
         run_js(self.view, "window.kuramaMiniShown && window.kuramaMiniShown(false)")
-        if not self.reaper:
+        if not self.reaper and PANEL_KEEP_S:
             self.reaper = GLib.timeout_add_seconds(PANEL_KEEP_S, self.drop_panel)
         self.bubble.queue_draw()
 
