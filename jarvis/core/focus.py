@@ -97,7 +97,9 @@ def previous() -> Path | None:
 
 def is_anaphora(text: str) -> bool:
     """True when `text` just points back ('this', 'it', 'that folder', 'here') rather than naming something."""
-    t = re.sub(r"\b(?:folder|file|directory|dir|one|document|zip|selected|highlighted)\b", " ", (text or "").lower())
+    t = re.sub(r"\b(?:folder|file|directory|dir|one|document|doc|zip|selected|highlighted|image|photo|picture|pic|"
+               r"screenshot|video|clip|song|audio|pdf|md|txt|markdown|essay|report|note|notes|script|wallpaper|drawing)\b", " ",
+               (text or "").lower())
     t = " ".join(t.split()).strip(" .")
     return t in ANAPHORA
 
@@ -121,6 +123,13 @@ def refer(text: str) -> Path | None:
     if not t or is_anaphora(t):
         if (pasted := said_path()) is not None:  # "/home/leo/Documents  organize this folder": that path
             return pasted
+        from jarvis.core import workmem
+        kind = workmem.kind_named(t)
+        if kind and kind not in ("folder", "file"):  # "that image", "the pdf": the newest thing of that kind or nothing
+            return workmem.latest(kind)  # (never some folder: "send that image" must not send the Files folder)
+        # something KURAMA made/touched a moment ago ("make folder X ... open it") beats the Files app
+        if (fresh := workmem.latest("folder" if kind == "folder" else "", config.WORKMEM_FRESH_S)) is not None:
+            return fresh
         try:  # the Files app, when it is the latest app: its selected item, else its open folder
             from jarvis.core import filemanager
             if (fm := filemanager.current()) is not None:

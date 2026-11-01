@@ -227,6 +227,8 @@ class JobManager:
                    error=job.error[:500], tokens=job.tokens, progress=job.progress)
         if status == "done":
             store.kv_delete(f"job_resume:{job.id}")
+            from jarvis.core import workmem
+            workmem.note_job(job)  # the essay / image it made is "it" for the next request
         if _send_after.pop(job.id, False) and status == "done":
             send_output(job)
         for cb in list(self._callbacks):

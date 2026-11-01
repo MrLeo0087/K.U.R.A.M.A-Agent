@@ -16,16 +16,21 @@ KIND_OF_JOB = {"image": ("image",), "document": ("write", "code", "scan"), "list
 
 def _newest(kind: str) -> Path | None:
     root = Path(config.OUTPUTS_DIR)
-    if not root.is_dir():
-        return None
-    files = [p for p in root.rglob("*") if p.is_file() and not p.name.startswith(".")]
+    files = [p for p in root.rglob("*") if p.is_file() and not p.name.startswith(".")] if root.is_dir() else []
     if kind == "image":
         files = [p for p in files if p.suffix.lower() in IMG]
     elif kind == "list":
         files = [p for p in files if p.parent.name == "results"]
     elif kind == "document":
         files = [p for p in files if p.suffix.lower() not in IMG and p.parent.name != "results"]
-    return max(files, key=lambda p: p.stat().st_mtime) if files else None
+    out = max(files, key=lambda p: p.stat().st_mtime) if files else None
+    # a thing this chat touched more recently (an image it found on disk, a document it wrote elsewhere) wins
+    want = {"image": "image", "document": "document", "any": "file"}.get(kind)
+    from jarvis.core import workmem
+    mem = next((t for t in workmem.things() if want and t["k"] != "folder" and (want == "file" or t["k"] == want)), None)
+    if mem and (out is None or float(mem["t"]) > out.stat().st_mtime):
+        return Path(mem["p"])
+    return out
 
 
 def _running(kind: str) -> dict | None:

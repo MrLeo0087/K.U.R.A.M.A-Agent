@@ -167,6 +167,13 @@ every tool of that kind, not just the sentence in the trace.
   read-only tools real, the rest fake, heavy-AI tools left out, 40k Groq tokens per round. Round 1: 38/45 judged
   right (84%); 30 questions not judged (internet cut, then Groq's daily limit): finish them with
   `--round 1 --real --failed` on a fresh day. Results: data/eval/round<N>.json, `--report` prints the summary.
+- **Memory rebuild, Phase 1 (11-01 evening)**: working memory (`jarvis/core/workmem.py`). Every tool call's real
+  paths become "things" (kv `workmem_things`); "it / that image / the folder" resolve to them (0 tokens); a numbered
+  list of real paths is a choice ("2", "the second one"); KURAMA's own question/offer (any channel or alert, 10 min)
+  routes a short reply by the QUESTION's meaning (route method `answer`); history replies carry
+  `[tools this turn: ...]` (last 2 only); the laptop chat resumes after a restart. Keys/passwords: a private file
+  (.env, *.pem, id_rsa...) or a highlighted key is never context, never sent. Watch: route method `answer` with
+  wrong tools, `choice` intents, a "Things from this chat" line naming the wrong file, BARE replies after a question.
 - Watch: `path: fastpath` traces with intents tab / tabs / desktop / colab / links / clean (meaning actions taking
   the wrong request), "llm" entries with model qwen (the fallback in use = daily limit reached), hang.log dumps,
   stt.log lines with no trace (speech heard but not sent).
@@ -234,3 +241,6 @@ video now" rule in `video_dl_intent`, the filler-word list in `tools/general/vid
 - 2026-11-01 08:45: one shared embedding-model process (the 611 MB core alert was two copies); talk-mode greetings
   by meaning; free RAM offers idle windowless apps (asks); /clear ram|storage|kurama. Watch: resource_guard log,
   "Left the background apps running" answers.
+- 2026-11-01 19:15: memory rebuild Phase 1 (working memory, answers to KURAMA's questions by the question's meaning,
+  choices, tool lines in history, laptop chat resumes) + private files/keys never in context (a 'yes' with .env open
+  printed the Groq key). Test fixture time bomb fixed (Telegram tests went stale once the suite ran > 4 min).

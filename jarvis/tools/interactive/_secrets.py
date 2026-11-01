@@ -157,3 +157,26 @@ def scan_diff(diff: str, limit: int = 200) -> list[Finding]:
         if len(found) >= limit:
             break
     return found
+
+
+# --- private files / highlights (KURAMA's context: the open VS Code file, the highlighted text) ---
+_PRIVATE_SUFFIX = (".pem", ".key", ".p12", ".pfx", ".keystore", ".jks", ".kdbx", ".gpg", ".asc")
+_PRIVATE_NAMES = ("credentials", "credentials.json", ".netrc", ".pgpass", ".npmrc", ".pypirc", "secrets.json",
+                  "secrets.yaml", "secrets.yml", "service-account.json")
+
+
+def private_file(path: object) -> bool:
+    """A file that holds keys or passwords (.env, *.pem, id_rsa, credentials...): KURAMA never reads its text into
+    an AI prompt or a reply, whatever is highlighted in it."""
+    from pathlib import Path
+    if not path:
+        return False
+    name = Path(str(path)).name.lower()
+    return (name == ".env" or name.startswith(".env.") or name.endswith(".env") or name.endswith(_PRIVATE_SUFFIX)
+            or name.startswith(("id_rsa", "id_ed25519", "id_ecdsa", "id_dsa")) or name in _PRIVATE_NAMES)
+
+
+def private(text: str = "", path: object = "") -> bool:
+    """True when the text holds a key/password (or comes from a private file): never sent to the AI or shown.
+    (11-01: with .env open in VS Code, a 'yes' was read as 'use the highlight' and the reply printed the Groq key.)"""
+    return private_file(path) or bool(text and scan_text(text, str(path or "")))

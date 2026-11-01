@@ -1087,6 +1087,10 @@ PATH_ALIASES = {
     "kurama": "/media/leo/Project1/New_project/KURAMA", "jarvis": "/media/leo/Project1/New_project/KURAMA",
 }
 FOCUS_TTL_H = 12.0  # the current folder (focus) is remembered this long
+WORKMEM_PROMPT_AGE_S = 3600  # things made/touched this recently are listed in the AI's prompt (workmem.line)
+WORKMEM_FRESH_S = 120  # a thing made/touched this recently is "it" even over the open Files folder
+DID_TURNS = 2  # the last 2 replies in the AI's history keep their '[tools this turn: ...]' line
+QUESTION_TTL_S = 600  # a question/offer KURAMA made this recently is what a short reply ('yes', 'the second') answers
 PATH_MATCH_MIN = 0.72
 SHARE_ROOTS = (Path.home(), Path("/media/leo/Project1"))  # send_file_telegram only sends files under these
 TELEGRAM_FILE_MAX_MB = 50

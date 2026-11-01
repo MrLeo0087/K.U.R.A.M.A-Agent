@@ -63,6 +63,11 @@ def snapshot() -> dict:
                 out["page_selection"] = browsertab.selection().strip()
         except Exception:  # noqa: BLE001
             pass
+    from jarvis.tools.interactive import _secrets
+    if out["file"] is not None and _secrets.private(out.get("selection", ""), out["file"]):
+        out.update(file=None, selection="", private=True)  # .env / keys: never in a prompt, never "this"
+    elif out.get("page_selection") and _secrets.private(out["page_selection"]):
+        out["page_selection"] = ""
     _cache = (time.monotonic(), out)
     return out
 
@@ -110,7 +115,8 @@ def _tab_line() -> str:
         if not tab:
             return ""
         txt = f"Open in the browser: {tab[1][:80]} ({tab[0][:150]}) — 'this page/link/website' means it."
-        if sel := " ".join((browsertab.selection() or "").split()):
+        from jarvis.tools.interactive import _secrets
+        if (sel := " ".join((browsertab.selection() or "").split())) and not _secrets.private(sel):
             txt += f" Highlighted on the page: `{sel[:160]}{'…' if len(sel) > 160 else ''}`."
         return txt
     except Exception:  # noqa: BLE001

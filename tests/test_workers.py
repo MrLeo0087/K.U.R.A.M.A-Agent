@@ -54,6 +54,12 @@ def tg(monkeypatch):
 NOW = int(time.time()) + 60  # one fixed "now" so repeated builds of the same update compare equal
 
 
+@pytest.fixture(autouse=True)
+def _fresh_now():  # set per test: fixed at import, it went stale once the whole suite ran longer than the bot's max age
+    global NOW
+    NOW = int(time.time()) + 60
+
+
 def upd(uid, text=None, chat=42, **extra):
     msg = {"chat": {"id": chat}, "date": NOW, **extra}
     if text is not None:

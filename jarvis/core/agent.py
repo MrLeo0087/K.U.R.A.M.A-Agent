@@ -34,7 +34,7 @@ from langchain_core.messages import (AIMessage, BaseMessage, HumanMessage, Syste
                                      ToolMessage)
 
 from jarvis.core import (config, fastpath, identity, selfknow, jobs, llm, meta, notify, planner, profile, registry, router, trace,
-                         modes, safety, store, workspace)
+                         modes, safety, store, workmem, workspace)
 
 log = logging.getLogger("jarvis.agent")
 
@@ -295,6 +295,12 @@ class Agent:
 
     def _route_node(self, state: AgentState) -> dict:
         r = router.route(state["user_text"])
+        asked = getattr(self, "_asked", "")
+        if asked and (fastpath.yes_no(state["user_text"]) or not r.groups):
+            # an answer to my question ('yes', 'do it', 'the blue one'): its tools are the QUESTION's, by meaning
+            q = router.route(asked)
+            groups = [*r.groups, *[g for g in q.groups if g not in r.groups]][: config.ROUTER_MAX_GROUPS]
+            r = router.Route(groups, "answer", r.reasoning or q.reasoning, r.latency_ms + q.latency_ms)
         prev, at = getattr(self, "_prev_groups", ([], 0.0))
         if (not r.groups and prev and time.time() - at < 300 and len(state["user_text"].split()) <= 8
                 and self._FOLLOWUP.search(state["user_text"])):  # "then turn it off": same tools as the last turn
@@ -604,6 +610,13 @@ class Agent:
             if self.summary:
                 system += SUMMARY_SUFFIX.format(summary=self.summary)
             recent = self.history[-2 * config.HISTORY_TURNS:]
+        old_ai = [i for i, m in enumerate(recent) if isinstance(m, AIMessage)][:-config.DID_TURNS]
+        recent = [AIMessage(content=_DID.sub("", str(m.content))) if i in old_ai else m for i, m in enumerate(recent)]
+        # (what the tools did is kept for the last DID_TURNS replies only: older ones cost tokens on every request)
+        if things := workmem.line():  # what this chat made/touched: "that image", "open it" point at these
+            system += " " + things
+        if asked := getattr(self, "_asked", ""):
+            system += f' Your latest message to the user asked: "{asked[-220:]}". If their reply answers it, do what it agreed to.'
         if getattr(self, "reply_to", ""):  # Telegram reply: the user is answering one earlier message
             system += f' The user is replying to this earlier message of yours: "{self.reply_to}".'
         if self.persist:  # token-gated: nothing unless the turn is personal / refers to the past
@@ -640,6 +653,8 @@ class Agent:
 
     def _begin_turn(self, user_text: str) -> None:
         """New session after a long silence (fresh context); regex fact capture (0 tokens)."""
+        self._asked = self._open_question()
+        self._turn_t0 = time.time()
         if not self.persist:
             return
         try:  # another process (UI / Telegram) cleared the chat: drop our in-memory history too
@@ -652,7 +667,7 @@ class Agent:
         except Exception:
             pass
         now = time.time()
-        if self.session_id is None and not self.history and self.channel:
+        if self.session_id is None and not self.history:  # laptop too: a restart kept losing "what we just said"
             self._resume(now)
         if self.session_id is not None and now - self._last_turn > config.SESSION_IDLE_S:
             self.end_session(blocking=False)
@@ -667,6 +682,38 @@ class Agent:
             self.last["facts"] = facts
         elif self._SELF_TALK.search(user_text) and not user_text.rstrip().endswith("?"):
             self._self_talk = (self._self_talk + [user_text[:200]])[-6:]
+
+    _OFFER = re.compile(r"\?|\b(?:want\s+me\s+to|should\s+i|shall\s+i|do\s+you\s+want|would\s+you\s+like|let\s+me\s+know\s+if|"
+                        r"if\s+you\s+want|tell\s+me\s+(?:which|if))\b", re.I)
+
+    def _open_question(self) -> str:
+        """KURAMA's NEWEST message to the user (this chat, the other channel, or an alert it sent on its own) when it
+        asked or offered something within config.QUESTION_TTL_S, else "". A short reply ('yes', 'do it', 'the
+        second') answers it: the reply is routed by the question's meaning and the question is shown to the AI.
+        (A 'yes' after 'Want me to find you a song?' got 'nothing is waiting for a yes'; a Telegram alert's question
+        answered on the laptop was unknown.)"""
+        now, ttl = time.time(), config.QUESTION_TTL_S
+        cands: list[tuple[float, str]] = []
+        last = next((m for m in reversed(self.history) if isinstance(m, AIMessage)), None)
+        if last is not None:
+            cands.append((self._last_turn or now, _DID.sub("", str(last.content))))
+        if self.persist:
+            try:
+                rows = [r for r in store.messages_other_channels(self.channel, now - ttl, 2) if r["role"] == "assistant"]
+                if rows:
+                    cands.append((float(rows[-1]["ts"]), rows[-1]["text"] or ""))
+            except Exception as e:  # noqa: BLE001
+                log.debug("other channel question: %s", e)
+            try:
+                if sent := notify.recent_sent(ttl, 1):
+                    cands.append((float(sent[0]["ts"]), f"{sent[0]['title']}: {sent[0].get('text') or ''}"))
+            except Exception as e:  # noqa: BLE001
+                log.debug("alert question: %s", e)
+        if not cands:
+            return ""
+        ts, text = max(cands, key=lambda c: c[0])
+        text = " ".join(text.split())
+        return text[-300:] if now - ts <= ttl and self._OFFER.search(text[-250:]) else ""
 
     _REFERS = re.compile(r"\b(?:this|that|it|those|them|same|earlier|before|above|last|again|telegram|phone|"
                          r"laptop|computer|file|folder|send)\b", re.I)
@@ -742,13 +789,17 @@ class Agent:
 
     def _remember(self, user_text: str, answer: str) -> None:
         user_text = selfknow.redact(user_text)  # never keep the owner password in history
+        if (c := workmem.choice()) and c["t"] < getattr(self, "_turn_t0", 0):
+            workmem.drop_choice()  # a choice lives for the one reply right after it
         self._persist_turn(user_text, answer)
         batch: list[BaseMessage] = []
         with self._lock:
             short = answer if len(answer) <= config.HISTORY_MSG_MAX_CHARS else \
                 answer[: config.HISTORY_MSG_MAX_CHARS].rstrip() + " …(shortened)"
             # long replies (file lists, reports) are kept short in the LLM history: every later turn re-sends them
-            self.history += [HumanMessage(content=user_text[: config.HISTORY_MSG_MAX_CHARS]), AIMessage(content=short)]
+            # + one line of what the tools really did: the next turn knows which file/image/folder "it" was
+            self.history += [HumanMessage(content=user_text[: config.HISTORY_MSG_MAX_CHARS]),
+                             AIMessage(content=short + did_line())]
             while len(self.history) > 2 * config.HISTORY_TURNS:
                 self._overflow += self.history[:2]
                 self.history = self.history[2:]
@@ -813,9 +864,8 @@ class Agent:
             return None
         if not all(w in safety.YES_WORDS or w in safety.NO_WORDS or w in ("please", "ok", "okay", "sir") for w in words):
             return None
-        last = next((m for m in reversed(self.history) if isinstance(m, AIMessage)), None)
-        if last is not None and "?" in str(last.content)[-200:]:
-            return None  # I asked something: the AI reads the answer with the conversation
+        if self._open_question():
+            return None  # I asked or offered something: the AI reads the answer with my question
         self.last = {"tools": [], "t0": time.monotonic(), "fastpath": "bare_answer"}
         return self.BARE["yes" if safety.parse_yes_no(text) else "no"]
 
@@ -978,8 +1028,38 @@ def garbled(text: str) -> bool:
 
 def tidy(text: str) -> str:
     """Invisible characters out, a run of ellipses down to one space."""
-    text = _ZW.sub("", text).replace("\u00a0", " ").replace("\u202f", " ")
+    text = _DID.sub("", _ZW.sub("", text)).replace("\u00a0", " ").replace("\u202f", " ")
     return re.sub(r"(?:\s*(?:\.\.\.|\u2026)\s*){2,}", " ", text)
+
+
+_DID = re.compile(r"\s*\[tools this turn:[^\]]*\]?\s*$")
+DID_MAX = 200
+
+
+def _brief(v: Any) -> str:
+    v = " ".join(str(v).split())
+    return v if len(v) <= 60 else f"<{len(v)} chars>"
+
+
+def did_line() -> str:
+    """'[tools this turn: create(path=~/Downloads/x) -> Made it ...]' from this turn's trace ('' when none ran)."""
+    tr = trace.current()
+    if not tr:
+        return ""
+    items, seen = [], set()
+    for t in tr.get("tools") or []:
+        name = str(t.get("name", ""))
+        res = " ".join(str(t.get("result", "")).split())[:80]
+        if not name or name.startswith("_") or res in seen:  # hub + specialised tool log the same call twice
+            continue
+        seen.add(res)
+        args = t.get("args")
+        a = ", ".join(f"{k}={_brief(v)}" for k, v in args.items()) if isinstance(args, dict) else ""
+        items.append(f"{name}({a}) -> {'' if t.get('ok') else 'FAILED '}{res}")
+    if not items:
+        return ""
+    body = "; ".join(items)
+    return f"\n[tools this turn: {body[:DID_MAX]}]"
 
 
 def last_result(msgs: list) -> str:

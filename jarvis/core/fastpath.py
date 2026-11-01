@@ -293,7 +293,8 @@ SENDFILE = _rx(
 # "send this / send it / send that folder [to telegram]" -> whatever we were just talking about
 _ANAPHORA_SEND = re.compile(
     r"^\s*(?:(?:ok|okay|nice|yes|yeah|now|please|hey|fine|good)\s+)*(?:send|share|forward|upload)"
-    r"(?:\s+(?:me|us|it|this|that|the|them))*(?:\s+(?:folder|file|one|document|zip))?"
+    r"(?:\s+(?:me|us|it|this|that|the|them|my))*(?:\s+(?:folder|file|one|document|zip|essay|report|notes?|pdf|doc|"
+    r"md\s+file|image|photo|picture|pic|screenshot|video|clip|song|audio|script|code))?"
     r"(?:\s+(?:again|also|too))?" + _TGDEST + r"?\s*[.!?]*$", I)
 
 
@@ -345,9 +346,16 @@ def focus_is_anaphora(text: str) -> bool:
     return focus.is_anaphora(text)
 
 
-def _focus_intent() -> Intent | None:
-    from jarvis.core import focus
-    ref = focus.refer("this")  # the same order as every tool: a pasted path, what's selected / open in Files when
+def _focus_intent(said: str = "this") -> Intent | None:
+    from jarvis.core import focus, workmem
+    kind = workmem.kind_named(said)
+    if kind not in ("", "folder", "file"):  # "send that video": the newest video this chat touched, or the AI asks
+        ref = workmem.latest(kind)  # (never some folder)
+        if ref is None:
+            return None
+    else:
+        ref = focus.refer("this folder" if kind == "folder" else "this")  # the same order as every tool: a pasted
+        # path, what's selected / open in Files when it's the latest app, then KURAMA's remembered folder
     fp = str(ref) if ref is not None else focus.get_path()  # it's the latest app, then KURAMA's remembered folder
     if not fp:
         return None
@@ -359,7 +367,7 @@ def sendfile_intent(t: str) -> Intent | None:
                 r"(?:photo|picture|image|pic|wallpaper)(?:\s+(?:you\s+)?(?:made|generated|created))?" + _TGDEST + r"?\s*[.!?]*$", t, I):
         return Intent("sendlast", "send_last_result", "telegram", {"kind": "image"}, "image")
     if _ANAPHORA_SEND.match(t):  # "send this folder" / "send it to telegram"
-        return _focus_intent()
+        return _focus_intent(t)
     m = _full(SENDFILE, t)
     if not m:
         return None
@@ -372,7 +380,7 @@ def sendfile_intent(t: str) -> Intent | None:
     if re.fullmatch(r"(?:a\s+|the\s+)?(?:camera|webcam|laptop\s+camera)", tgt, I):  # 'send me a camera photo' = the webcam
         return None
     if re.fullmatch(r"(?:it|that|this|them|the)", tgt, I) or focus_is_anaphora(tgt):  # 'this', 'this selected file'
-        return _focus_intent()  # -> what is selected / open (it searched the disk for "this selected")
+        return _focus_intent(tgt)  # -> what is selected / open (it searched the disk for "this selected")
     path = f"{tgt} in {loc}" if loc else tgt
     return Intent("sendfile", "send_file_telegram", "telegram", {"path": path}, tgt)
 
@@ -3208,8 +3216,23 @@ def semantic_ensure() -> bool:
     return semantic.ensure_ready()
 
 
+def _bare_yes_no(t: str) -> bool:
+    """'yes', 'yeah do it', 'ok go ahead', 'no thanks': an answer with no action of its own."""
+    return bool(yes_no(t)) and len(re.findall(r"[\w']+", t)) <= 4
+
+
+def registry_group(tool: str) -> str:
+    from jarvis.core import registry
+    t = registry.REGISTRY.get(tool)
+    return registry.group_of(t) if t is not None else ""
+
+
 def match(text: str) -> Intent | None:
     """The single high-confidence intent for text whose meaning agrees (meaning_ok), or None."""
+    from jarvis.core import workmem
+    if (picked := workmem.choose(text)) is not None:  # "2" / "the second one" after "I found 3 copies: 1. ... 2. ..."
+        tool, args = picked
+        return Intent("choice", tool, registry_group(tool), args)
     it = agent_intent(text) or agent_coding_intent(text) or link_play_intent(text) or clean_intent(text) \
         or shutdown_later_intent(text) or to_file_intent(text) or selection_intent(text) \
         or _code_not_file(_match(text)) or daily_intent(text)
@@ -3222,6 +3245,8 @@ def match(text: str) -> Intent | None:
     if it is not None and meaning_ok(text, it):
         return it
     semantic_ensure()  # a freed model loads in ~0.6 s: cheaper than an AI request that guesses (it wrote kt1.txt)
+    if _bare_yes_no(text):
+        return None  # a bare yes/no names no action: it answers a question (the AI reads it with that question)
     return meaning_intent(text)  # no pattern, or its meaning disagreed ('Open VS Code from this folder' is not a
     #                              folder named 'VS Code from this'): an action picked by meaning, else the AI
 
@@ -3433,6 +3458,8 @@ def selection_intent(text: str) -> Intent | None:
     details (the language, 'replace it')."""
     t = " ".join((text or "").split())
     if not config.CONTEXT or not t or len(t) > 300 or t.startswith("/") or _assist_waiting(t):
+        return None
+    if _bare_yes_no(t):  # 'yes' answers MY question; it never means 'use the highlight' (it once rewrote .env)
         return None
     if re.search(r"https?://|(?<!\w)[~/][\w.-]+/|\b[\w-]+\.(?:py|js|ts|md|txt|json|ipynb|html|css|sh)\b", t, I):
         return None  # a link, a path or a file named in the request: it is about THAT, not the highlight

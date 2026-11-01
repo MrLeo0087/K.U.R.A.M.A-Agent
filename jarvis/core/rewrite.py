@@ -138,7 +138,35 @@ def _from_browser(wid: int, in_front: bool) -> "Grab | None":
     return Grab(text, wid, in_front, False, _window_name(wid), editable=browsertab.editable())
 
 
+PRIVATE_SAID = "That's from a file with keys or passwords, so I never read or send it."
+
+
+def _private(g: "Grab | str | None") -> bool:
+    from jarvis.tools.interactive import _secrets
+    if not isinstance(g, Grab):
+        return False
+    return _secrets.private(g.text, (g.editor or {}).get("file", "") if g.editor else "")
+
+
 def peek() -> str:
+    """The highlighted text the user would mean by "this" ('' = none, or a key/password: never)."""
+    text = _peek()
+    from jarvis.tools.interactive import _secrets
+    if text and _secrets.private(text, _editor_file()):
+        return ""
+    return text
+
+
+def _editor_file() -> str:
+    try:
+        from jarvis.core import editor
+        st = editor.target()
+        return str((st or {}).get("file") or "")
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _peek() -> str:
     """The highlighted text the user would mean by "this", WITHOUT touching anything (no window switch, no Ctrl+C):
     VS Code / the browser through their extensions, else the newest highlight made outside KURAMA. '' = none."""
     wid, in_front = target_window()
@@ -197,6 +225,19 @@ def restore_clipboard() -> None:
 
 
 def grab() -> Grab | str:
+    """The highlight (see _grab), never a key or password: a private one is a message instead."""
+    g = _grab()
+    if _private(g) or (isinstance(g, Grab) and not g.editor and _private_file_in_front()):
+        return PRIVATE_SAID
+    return g
+
+
+def _private_file_in_front() -> bool:
+    from jarvis.tools.interactive import _secrets
+    return _secrets.private_file(_editor_file())
+
+
+def _grab() -> Grab | str:
     """Copy the selection FROM the app the user is working in (Ctrl+C there, not the X PRIMARY buffer, which also
     changes when text is selected inside KURAMA). Returns a Grab, or a message for the user."""
     from jarvis.core import uiagent

@@ -72,7 +72,7 @@ def test_tool_call_then_answer(fake):
     assert (row["tool"], row["outcome"], row["ok"]) == ("get_time", "allowed", 1)
     assert store.recent_routing(1)[0]["groups"] == ["general"]
     assert a.last["tools"] == [{"name": "get_time", "ok": True}]
-    assert isinstance(a.history[-1], AIMessage) and a.history[-1].content == "It is 11:42."
+    assert isinstance(a.history[-1], AIMessage) and a.history[-1].content.startswith("It is 11:42.\n[tools this turn: get_time()")
     purposes = [r[0] for r in store._exec("SELECT purpose FROM llm_calls ORDER BY id")]
     assert purposes == ["agent_text", "agent_text"]
 

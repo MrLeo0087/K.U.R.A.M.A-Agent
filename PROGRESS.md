@@ -839,3 +839,20 @@ Phases (one at a time, owner tests after each):
       name. "Create a new folder here, name it X" = 0-token action in the folder open in Files (or pasted / last);
       file tools' "here" now use the Files folder too (was KURAMA's remembered folder). Telegram lateness: no evidence
       yet (the image job took 4 s); each send now logs its delay and upload time (jobs log "telegram: job #").
+- [x] 2026-11-01 19:15 Memory + multitasking rebuild, PHASE 1 (working memory). Owner: "short-term memory is horrible"
+      ('yes' -> "nothing waiting for a yes"; "open it in vs code" / "send that image" had nothing to point at).
+      Cause: history kept only words; what tools made/touched vanished; a question asked on Telegram, in an alert or
+      before a restart was unknown (the laptop chat never resumed). New jarvis/core/workmem.py: the safety gate records
+      every real path a tool used/produced (and finished jobs' outputs) as things with a kind (image/video/audio/
+      document/code/folder); focus.refer + send shortcuts pick by kind ("that image" never sends a folder); something
+      made < 2 min ago beats the open Files folder; a numbered list of real paths is a choice ("2", "the one in Redmi").
+      KURAMA's newest message (any channel or alert, 10 min) that asks/offers routes a short reply by the QUESTION's
+      meaning and is shown to the AI. Replies in the AI history carry "[tools this turn: ...]" (last 2 only, ~40-60
+      tokens). "Things from this chat" line in the prompt (~50 tokens). Live: "maybe some music would help" -> "yes"
+      played music (route 'answer'). Found live: with .env open, 'yes' was taken as "use the highlight" and the reply
+      printed the Groq key -> private files (.env, keys) and highlighted keys are never context/sent; a bare yes/no is
+      never a selection or meaning action; the leaked key was masked in data/ (traces, messages, clipboard, outputs).
+      Tests: test_workmem.py (37), test_privacy_guard.py (21); suite 1364 passed; scorecard 67% / 100% / 98%.
+      Next: Phase 2 (task graph: steps with real inputs/outputs, learned plans, re-plan on failure), Phase 3 (Gemini
+      fallback when GEMINI_API_KEY is set, token cuts).
+
