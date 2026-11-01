@@ -253,3 +253,11 @@
 {"id": 253, "text": "Open VS Code from this folder.", "expect": "open.folder", "args": {}, "channel": "laptop", "source": "traces 2026-10-29..11-01 frequent AI requests", "groups": ["files", "apps"]}
 {"id": 254, "text": "open selected folder in vscode", "expect": "open.folder", "args": {}, "channel": "laptop", "source": "traces 2026-10-29..11-01 frequent AI requests", "groups": ["files", "apps"]}
 {"id": 255, "text": "open vs code from kurama folder from tara", "expect": "open.folder", "args": {}, "channel": "laptop", "source": "traces 2026-10-29..11-01 frequent AI requests", "groups": ["files", "apps"]}
+{"id": 256, "text": "save this website names whatsapp", "expect": "links", "args": {"action": "save", "name": "whatsapp"}, "channel": "laptop", "source": "traces 2026-11-01 link store (live)"}
+{"id": 257, "text": "save this link to socolive", "expect": "links", "args": {"action": "save", "name": "socolive"}, "channel": "laptop", "source": "traces 2026-11-01 link store (live)"}
+{"id": 258, "text": "i mean sabe it's url in link store name google drive", "expect": "links", "args": {"action": "save", "name": "google drive"}, "channel": "laptop", "source": "traces 2026-11-01 link store (live)"}
+{"id": 259, "text": "bro save this page link as watest", "expect": "links", "args": {"action": "save", "name": "watest"}, "channel": "laptop", "source": "traces 2026-11-01 link store (live)"}
+{"id": 260, "text": "save this video link as night melody song", "expect": "links", "args": {"action": "save", "name": "night melody song"}, "channel": "laptop", "source": "traces 2026-11-01 link store (live)"}
+{"id": 261, "text": "show me link stroe", "expect": "links", "args": {"action": "list"}, "channel": "laptop", "source": "traces 2026-11-01 link store (live)"}
+{"id": 262, "text": "give me list of link store", "expect": "links", "args": {"action": "list"}, "channel": "laptop", "source": "traces 2026-11-01 link store (live)"}
+{"id": 263, "text": "what links i saved bro", "expect": "links", "args": {"action": "list"}, "channel": "laptop", "source": "traces 2026-11-01 link store (live)"}

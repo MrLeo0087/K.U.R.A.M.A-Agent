@@ -70,3 +70,29 @@ def test_fake_claim_is_retried_with_the_same_tools(respond, monkeypatch, text, c
     monkeypatch.setattr(router, "route", lambda t, log_it=True: router.Route(["links"], "semantic"))
     agent.Agent().run(text)
     assert len(seen) == 2 and seen[0] and seen[1][:len(seen[0])] == seen[0] and "request_tools" in seen[1]
+
+
+@pytest.mark.parametrize("text,answer,area", [
+    ("give me list of link store", "Your link store contains:\n- sofascore: https://www.sofascore.com", "links"),
+    ("show me all link list from link store", "🔗 Your links: none.", "links"),
+    ("wat is in my todo list bro", "You have nothing on your to-do list.", "todo"),
+])
+def test_a_tool_less_answer_about_saved_things_is_retried(respond, monkeypatch, text, answer, area):
+    """Traces f8d5f6b7c2d4 / 7800bf0ca4bc: the list was 'read' from old replies (wrong). Nothing was read yet."""
+    seen = []
+
+    def fn(messages, kw):
+        seen.append(1)
+        return AIMessage(content="Okay." if isinstance(messages[-1], SystemMessage) else answer)
+    respond(fn)
+    monkeypatch.setattr(router, "route", lambda t, log_it=True: router.Route(["clipboard", area], "semantic"))
+    agent.Agent().run(text)
+    assert len(seen) == 2
+
+
+def test_other_areas_keep_a_plain_answer(respond, monkeypatch):
+    seen = []
+    respond(lambda messages, kw: seen.append(1) or AIMessage(content="A decorator wraps a function."))
+    monkeypatch.setattr(router, "route", lambda t, log_it=True: router.Route(["knowledge"], "semantic"))
+    agent.Agent().run("what is a decorator in python")
+    assert len(seen) == 1

@@ -726,3 +726,12 @@ Phases (one at a time, owner tests after each):
       source, the words give the quality. Report: "Slowest" leaves out yes/no waits. Not proven: Alt-Tab (the tool
       reported "Pressed alt+Tab"; needs a live look at what the window manager did).
       Scorecard 66% instant / 100% right / 98% router; 1182 tests pass.
+- [x] 2026-11-01 08:10 Live: "save this website names whatsapp" summarized the page (the AI picked web this_page);
+      the first request after a restart / 10 min idle wrote whatsapp.txt / kt1.txt (word routing while the meaning
+      model was freed; the AI refused "no URL" twice, then asked for files). Fixes: the freed model is loaded before
+      routing (~0.6 s, measured), not guessed by words; save / list links are 0-token actions by meaning — words no
+      action knows become X ("save this website names X"), the left-over words are the name (one part, never the
+      first word: "show me link stroe" lists); the router also offers the masked action's area; tool texts say
+      this_page = summary, save_link reads the open page; a tool-less answer in a saved-things area (links, to-dos,
+      reminders, jobs, money) is retried with the tools. "save this video link as X" no longer downloads.
+      Scorecard 67% / 100% / 98%; 1206 tests pass. Live: cold first request saved in 1 s, 0 tokens.

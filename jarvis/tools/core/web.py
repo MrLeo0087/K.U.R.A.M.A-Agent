@@ -19,13 +19,14 @@ TABLE = {
 
 @tool(group="core", safety="safe",
       description="Internet answers: live (match results, news, scores, prices, anything recent), search, read a web "
-                  "page, this_page (the page open in the browser), wiki, watch a page for a word.")
+                  "page, this_page (summarize what the open browser page says; saving its link is memory save_link), wiki, "
+                  "watch a page for a word.")
 def web(action: Literal["live", "search", "read", "this_page", "wiki", "watch"], query: str = "", url: str = "",
         kind: Literal["auto", "sports", "news", "answer"] = "auto") -> str:
     """Web.
 
     Args:
-        action: live, search, read, this_page, wiki, watch.
+        action: live, search, read, this_page (a summary of the open page, never to save it), wiki, watch.
         query: What to look up (or the word to watch for).
         url: The page to read or watch.
         kind: live: sports, news, answer or auto.

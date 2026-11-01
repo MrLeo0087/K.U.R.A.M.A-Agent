@@ -9,7 +9,8 @@ def test_shortcuts_on_real_requests_stay_accurate(monkeypatch):
     cases = harness.load()
     assert len(cases) >= 200
     sc = harness.run_shortcut(cases)
-    coverage, precision = sc["handled"] / len(cases), sc["right"] / max(1, sc["handled"])
+    judged = sum(not c["expect"].startswith("route.") for c in cases)  # like the scorecard: routing-only cases
+    coverage, precision = sc["handled"] / judged, sc["right"] / max(1, sc["handled"])  # expect no shortcut
     wrong = [f"#{w['id']} {w['text'][:50]!r} -> {w['got']}" for w in sc["wrong"]]
     assert coverage >= 0.55, f"shortcuts handle only {coverage:.0%}"
     # baseline 2026-10-29: 4 known mistakes (#74 'find X and send me', #77 'get it on telegram', #196/#197 two tasks

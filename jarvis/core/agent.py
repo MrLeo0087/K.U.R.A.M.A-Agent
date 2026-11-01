@@ -344,6 +344,13 @@ class Agent:
         return self._meta_ok(state["user_text"])
 
     @staticmethod
+    def _data_area(state: AgentState) -> bool:
+        """The request's main area holds the user's own saved things (config.DATA_AREAS): links, to-dos, reminders,
+        jobs, money. ('clipboard' only says something is highlighted.)"""
+        main = [g for g in state.get("groups") or [] if g != "clipboard"][:1]
+        return bool(main) and main[0] in config.DATA_AREAS and bool(state.get("tools"))
+
+    @staticmethod
     def _unoffered_tool(error: str, tools: list | None) -> Any | None:
         """Groq 400 'attempted to call tool X which was not in request.tools': X if it is a real KURAMA tool."""
         m = re.search(r"attempted to call tool '([A-Za-z0-9_]+)'", error)
@@ -366,8 +373,9 @@ class Agent:
             kw["timeout"] = config.AGENT_TIMEOUT_S
         msgs = state["messages"]
         hold = self._retry_ok(state)  # stream: hold the first sentence back until it is not "I can't"
+        unread = hold and self._data_area(state)  # the user's saved things: no tool yet = nothing read yet
         try:
-            reply = self._chat(msgs, kw, state.get("stream", False), hold)
+            reply = self._chat(msgs, kw, state.get("stream", False) and not unread, hold)
         except llm.LLMError as e:
             low = str(e).lower()
             if "tool" not in low and "400" not in low:
@@ -400,8 +408,8 @@ class Agent:
             return {"messages": msgs + [msg], "pending": calls + bad, "tools": tools or state.get("tools") or []}
         answer = reply.text.strip() or (TOO_MANY_ROUNDS if ai.tool_calls else NO_ANSWER)
         answer = honest(answer, msgs)
-        if hold and not last_round and meta.needs_tool(answer) and not self.last.get("denied") and (
-                meta.claims(answer) or worth_retry(state["user_text"])):
+        if hold and not last_round and not self.last.get("denied") and (unread or meta.needs_tool(answer) and (
+                meta.claims(answer) or worth_retry(state["user_text"]))):
             # (never after a "no" to a yes/no question; a refusal to small talk / an emoji isn't worth a retry)
             log.info("tool-less refusal, retrying once with %s: %r", meta.NAME, answer[:80])
             self._log_meta(state["user_text"], [])

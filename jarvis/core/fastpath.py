@@ -2192,7 +2192,7 @@ def video_dl_intent(t: str) -> Intent | None:
         return None  # a plain file link -> download_file
     if not is_url and not (kind or q or m.group("aud") or re.search(r"\byoutube\b", t, I)):
         return None  # "download the dataset" etc. are not videos
-    if re.search(r"\b(?:link|url)$", src, I):
+    if re.search(r"\b(?:link|url)$", src, I) or re.match(r"(?:link|url)\b", src, I):  # "save this video link as X"
         return None  # "save this video link" keeps the link (saved_links), it doesn't download the video
     if src.lower() in ("", "it", "this", "that", "one") or \
             (not is_url and (m.group("det") or "").strip().lower() in ("this", "that") and kind):
@@ -3208,6 +3208,7 @@ def match(text: str) -> Intent | None:
             return None
     if it is not None and meaning_ok(text, it):
         return it
+    semantic_ensure()  # a freed model loads in ~0.6 s: cheaper than an AI request that guesses (it wrote kt1.txt)
     return meaning_intent(text)  # no pattern, or its meaning disagreed ('Open VS Code from this folder' is not a
     #                              folder named 'VS Code from this'): an action picked by meaning, else the AI
 
@@ -3292,12 +3293,35 @@ def _assist_waiting(t: str) -> bool:
 _NO_DETAIL = {"bro", "pls", "plz", "please", "hey", "ok", "okay", "now", "can", "could", "you", "will", "just",
            "for", "me", "my", "the", "a", "an", "of", "in", "to", "it", "this", "that", "here", "current", "selected",
            "and", "yaar", "dai", "na", "quickly", "again", "also", "all", "i", "want", "need", "your", "with", "on",
-           "from", "is", "are", "what", "which"}
+           "from", "is", "are", "what", "which", "mean", "no", "not", "said", "say", "its", "it's"}
 _vocab: dict[str, set[str]] = {}
 
 
 def _words(t: str) -> set[str]:
     return set(re.findall(r"[a-z0-9]+", t.lower()))
+
+
+def _known(word: str, vocab: set[str]) -> bool:
+    """The word belongs to the action (or is filler), allowing a typo ('names' ~ name, 'sabe' ~ save, 'webiste')."""
+    w = word.lower().strip("'.")
+    if any(c.isdigit() for c in w):  # 'job 2', 'abc123': a detail, never filler
+        return w in vocab
+    if len(w) < 2 or w in vocab or w in _NO_DETAIL or w.endswith("'s") and w[:-2] in vocab:
+        return True
+    from difflib import SequenceMatcher
+    return len(w) >= 4 and any(len(v) >= 4 and SequenceMatcher(None, w, v).ratio() >= 0.75 for v in vocab)
+
+
+def meaning_label(t: str) -> tuple[str, float] | None:
+    """The closest config.MEANING_SHORTCUTS action and how close. Words no action knows (a name: 'whatsapp',
+    'night melody song') become X, like in the examples, so a name never pulls the meaning away
+    ('save this website names whatsapp' -> 'save this website names X')."""
+    from jarvis.core import semantic
+    if "" not in _vocab:
+        _vocab[""] = set().union(*(_words(e) for exs in config.MEANING_SHORTCUTS.values() for e in exs)) - {"x"}
+    masked = re.sub(r"\bX(?:\s+X\b)+", "X", " ".join(w if _known(w, _vocab[""]) else "X"
+                                                     for w in re.findall(r"[\w'.+#-]+", t)))
+    return semantic.best_of(masked, "meaning_shortcuts", config.MEANING_SHORTCUTS)
 
 
 def meaning_intent(text: str) -> Intent | None:
@@ -3306,10 +3330,13 @@ def meaning_intent(text: str) -> Intent | None:
     'start job 2' or 'open vs code from the kurama folder' carry a detail only the AI can use, so they go to the AI.
     'this' is resolved like every tool: a pasted path > the Files app's selection / open folder > the last folder."""
     from jarvis.core import router, semantic
-    t = router.fix_typos(" ".join((text or "").split())).strip(" .!?")
+    raw = " ".join((text or "").split()).strip(" .!?")
+    t = router.fix_typos(raw)
     if not t or len(t) > 120 or not semantic.ready():
         return None
-    best = semantic.best_of(t, "meaning_shortcuts", config.MEANING_SHORTCUTS)
+    # words no action knows (a name: 'whatsapp', 'watest') become X, like in the examples, so the name never pulls
+    # the meaning away ('save this website names whatsapp' -> 'save this website names X')
+    best = meaning_label(t)
     if best is None or best[1] < config.MEANING_SHORTCUT_MIN:
         return None
     label, score = best
@@ -3317,10 +3344,25 @@ def meaning_intent(text: str) -> Intent | None:
     if score < chat + config.SEMANTIC_OVER_CHAT:
         return None
     if label not in _vocab:
-        _vocab[label] = set().union(*(_words(e) for e in config.MEANING_SHORTCUTS[label]))
-    said = re.sub(r"^\W*(?:(?:hey|hi|ok)\s+)?(?:" + "|".join(config.ASSISTANT_NAMES) + r")\b\W*", "", t, flags=I)
-    if _words(said) - _vocab[label] - _NO_DETAIL:  # something the examples don't cover: a number, a name, a place
+        _vocab[label] = set().union(*(_words(e) for e in config.MEANING_SHORTCUTS[label])) - {"x"}
+    said = re.sub(r"^\W*(?:(?:hey|hi|ok)\s+)?(?:" + "|".join(config.ASSISTANT_NAMES) + r")\b\W*", "", raw, flags=I)
+    toks = re.findall(r"[\w'.+#-]+", said)
+    pos = [i for i, w in enumerate(toks) if not _known(w, _vocab[label])]
+    extra = [toks[i] for i in pos]
+    if label == "save_link":  # the words left over ARE the name ("save this website names whatsapp" -> whatsapp)
+        if pos and (pos[-1] - pos[0] + 1 != len(pos) or pos[0] == 0):
+            return None  # two unknown parts ('save this FILE as REPORT') or a leading one (the request starts with
+            #              what to do: 'show me link stroe' is not a link named 'show'): not just a name -> the AI
+        it = Intent("links", "saved_links", "links", {"action": "save", **({"name": " ".join(extra)} if extra else {})})
+        return it if meaning_ok(t, it) else None
+    if extra:  # something the examples don't cover: a number, a name, a place -> the AI
         return None
+    if label == "list_links":
+        it = Intent("links", "saved_links", "links", {"action": "list"})
+        return it if meaning_ok(t, it) else None
+    if label == "read_later_add":
+        it = Intent("readlater", "read_later", "links", {"action": "add", "url": ""})
+        return it if meaning_ok(t, it) else None
     if label == "jobs_start":
         return Intent("jobs", "jobs", "jobs", {"action": "start"})
     if label == "jobs_list":

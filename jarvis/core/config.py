@@ -499,7 +499,8 @@ for _g, _ex in {
               "delete that saved link", "remove this link from my links", "forget the link I saved",
               "list every link I have saved", "empty my saved links", "delete the 3rd bookmark",
               "keep the address of the page I'm on under a name", "bookmark this site as my bank",
-              "rename one of my saved links", "open a link I bookmarked earlier"),
+              "rename one of my saved links", "open a link I bookmarked earlier",
+              "keep this youtube video link in my links under a name"),
     "daily": ("what is 12 times 8", "how much is 250 minus 75"),
     "screen": ("read what's on my screen", "what does my screen say"),
     "image": ("make an audio of this text", "turn this paragraph into speech"),
@@ -509,6 +510,9 @@ ROUTER_URL_GROUP = "browser"  # group for messages containing a URL/domain
 # while the meaning model is not loaded (first request after 10 min idle: 17 of 87 AI requests 10-31..11-01) the word
 # rules decide; an area split out of another keeps riding along with it so its tools are still offered
 ROUTER_RULE_NEIGHBORS = {"browser": "links"}
+# areas that hold the user's own saved things: an answer there with no tool can only come from old replies (traces
+# 59989bc5f78f, f8d5f6b7c2d4 listed links that no longer existed / never did), so it is retried with the tools
+DATA_AREAS = ("links", "todo", "schedule", "jobs", "tracker")
 ROUTER_SITE_OVER_APPS = True  # "open youtube": a known site/URL drops the apps group (browser wins)
 FASTPATH = os.getenv("JARVIS_FASTPATH", "1").lower() not in ("0", "false", "no", "off")  # regex intents, 0 tokens
 ASSISTANT_NAME = os.getenv("KURAMA_NAME", "KURAMA")  # default name; the user can change it (core/identity.py)
@@ -1115,11 +1119,22 @@ MEANING_SHORTCUTS: dict[str, tuple[str, ...]] = {
     "open_vscode": ("open this folder in vs code", "open vs code in this folder", "open the selected folder in code",
                     "open this file with visual studio code", "open the current folder in my code editor",
                     "launch vscode here"),
+    # X = the name the user gives: whatever words are left after the action's own words (none -> KURAMA asks)
+    "save_link": ("save this link as X", "save this page as X", "store this website link as X", "bookmark this site "
+                  "as X", "keep this page's link under the name X", "save this url with the name X",
+                  "add this website to my link store as X", "this website is my X link, save it",
+                  "save the link of this site for X", "put this page in my links named X", "save this video link as X"),
+    "list_links": ("show me my link store", "list my saved links", "give me all my links", "what links did I save",
+                   "show the link store list", "what is in my link store"),
+    "read_later_add": ("save this page to read later", "add this article to my reading list",
+                       "keep this link to read later", "read this later"),
     "jobs_start": ("start the jobs", "start working on my job list", "run all the waiting jobs", "do the jobs now",
                    "begin the queued jobs", "work on your job list now"),
     "jobs_list": ("show my job list", "what jobs are waiting", "list the jobs you have", "what is in your job list",
                   "show the queued jobs", "which jobs are pending"),
 }
+MEANING_SHORTCUT_AREAS = {"save_link": "links", "list_links": "links", "read_later_add": "links", "copy_path": "clipboard",
+                          "open_vscode": "files", "jobs_start": "jobs", "jobs_list": "jobs"}  # the router offers it too
 MEANING_SHORTCUT_MIN = 0.82  # this close to the action's examples (bge-small cosine) to run it without the AI
 QUEUE_EXAMPLES: dict[str, tuple[str, ...]] = {
     "later": ("add a job: write an essay about Nepal", "keep this job for later", "put this in your job list",

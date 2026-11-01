@@ -67,3 +67,44 @@ def test_this_folder_after_a_file_is_the_files_folder(meaning, monkeypatch, tmp_
     monkeypatch.setattr(focus, "refer", lambda t: f)
     meaning.update(label="copy_path", score=0.9)
     assert fastpath.meaning_intent(text).args["text"] == str(tmp_path if want == "dir" else f)
+
+
+@pytest.mark.parametrize("text,name", [
+    ("save this website names whatsapp", "whatsapp"),          # 07:49 live: the AI summarized the page instead
+    ("save this link to socolive", "socolive"),
+    ("i mean sabe it's url in link store name google drive", "google drive"),
+    ("bro save this page link as watest", "watest"),            # the name is never typo-'fixed' ('latest')
+])
+def test_save_link_takes_the_left_over_words_as_the_name(meaning, monkeypatch, text, name):
+    monkeypatch.setattr(fastpath, "meaning_ok", lambda t, it: True)
+    meaning.update(label="save_link", score=0.9)
+    assert fastpath.meaning_intent(text).args == {"action": "save", "name": name}
+
+
+@pytest.mark.parametrize("text", ["save this file as report", "save this image as cat now pls", "save this code as test.py"])
+def test_save_with_another_object_is_not_a_link(meaning, monkeypatch, text):
+    monkeypatch.setattr(fastpath, "meaning_ok", lambda t, it: True)
+    meaning.update(label="save_link", score=0.9)
+    assert fastpath.meaning_intent(text) is None
+
+
+def test_save_link_without_a_name_asks_for_one(meaning, monkeypatch):
+    monkeypatch.setattr(fastpath, "meaning_ok", lambda t, it: True)
+    meaning.update(label="save_link", score=0.9)
+    assert fastpath.meaning_intent("save this link pls").args == {"action": "save"}
+
+
+@pytest.mark.parametrize("text", ["show me link stroe", "give me list of link store", "what links i saved bro"])
+def test_list_links_by_meaning(meaning, monkeypatch, text):
+    monkeypatch.setattr(fastpath, "meaning_ok", lambda t, it: True)
+    meaning.update(label="list_links", score=0.9)
+    assert fastpath.meaning_intent(text).args == {"action": "list"}
+
+
+@pytest.mark.parametrize("text", ["show me link stroe", "open my link store", "check this link"])
+def test_a_leading_unknown_word_is_the_action_not_a_name(meaning, monkeypatch, text):
+    """08:02 live: 'show me link stroe' was saved as a link named 'show'."""
+    monkeypatch.setattr(fastpath, "meaning_ok", lambda t, it: True)
+    meaning.update(label="save_link", score=0.9)
+    it = fastpath.meaning_intent(text)
+    assert it is None or "name" not in it.args or it.args["name"] not in ("show", "open", "check")

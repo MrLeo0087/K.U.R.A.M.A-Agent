@@ -181,3 +181,6 @@ video now" rule in `video_dl_intent`, the filler-word list in `tools/general/vid
   junk streams held and replaced by the tool result, 0-token actions by meaning (copy path, VS Code here, start /
   list jobs), video link kept when words come before it, "Slowest" without yes/no waits. Watch: "junk-looking stream
   held" in server.log, link-store traces, meaning shortcuts taking a request they shouldn't.
+- 2026-11-01 08:10: the freed meaning model is loaded before routing (no more word-routing on the first request
+  after idle); save / list links by meaning with the name taken from the left-over words; saved-things areas
+  never answered from old replies. Watch: links saved under a wrong name (a word of the request taken as the name).

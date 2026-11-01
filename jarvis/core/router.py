@@ -241,6 +241,8 @@ def route(text: str, log_it: bool = True) -> Route:
     text = fix_typos(text)
     available = registry.groups()
     r = Route(reasoning=needs_reasoning(text))
+    if not is_small_talk(text):  # load the meaning model if it was freed (~0.6 s once): routing by words while it
+        semantic.ensure_ready()  # loaded sent link requests to files / web (17 of 87 AI requests 10-31..11-01)
     if semantic.ready() and not is_small_talk(text) and (sem := [g for g in semantic.match(text) if g in available]):
         # by meaning first (model loaded: ~10 ms); word-rule areas only fill the free places as extra candidates —
         # the AI still picks the action by meaning
@@ -248,6 +250,10 @@ def route(text: str, log_it: bool = True) -> Route:
                  if g not in sem]
         r.method, r.groups = "semantic", (sem[:2] + extra + sem[2:])[: config.ROUTER_MAX_GROUPS]
         matched = []
+        from jarvis.core import fastpath  # the action it means, with any name masked out ("save this video link as
+        if (lab := fastpath.meaning_label(text)) and lab[1] >= config.MEANING_SHORTCUT_MIN and (  # night melody song":
+                area := config.MEANING_SHORTCUT_AREAS.get(lab[0])) in available and area not in r.groups:  # the
+            r.groups = [*r.groups[:config.ROUTER_MAX_GROUPS - 1], area]  # song pulled it to media; links joins)
     else:
         matched = rule_groups(text)  # model not loaded yet / meaning unclear / Nepali-Hindi script: the word rules
         semantic.warm_soon()
