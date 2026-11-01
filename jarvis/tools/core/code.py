@@ -62,7 +62,7 @@ TABLE = {
     "review": Act("review_code", lambda a: {"path": a.get("path", "")}),
     "find_code": Act("code_nav", lambda a: {"action": "find", "name": a.get("text", "")}),
     "code_help": Act("code_nav", lambda a: {"action": "help", "name": "", "request": a.get("text", "")}),
-    "training": Act("training", lambda a: {"action": a.get("text", "status") if a.get("text") in ("status", "stop", "watch") else "status"}),
+    "training": Act("training", lambda a: {"action": a.get("text", "status") if a.get("text") in ("status", "stop", "watch", "colab") else "status"}),
 }
 
 
@@ -73,7 +73,7 @@ TABLE = {
                   "lately), git (status/log/diff), commit, new_project, env (check / install a package), requirements (make "
                   "requirements.txt from imports), notebook_to_py (.ipynb -> .py), check_deps (missing/unpinned/outdated "
                   "packages), review, training "
-                  "(ML training / Colab status).")
+                  "(ML training status; text 'colab' = the ready notebook cell for Colab / Kaggle to watch training).")
 def code(action: Literal["find_code", "code_help", "fix_error", "run_tests", "where_was_i", "changes", "git", "commit", "new_project", "env",
                          "requirements", "notebook_to_py", "check_deps", "review", "training"], text: str = "", path: str = "") -> str:
     """Coding.

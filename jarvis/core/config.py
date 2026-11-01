@@ -91,6 +91,7 @@ TYPO_FIXES: dict[str, str] = {
     "foler": "folder", "fodler": "folder", "folde": "folder", "summarise": "summarize",
 }
 STT_FIXES: dict[str, str] = {
+    r"\b(?:b\.?\s?s\.?|bee\s?s|be\s?s)\s+code\b": "vs code",  # owner 11-01: "VS Code" heard as "BS code"
     r"^\W*p\.?\s?s\.?\s+(?=(?:the\s+)?(?:super|ctrl|control|alt|shift|enter|escape|tab|f\d)\b)": "press ",  # "P.S. Super Key" (09:35)
     r"\b(?:stobas|stopbus|stop\s+was|stop\s+watts?|stopwach)\b": "stopwatch",
     r"\b(?:set|shat|shot|sut)\s+down\s+(?:the\s+)?(?:letter|ladder|laptop|leptop)\b": "shut down the laptop",
@@ -278,7 +279,8 @@ DIRECT_REPLY_TOOLS = {"open_url": "open", "open_app": "open", "audio": "audio", 
                       # finishing actions: the tool's own words are the reply, so the AI can't claim what another
                       # tool did ('The second tab is now active' after only focusing Brave, trace 9a7787367d47)
                       "close_app": "said", "open_folder": "said", "open_path": "said", "app_control": "said",
-                      "window": "said"}
+                      "window": "said", "generate_image": "said", "write_document": "said"}  # a job STARTED is
+#                     not "has been sent" (trace 54045016: the AI said the picture was sent while it was being made)
 DIRECT_REPLY_STEPS = {"window": ("focus", "list"), "app_control": ("task", "enable")}  # these continue a task
 # --- OCR (read_text): Tesseract first (0 tokens); the vision model only for handwriting / hard photos ---
 OCR_LANGS = os.getenv("KURAMA_OCR_LANGS", "eng+nep")
@@ -471,7 +473,8 @@ ROUTER_EXAMPLES: dict[str, tuple[str, ...]] = {
     "screen": ("capture my screen", "screenshot of this window"),
     "power": ("how much charge is left", "lock the screen", "shut down the computer", "put it to sleep",
               "guard my laptop while I am away", "where is my laptop", "anti theft"),
-    "image": ("make an image of a cat in space", "create a picture of mountains", "draw a logo"),
+    "image": ("make an image of a cat in space", "create a picture of mountains", "draw a logo",
+              "generate a random image and send it to telegram", "make any picture for me"),
     "web": ("search online for", "look this up on the internet", "who won the match yesterday",
             "latest news about technology", "tell me when this website changes", "watch the exam results page",
             "let me know when the notice board page updates"),
@@ -1131,6 +1134,10 @@ MEANING_SHORTCUTS: dict[str, tuple[str, ...]] = {
                     "move the page down"),
     "scroll_up": ("scroll up", "scroll up a bit", "scroll up a lot", "go up the page", "scroll up more", "scroll up a little",
                   "move the page up"),
+    "colab_setup": ("set up a colab notebook for training", "give me the colab cell to watch my training",
+                    "setup kaggle notebook for training", "connect my colab training to kurama", "colab setup code",
+                    "code to paste in my kaggle notebook so you can watch the training",
+                    "setup colab notebook to watch out my training"),
     "show_desktop": ("go to the home screen", "show me the desktop", "minimize all windows", "hide every window",
                      "take me to the home screen"),
     "copy_path": ("copy the path of this folder", "copy this file's path", "put the path of the selected folder in "
@@ -1162,7 +1169,7 @@ MEANING_SHORTCUTS: dict[str, tuple[str, ...]] = {
 MEANING_SHORTCUT_AREAS = {"save_link": "links", "list_links": "links", "read_later_add": "links", "copy_path": "clipboard",
                           "open_vscode": "files", "jobs_start": "jobs", "jobs_list": "jobs",
                           "clean_ram": "system", "clean_kurama": "system", "clean_storage": "system", "show_desktop": "windows", "switch_tab": "windows",
-                          "list_tabs": "windows", "close_tab": "windows", "scroll_down": "windows", "scroll_up": "windows"}  # the router offers it too
+                          "list_tabs": "windows", "close_tab": "windows", "scroll_down": "windows", "scroll_up": "windows", "colab_setup": "watch"}  # the router offers it too
 MEANING_SHORTCUT_MIN = 0.82
 # actions that change everything on screen need more certainty ("show my screen" is not "go to the home screen": 0.86)
 MEANING_SHORTCUT_MIN_BY = {"show_desktop": 0.90}

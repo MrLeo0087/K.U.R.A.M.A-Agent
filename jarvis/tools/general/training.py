@@ -65,8 +65,14 @@ def training(action: Literal["status", "watch", "colab", "stop", "stop_now", "st
             if ctx.get("published") is not None:
                 ctx["published"].append(rel)
             where = "in your workspace as KURAMA_colab.ipynb (also at " + str(nb) + ")"
-        return (f"The Colab notebook is {where}. In Colab, open it (File > Upload notebook) or copy its first cell, "
-                "run that cell once, then start training. Keras: model.fit(..., callbacks=[KuramaKeras()]); "
+            try:  # the owner wants to paste it at once: the cell goes to the clipboard too
+                from jarvis.tools.general import _sys
+                _sys.clip_set(cell)
+                where += "; the cell is COPIED: paste it as the first cell of your Colab or Kaggle notebook"
+            except Exception:  # noqa: BLE001 - no clipboard tool: the file is enough
+                pass
+        return (f"The training notebook is {where}. Works in Colab and Kaggle (Kaggle: Settings > Internet on). "
+                "Run that cell once, then start training. Keras: model.fit(..., callbacks=[KuramaKeras()]); "
                 "PyTorch: call kurama(epoch=e, epochs=N, loss=l, acc=a) each epoch and 'if kurama_should_stop(): break'; "
                 "HF: callbacks=[KuramaCallback()]. At the end kurama_send('best.pt') sends the checkpoint here. "
                 "Optional Colab secrets KURAMA_TG_TOKEN and KURAMA_TG_CHAT make alerts reach your phone when the laptop is off.")

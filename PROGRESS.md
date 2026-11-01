@@ -787,3 +787,11 @@ Phases (one at a time, owner tests after each):
       "busy" or a yes/no card was open (ptt.log: busy=thinking for every hold after 10:07:53; the server had no pending
       question). Now a stale card is cleared (checked with the server), a stuck turn is aborted, and the new request
       always goes; a real pending question is said in the caption.
+- [x] 2026-11-01 11:20 Owner report: (1) "organize this folder .. make less folder" / "organize file bro" passed
+      "folder make less" / "file bro" as the folder (one picked /home/leo/WhiteSur-gtk-theme/make-release.sh): a name
+      that is no real folder now means the folder in use (pasted path > Files app > last folder). (2) "BS code" heard
+      for VS Code -> STT fix. (3) "generate a random image and send to telegram" wrote a 1-pixel base64 PNG with
+      write_file: write_file refuses picture/sound/PDF files (says: use create image); image examples added; a started
+      image / document job replies with its own words (the AI said "has been sent" while the picture was being made).
+      (4) "Setup, Colab, Notebook" got a generic guide: the ready-made training cell (Colab AND Kaggle) is a 0-token
+      action by meaning, reachable by the code tool (training colab), and is copied to the clipboard to paste.

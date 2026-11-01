@@ -18,6 +18,10 @@ def write_file(path: str, content: str = "", overwrite: bool = False) -> str:
         content: Text to write.
         overwrite: Replace the file if it already exists.
     """
+    if path.lower().rsplit(".", 1)[-1] in ("png", "jpg", "jpeg", "gif", "webp", "bmp", "mp3", "mp4", "wav", "pdf", "zip"):
+        # text can't make a real picture / sound / pdf ("generate a random image" wrote a 1-pixel base64 PNG, 11-01)
+        return ("error: write_file only writes text. For a picture use the create tool (action image); for audio "
+                "create (audio); for a PDF write the text, then convert it.")
     p = _files.resolve(path, create=True)
     _files.guard(p)
     if p.is_dir():

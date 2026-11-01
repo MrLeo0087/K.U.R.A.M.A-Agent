@@ -34,8 +34,12 @@ def organize_files(action: Literal["organize", "apply", "edit", "cancel", "undo"
     from jarvis.core import focus
     from jarvis.core.paths import resolve_target
     pasted = focus.said_path()  # a folder path written in the message wins over a loose name ('organize this folder')
-    d = pasted if pasted is not None and pasted.is_dir() and not str(folder or "").startswith("/") \
-        else resolve_target(folder or "downloads")
+    if pasted is not None and pasted.is_dir() and not str(folder or "").startswith("/"):
+        d = pasted
+    elif folder and focus.is_anaphora(folder):  # 'organize it / this folder': the Files app's folder, else the last one
+        d = focus.refer("this") or resolve_target("downloads")
+    else:
+        d = resolve_target(folder or "downloads")
     if isinstance(d, str):
         return d
     if not d.is_dir():

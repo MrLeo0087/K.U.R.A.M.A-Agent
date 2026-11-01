@@ -2100,8 +2100,10 @@ def everyday_intent(t: str) -> Intent | None:
                        r"(?P<f>[\w .-]{2,40}?)(?:\s+(?:folder|files|directory))?(?:[,.!]|\s+(?:it\s+is|this\s+is|which|because|please)\b|$)",
                        t, I)) and not re.search(r"\b(?:tabs?|windows?|desktop\s+icons?|code|imports?|paragraphs?|sentences?|text|thoughts?|ideas?|notes?|essay|points?|this\s+(?:list|email|message))\b", m.group("f"), I):
         f = m.group("f").strip()
-        return Intent("organize", "organize_files", "daily", {"action": "organize",
-                                                              "folder": "this" if f.lower() in ("this", "it", "here", "folder", "files", "directory") else f})
+        from jarvis.core.paths import smart_path
+        if f.lower() in ("this", "it", "here", "folder", "files", "directory") or smart_path(f, want="dir") is None:
+            f = "this"  # not a real folder name ('folder make less', 'file bro'): the folder in use, never a guess
+        return Intent("organize", "organize_files", "daily", {"action": "organize", "folder": f})
     if m := re.fullmatch(r"(?:please\s+)?(?:(?:run|train|start)\s+(?:the\s+|my\s+)?(?P<p>.+?)\s+(?:on|in|using|with)\s+"
                          r"(?:a\s+|the\s+)?(?:free\s+)?(?:kaggle(?:'s)?(?:\s+(?:free\s+)?gpu)?|gpu|cloud\s+gpu)|(?:train|run)\s+(?:it|this)\s+on\s+gpu)"
                          r"[\s.!]*", t, I):
@@ -3374,6 +3376,9 @@ def meaning_intent(text: str) -> Intent | None:
         return it if meaning_ok(t, it) else None
     if label == "read_later_add":
         it = Intent("readlater", "read_later", "links", {"action": "add", "url": ""})
+        return it if meaning_ok(t, it) else None
+    if label == "colab_setup":  # the ready-made notebook cell (Colab / Kaggle), copied: 0 tokens
+        it = Intent("colab", "training", "watch", {"action": "colab"})
         return it if meaning_ok(t, it) else None
     if label == "list_tabs":
         it = Intent("tabs", "app_control", "windows", {"action": "shortcut", "text": "tabs"})
