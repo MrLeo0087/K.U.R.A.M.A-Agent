@@ -3355,11 +3355,17 @@ def meaning_intent(text: str) -> Intent | None:
     toks = re.findall(r"[\w'.+#-]+", said)
     pos = [i for i, w in enumerate(toks) if not _known(w, _vocab[label])]
     extra = [toks[i] for i in pos]
-    if label == "save_link":  # the words left over ARE the name ("save this website names whatsapp" -> whatsapp)
-        if pos and (pos[-1] - pos[0] + 1 != len(pos) or pos[0] == 0):
+    if label in ("save_link", "switch_tab", "close_tab"):  # the words left over ARE the name ("save this website names
+        if pos and (pos[-1] - pos[0] + 1 != len(pos) or pos[0] == 0):  # whatsapp" -> whatsapp)
             return None  # two unknown parts ('save this FILE as REPORT') or a leading one (the request starts with
             #              what to do: 'show me link stroe' is not a link named 'show'): not just a name -> the AI
-        it = Intent("links", "saved_links", "links", {"action": "save", **({"name": " ".join(extra)} if extra else {})})
+        if label in ("switch_tab", "close_tab"):
+            if not extra:
+                return None
+            verb = "tab:" if label == "switch_tab" else "close_tab:"
+            it = Intent("tab", "app_control", "windows", {"action": "shortcut", "text": verb + " ".join(extra)})
+        else:
+            it = Intent("links", "saved_links", "links", {"action": "save", **({"name": " ".join(extra)} if extra else {})})
         return it if meaning_ok(t, it) else None
     if extra:  # something the examples don't cover: a number, a name, a place -> the AI
         return None
@@ -3368,6 +3374,13 @@ def meaning_intent(text: str) -> Intent | None:
         return it if meaning_ok(t, it) else None
     if label == "read_later_add":
         it = Intent("readlater", "read_later", "links", {"action": "add", "url": ""})
+        return it if meaning_ok(t, it) else None
+    if label == "list_tabs":
+        it = Intent("tabs", "app_control", "windows", {"action": "shortcut", "text": "tabs"})
+        return it if meaning_ok(t, it) else None
+    if label in ("scroll_down", "scroll_up"):  # 'a lot' / 'more' = three pages (the words give the amount only)
+        n = 3 if re.search(r"\b(?:lot|more|fast|much|far)\b", t, I) else 1
+        it = Intent("ui", "app_control", "windows", {"action": "shortcut", "text": f"{label}:{n}", "app": ""})
         return it if meaning_ok(t, it) else None
     if label == "show_desktop":
         it = Intent("desktop", "window", "windows", {"action": "desktop"})

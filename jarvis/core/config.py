@@ -91,6 +91,7 @@ TYPO_FIXES: dict[str, str] = {
     "foler": "folder", "fodler": "folder", "folde": "folder", "summarise": "summarize",
 }
 STT_FIXES: dict[str, str] = {
+    r"^\W*p\.?\s?s\.?\s+(?=(?:the\s+)?(?:super|ctrl|control|alt|shift|enter|escape|tab|f\d)\b)": "press ",  # "P.S. Super Key" (09:35)
     r"\b(?:stobas|stopbus|stop\s+was|stop\s+watts?|stopwach)\b": "stopwatch",
     r"\b(?:set|shat|shot|sut)\s+down\s+(?:the\s+)?(?:letter|ladder|laptop|leptop)\b": "shut down the laptop",
     r"\b(better|good|more|clean|simple|clear)\s+(?:end|an|in)\s+detail(?:ed)?\b": r"\1 and detailed",
@@ -273,7 +274,12 @@ TOOL_OUTPUT_MAX_CHARS = 800  # tool results are truncated to this before going b
 # (tool -> fast-path intent used to word the reply; None = fixed sentence below)
 DIRECT_REPLY_TOOLS = {"open_url": "open", "open_app": "open", "audio": "audio", "brightness": "brightness",
                       "media_control": "media", "lock_screen": "lock",
-                      "screenshot": "screenshot", "send_message_telegram": None, "get_time": "time"}
+                      "screenshot": "screenshot", "send_message_telegram": None, "get_time": "time",
+                      # finishing actions: the tool's own words are the reply, so the AI can't claim what another
+                      # tool did ('The second tab is now active' after only focusing Brave, trace 9a7787367d47)
+                      "close_app": "said", "open_folder": "said", "open_path": "said", "app_control": "said",
+                      "window": "said"}
+DIRECT_REPLY_STEPS = {"window": ("focus", "list"), "app_control": ("task", "enable")}  # these continue a task
 # --- OCR (read_text): Tesseract first (0 tokens); the vision model only for handwriting / hard photos ---
 OCR_LANGS = os.getenv("KURAMA_OCR_LANGS", "eng+nep")
 OCR_MIN_CONF = float(os.getenv("KURAMA_OCR_MIN_CONF", "75"))  # Tesseract's mean word confidence below this = poor
@@ -1117,6 +1123,14 @@ LONG_JOBS_MAX_WORKERS = 2  # own threads; at most ONE CPU-heavy long job runs at
 # frequent AI requests (10-29..11-01: 'copy the path of this folder' 7x, 'open this folder in vs code' 11x,
 # 'start the jobs' 4x up to 8.5k tokens).
 MEANING_SHORTCUTS: dict[str, tuple[str, ...]] = {
+    "switch_tab": ("switch to the X tab", "go to the X tab in my browser", "show me the X tab", "open the X tab",
+                   "switch to X tab of my brave browser", "take me to the X tab"),
+    "list_tabs": ("what tabs are open", "list my browser tabs", "which tabs do i have open", "show all my tabs"),
+    "close_tab": ("close the X tab", "close X tab in my browser", "shut the X tab"),
+    "scroll_down": ("scroll down", "scroll down a bit", "scroll down a lot", "go down the page", "scroll down more", "scroll down a little",
+                    "move the page down"),
+    "scroll_up": ("scroll up", "scroll up a bit", "scroll up a lot", "go up the page", "scroll up more", "scroll up a little",
+                  "move the page up"),
     "show_desktop": ("go to the home screen", "show me the desktop", "minimize all windows", "hide every window",
                      "take me to the home screen"),
     "copy_path": ("copy the path of this folder", "copy this file's path", "put the path of the selected folder in "
@@ -1147,7 +1161,8 @@ MEANING_SHORTCUTS: dict[str, tuple[str, ...]] = {
 }
 MEANING_SHORTCUT_AREAS = {"save_link": "links", "list_links": "links", "read_later_add": "links", "copy_path": "clipboard",
                           "open_vscode": "files", "jobs_start": "jobs", "jobs_list": "jobs",
-                          "clean_ram": "system", "clean_kurama": "system", "clean_storage": "system", "show_desktop": "windows"}  # the router offers it too
+                          "clean_ram": "system", "clean_kurama": "system", "clean_storage": "system", "show_desktop": "windows", "switch_tab": "windows",
+                          "list_tabs": "windows", "close_tab": "windows", "scroll_down": "windows", "scroll_up": "windows"}  # the router offers it too
 MEANING_SHORTCUT_MIN = 0.82
 # actions that change everything on screen need more certainty ("show my screen" is not "go to the home screen": 0.86)
 MEANING_SHORTCUT_MIN_BY = {"show_desktop": 0.90}

@@ -184,8 +184,23 @@ def focus(app: str) -> bool:
     return False
 
 
-def key(combo: str) -> None:
-    _x("key", "--clearmodifiers", *combo.split())
+def to_user_window() -> None:
+    """Keys must go to the app the user is working in. When KURAMA's own chat is in front (the request was typed
+    there), the window below it gets the keyboard first: 'scroll down' scrolled KURAMA's chat, not the page."""
+    from jarvis.core import rewrite
+    try:
+        wid, in_front = rewrite.target_window()
+    except Exception:  # noqa: BLE001 - no X: the front window it is
+        return
+    if wid and not in_front:
+        _x("windowactivate", "--sync", str(wid))
+        time.sleep(0.15)
+
+
+def key(combo: str, times: int = 1) -> None:
+    to_user_window()
+    for _ in range(max(1, min(times, 30))):
+        _x("key", "--clearmodifiers", *combo.split())
 
 
 def type_text(text: str) -> None:
@@ -209,6 +224,8 @@ def keys_from_words(words: str) -> str | None:
         if not k:
             return None
         out.append(k)
+    if out == ["super"]:  # the Super key alone: GNOME's Activities / app launcher
+        return "Super_L"
     if not out or all(k in _MODS for k in out):
         return None
     return "+".join(out)
@@ -227,11 +244,46 @@ def parse_shortcut(text: str) -> dict | None:
     return None
 
 
-def shortcut(action: str, n: int = 0, app: str = "") -> str:
+def tab_named(name: str, app: str = "") -> str:
+    """'switch to the Facebook tab': the browser extension's tab list -> that tab's position -> Ctrl+N (0 tokens)."""
+    from jarvis.core import browsertab
+    if not browsertab.tabs():
+        return ("I can't see the browser's tabs yet: reload the KURAMA tab link extension (brave://extensions, "
+                "version 1.3), or say the tab's number ('go to tab 3').")
+    t = browsertab.find_tab(name)
+    if t is None:
+        open_ = ", ".join(x["title"][:30] for x in browsertab.tabs()[:6])
+        return f"No open tab matches '{name}'. Open tabs: {open_}."
+    if family(active_class()) != "browser" and not focus(app or browsertab.browser_name() or "brave"):
+        return "I couldn't find the browser window."
+    res = shortcut("tab", t["i"])
+    return f"Switched to the {t['title'][:60]} tab." if res.startswith("Switched") else res
+
+
+def list_tabs() -> str:
+    """'what tabs are open': the browser extension's list (0 tokens)."""
+    from jarvis.core import browsertab
+    tabs = browsertab.tabs()
+    if not tabs:
+        return "I can't see the browser's tabs (no browser open, or the KURAMA tab link extension needs a reload)."
+    return f"{len(tabs)} tabs open:\n" + "\n".join(f"{t['i']}. {t['title'][:70]}" for t in tabs)
+
+
+def close_tab_named(name: str) -> str:
+    """'close the facebook tab': switch to it, close it (Ctrl+W)."""
+    switched = tab_named(name)
+    if not switched.startswith("Switched"):
+        return switched
+    key("ctrl+w")
+    return switched.replace("Switched to", "Closed", 1)
+
+
+def shortcut(action: str, n: int = 0, app: str = "", times: int = 1) -> str:
     if err := _need():
         return err
     if app and not focus(app):
         return f"I couldn't find an open {app} window."
+    to_user_window()
     fam = family(active_class())
     if action == "tab":
         if n < 1:
@@ -247,7 +299,7 @@ def shortcut(action: str, n: int = 0, app: str = "") -> str:
     combo = FAMILY_KEYS.get(fam, {}).get(action) or COMMON.get(action)
     if not combo:
         return f"'{action.replace('_', ' ')}' isn't available here."
-    key(combo)
+    key(combo, times)
     return LABELS.get(action, "Done") + "."
 
 

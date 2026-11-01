@@ -2,20 +2,27 @@
 const API = "http://127.0.0.1:8000/api/v1/context/tab";
 let last = "";
 
-function send(url, title) {
-  const body = JSON.stringify({ url: url || "", title: title || "", browser: navigator.userAgent.includes("Brave") ? "brave" : "chromium" });
+function send(url, title, tabs = []) {
+  const body = JSON.stringify({ url: url || "", title: title || "", tabs,
+                                browser: navigator.userAgent.includes("Brave") ? "brave" : "chromium" });
   if (body === last) return;
   last = body;
   fetch(API, { method: "POST", headers: { "Content-Type": "application/json" }, body }).catch(() => { last = ""; });
 }
 
 async function report() {
-  const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-  if (tab) send(tab.url, tab.title);
+  // the active tab + every tab of that window (position, title, site): "switch to the Facebook tab" picks by name
+  const all = await chrome.tabs.query({ lastFocusedWindow: true });
+  const tab = all.find((t) => t.active);
+  const tabs = all.map((t) => ({ i: t.index + 1, title: (t.title || "").slice(0, 120), url: (t.url || "").slice(0, 300) }));
+  if (tab) send(tab.url, tab.title, tabs);
 }
 
 chrome.tabs.onActivated.addListener(report);
-chrome.tabs.onUpdated.addListener((_id, info, tab) => { if (tab.active && (info.url || info.title)) report(); });
+chrome.tabs.onUpdated.addListener((_id, info) => { if (info.url || info.title) report(); });
+chrome.tabs.onCreated.addListener(report);
+chrome.tabs.onRemoved.addListener(report);
+chrome.tabs.onMoved.addListener(report);
 chrome.windows.onFocusChanged.addListener((w) => { if (w !== chrome.windows.WINDOW_ID_NONE) report(); });
 chrome.windows.onRemoved.addListener(async () => { if (!(await chrome.windows.getAll()).length) send("", ""); });
 chrome.runtime.onStartup.addListener(report);

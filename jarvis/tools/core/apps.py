@@ -35,6 +35,7 @@ TABLE = {
     "close": Act("close_app", lambda a: {"name": a.get("target")}),
     "kill": Act("kill_app", lambda a: {"name": a.get("target"), "force": True}),
     "window": Act("window", lambda a: {"action": a.get("how", "focus"), "name": a.get("target")}),
+    "tab": Act("app_control", lambda a: {"action": "shortcut", "text": f"tab:{a.get('target') or a.get('text')}"}),
     "press": Act("app_control", lambda a: {"action": "press", "text": a.get("text") or a.get("target")}),
     "type": Act("app_control", lambda a: {"action": "type", "text": a.get("text"), "app": a.get("target")}),
     "click": Act("app_control", lambda a: {"action": "click", "text": a.get("text") or a.get("target")}),
@@ -44,13 +45,14 @@ TABLE = {
 
 @tool(group="core", safety="safe",
       description="Open an app, website or folder by name; close or force-kill an app; arrange a window "
-                  "(minimize/maximize/left/right/focus, or the home screen = desktop); browser tab N = press ctrl+N; press keys, type or click in the app in front; install an app.")
-def apps(action: Literal["open", "close", "kill", "window", "press", "type", "click", "install"], target: str = "",
+                  "(minimize/maximize/left/right/focus, or the home screen = desktop); switch to a browser tab by name or number (tab); press keys, type or click in the app in front; install an app.")
+def apps(action: Literal["open", "close", "kill", "window", "tab", "press", "type", "click", "install"], target: str = "",
          how: str = "", text: str = "") -> str:
     """Apps, websites, folders and windows.
 
     Args:
-        action: open, close, kill (force), window, press (keys like 'ctrl+v', 'enter'), type, click, install.
+        action: open, close, kill (force), window, tab (switch to a browser tab: target = its name or number), press
+            (keys like 'ctrl+v', 'enter'), type, click, install.
         target: App / website / folder name ('brave', 'youtube', 'tara'), or several sites 'youtube, facebook'.
         how: open: the app to open it IN ('vscode' for a folder/file in VS Code); window: focus, minimize, maximize,
             left, right, restore, list, desktop (go to the home screen); install: install, remove, search, update.

@@ -777,3 +777,8 @@ Phases (one at a time, owner tests after each):
       "Opening <name>", "is now active". (3) Ctrl+Alt+K opened the chat without the keyboard (Wnck: Brave kept focus):
       a signal has no event time, so the window manager refused focus; the X server time is used now (Wnck: kurama-mini
       focused). Not fixed: tab switching by name ("switch to the Facebook tab" needs the extension's tabs API).
+- [x] 2026-11-01 10:15 Browser + screen control: extension 1.3 reports every tab (reload it once in
+      brave://extensions); "switch to / close the <name> tab", "what tabs are open", "scroll down/up (a lot)" are
+      0-token actions by meaning; keys go to the app below KURAMA's chat when the chat is in front; "press super key"
+      (and the "P.S. Super Key" mishearing); finishing window/app actions reply with the tool's own words (no claims
+      of what another tool did). Tests: tests/test_tabs_and_scroll.py, tests/test_screen_actions.py.

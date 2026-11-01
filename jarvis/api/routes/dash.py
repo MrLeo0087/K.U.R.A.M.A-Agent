@@ -385,7 +385,8 @@ async def context_tab(request: Request):
     url = str(d.get("url") or "")
     if url and not url.startswith(("http://", "https://")):  # brave://, file://, new tab: no page to talk about
         url = ""
-    await run_in_threadpool(browsertab.put, url, str(d.get("title") or ""), str(d.get("browser") or ""))
+    tabs = [t for t in (d.get("tabs") or []) if isinstance(t, dict)][:100]
+    await run_in_threadpool(browsertab.put, url, str(d.get("title") or ""), str(d.get("browser") or ""), tabs)
     return {"ok": True}
 
 

@@ -562,7 +562,12 @@ class Agent:
             if text.lower().startswith(("error", "the user", "refused")):
                 return ""  # something went wrong: let the model explain it
             tool_name, args = real[m.tool_call_id]  # a general tool's call is worded as the action it ran
+            if str(args.get("action") or "") in config.DIRECT_REPLY_STEPS.get(tool_name, ()):
+                return ""  # a step of something bigger ('switch to Brave' before 'open a new tab'): the AI goes on
             intent = config.DIRECT_REPLY_TOOLS[tool_name]
+            if intent == "said":  # the tool's own sentence
+                said.append(text[:1].upper() + text[1:])
+                continue
             if intent == "audio":  # one tool, three kinds of reply
                 intent = "mic" if args.get("target") == "mic" else (
                     "volume" if args.get("action", "get") in ("get", "set", "up", "down") else "mute")
