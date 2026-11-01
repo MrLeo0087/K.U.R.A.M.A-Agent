@@ -93,7 +93,30 @@ def addressed(text: str) -> bool:
         it = fastpath.match(text)
     except Exception:  # noqa: BLE001
         return True
-    return it is not None and it.tool != "_say"
+    if it is not None and it.tool != "_say":
+        return True
+    try:
+        return _means_it(text)
+    except Exception:  # noqa: BLE001 - the meaning model is a bonus
+        return False
+
+
+def _means_it(text: str) -> bool:
+    """By MEANING, not words: a greeting / 'how are you' said to an assistant (the owner's 'Hello buddy', 'Hello, how
+    are you?' were dropped as room talk, stt.log 08:08), or a clear request ('Hello, shut down the laptop.' 10-30).
+    A bare 'okay' / 'cool' and talk that means no action ('the middle of the middle is number 18') stay ignored."""
+    from jarvis.core import config, semantic, templates
+    if not semantic.ensure_ready():
+        return False
+    first = re.split(r"[,.!?;]", text, maxsplit=1)[0]  # "Hello Namaste, my name is ..." greets in its first part
+    for part in {text, first}:
+        st = templates.small_talk(part)
+        if st and st.get("en") != "👍":
+            return True
+    ranked = semantic.scores(text)
+    chat = next((s for g, s in ranked if g == semantic.CHAT), 0.0)
+    top = next((s for g, s in ranked if g != semantic.CHAT), 0.0)
+    return top >= config.AMBIENT_ACTION_MIN and top >= chat + config.AMBIENT_OVER_CHAT
 
 
 def reply_lang(text: str, hint: str | None = None) -> str:

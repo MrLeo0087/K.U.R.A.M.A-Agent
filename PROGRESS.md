@@ -735,3 +735,8 @@ Phases (one at a time, owner tests after each):
       this_page = summary, save_link reads the open page; a tool-less answer in a saved-things area (links, to-dos,
       reminders, jobs, money) is retried with the tools. "save this video link as X" no longer downloads.
       Scorecard 67% / 100% / 98%; 1206 tests pass. Live: cold first request saved in 1 s, 0 tokens.
+- [x] 2026-11-01 08:20 Talk mode dropped the owner's "Hello buddy" / "Hello, how are you?" as room talk (stt.log 08:08;
+      also 10-30 "Hello, shut down the laptop."): the gate accepted only the name, a word list of request openers or a
+      shortcut that isn't small talk. Now by MEANING too: a greeting / how-are-you (small-talk examples, not a bare
+      "okay") or a clear action (area >= 0.80 and above chat; room talk scored 0.65-0.72). The morning greeting no
+      longer says "ready when you are" twice.

@@ -6,7 +6,7 @@ from datetime import datetime
 
 OPEN = {
     "morning": ("Good morning", "Morning", "Good morning, sir", "Rise and shine", "Hello, good morning", "Top of the morning",
-                "Good morning! Hope you slept well", "Morning, boss", "A fresh morning", "Good morning, ready when you are"),
+                "Good morning! Hope you slept well", "Morning, boss", "A fresh morning", "Good morning, nice to see you"),
     "afternoon": ("Good afternoon", "Afternoon", "Good afternoon, sir", "Hey, good afternoon", "Hello there",
                   "Afternoon, boss", "Good to see you this afternoon", "Hi, hope the day is going well"),
     "evening": ("Good evening", "Evening", "Good evening, sir", "Hey, good evening", "Welcome back this evening",

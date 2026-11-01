@@ -1135,7 +1135,11 @@ MEANING_SHORTCUTS: dict[str, tuple[str, ...]] = {
 }
 MEANING_SHORTCUT_AREAS = {"save_link": "links", "list_links": "links", "read_later_add": "links", "copy_path": "clipboard",
                           "open_vscode": "files", "jobs_start": "jobs", "jobs_list": "jobs"}  # the router offers it too
-MEANING_SHORTCUT_MIN = 0.82  # this close to the action's examples (bge-small cosine) to run it without the AI
+MEANING_SHORTCUT_MIN = 0.82
+# talk mode, speech long after KURAMA spoke: it is for KURAMA if it greets it or clearly MEANS an action (calibrated on
+# stt.log 10-30..11-01: 'Hello, shut down the laptop.' power 0.88; room talk 0.65-0.72)
+AMBIENT_ACTION_MIN = 0.80
+AMBIENT_OVER_CHAT = 0.05  # this close to the action's examples (bge-small cosine) to run it without the AI
 QUEUE_EXAMPLES: dict[str, tuple[str, ...]] = {
     "later": ("add a job: write an essay about Nepal", "keep this job for later", "put this in your job list",
               "add to my job list: research black holes and send it to telegram", "save this as a job, don't start it",
