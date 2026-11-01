@@ -14,7 +14,7 @@ edits: never commit or overwrite them.
 `MONITORING.md` has the paste-in prompt, every data source and the fix table. In short:
 `venv/bin/python scripts/trace_report.py --days 3` (traces + side logs: data/logs/stt.log, wake.log, ptt.log, fm.log,
 the job list), `--show <id>`; live check: `curl -sN -X POST http://127.0.0.1:8000/api/v1/chat -H 'Content-Type:
-application/json' -d '{"text":"..."}'`; tests `venv/bin/python -m pytest -q` (~1100, ~2.5 min; related files first);
+application/json' -d '{"text":"..."}'`; tests `venv/bin/python -m pytest -q` (~1400, ~3.5 min; related files first);
 scorecard `venv/bin/python -m tests.eval.harness` (65% instant / 100% right / 98% router: must not drop).
 
 ### Done 2026-10-31 / 11-01 (details: PROGRESS.md, MONITORING.md "How KURAMA works now")
@@ -33,6 +33,15 @@ greetings by meaning; free RAM / `/clear ram|storage|kurama`. `LEARN.md` = the a
 Test round 1 + its fixes, tabs / scroll / home screen / Super key, Colab-Kaggle cell, Ctrl+Alt+L focus toggle,
 clipboard kept, qwen fallback, hang guard. Details: PROGRESS.md (11-01 entries), MONITORING.md "Since the last
 report". The owner now uses KURAMA for a few days; the next session reads the traces (MONITORING.md prompt).
+
+### Done 2026-11-01 evening/night: memory + multitasking rebuild (3 phases; LEARN.md sections 3, 4, 10, 11)
+Phase 1 working memory (jarvis/core/workmem.py: things from every tool call, choices, KURAMA's open question routes
+short replies, tool lines in history, laptop chat resumes; private files / keys never in context). Phase 2 task graph
+(jarvis/core/taskgraph.py + agent schedule -> step -> finish; config.TASK_GRAPH=False = old chains). Phase 3 Gemini
+fallback after gpt-oss (GEMINI_API_KEY), cooldown of used-up models, direct replies for short actions, text tool only
+by meaning, 0-token Telegram message. LEARN.md rewritten so the owner can run and improve KURAMA alone. Next: read
+the traces for problems with these (MONITORING.md "Since the last report"). The owner should make a new Groq key
+(the old one leaked into a reply on 11-01, masked in data/ since).
 
 ### Unproven / watch in the next report (see MONITORING.md "Watch in the next report (round 2)")
 - Hold-to-talk: a caption auto-hide timer fired during a hold (ptt.log); hides are now blocked while Ctrl is held and

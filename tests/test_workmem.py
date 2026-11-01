@@ -42,6 +42,7 @@ def test_only_real_paths_of_calls_that_worked(files):
     many = "\n".join(str(p) for p in (files.img, files.folder, files.doc, files.img.parent))
     workmem.record_call("find_files", {"query": "x"}, True, many)  # a listing is not a thing it made
     workmem.record_call("_say", {"text": str(files.img)}, True, str(files.img))
+    workmem.record_call("text_assist", {"path": "/"}, True, "Read / and /media")  # never the root or a top folder
     assert workmem.things() == [] and workmem.line() == ""
 
 

@@ -1,8 +1,10 @@
 # KURAMA monitoring
 
 Every request to KURAMA is recorded as one **trace**, and the voice, wake word, hold-to-talk, Files app and job list
-keep small side logs. After 2-3 days of normal use, a Claude Code session reads them, finds what went wrong, proves
-the cause and fixes the class of problem. Tracing started with v2 on **2026-10-29**; the side logs on **2026-11-01**.
+keep small side logs. Every 2-3 days of normal use, read them, find what went wrong, prove the cause and fix the
+class of problem: **yourself** (section "Do it yourself" below, and LEARN.md sections 19-20) or with a Claude Code
+session (the prompt below). Tracing started with v2 on **2026-10-29**; the side logs on **2026-11-01**; step results,
+answers to KURAMA's questions and the model per call since the memory + multitasking rebuild (**2026-11-01 night**).
 
 ## Prompt to paste into a new Claude Code session
 
@@ -15,7 +17,9 @@ the cause and fixes the class of problem. Tracing started with v2 on **2026-10-2
 >
 > Tell me in short, simple English the top problems I hit in the last days, grouped by CLASS (wrong tool / area,
 > no tool, a mistake I corrected, dropped or misheard speech, wake word misses, hold-to-talk cut-outs, Files
-> "this folder" picking the wrong thing, job list failures, slow or expensive requests), with trace ids or log lines
+> "this folder" picking the wrong thing, "it / that image" pointing at the wrong thing, multi-step requests with
+> failed / skipped steps, short replies ("yes") routed wrongly, model fallbacks (gemini / qwen in use), job list
+> failures, slow or expensive requests), with trace ids or log lines
 > as proof, the root cause of each (proven from traces / logs / code, not guessed) and the fix you suggest. Also list
 > AI requests that should become 0-token shortcuts. If a cause can't be proven, say what evidence is missing.
 >
@@ -51,12 +55,12 @@ the cause and fixes the class of problem. Tracing started with v2 on **2026-10-2
 | `channel`, `mode` | `telegram` or empty (the laptop); `text` / `voice` / `talk` |
 | `text` | what the user said, as KURAMA got it (after speech-to-text for voice) |
 | `path` | `fastpath` (instant shortcut or `/command`, 0 tokens), `multi` (several tasks split), `ai` (the agent), `no_ai` (AI switched off), `error` |
-| `intent` | the shortcut's intent name, or the first tool the AI called |
-| `route_method`, `route_groups` | how the router decided (`rules`, `semantic`, `classifier`, `meta` = the AI asked for tools, `fastpath`) and the tool groups it picked |
+| `intent` | the shortcut's intent name (`choice` = a pick from KURAMA's numbered list, `tgmsg` = Telegram message...), or the first tool the AI called |
+| `route_method`, `route_groups` | how the router decided (`rules`, `semantic`, `classifier`, `meta` = the AI asked for tools, `fastpath`, `answer` = a short reply routed by KURAMA's own question, `followup`, `graph` = a multi-step request) and the tool groups it picked |
 | `tools_sent` | the tools the AI was given (at most 3 of the 17 general tools) |
 | `tools` | every tool that ran: name, args, ok, ms, outcome (`allowed` / `denied` / `blocked` / `error`), first 300 chars of the result, `safety: confirm` when it asked yes/no |
-| `plan` | the split of a multi-task request |
-| `tier`, `llm_calls`, `tokens_in`, `tokens_out`, `tokens`, `llm` | AI size, number of AI calls, tokens, and each call: model, purpose (`agent_text`, `router`, `planner`, `summary`...), tokens, ms, error |
+| `plan` | a multi-task request: `method` (`rules` / `learned` = 0-token plan, `llm` = one planning call, `single`), `tasks` with `depends_on`, `steps` (`1:ok 2:skipped 3:waiting 4:after`), `replanned` (`from` → `to`) |
+| `tier`, `llm_calls`, `tokens_in`, `tokens_out`, `tokens`, `llm` | AI size, number of AI calls, tokens, and each call: model (gpt-oss / **gemini** / qwen), purpose (`agent_text`, `router`, `planner`, `replan`, `summary`...), tokens, ms, error |
 | `retried` | 1 = the AI said "I can't" or claimed an action without a tool, so it was retried with tools |
 | `asked`, `denied` | a yes/no question was asked / the user said no |
 | `jobs` | background jobs started (essays, images, videos...) |
@@ -78,7 +82,9 @@ venv/bin/python -m tests.eval.harness                   # the scorecard (0 token
 
 Traces part: totals, errors, **likely mistakes** (a request followed within 2 min by a correction: the most valuable
 rows), commands answered without a tool, retries, "no" to yes/no questions, failed tool calls, slowest, most tokens,
-requests asked the AI most often (0-token shortcut candidates), tools used.
+**multi-step requests with a failed / skipped / waiting step or a re-plan**, multi-step plan methods, **short
+replies routed by KURAMA's question** (route `answer`), **choices**, **models used** (with failures), requests asked
+the AI most often (0-token shortcut candidates), tools used.
 Side part: speech drops, wake checks (woke / no match / too quiet / rate-limited), hold-to-talk (caption hides,
 mic failures, page reloads), Files reads with several windows (window guessed), the job list (failed jobs + why).
 
@@ -117,8 +123,30 @@ every tool of that kind, not just the sentence in the trace.
 | Hold-to-talk stops / sticks | `jarvis/core/ptt.py` (keys), `scripts/kurama_wallpaper.py` `Mini.ptt` / `Caption`, `kuramaPTT` in `frontend/app.js` |
 | "this folder / file" wrong | `scripts/kurama_fm.py` (window, selection), `jarvis/core/filemanager.py`, `focus.refer` |
 | A job-list job failed | `jarvis/core/jobqueue.py` (runner, retries, Telegram questions) |
+| "it / that image / the folder" pointed at the wrong thing | `workmem.py` (what was recorded: is the full path in the tool's result?), `focus.refer` order, `WORKMEM_FRESH_S` |
+| "yes" got the wrong tools / "nothing waiting" | `agent._open_question` (`_OFFER`, `QUESTION_TTL_S`), route method `answer` in `_route_node` |
+| A pick from a list ("2") did nothing | `workmem.choose` / `_offer` (the list must be numbered real paths) |
+| Tasks split / linked wrongly | `planner.py` (`split_clauses`, `_REF`, `PLAN_PROMPT`, `parts`), `FILLER_EXAMPLES` |
+| A step failed / was skipped wrongly | `taskgraph.judge` (claims, `error:` results: `workmem._FAILED`), `taskgraph.settle` |
+| A learned plan was reused wrongly | `data/learned_plans.json` (delete the row), `TASK_PLAN_MATCH` |
+| Requests fail on a model that hit its limit | `llm._chain` / `_on_error` (cooldown), `TIER_CHAIN`, `LLM_COOLDOWN_S` |
+| A short action's reply needed the AI's wording | `config.DIRECT_REPLY_SINGLE` / `DIRECT_REPLY_STEPS` / `DIRECT_REPLY_MAX_WORDS` |
+| A request about the open file got no text tool | `agent._about_context` (`CONTEXT_TOOL_SEL_MIN`, `CONTEXT_TOOL_MARGIN`) |
+| A key / private file showed up in a reply | `jarvis/tools/interactive/_secrets.py` (`private`, `private_file`), `context.snapshot`, `rewrite.peek/grab` |
 
-## How KURAMA works now (2026-11-01)
+## How KURAMA works now (2026-11-01, after the memory + multitasking rebuild)
+
+- **Short-term memory** (LEARN.md section 3): working memory of real things (`workmem.py`), choices, KURAMA's open
+  question routes short replies, tool lines in history, the laptop chat resumes after a restart.
+- **Multitasking** (LEARN.md section 4): the task graph (`taskgraph.py` + agent `schedule → step → finish`): steps
+  get what the steps they need made, shortcut first, no chat history, checked, one re-plan, skipped with the reason,
+  follow-up jobs, learned plans, filler by meaning, "close X" only closes what the plan opened.
+- **Models** (LEARN.md section 10): gpt-oss → Gemini → qwen; used-up models cool down.
+- **Tokens** (LEARN.md section 11): direct replies for short actions, the text tool only by meaning, 0-token
+  Telegram messages.
+- **Privacy**: private files (.env, keys) and highlighted keys never reach the AI.
+
+Older notes (still true):
 
 - **Routing:** meaning first (`semantic.py`) + learned wordings; typos are read as the nearest area word for routing
   (`router.fix_typos`, never real English words); word rules only add candidates. Areas served by two general tools
@@ -213,10 +241,48 @@ every tool of that kind, not just the sentence in the trace.
 - **Still open from round 1**: Alt-Tab pressed but no switch (needs a look at what the window manager did); the AI
   sometimes refuses with its tools in hand ("I can't save without a URL"): more 0-token meaning actions are the fix.
 
+## Do it yourself (without Claude)
+
+The routine (every 2-3 days, ~15 minutes) is in LEARN.md section 20. Handy queries on `data/traces.db` (open it with
+`venv/bin/python` + `sqlite3`, or any SQLite viewer):
+
+```bash
+# tokens and AI requests per day
+venv/bin/python - <<'PY'
+import sqlite3; c=sqlite3.connect("data/traces.db")
+for r in c.execute("select day, count(*), sum(tokens), sum(path='ai'), sum(path='fastpath') from traces group by day order by day desc limit 7"): print(r)
+PY
+
+# multi-step requests and how their steps ended
+venv/bin/python - <<'PY'
+import sqlite3, json; c=sqlite3.connect("data/traces.db")
+for i, t, p in c.execute("select id, text, plan from traces where path='multi' order by ts desc limit 15"):
+    p = json.loads(p or "{}"); print(i, p.get("method"), p.get("steps"), t[:60])
+PY
+
+# which models answered (gemini / qwen = Groq used up) and which failed
+venv/bin/python - <<'PY'
+import sqlite3, json, collections; c=sqlite3.connect("data/traces.db"); n=collections.Counter()
+for (l,) in c.execute("select llm from traces where ts > strftime('%s','now','-3 days')"):
+    for x in json.loads(l or "[]"): n[(x["model"], x["ok"])] += 1
+print(n.most_common())
+PY
+
+# what KURAMA remembers right now (working memory) and a waiting choice
+venv/bin/python -c "from jarvis.core import workmem; print(workmem.things()[:5]); print(workmem.choice())"
+```
+
+Rules that keep fixes healthy: fix the class (every phrasing, every tool of that kind), by meaning (examples, tool
+descriptions) before words, a test with 3+ of your real phrasings, the full suite + the scorecard green, one live
+check, a line in PROGRESS.md and in the Fix history.
+
 ## Known shortcuts that are still word patterns (replace them by meaning when touched)
 
-`fastpath.link_play_intent`, `fastpath.clean_intent`, `fastpath.to_file_intent`, `fastpath._code_not_file`, the "this
-video now" rule in `video_dl_intent`, the filler-word list in `tools/general/video_download.py`.
+`fastpath.link_play_intent`, `fastpath.clean_intent`, `fastpath.to_file_intent` (since 11-01 the "into the file" part
+must be in the same clause as the write request: "create folder X and open it in vs code" is two tasks),
+`fastpath._code_not_file`, the "this video now" rule in `video_dl_intent`, the filler-word list in
+`tools/general/video_download.py`, the Telegram message extraction (`fastpath.tg_message_text`: which words are the
+message; the action itself is chosen by meaning), the reference nouns (`workmem._NOUNS`, `focus.is_anaphora`).
 
 ## Which document to update (after every fix)
 
@@ -263,3 +329,9 @@ video now" rule in `video_dl_intent`, the filler-word list in `tools/general/vid
   Downloads" with no tool is now caught as a claim; "list files in this folder" is its own task.
 - 2026-11-01 20:20: memory rebuild Phase 3: Gemini fallback (after gpt-oss, before qwen), used-up models skipped
   (cooldown), direct replies for short single actions, text tool only by meaning, 0-token Telegram message.
+- 2026-11-01 20:35: LEARN.md rewritten for the rebuild (short-term memory, task graph, models, tokens, privacy, the
+  do-it-yourself routine); the trace's `plan` column now holds step results and re-plans, and the report shows
+  multi-step problems, answers routed by KURAMA's question, choices and models. Fixed: "create a folder X in
+  downloads and open it in vs code" was taken as "write code into the file" (one request) instead of two tasks;
+  root folders ("/") are never remembered as "it".
+

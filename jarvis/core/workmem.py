@@ -111,7 +111,8 @@ def note(path: str | Path, by: str = "") -> dict | None:
     """Remember a real file/folder KURAMA made or touched (ignored when it doesn't exist)."""
     try:
         p = Path(str(path)).expanduser()
-        if not p.is_absolute() or not p.exists() or str(p).startswith(_SKIP_ROOTS) or p == Path.home():
+        if not p.is_absolute() or not p.exists() or str(p).startswith(_SKIP_ROOTS) or p == Path.home() \
+                or len(p.parts) < 3:  # '/', '/home', '/media': never "it" (text_assist once left '/')
             return None
         p = p.resolve()
         item = {"p": str(p), "k": kind_of(p), "by": by, "t": time.time()}

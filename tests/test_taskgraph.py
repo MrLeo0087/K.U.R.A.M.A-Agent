@@ -187,3 +187,19 @@ def test_the_owners_folder_request_plans_with_no_ai(monkeypatch):
     assert p.method == "rules" and p.tasks == [
         {"text": "create a new folder in download folder name new_project2", "kind": "quick"},
         {"text": "open this folder in vs code", "kind": "quick", "depends_on": [0]}]
+
+
+@pytest.mark.parametrize("text", ["create a folder test in downloads and open it in vs code",
+                                  "make a folder reports and then open it in vs code"])
+def test_open_it_in_vs_code_after_a_folder_is_two_tasks_not_code(text):
+    from jarvis.core import fastpath
+    assert fastpath.to_file_intent(text) is None and planner.is_multi(text)
+
+
+@pytest.mark.parametrize("text", ["write a function that adds two numbers and put it in this file",
+                                  "create a calculator code and write it in the open file"])
+def test_code_into_the_open_file_stays_one_request(monkeypatch, text):
+    from jarvis.core import assist, fastpath
+    monkeypatch.setattr(assist, "pending_code_active", lambda: False)
+    assert fastpath.to_file_intent(text) is not None
+

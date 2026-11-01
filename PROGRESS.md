@@ -887,4 +887,16 @@ Phases (one at a time, owner tests after each):
       paths are never sent as words). Live: "send hello to telegram" 0 tokens (was 1,323); with gpt-oss used up,
       Gemini answered (1,275 tokens, no failed calls first). Telegram timing: getMe 0.2-0.8 s; the one 6 s send was
       13 s after a restart (startup load). Tests: test_phase3.py (29); suite 1407 passed; scorecard 68% / 100% / 98%.
+- [x] 2026-11-01 20:35 LEARN.md rewritten for the rebuild, so the owner can run and improve KURAMA alone: new sections
+      on short-term memory (5 layers, how things are recorded and resolved, answers to questions, resume), the task
+      graph (plan, steps, checks, re-plan, skip, follow-ups, learned plans, the 6-step example), the models (chains,
+      cooldown), tokens (where they go, every cut), privacy, and a do-it-yourself monitoring routine; file table,
+      dependency map, "I want to change X", debugging snippets (plan a sentence, read working memory) and glossary
+      updated. MONITORING.md: trace fields (plan steps / replanned, route `answer`, intent `choice`, models), new
+      fix-table rows, "Do it yourself" queries. The trace's plan column now stores step results + re-plans;
+      trace_report.py shows multi-step problems, answers routed by the question, choices and models. Found while
+      checking the guide's snippets: "create a folder X in downloads and open it in vs code" was taken as "write
+      code into the file" (to_file_intent: the "in vs code" of the second clause + "it") -> the "into the file" part
+      must be in the same clause as a write request; '/' was remembered as a thing (text_assist) -> top folders are
+      never things. Tests: +5; suite and scorecard below.
 

@@ -3145,7 +3145,10 @@ def to_file_intent(text: str) -> Intent | None:
         if not context.snapshot()["selection"] and context.editor_open():  # selected code: assist completes that
             return Intent("tofile", "code_to_file", "clipboard", {"request": t})
     bare = _VSCODE_NAME.sub(" ", t)  # the 'code' in 'VS Code' is the app's name, not a request for code
-    if not (_CODE_ASK.search(bare) and _CODE_WORD.search(bare) and _INTO_FILE.search(t)):
+    from jarvis.core.planner import split_clauses  # the ask and 'into the file' must be in ONE part: 'create a folder
+    one = any(_CODE_ASK.search(_VSCODE_NAME.sub(" ", c)) and _INTO_FILE.search(c)  # X and OPEN it in vs code' is two
+              for c in split_clauses(t))  # tasks, not code: the part saying 'into the file' must ask to write (11-01)
+    if not (one and _CODE_ASK.search(bare) and _CODE_WORD.search(bare) and _INTO_FILE.search(t)):
         return _TO_FILE.fullmatch(t.strip(" .!?")) and Intent("tofile", "code_to_file", "clipboard", {"request": t}) or None
     p = re.search(r"(?<!\w)(/[^\s]+\.\w{1,5})\b", t)
     return Intent("tofile", "code_to_file", "clipboard", {"request": t, "path": p.group(1) if p else ""})

@@ -122,6 +122,37 @@ def report(rows: list[dict], days: float) -> str:
              for r in sorted((r for r in rows if not r["asked"]), key=lambda r: -r["ms"])[:10]])
     section("Most tokens", [f"  {r['id']} {r['tokens']} tok ({r['llm_calls']} calls) {short(r['text'], 60)!r}"
                             for r in sorted(ai, key=lambda r: -r["tokens"])[:10]])
+    # --- memory + multitasking rebuild (11-01): how the task graph, answers and models behaved ---
+    steps = []
+    for r in rows:
+        plan = json.loads(r["plan"] or "{}") if r.get("plan") else {}
+        st = plan.get("steps") or []
+        if any(not x.endswith(":ok") for x in st) or plan.get("replanned"):
+            re_ = f" re-planned {plan['replanned'][0]['from'][:30]!r}→{plan['replanned'][0]['to'][:30]!r}" \
+                if plan.get("replanned") else ""
+            steps.append(f"  {r['id']} [{plan.get('method')}] {' '.join(st)}{re_} {short(r['text'], 50)!r}")
+    section("Multi-step requests with a failed / skipped / waiting step (or a re-plan)", steps)
+    multi = [r for r in rows if r["path"] == "multi"]
+    if multi:
+        meth = Counter((json.loads(r["plan"] or "{}") or {}).get("method") for r in multi)
+        add(f"Multi-step plans: {len(multi)} · " + ", ".join(f"{k} {v}" for k, v in meth.most_common())
+            + " (rules/learned = 0-token plan)")
+    section("Short replies routed by KURAMA's own question (route 'answer': check the tools fit the question)",
+            [f"  {r['id']} {short(r['text'], 30)!r} → {r['route_groups']} → {short(r['answer'], 50)!r}"
+             for r in rows if r["route_method"] == "answer"])
+    section("Choices picked from a list ('2', 'the second one')",
+            [f"  {r['id']} {short(r['text'], 30)!r} → {short(r['answer'], 60)!r}" for r in rows if r["intent"] == "choice"])
+    models: Counter = Counter()
+    failed: Counter = Counter()
+    for r in rows:
+        for c in json.loads(r["llm"] or "[]") if r.get("llm") else []:
+            models[c.get("model", "?")] += 1
+            if not c.get("ok"):
+                failed[c.get("model", "?")] += 1
+    if models:
+        add("")
+        add("Models: " + ", ".join(f"{m} {v}" + (f" ({failed[m]} failed)" if failed[m] else "") for m, v in models.most_common())
+            + "  (gemini / qwen in use = Groq's gpt-oss limit was used up)")
     norm = Counter(re.sub(r"[^\w\s]", "", (r["text"] or "").lower()).strip() for r in ai)
     section("Asked the AI most often (make these 0-token shortcuts)",
             [f"  {v}× {k!r}" for k, v in norm.most_common(15) if v > 1])

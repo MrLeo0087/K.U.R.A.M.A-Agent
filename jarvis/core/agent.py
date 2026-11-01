@@ -300,6 +300,10 @@ class Agent:
                     final[i].update(status="failed", answer=TASK_FAILED.format(text=tasks[i]["text"]))
         self.last["steps"] = [{"idx": i, "status": final[i]["status"], "things": final[i].get("things") or []}
                               for i in sorted(final)]
+        if isinstance(self.last.get("plan"), dict):  # the trace's plan column shows how each step ended
+            self.last["plan"]["steps"] = [f"{i + 1}:{final[i]['status']}" for i in sorted(final)]
+            if self.last.get("replanned"):
+                self.last["plan"]["replanned"] = self.last["replanned"]
         self.last.setdefault("jobs", []).extend(r["job"] for r in final.values() if r.get("long") and r.get("job"))
         if (self.last.get("plan") or {}).get("method") == "llm" and all(r["status"] in ("ok", "waiting", "after")
                                                                          for r in final.values()):
