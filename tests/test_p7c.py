@@ -63,7 +63,7 @@ def tg(monkeypatch):
     monkeypatch.setattr(config, "TELEGRAM_BOT_TOKEN", "123:abc")
     monkeypatch.setattr(config, "TELEGRAM_CHAT_ID", "42")
     monkeypatch.setattr(notify, "telegram_call",
-                        lambda method, payload=None, timeout=None, files=None: sent.append(
+                        lambda method, payload=None, timeout=None, files=None, upload=False: sent.append(
                             (method, payload, {k: v[0] for k, v in (files or {}).items()}, time.monotonic())) or {"ok": True})
     return sent
 

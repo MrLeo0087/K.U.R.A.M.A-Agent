@@ -1,6 +1,7 @@
 """send_file_telegram (P7c): send a local file to the user's Telegram (sendPhoto / sendDocument)."""
 from __future__ import annotations
 
+import logging
 import re
 import time
 from pathlib import Path
@@ -8,6 +9,8 @@ from pathlib import Path
 from jarvis.core import config, notify
 from jarvis.core.registry import alias, tool
 from jarvis.tools.general import _files, _tg
+
+log = logging.getLogger(__name__)
 
 PHOTO_EXT = {".jpg", ".jpeg", ".png", ".webp"}
 PHOTO_MAX = 10 * 1024 * 1024  # Bot API sendPhoto limit
@@ -211,6 +214,28 @@ def send_file_telegram(path: str = "", caption: str = "", pick: int = 0) -> str:
     return find_and_send(cleaned, want=want)
 
 
+def _small_photo(p: Path) -> bytes:
+    """A photo as Telegram will show it anyway (it recompresses every photo to at most 1280 px): resized and saved as
+    JPEG before the upload, so a slow uplink sends ~150 KB instead of 0.4-5 MB. Small photos go as they are."""
+    raw = p.read_bytes()
+    if len(raw) <= config.TELEGRAM_PHOTO_KEEP_KB * 1024:
+        return raw
+    try:
+        import io
+
+        from PIL import Image  # lazy: only when a big photo is sent
+        with Image.open(io.BytesIO(raw)) as im:
+            im = im.convert("RGB")
+            im.thumbnail((config.TELEGRAM_PHOTO_PX, config.TELEGRAM_PHOTO_PX))
+            out = io.BytesIO()
+            im.save(out, "JPEG", quality=85, optimize=True)
+        small = out.getvalue()
+        return small if len(small) < len(raw) else raw
+    except Exception as e:  # noqa: BLE001  (not a real image / Pillow missing: send the file as it is)
+        log.info("photo not shrunk (%s): sending %s as it is", e, p.name)
+        return raw
+
+
 def deliver(p: Path, caption: str = "") -> str:
     """Upload one checked file to the user's chat (photos as pictures, the rest as documents).
     A file over Telegram's limit is uploaded to a file host and sent as a download link instead."""
@@ -219,9 +244,10 @@ def deliver(p: Path, caption: str = "") -> str:
     photo = p.suffix.lower() in PHOTO_EXT and p.stat().st_size <= PHOTO_MAX
     method, field = ("sendPhoto", "photo") if photo else ("sendDocument", "document")
     payload = {"chat_id": config.TELEGRAM_CHAT_ID, **({"caption": caption[:1000]} if caption else {})}
-    data = p.read_bytes()  # bytes, not a file object: a known length
+    data = _small_photo(p) if photo else p.read_bytes()  # bytes, not a file object: a known length
+    t0 = time.monotonic()
     try:  # ONE try, never a retry: Telegram answered "500" / timed out yet DELIVERED the file (owner got duplicates)
-        ok = notify.telegram_call(method, payload, files={field: (p.name, data)}, timeout=60)
+        ok = notify.telegram_call(method, payload, files={field: (p.name, data)}, timeout=60, upload=True)
     except RuntimeError as e:
         if re.search(r"\b5\d\d\b|Internal Server Error|Timeout|RemoteProtocol", str(e)):
             notify.telegram_send(f"📄 {p.name}: Telegram gave an error while uploading, so it may or may not have "
@@ -229,6 +255,10 @@ def deliver(p: Path, caption: str = "") -> str:
             return (f"Telegram gave an error while uploading {p.name} (its server); it may still have arrived. "
                     f"I told you on Telegram. Saved at {p}.")
         return f"error: Telegram didn't accept {p.name}: {e}"
+    finally:  # evidence for "it took minutes to arrive" (11-01: a 360 KB photo took 84 s once, 2.5 s on a re-test)
+        dt = time.monotonic() - t0
+        log.info("telegram upload: %s %.0f KB (file %.0f KB) in %.1f s (%.0f KB/s)", method, len(data) / 1024,
+                 p.stat().st_size / 1024, dt, len(data) / 1024 / max(dt, 0.01))
     if not ok:
         return f"error: Telegram didn't accept {p.name} (check the bot token/chat id or your internet)"
     # don't put the raw filename in the text: Telegram turns "x.zip" into a (dead) web link because .zip is a TLD.

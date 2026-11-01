@@ -54,8 +54,21 @@ def _http():
     return _client
 
 
+_upload_client = None
+
+
+def _upload_http():
+    """Its own connection for file uploads: never queued behind the bot's long poll on the shared client."""
+    global _upload_client
+    if _upload_client is None:
+        import httpx  # lazy
+
+        _upload_client = httpx.Client(timeout=httpx.Timeout(60.0, connect=10.0))
+    return _upload_client
+
+
 def telegram_call(method: str, payload: dict | None = None, timeout: float | None = None,
-                  files: dict | None = None) -> dict:
+                  files: dict | None = None, upload: bool = False) -> dict:
     """POST one Bot API method; returns the decoded "result" (raises RuntimeError on failure).
     files={"document": (name, fileobj)} sends multipart form data (sendDocument/sendPhoto)."""
     if not config.TELEGRAM_BOT_TOKEN:
@@ -63,8 +76,8 @@ def telegram_call(method: str, payload: dict | None = None, timeout: float | Non
     url = TELEGRAM_API.format(token=config.TELEGRAM_BOT_TOKEN, method=method)
     try:
         if files:
-            r = _http().post(url, data={k: str(v) for k, v in (payload or {}).items()}, files=files,
-                             timeout=timeout or 120)
+            r = (_upload_http() if upload else _http()).post(url, data={k: str(v) for k, v in (payload or {}).items()},
+                                                            files=files, timeout=timeout or 120)
         else:
             r = _http().post(url, json=payload or {}, timeout=timeout or config.HTTP_TIMEOUT_S)
         data = r.json()

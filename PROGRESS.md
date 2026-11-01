@@ -899,4 +899,11 @@ Phases (one at a time, owner tests after each):
       code into the file" (to_file_intent: the "in vs code" of the second clause + "it") -> the "into the file" part
       must be in the same clause as a write request; '/' was remembered as a thing (text_assist) -> top folders are
       never things. Tests: +5; suite and scorecard below.
+- [x] 2026-11-01 20:55 Owner: "send the image to telegram" took minutes. Evidence: job #44 (send_last_result) ran
+      84 s for a 354 KB photo; the file lookup takes 0.01 s and a re-test upload of the same photo took 2.5 s, so the
+      upload itself was slow at that moment (uplink busy), with nothing logged to show it. Fix (all file sends): photos
+      over 200 KB are resized to 1280 px JPEG before the upload (what Telegram shows anyway; that photo 354 -> 73 KB,
+      so ~5x less to push through a slow uplink); uploads get their own connection (never behind the bot's long poll
+      on the shared client); every upload logs "telegram upload: <method> <KB> in <s> (<KB/s>)" in server.log, so a
+      slow send next time shows whether it was the network. Test: test_phase3 (photo shrink). Suite 1412 passed.
 

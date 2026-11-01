@@ -334,4 +334,6 @@ message; the action itself is chosen by meaning), the reference nouns (`workmem.
   multi-step problems, answers routed by KURAMA's question, choices and models. Fixed: "create a folder X in
   downloads and open it in vs code" was taken as "write code into the file" (one request) instead of two tasks;
   root folders ("/") are never remembered as "it".
+- 2026-11-01 20:55: Telegram photos shrunk to 1280 px JPEG before upload (354 -> 73 KB), uploads on their own
+  connection, every upload logged with its speed (`grep "telegram upload" data/logs/server.log`).
 

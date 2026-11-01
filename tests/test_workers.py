@@ -39,7 +39,7 @@ def tg(monkeypatch):
     monkeypatch.setattr(config, "TELEGRAM_CHAT_ID", "42")
     api = {"updates": [], "sent": [], "calls": []}
 
-    def call(method, payload=None, timeout=None):
+    def call(method, payload=None, timeout=None, **kw):
         api["calls"].append(method)
         if method == "getUpdates":
             return api["updates"].pop(0) if api["updates"] else []

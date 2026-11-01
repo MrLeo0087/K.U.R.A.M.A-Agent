@@ -6,7 +6,7 @@ from langchain_core.messages import AIMessage, ToolMessage
 
 from jarvis.core import agent, config, fastpath, llm, semantic
 from tests.test_llm import MSGS, FakeClient, completion, err
-from tests.test_p7c import Responder, human, names, respond, roots, tc  # noqa: F401  (fixtures)
+from tests.test_p7c import Responder, human, names, respond, roots, tc, tg  # noqa: F401  (fixtures)
 
 GEM = "gemini-2.5-flash"
 
@@ -126,3 +126,21 @@ def test_telegram_message_text(text, msg):
                                   "send /home/leo/a.txt to telegram", "send https://x.com to telegram"])
 def test_a_thing_to_send_is_never_sent_as_words(text):
     assert fastpath.tg_message_text(text) is None
+
+
+def test_a_big_photo_is_shrunk_before_the_upload(tmp_path, roots, tg):  # noqa: F811
+    from PIL import Image
+    from jarvis.tools.general import send_file_telegram as sft
+    big = tmp_path / "dog.png"
+    Image.effect_noise((2400, 1600), 60).convert("RGB").save(big)  # noisy: a real-size file (~MBs)
+    small = tmp_path / "icon.jpg"
+    Image.new("RGB", (64, 64), "red").save(small)
+    data = sft._small_photo(big)
+    with Image.open(__import__("io").BytesIO(data)) as im:
+        assert max(im.size) == config.TELEGRAM_PHOTO_PX and im.format == "JPEG"
+    assert len(data) < big.stat().st_size / 3
+    assert sft._small_photo(small) == small.read_bytes()  # small photos go as they are
+    txt = tmp_path / "notes.png"
+    txt.write_bytes(b"not an image" * 30000)
+    assert sft._small_photo(txt) == txt.read_bytes()  # not a real image: sent unchanged
+    assert sft.deliver(big) == "Sent to your Telegram." and tg[-1][0] == "sendPhoto"
