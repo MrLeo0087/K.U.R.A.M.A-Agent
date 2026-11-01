@@ -17,13 +17,21 @@ DOC = config.ROOT / "docs" / "kurama_self.md"
 _state = {"pending": "", "pending_ts": 0.0, "unlocked_until": 0.0, "fails": 0}
 _PW_LEAD = re.compile(r"^(?:(?:the|my)\s+)?(?:password|passcode|pass|पासवर्ड)\s*(?:is|:|हो|है)?\s*|^(?:it'?s|it is)\s+",
                       re.I)
-_TRANSLIT = {"दर्शन": "darshan"}
+def _aliases() -> dict[str, str]:
+    """KURAMA_PASSWORD_ALIASES (.env): 'heard=meant' pairs, comma-separated (never in the code: the repo is public)."""
+    return {a.strip().lower(): b.strip().lower() for a, _, b in
+            (p.partition("=") for p in config.SELF_PASSWORD_ALIASES.split(",")) if a.strip() and b.strip()}
 
 
 def _norm_pw(text: str) -> str:
     t = re.sub(r"[^\w\s:']", " ", (text or "").strip().lower(), flags=re.U)
     t = _PW_LEAD.sub("", " ".join(t.split()))
-    return _TRANSLIT.get(t, t).replace(" ", "")
+    return _aliases().get(t, t).replace(" ", "")
+
+
+def hash_for(password: str) -> str:
+    """The value for KURAMA_PASSWORD_HASH in .env (python -m jarvis.core.selfknow asks for a new password)."""
+    return hashlib.sha256((config.SELF_PASSWORD_SALT + _norm_pw(password)).encode()).hexdigest()
 
 
 def check_password(text: str) -> bool:
@@ -154,3 +162,12 @@ def find_tools(need: str, k: int = 6) -> list[tuple[str, str, str]]:
 
 _STOP = set("""the and for you can with want need how what that this have does any some make tool tools
 your there about from into please would could should help like know tell use using""".split())
+
+
+if __name__ == "__main__":  # set a new owner password: prints the line to put in .env
+    import getpass
+    pw = getpass.getpass("New KURAMA password: ")
+    if pw and pw == getpass.getpass("Again: "):
+        print(f"Put this in .env (replace the old line), then restart KURAMA:\nKURAMA_PASSWORD_HASH={hash_for(pw)}")
+    else:
+        print("The two passwords were empty or different; nothing changed.")

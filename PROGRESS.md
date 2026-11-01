@@ -753,3 +753,8 @@ Phases (one at a time, owner tests after each):
       after 20 min hidden, and after every restart; ptt.log 02:37: ~1.7 s). Now it is preloaded 8 s after start and
       never closed: measured web process ~175 MB with it (it was ~200 MB earlier without; the page shares the
       wallpaper's web process), idle CPU 0.2%; the hidden page polls nothing. kurama.zip (650 MB archive) deleted.
+- [x] 2026-11-01 09:05 Before the first push to the PUBLIC GitHub repo: no API keys in any commit (scanned all), but
+      the owner-password hash lived in config.py and the password itself in tests/selfknow. Now the hash and the
+      spoken-spelling aliases come only from .env (KURAMA_PASSWORD_HASH, KURAMA_PASSWORD_ALIASES; empty = never
+      unlocks), tests use their own test password, and `python -m jarvis.core.selfknow` prints a new hash. Old commits
+      still contain the old password: the owner should set a new one.

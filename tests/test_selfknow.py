@@ -16,6 +16,8 @@ def clean(monkeypatch):
     monkeypatch.setattr(store, "kv_get", lambda k, d=None: kv.get(k, d))
     monkeypatch.setattr(store, "kv_set", lambda k, v: kv.__setitem__(k, v))
     monkeypatch.setattr(identity, "_cache", None)
+    monkeypatch.setattr(config, "SELF_PASSWORD_ALIASES", "")
+    monkeypatch.setattr(config, "SELF_PASSWORD_HASH", selfknow.hash_for("Bluefox"))  # a test password, never the real one
     yield
     identity._cache = None
     fastpath.refresh_names()
@@ -30,14 +32,14 @@ def test_public_topic_and_paths():
 def test_locked_topic_needs_password_then_unlocks():
     assert "password" in fastpath.try_answer("where do you store my data").answer.lower()
     assert "not the right password" in fastpath.try_answer("rajesh").answer
-    out = fastpath.try_answer("Darshan").answer
+    out = fastpath.try_answer("Bluefox").answer
     assert out.startswith("Thank you") and "jarvis.db" in out
     assert selfknow.unlocked()
     assert "Main database" in selfknow.ask("storage")  # stays unlocked for a while
 
 
 def test_password_never_stored_and_other_messages_cancel():
-    assert selfknow.redact("the password is Darshan") == "[password given]"
+    assert selfknow.redact("the password is Bluefox") == "[password given]"
     assert selfknow.redact("open youtube") == "open youtube"
     selfknow.ask("architecture")
     assert not selfknow.looks_like_password_try("open youtube please now")  # moved on
