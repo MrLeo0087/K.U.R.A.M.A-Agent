@@ -62,9 +62,11 @@ BUBBLE = 56  # floating button size (px)
 PANEL_W, PANEL_H = 400, 600  # mini chat panel (default size; a resized panel remembers its size)
 PANEL_MIN_W, PANEL_MIN_H = 300, 260
 MINI_HOTKEY = os.getenv("KURAMA_MINI_HOTKEY", "<Control><Alt>k")  # opens / hides the mini chat (GNOME shortcut; '' = none)
-# typing cursor to KURAMA's chat box and back again (the chat stays open). Not plain Ctrl+L: Brave/Chrome use it for
-# the address bar, the terminal to clear the screen, VS Code to select a line; Ctrl+Alt+L is free on this laptop.
-FOCUS_HOTKEY = os.getenv("KURAMA_FOCUS_HOTKEY", "<Control><Alt>l")
+# typing cursor to KURAMA's chat box and back again; the chat itself never hides (owner's choice 11-01: Ctrl+Shift+L;
+# plain Ctrl+L is Brave's address bar / the terminal's clear; while KURAMA runs, VS Code's own Ctrl+Shift+L
+# "select all occurrences" is taken over)
+FOCUS_HOTKEY = os.getenv("KURAMA_FOCUS_HOTKEY", "<Control><Shift>l")
+_OLD_FOCUS_KEYS = ("<Control><Alt>l",)  # earlier defaults: replaced by the new one (a key you set yourself is kept)
 ALERT_POLL_S = 5  # mini KURAMA checks for new alerts this often (one tiny local request)
 PID_FILE = STATE_FILE.with_name("wallpaper.pid")  # the shortcut signals this process (SIGUSR1)
 BUSY_STATES = ("listening", "capturing", "thinking", "speaking")  # closing the panel now keeps it alive
@@ -1199,6 +1201,7 @@ class Mini:
             back = getattr(self, "came_from", 0) or self._user_window(top=True)
             if back:
                 subprocess.run(["wmctrl", "-i", "-a", hex(back)], capture_output=True, timeout=3)
+            self.panel.set_keep_above(True)  # the chat stays on screen; only the typing cursor moved
             return
         self.came_from = self._user_window(top=False)
         if not self.open:
@@ -1450,7 +1453,12 @@ def _custom_key(slot: str, name: str, command: str, binding: str) -> None:
 
     def gs(*args: str) -> str:
         return subprocess.run(["gsettings", *args], capture_output=True, text=True, timeout=5).stdout.strip()
-    if gs("get", key, "binding").strip("'\"") not in ("", "''"):
+    have = gs("get", key, "binding").strip("'\"")
+    if have not in ("", "''") and have not in _OLD_FOCUS_KEYS:
+        return
+    if have in _OLD_FOCUS_KEYS:
+        gs("set", key, "binding", binding)
+        note(f"shortcut {have} -> {binding}: {name}")
         return
     paths = gs("get", base, "custom-keybindings").replace("@as ", "")
     lst = json.loads(paths.replace("'", '"')) if paths.startswith("[") else []

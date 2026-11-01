@@ -165,3 +165,15 @@ def test_alt_then_shift_cancels_while_listening(other):
     h.press("alt_l"); t[0] = 0.3; fire(timers); t[0] = 2.0
     h.press(other); h.release(other); t[0] = 2.5; h.release("alt_l")
     assert told == ["down", "cancel"]
+
+
+@pytest.mark.parametrize("first", ["ctrl_l", "shift", "ctrl_r"])
+def test_alt_after_another_key_never_talks(first):
+    """Ctrl+Alt+L (and Shift+Alt...): Alt pressed while another key is down is a shortcut, never a hold-to-talk."""
+    told, t, timers = [], [0.0], []
+    h = ptt.Holder("alt", tell=told.append, now=lambda: t[0], min_hold=0.0,
+                   schedule=lambda d, fn: timers.append(FakeTimer(fn)) or timers[-1], dismiss="double:shift")
+    h.press(first); h.press("alt_l"); t[0] = 0.5; fire(timers); h.press("l"); h.release("l"); h.release("alt_l")
+    h.release(first)
+    t[0] = 20; h.press("alt_l"); t[0] = 20.4; fire(timers); t[0] = 21; h.release("alt_l")  # alone again: talks
+    assert told == ["down", "up"]

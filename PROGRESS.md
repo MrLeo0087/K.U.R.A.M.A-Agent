@@ -812,3 +812,8 @@ Phases (one at a time, owner tests after each):
       terminal's clear and VS Code's select-line use it. KURAMA's own clipboard use (Ctrl+C to read a highlight, the
       paste of a rewrite) now puts the owner's clipboard back (test: tests/test_clipboard_kept.py); selections made
       inside KURAMA were already kept apart from the owner's. MONITORING.md / HANDOFF updated for the next session.
+- [x] 2026-11-01 14:30 The chat disappeared after Ctrl+Alt+L (ptt.log 13:45:33: "server key down" -> the shortcut's
+      Alt started a hold-to-talk, its cancel hid the chat). Hold-to-talk now never starts when another key is
+      already down (Ctrl/Shift + Alt = a shortcut; a "down" older than 10 s counts as a lost release). The focus key
+      is Ctrl+Shift+L (owner's choice; the old binding is migrated) and the chat stays on screen: only the typing
+      cursor moves (tested with Wnck: VS Code <-> kurama-mini four times, chat visible every time).

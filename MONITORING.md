@@ -160,7 +160,7 @@ every tool of that kind, not just the sentence in the trace.
 - New since round 1: tab control by name (extension 1.3: list / switch / close tabs), scroll by meaning, keys go to
   the app below KURAMA's chat, home screen (window desktop), Super key, Colab/Kaggle training cell (copied),
   organize uses the folder in use, qwen is the last model fallback (both gpt-oss hit Groq's 200k/day on 11-01: a
-  new key in the same Groq account shares that limit), Ctrl+Alt+L puts the cursor in the chat box and back,
+  new key in the same Groq account shares that limit), Ctrl+Shift+L puts the cursor in the chat box and back (the chat stays open),
   KURAMA puts your clipboard back after reading a highlight or pasting a rewrite, spoken requests are never dropped
   behind a stuck turn, a frozen window logs its stacks (data/logs/hang.log) and restarts itself.
 - **Test rounds** (`scripts/tool_round.py --round N [--real] [--failed]`): owner-style questions for ~25 tools,

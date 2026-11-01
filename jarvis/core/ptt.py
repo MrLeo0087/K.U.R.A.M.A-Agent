@@ -89,6 +89,7 @@ class Holder:
         self.solo = not self.mods and self.main in ("ctrl", "alt", "shift", "cmd")
         self.waiting = None  # the delayed "start listening" while the solo key is held
         self.pressed_at: float | None = None
+        self.others: dict[str, float] = {}  # other keys down right now (solo mode) -> since when
         self.last_tap = -1e9
 
     def press(self, name: str) -> None:
@@ -96,6 +97,8 @@ class Holder:
         self._dtap_press(n)
         if self.solo:
             self._solo_press(n)
+            if n != self.main:
+                self.others.setdefault(n, self.now())
             return
         if self.dismiss and n == self.dismiss[1] and self.dismiss[0] <= self.held and self.down_at is None:
             if n not in self.held:  # Super+X: close the caption / stop speaking (once per press, not on repeat)
@@ -155,7 +158,11 @@ class Holder:
     def _solo_press(self, n: str) -> None:
         if n == self.main:
             if self.pressed_at is None:  # first press (a held modifier doesn't repeat, but be safe)
-                self.pressed_at, self.spoiled = self.now(), False
+                # Ctrl (or any key) already down = a shortcut like Ctrl+Alt+L, never talking (11-01: the chat
+                # shortcut started listening, then its cancel hid the chat)
+                now = self.now()  # a key "down" for over 10 s is a lost release, not a shortcut being typed
+                self.others = {k: at for k, at in self.others.items() if now - at < 10}
+                self.pressed_at, self.spoiled = now, bool(self.others)
                 self.waiting = self.schedule(config.PTT_START_DELAY_S, self._solo_start)
             return
         if self.pressed_at is not None and not self.spoiled:  # Ctrl + another key = a shortcut
@@ -175,6 +182,7 @@ class Holder:
             self.tell("down")
 
     def _solo_release(self, n: str) -> None:
+        self.others.pop(n, None)
         if n != self.main or self.pressed_at is None:
             return
         held, self.pressed_at = self.now() - self.pressed_at, None
