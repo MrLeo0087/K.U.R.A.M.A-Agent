@@ -108,3 +108,13 @@ def test_a_leading_unknown_word_is_the_action_not_a_name(meaning, monkeypatch, t
     meaning.update(label="save_link", score=0.9)
     it = fastpath.meaning_intent(text)
     assert it is None or "name" not in it.args or it.args["name"] not in ("show", "open", "check")
+
+
+@pytest.mark.parametrize("text,label,action", [("free RAM bro", "clean_ram", "ram"),
+                                                ("clear cache of kurama", "clean_kurama", "kurama"),
+                                                ("clean kurama storage", "clean_kurama", "kurama"),
+                                                ("free some disk space pls", "clean_storage", "storage")])
+def test_cleanups_by_meaning(meaning, monkeypatch, text, label, action):
+    monkeypatch.setattr(fastpath, "meaning_ok", lambda t, it: True)
+    meaning.update(label=label, score=0.9)
+    assert fastpath.meaning_intent(text).args == {"action": action}

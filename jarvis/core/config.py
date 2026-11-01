@@ -933,6 +933,7 @@ RESOURCE_REALERT_S = 1800.0  # still high: alert again after 30 min
 RESOURCE_COOLDOWN_S = 2 * 3600.0  # after an alert, the SAME metric stays quiet this long even if it dips and comes back
 RESOURCE_TRIM_AT = 0.75  # KURAMA core above this share of JARVIS_CORE_MAX_MB -> gc + malloc_trim (no process stopped)
 RESOURCE_TRIM_EVERY_S = 300.0
+FREE_RAM_MIN_MB = 150.0  # "free RAM": windowless idle apps at least this big are offered for closing (asks first)
 # Alert mute ("don't send RAM warnings for 20 minutes"): word -> notify sources. 'all' never mutes reminders,
 # timers or the anti-theft guard (things the user set up on purpose).
 MUTE_KINDS: dict[str, tuple[str, ...]] = {
@@ -1128,13 +1129,20 @@ MEANING_SHORTCUTS: dict[str, tuple[str, ...]] = {
                    "show the link store list", "what is in my link store"),
     "read_later_add": ("save this page to read later", "add this article to my reading list",
                        "keep this link to read later", "read this later"),
+    "clean_ram": ("free ram", "free up my memory", "clear the ram", "my laptop ram is full, clean it",
+                  "release some memory", "optimize ram usage"),
+    "clean_kurama": ("clear kurama cache", "clean your own cache", "clear the cache of kurama", "clean kurama storage",
+                     "delete kurama's temp files and old logs", "clear kurama"),
+    "clean_storage": ("free disk space", "clear the cache on my laptop", "clean my storage", "my disk is full, clean it",
+                      "delete caches that rebuild themselves"),
     "jobs_start": ("start the jobs", "start working on my job list", "run all the waiting jobs", "do the jobs now",
                    "begin the queued jobs", "work on your job list now"),
     "jobs_list": ("show my job list", "what jobs are waiting", "list the jobs you have", "what is in your job list",
                   "show the queued jobs", "which jobs are pending"),
 }
 MEANING_SHORTCUT_AREAS = {"save_link": "links", "list_links": "links", "read_later_add": "links", "copy_path": "clipboard",
-                          "open_vscode": "files", "jobs_start": "jobs", "jobs_list": "jobs"}  # the router offers it too
+                          "open_vscode": "files", "jobs_start": "jobs", "jobs_list": "jobs",
+                          "clean_ram": "system", "clean_kurama": "system", "clean_storage": "system"}  # the router offers it too
 MEANING_SHORTCUT_MIN = 0.82
 # talk mode, speech long after KURAMA spoke: it is for KURAMA if it greets it or clearly MEANS an action (calibrated on
 # stt.log 10-30..11-01: 'Hello, shut down the laptop.' power 0.88; room talk 0.65-0.72)

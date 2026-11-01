@@ -731,7 +731,13 @@ def get_index() -> Index:
     global _index
     with _index_lock:
         if _index is None:
-            _index = Index()
+            # ONE model process for the whole of KURAMA: the index and the meaning router used to load the same
+            # bge-small model in two child processes (~250 MB each; the 611 MB "core" alert 11-01 08:10)
+            shared = None
+            if config.SEMANTIC_ROUTER:
+                from jarvis.core import semantic
+                shared = semantic.embedder()
+            _index = Index(embedder=shared)
         return _index
 
 

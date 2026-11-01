@@ -119,6 +119,9 @@ def checks(s: dict) -> dict[str, tuple[float, float, str]]:
     return out
 
 
+_SAY = {"jarvis_core": "KURAMA core", "jarvis_total": "KURAMA total", "ram": "RAM", "cpu": "CPU", "swap": "swap"}
+
+
 class ResourceGuard(Worker):
     name = "resource_guard"
     interval_s = config.RESOURCE_GUARD_INTERVAL_S
@@ -174,8 +177,9 @@ class ResourceGuard(Worker):
                 self.log.info("%s recovered (%.0f%s)", metric, value, unit)
         if fired:
             hogs = ", ".join(f"{n} {mb:.0f} MB" for n, _, mb in top_memory(3))
-            parts = [f"{m} {checks(snap)[m][0]:.0f}{checks(snap)[m][2]} (limit {checks(snap)[m][1]:.0f})"
+            say = lambda m: _SAY.get(m, m)  # noqa: E731 - the user hears "KURAMA core", never "jarvis_core"
+            parts = [f"{say(m)} {checks(snap)[m][0]:.0f}{checks(snap)[m][2]} (limit {checks(snap)[m][1]:.0f})"
                      for m in fired]
-            notify.notify("Resource alert: " + ", ".join(fired),
+            notify.notify("Resource alert: " + ", ".join(map(say, fired)),
                           f"{'; '.join(parts)}. Top memory: {hogs}.", level="warning", source="resource_guard")
         return fired

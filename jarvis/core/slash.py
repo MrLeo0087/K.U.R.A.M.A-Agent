@@ -88,7 +88,8 @@ COMMANDS: tuple[Cmd, ...] = (
     Cmd("jobs", "background jobs", "Laptop", tool=("jobs", "jobs", {"action": "list"}, "")),
     Cmd("tokens", "today's token use", "KURAMA", phrase="token usage"),
     Cmd("clearchat", "clear this conversation", "KURAMA", tool=_c("clearchat"), aliases=("new",)),
-    Cmd("clear", "clear chat + reminders (asks first)", "KURAMA", "[yes]", tool=_c("clear")),
+    Cmd("clear", "clear chat + reminders (asks first); /clear ram | storage | kurama cleans that", "KURAMA",
+        "[yes|ram|storage|kurama]", tool=_c("clear")),
     Cmd("reset", "wipe everything (Settings or Telegram)", "KURAMA", tool=_c("reset")),
     Cmd("stop", "stop a stuck answer", "KURAMA", tool=_c("stop")),
     # --- the Telegram commands, on the laptop too ---
@@ -187,7 +188,16 @@ def phrase_for(cmd: Cmd, arg: str) -> str:
     return bare if "{a}" not in bare else ""
 
 
+def _clean_target(arg: str) -> str:
+    """'/clear ram', '/clear kurama storage', '/clear KURAMA' -> ram | storage | kurama ('' = the old /clear)."""
+    from jarvis.core import cleanup
+    found = {cleanup.word(w) for w in re.findall(r"[a-z]+", arg.lower())}
+    return next((t for t in ("kurama", "ram", "storage") if t in found), "")
+
+
 def tool_call(cmd: Cmd, arg: str) -> tuple[str, str, dict] | None:
+    if cmd.name == "clear" and (target := _clean_target(arg)):
+        return "cleanup", "system", {"action": target}
     if not cmd.tool:
         return None
     tool, group, fixed, key = cmd.tool

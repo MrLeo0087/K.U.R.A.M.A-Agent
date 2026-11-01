@@ -290,7 +290,7 @@ def test_resource_guard_hysteresis(monkeypatch):
     snap = lambda **kw: {**SNAP, **kw}  # noqa: E731
     assert g.evaluate(snap(ram_pct=95), now=0) == ["ram"]
     alert = store.alerts_recent()[0]
-    assert "ram" in alert["title"] and "chrome 2100 MB" in alert["text"]
+    assert "RAM" in alert["title"] and "chrome 2100 MB" in alert["text"]
     assert g.evaluate(snap(ram_pct=96), now=60) == []  # still high: no spam
     assert g.evaluate(snap(ram_pct=88), now=120) == []  # below 90 but within hysteresis: not recovered
     assert g.evaluate(snap(ram_pct=95), now=180) == []
@@ -457,3 +457,20 @@ def test_telegram_plain_words_work_like_slash_commands(tg, monkeypatch):
     bot = telegram_bot.TelegramBot()
     assert bot.answer("ram usage") == resource_guard.summary(dict(SNAP))  # same answer as /ram, 0 tokens
     assert bot.answer("show all commands") == telegram_bot.HELP
+
+
+def test_core_alert_says_kurama_and_one_model_process(monkeypatch):
+    """11-01 08:10: 'Resource alert: jarvis_core 611 MB' = the server + TWO copies of the same embedding model."""
+    from jarvis.core import config, memory, semantic
+    sent = []
+    monkeypatch.setattr(notify, "notify", lambda title, text, *a, **k: sent.append(title) or [])
+    g = resource_guard.ResourceGuard()
+    g.evaluate({"ram_pct": 40.0, "swap_pct": 0.0, "cpu_pct": 5.0, "disk": {"/": 50.0}, "jarvis_core_mb": 650,
+                "jarvis_total_mb": 650}, now=10)
+    assert sent and "KURAMA core" in sent[0] and "jarvis" not in sent[0]
+    monkeypatch.setattr(config, "SEMANTIC_ROUTER", True)
+    monkeypatch.setattr(memory, "_index", None)
+    try:
+        assert memory.get_index().embedder is semantic.embedder()
+    finally:
+        memory.set_index(None)

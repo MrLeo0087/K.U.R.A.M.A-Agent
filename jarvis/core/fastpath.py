@@ -1815,6 +1815,8 @@ def slash_intent(t: str) -> Intent | None:
         if typed and not arg and len(typed) <= 15:
             return Intent("say", "_say", "self", {"en": f"I don't know /{typed}. Type /list to see every command."})
         return None
+    if cmd.name == "clear" and (tc := slash.tool_call(cmd, arg)) and tc[0] != "_cmd":  # /clear ram|storage|kurama
+        return Intent("slash", tc[0], tc[1], tc[2], cmd.name)
     if cmd.tool and cmd.tool[0] == "_cmd":  # the Telegram commands, done on the laptop
         return Intent("cmd", "_cmd", "self", {"cmd": cmd.tool[2]["cmd"], "arg": arg}, cmd.name)
     if cmd.name == "list":
@@ -3293,7 +3295,7 @@ def _assist_waiting(t: str) -> bool:
 _NO_DETAIL = {"bro", "pls", "plz", "please", "hey", "ok", "okay", "now", "can", "could", "you", "will", "just",
            "for", "me", "my", "the", "a", "an", "of", "in", "to", "it", "this", "that", "here", "current", "selected",
            "and", "yaar", "dai", "na", "quickly", "again", "also", "all", "i", "want", "need", "your", "with", "on",
-           "from", "is", "are", "what", "which", "mean", "no", "not", "said", "say", "its", "it's"}
+           "from", "is", "are", "what", "which", "some", "mean", "no", "not", "said", "say", "its", "it's"}
 _vocab: dict[str, set[str]] = {}
 
 
@@ -3362,6 +3364,9 @@ def meaning_intent(text: str) -> Intent | None:
         return it if meaning_ok(t, it) else None
     if label == "read_later_add":
         it = Intent("readlater", "read_later", "links", {"action": "add", "url": ""})
+        return it if meaning_ok(t, it) else None
+    if label.startswith("clean_"):
+        it = Intent("clean", "cleanup", "system", {"action": label[6:]})
         return it if meaning_ok(t, it) else None
     if label == "jobs_start":
         return Intent("jobs", "jobs", "jobs", {"action": "start"})
@@ -3446,7 +3451,8 @@ def _match(text: str) -> Intent | None:
         return everyday_intent(" ".join((text or "").split()).strip(" ,"))
     if len(t) > 200:
         return None
-    if t.startswith("/") and (sl := slash_intent(t)):
+    raw = " ".join((text or "").split())  # a command's words are kept as typed: normalize() drops a trailing
+    if raw.startswith("/") and (sl := slash_intent(raw)):  # "KURAMA" ('/clear KURAMA' became '/clear')
         return sl
     if si := _self_intent(t):
         return si

@@ -184,3 +184,6 @@ video now" rule in `video_dl_intent`, the filler-word list in `tools/general/vid
 - 2026-11-01 08:10: the freed meaning model is loaded before routing (no more word-routing on the first request
   after idle); save / list links by meaning with the name taken from the left-over words; saved-things areas
   never answered from old replies. Watch: links saved under a wrong name (a word of the request taken as the name).
+- 2026-11-01 08:45: one shared embedding-model process (the 611 MB core alert was two copies); talk-mode greetings
+  by meaning; free RAM offers idle windowless apps (asks); /clear ram|storage|kurama. Watch: resource_guard log,
+  "Left the background apps running" answers.

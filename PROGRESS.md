@@ -740,3 +740,10 @@ Phases (one at a time, owner tests after each):
       shortcut that isn't small talk. Now by MEANING too: a greeting / how-are-you (small-talk examples, not a bare
       "okay") or a clear action (area >= 0.80 and above chat; room talk scored 0.65-0.72). The morning greeting no
       longer says "ready when you are" twice.
+- [x] 2026-11-01 08:45 "Resource alert: jarvis_core 611 MB" (guard log 08:10:02, recovered to 390 MB 16 s later): the
+      knowledge index and the meaning router each loaded the SAME bge-small model in its own child process (~250 MB
+      each): 130 server + 2 x ~240. Now one shared model process (core 390 MB with both in use). The alert says
+      "KURAMA core", never "jarvis_core". "Free RAM" also offers (one yes/no) to close windowless apps idle for the
+      sample and >= 150 MB (never the desktop's services, KURAMA or anything with a window). /clear ram | storage |
+      kurama (also "/clear KURAMA", "/clear kurama storage") clean that; plain /clear keeps its meaning. "free RAM bro",
+      "clear cache of kurama", "clean kurama storage" are 0-token by meaning. Slash commands use the text as typed.

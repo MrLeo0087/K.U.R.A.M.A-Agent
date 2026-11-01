@@ -88,12 +88,101 @@ def top_apps(n: int = 5) -> tuple[list[tuple[str, int]], list[tuple[str, float]]
     return by_ram, by_cpu
 
 
+# the desktop's own background services (notifications, file access, phone link...): never offered for closing
+_DESKTOP = ("xdg-", "gsd-", "gvfs", "evolution-", "tracker-", "at-spi", "ibus", "kdeconnect", "snapd", "goa-",
+            "gnome-", "gjs", "ubuntu-", "update-", "pk", "packagekit", "fwupd", "colord", "geoclue", "dconf")
+
+
+def _window_pids() -> set[int]:
+    """Processes that own a window on the desktop (wmctrl -lp): someone may be using them."""
+    import subprocess
+    try:
+        out = subprocess.run(["wmctrl", "-lp"], capture_output=True, text=True, timeout=3).stdout
+    except (OSError, subprocess.SubprocessError):
+        return set()
+    return {int(f[2]) for f in (line.split(None, 4) for line in out.splitlines()) if len(f) > 2 and f[2].isdigit()}
+
+
+def idle_background(min_mb: float = config.FREE_RAM_MIN_MB) -> list[tuple[str, list[int], int]]:
+    """[(app, pids, RSS bytes)] of the user's apps that NOBODY can be using: no window anywhere in their family (a
+    browser's tab processes belong to the browser window), no CPU over a second, at least min_mb, never KURAMA or
+    the desktop's own services (kill_app.protected)."""
+    import getpass
+    import psutil
+    from jarvis.tools.general.kill_app import _ancestors, protected
+    win = _window_pids()
+    if not win:  # can't see the windows (no X / no wmctrl): never guess what is in use
+        return []
+    me, mine = getpass.getuser(), _ancestors()
+    procs = [p for p in psutil.process_iter(["pid", "name", "cmdline", "username", "ppid", "memory_info"])]
+    for p in procs:
+        try:
+            p.cpu_percent(None)
+        except psutil.Error:
+            pass
+    time.sleep(1.0)
+    by_pid = {p.pid: p for p in procs}
+    windowed_names = {(by_pid[w].info["name"] or "") for w in win if w in by_pid}
+
+    def in_use(p) -> bool:
+        q, seen = p, 0
+        while q is not None and seen < 40:
+            if q.pid in win or (q.info["name"] or "") in windowed_names:
+                return True
+            q, seen = by_pid.get(q.info.get("ppid") or 0), seen + 1
+        return False
+    apps: dict[str, tuple[list[int], int, float]] = {}
+    for p in procs:
+        try:
+            if protected(p.info, me, mine) or in_use(p) or not p.info["memory_info"] \
+                    or (p.info["name"] or "").lower().startswith(_DESKTOP):
+                continue
+            cpu = p.cpu_percent(None)
+        except psutil.Error:
+            continue
+        name = (p.info["name"] or "?")[:30]
+        pids, rss, c = apps.get(name, ([], 0, 0.0))
+        apps[name] = (pids + [p.pid], rss + p.info["memory_info"].rss, c + cpu)
+    return sorted(((n, pids, rss) for n, (pids, rss, c) in apps.items() if rss >= min_mb * 1e6 and c < 1.0),
+                  key=lambda x: -x[2])
+
+
+def close_idle_background() -> str:
+    """Ask once, then close the idle background apps (politely: SIGTERM, then a kill after 3 s). '' = nothing to do."""
+    import psutil
+    from jarvis.core import safety
+    found = idle_background()
+    if not found:
+        return ""
+    total = sum(r for _, _, r in found)
+    names = ", ".join(f"{n} {_fmt(r)}" for n, _, r in found[:8])
+    if not safety.ask(f"These run in the background with no window and do nothing right now: {names}. "
+                      f"Close them to free about {_fmt(total)}?"):
+        return f"Left the background apps running ({names})."
+    procs = []
+    for _, pids, _ in found:
+        for pid in pids:
+            try:
+                q = psutil.Process(pid)
+                q.terminate()
+                procs.append(q)
+            except psutil.Error:
+                continue
+    _, alive = psutil.wait_procs(procs, timeout=3)
+    for q in alive:
+        try:
+            q.kill()
+        except psutil.Error:
+            pass
+    return f"Closed {len(found)} idle background app(s) ({names}), about {_fmt(total)}."
+
+
 def ram() -> str:
     import psutil
     before = psutil.virtual_memory()
     try:
         from jarvis.core import semantic
-        semantic.free_now()  # KURAMA's meaning model (~120 MB): it reloads by itself when needed
+        semantic.free_now()  # KURAMA's meaning model (~250 MB): it reloads by itself when needed (~0.6 s)
     except Exception:  # noqa: BLE001
         pass
     gc.collect()
@@ -103,10 +192,13 @@ def ram() -> str:
     except (OSError, AttributeError):
         pass
     by_ram, by_cpu = top_apps()
+    closed = close_idle_background()
     after = psutil.virtual_memory()
     freed = max(0, after.available - before.available)
     lines = [f"RAM: {after.percent:.0f}% used, {_fmt(after.available)} free"
              + (f" ({_fmt(freed)} freed from KURAMA's own memory)" if freed > 20e6 else "") + "."]
+    if closed:
+        lines.append(closed)
     lines.append("Top RAM: " + ", ".join(f"{a} {_fmt(b)}" for a, b in by_ram) + ".")
     if by_cpu:
         lines.append("Top CPU: " + ", ".join(f"{a} {c:.0f}%" for a, c in by_cpu) + ".")
