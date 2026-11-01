@@ -29,6 +29,11 @@ Link store through the AI + 0-token save/list by meaning; model loaded before ro
 (the 611 MB alert); fake "done" claims and saved-things answers retried with tools; junk streams replaced; talk-mode
 greetings by meaning; free RAM / `/clear ram|storage|kurama`. `LEARN.md` = the architecture guide for the owner.
 
+### Done 2026-11-01 afternoon
+Test round 1 + its fixes, tabs / scroll / home screen / Super key, Colab-Kaggle cell, Ctrl+Alt+L focus toggle,
+clipboard kept, qwen fallback, hang guard. Details: PROGRESS.md (11-01 entries), MONITORING.md "Since the last
+report". The owner now uses KURAMA for a few days; the next session reads the traces (MONITORING.md prompt).
+
 ### Unproven / watch in the next report (see MONITORING.md "Watch in the next report (round 2)")
 - Hold-to-talk: a caption auto-hide timer fired during a hold (ptt.log); hides are now blocked while Ctrl is held and
   logged with their caller — find which timer it was.

@@ -185,6 +185,17 @@ def _from_editor(wid: int, in_front: bool) -> "Grab | str | None":
     return Grab(st["selection"], wid, in_front, False, _window_name(wid), editor=st)
 
 
+_SAVED_CLIP: dict = {"text": None}
+
+
+def restore_clipboard() -> None:
+    """Put back the text you had copied before KURAMA used the clipboard to read / paste (owner 11-01: KURAMA's
+    work and your own copy-paste stay separate). A picture on the clipboard can't be read as text: left alone."""
+    saved = _SAVED_CLIP.get("text")
+    if saved is not None:
+        _xclip(["-selection", "clipboard"], saved)
+
+
 def grab() -> Grab | str:
     """Copy the selection FROM the app the user is working in (Ctrl+C there, not the X PRIMARY buffer, which also
     changes when text is selected inside KURAMA). Returns a Grab, or a message for the user."""
@@ -202,16 +213,17 @@ def grab() -> Grab | str:
         _activate(wid)
         time.sleep(0.35)
     term = uiagent.family(uiagent.active_class()) == "terminal"
-    sentinel = f"__kurama_copy_{time.time()}__"
+    _SAVED_CLIP["text"] = _xclip(["-selection", "clipboard"])  # your clipboard is put back afterwards: KURAMA
+    sentinel = f"__kurama_copy_{time.time()}__"  # reading the highlight must not change what you copied
     _xclip(["-selection", "clipboard"], sentinel)
     uiagent.key("ctrl+shift+c" if term else "ctrl+c")
     time.sleep(0.35)
     sel = _xclip(["-selection", "clipboard"])
+    restore_clipboard()
     if not sel.strip() or sel == sentinel:
         sel = selection() if in_front else ""  # some apps only set PRIMARY
     title = _window_name(wid)
     if not sel.strip() or sel == sentinel:
-        _xclip(["-selection", "clipboard"], "")
         return f"I couldn't see any highlighted text in '{title}'. Highlight it there, then ask again."
     if len(sel) > MAX_CHARS:
         return f"That selection is too long ({len(sel)} characters, max {MAX_CHARS}). Select a smaller part."
@@ -235,11 +247,10 @@ def grab_cursor() -> Grab | str:
 
 
 def put(g: Grab, new: str) -> bool:
-    """Paste `new` over the (still highlighted) selection / at the cursor of the grabbed window; it also stays on
-    the clipboard. VS Code with the editor link: replaced in the editor itself, exactly the range that was selected
+    """Paste `new` over the (still highlighted) selection / at the cursor of the grabbed window; your own clipboard
+    is put back after the paste. VS Code with the editor link: replaced in the editor itself, exactly the range that was selected
     (even if the cursor moved meanwhile), one Ctrl+Z undoes it."""
     from jarvis.core import uiagent
-    _xclip(["-selection", "clipboard"], new)
     if g.editor is not None:
         from jarvis.core import editor
         st, f = g.editor, g.editor.get("file") or ""
@@ -252,8 +263,12 @@ def put(g: Grab, new: str) -> bool:
     if not g.in_front and g.wid is not None:
         _activate(g.wid)  # the LLM call took a moment: make sure the document is still in front
         time.sleep(0.2)
+    if _SAVED_CLIP.get("text") is None:
+        _SAVED_CLIP["text"] = _xclip(["-selection", "clipboard"])
+    _xclip(["-selection", "clipboard"], new)  # the clipboard carries the new text for one paste...
     uiagent.key("ctrl+shift+v" if g.term else "ctrl+v")
     time.sleep(0.3)
+    restore_clipboard()  # ...then holds what YOU copied again
     return True
 
 

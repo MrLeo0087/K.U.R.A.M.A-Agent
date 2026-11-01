@@ -62,6 +62,9 @@ BUBBLE = 56  # floating button size (px)
 PANEL_W, PANEL_H = 400, 600  # mini chat panel (default size; a resized panel remembers its size)
 PANEL_MIN_W, PANEL_MIN_H = 300, 260
 MINI_HOTKEY = os.getenv("KURAMA_MINI_HOTKEY", "<Control><Alt>k")  # opens / hides the mini chat (GNOME shortcut; '' = none)
+# typing cursor to KURAMA's chat box and back again (the chat stays open). Not plain Ctrl+L: Brave/Chrome use it for
+# the address bar, the terminal to clear the screen, VS Code to select a line; Ctrl+Alt+L is free on this laptop.
+FOCUS_HOTKEY = os.getenv("KURAMA_FOCUS_HOTKEY", "<Control><Alt>l")
 ALERT_POLL_S = 5  # mini KURAMA checks for new alerts this often (one tiny local request)
 PID_FILE = STATE_FILE.with_name("wallpaper.pid")  # the shortcut signals this process (SIGUSR1)
 BUSY_STATES = ("listening", "capturing", "thinking", "speaking")  # closing the panel now keeps it alive
@@ -531,6 +534,16 @@ class Wallpaper:
             state = STATE_FILE.with_name("ptt.state").read_text().split()[0]
             if self.mini is not None:
                 self.mini.ptt(state)
+        return True
+
+    def focus_chat(self):
+        """FOCUS_HOTKEY: the typing cursor goes to the mini chat's box (opening it if needed); pressed again while
+        typing there, it goes back to the window you came from (the chat stays open). Your selection there is kept:
+        nothing is copied or clicked."""
+        if self.mini is None:
+            self.toggle_mini()
+            return True
+        self.mini.focus_toggle()
         return True
 
     def toggle_mini(self):
@@ -1181,6 +1194,37 @@ class Mini:
             self.end_ghost(keep_caption=True)
         return False
 
+    def focus_toggle(self) -> None:
+        if self.open and self.panel is not None and self.panel.is_active():  # typing here: back to where you were
+            back = getattr(self, "came_from", 0) or self._user_window(top=True)
+            if back:
+                subprocess.run(["wmctrl", "-i", "-a", hex(back)], capture_output=True, timeout=3)
+            return
+        self.came_from = self._user_window(top=False)
+        if not self.open:
+            self.show_panel()
+        else:
+            take_focus(self.panel, self.view, 0)
+            run_js(self.view, "window.kuramaMiniShown && window.kuramaMiniShown(true)")  # the box gets the cursor
+
+    @staticmethod
+    def _user_window(top: bool) -> int:
+        """The window you work in: the active one (top=False), or the highest non-KURAMA one in the stack (top=True:
+        the chat was opened another way, so where you came from wasn't recorded). 0 = none."""
+        with contextlib.suppress(Exception):
+            gi.require_version("Wnck", "3.0")
+            from gi.repository import Wnck
+            scr = Wnck.Screen.get_default()
+            scr.force_update()
+            mine = lambda w: "kurama" in (w.get_class_instance_name() or "").lower()  # noqa: E731
+            if not top:
+                w = scr.get_active_window()
+                return w.get_xid() if w is not None and not mine(w) else 0
+            for w in reversed(scr.get_windows_stacked()):
+                if not mine(w) and not w.is_minimized() and w.get_window_type() == Wnck.WindowType.NORMAL:
+                    return w.get_xid()
+        return 0
+
     def toggle_panel(self) -> None:
         """The shortcut: chat and its workspace window hide together and come back together."""
         if self.open:
@@ -1398,6 +1442,26 @@ class Caption:
         return False
 
 
+def _custom_key(slot: str, name: str, command: str, binding: str) -> None:
+    """One GNOME custom shortcut (Settings > Keyboard > Custom Shortcuts), added once; never overwrites yours."""
+    base = "org.gnome.settings-daemon.plugins.media-keys"
+    path = f"/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/{slot}/"
+    key = f"{base}.custom-keybinding:{path}"
+
+    def gs(*args: str) -> str:
+        return subprocess.run(["gsettings", *args], capture_output=True, text=True, timeout=5).stdout.strip()
+    if gs("get", key, "binding").strip("'\"") not in ("", "''"):
+        return
+    paths = gs("get", base, "custom-keybindings").replace("@as ", "")
+    lst = json.loads(paths.replace("'", '"')) if paths.startswith("[") else []
+    if path not in lst:
+        gs("set", base, "custom-keybindings", json.dumps(lst + [path]).replace('"', "'"))
+    gs("set", key, "name", name)
+    gs("set", key, "command", command)
+    gs("set", key, "binding", binding)
+    note(f"shortcut {binding}: {name}")
+
+
 def install_hotkey() -> None:
     """GNOME shortcut MINI_HOTKEY (Super+S) -> SIGUSR1 to this script = open / hide the mini chat. Once; idempotent.
     (Super+S was tried first: GNOME keeps it; its quick-settings binding is given back.)"""
@@ -1412,7 +1476,10 @@ def install_hotkey() -> None:
         return r.stdout.strip()
     try:
         if gs("get", key, "binding").strip("'\"") not in ("", "''"):  # already there (maybe changed by you
-            return  # in Settings > Keyboard > Custom Shortcuts): never overwrite it
+            if FOCUS_HOTKEY:  # in Settings > Keyboard > Custom Shortcuts): never overwrite it
+                _custom_key("kurama-focus", "KURAMA chat box: type here / back",
+                            f"sh -c 'kill -WINCH $(cat {PID_FILE})'", FOCUS_HOTKEY)
+            return
         if gs("get", "org.gnome.shell.keybindings", "toggle-quick-settings") == "@as []":
             gs("set", "org.gnome.shell.keybindings", "toggle-quick-settings", "['<Super>s']")
         paths = gs("get", base, "custom-keybindings").replace("@as ", "")
@@ -1423,6 +1490,9 @@ def install_hotkey() -> None:
         gs("set", key, "command", f"sh -c 'kill -USR1 $(cat {PID_FILE})'")
         gs("set", key, "binding", MINI_HOTKEY)
         note(f"shortcut {MINI_HOTKEY} opens / hides the mini chat")
+        if FOCUS_HOTKEY:
+            _custom_key("kurama-focus", "KURAMA chat box: type here / back", f"sh -c 'kill -WINCH $(cat {PID_FILE})'",
+                        FOCUS_HOTKEY)
     except (OSError, subprocess.SubprocessError, ValueError) as e:
         note(f"couldn't set the {MINI_HOTKEY} shortcut: {e}")
 
@@ -1438,6 +1508,7 @@ def main() -> int:
     wp = Wallpaper(a.url, a.window)
     GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGUSR1, wp.toggle_mini)
     GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGUSR2, wp.on_ptt)  # hold-to-talk (jarvis/core/ptt.py)
+    GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGWINCH, wp.focus_chat)  # FOCUS_HOTKEY: type here / back
     with contextlib.suppress(OSError):
         PID_FILE.write_text(str(os.getpid()))
     threading.Thread(target=install_hotkey, daemon=True).start()

@@ -155,6 +155,22 @@ every tool of that kind, not just the sentence in the trace.
   greetings and clear requests by meaning. "Free RAM" offers (asks) to close windowless idle apps; `/clear ram |
   storage | kurama`. The architecture guide for humans is `LEARN.md`.
 
+## Since the last report (11-01, afternoon) — check these first in the next report
+
+- New since round 1: tab control by name (extension 1.3: list / switch / close tabs), scroll by meaning, keys go to
+  the app below KURAMA's chat, home screen (window desktop), Super key, Colab/Kaggle training cell (copied),
+  organize uses the folder in use, qwen is the last model fallback (both gpt-oss hit Groq's 200k/day on 11-01: a
+  new key in the same Groq account shares that limit), Ctrl+Alt+L puts the cursor in the chat box and back,
+  KURAMA puts your clipboard back after reading a highlight or pasting a rewrite, spoken requests are never dropped
+  behind a stuck turn, a frozen window logs its stacks (data/logs/hang.log) and restarts itself.
+- **Test rounds** (`scripts/tool_round.py --round N [--real] [--failed]`): owner-style questions for ~25 tools,
+  read-only tools real, the rest fake, heavy-AI tools left out, 40k Groq tokens per round. Round 1: 38/45 judged
+  right (84%); 30 questions not judged (internet cut, then Groq's daily limit): finish them with
+  `--round 1 --real --failed` on a fresh day. Results: data/eval/round<N>.json, `--report` prints the summary.
+- Watch: `path: fastpath` traces with intents tab / tabs / desktop / colab / links / clean (meaning actions taking
+  the wrong request), "llm" entries with model qwen (the fallback in use = daily limit reached), hang.log dumps,
+  stt.log lines with no trace (speech heard but not sent).
+
 ## Watch in the next report (round 2)
 
 - **Meaning actions taking the wrong request**: a link saved under a wrong name (a word of the request taken as the

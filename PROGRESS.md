@@ -806,3 +806,9 @@ Phases (one at a time, owner tests after each):
       it): qwen is now the last fallback for the fast and smart chains (tested: it calls the right tool). Round
       script: owner-style questions, pacing by tokens, --failed re-runs, connection / limit errors not judged,
       heavy-AI tools left out, 40k tokens per round cap.
+- [x] 2026-11-01 14:10 Ctrl+Alt+L (GNOME custom shortcut -> SIGWINCH): the typing cursor goes to the mini chat's box
+      (opening it if needed) and, pressed again, back to the window you came from (tested with Wnck: VS Code ->
+      kurama-mini -> VS Code, both from a closed and an open chat). Not plain Ctrl+L: Brave's address bar, the
+      terminal's clear and VS Code's select-line use it. KURAMA's own clipboard use (Ctrl+C to read a highlight, the
+      paste of a rewrite) now puts the owner's clipboard back (test: tests/test_clipboard_kept.py); selections made
+      inside KURAMA were already kept apart from the owner's. MONITORING.md / HANDOFF updated for the next session.
