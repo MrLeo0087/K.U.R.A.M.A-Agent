@@ -19,6 +19,7 @@ load_dotenv(ROOT / ".env")
 
 # --- secrets (never print) ---
 GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
+GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")  # optional: Gemini answers when Groq's limits are used up
 TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID: str = os.getenv("TELEGRAM_CHAT_ID", "")
 TELEGRAM_MAX_AGE_S = 120  # ignore Telegram messages sent more than this long before the bot started
@@ -30,17 +31,23 @@ LLM_VISION = "qwen/qwen3.8-27b"  # screen / image tasks
 # Spoken chat without tools: qwen with thinking off starts in ~0.2 s vs ~0.5 s for gpt-oss.
 LLM_VOICE = os.getenv("JARVIS_LLM_VOICE", "qwen/qwen3.8-27b")
 
+# Gemini (Google, free tier): the fallback AFTER Groq's gpt-oss models and BEFORE qwen (qwen claimed actions it never
+# did on 11-01 when both gpt-oss hit their daily limit). Only with GEMINI_API_KEY in .env. Free tier: ~10 requests/min.
+LLM_GEMINI = os.getenv("KURAMA_LLM_GEMINI", "gemini-2.5-flash")
+LLM_GEMINI_LITE = os.getenv("KURAMA_LLM_GEMINI_LITE", "gemini-flash-lite-latest")  # its own quota, more requests/day
+_GEM = [LLM_GEMINI, LLM_GEMINI_LITE] if GEMINI_API_KEY else []
+
 TIERS: dict[str, str] = {"smart": LLM_DEFAULT, "fast": LLM_FAST, "vision": LLM_VISION,
                          "voice": LLM_VOICE}
 # Fallback chain per tier (first entry is preferred).
 TIER_CHAIN: dict[str, list[str]] = {
-    "smart": [LLM_DEFAULT, LLM_FAST, LLM_VISION],  # qwen last: when both gpt-oss models hit their daily limit (200k
+    "smart": [LLM_DEFAULT, LLM_FAST, *_GEM, LLM_VISION],  # qwen last: when both gpt-oss models hit their daily limit (200k
     #                                                tokens each, 11-01) KURAMA keeps answering instead of "busy"
-    "fast": [LLM_FAST, LLM_DEFAULT, LLM_VISION],  # rate-limited: the smart one, then qwen (its own daily quota)
-    "vision": [LLM_VISION, LLM_DEFAULT],  # second vision model; the text fallback still answers non-image asks
-    "voice": list(dict.fromkeys([LLM_VOICE, LLM_FAST])),
+    "fast": [LLM_FAST, LLM_DEFAULT, *_GEM, LLM_VISION],  # rate-limited: the smart one, then qwen (its own daily quota)
+    "vision": [LLM_VISION, LLM_DEFAULT, *_GEM[:1]],  # second vision model; the text fallback still answers non-image asks
+    "voice": list(dict.fromkeys([LLM_VOICE, LLM_FAST, *_GEM[:1]])),
     # Background writer jobs: smart model only (never falls back onto the fast/voice models' TPM).
-    "writer": [LLM_DEFAULT],
+    "writer": [LLM_DEFAULT, *_GEM[:1]],
 }
 # Extra per-model request params. gpt-oss models are reasoning models: keep reasoning
 # short and hidden so replies stay fast and token-cheap.
@@ -54,6 +61,7 @@ MODEL_PARAMS: dict[str, dict] = {
     LLM_DEFAULT: {"reasoning_effort": "low", "reasoning_format": "hidden"},
     LLM_FAST: {"reasoning_effort": "low", "reasoning_format": "hidden"},
     LLM_VISION: {"reasoning_effort": "none"},  # qwen3 thinking mode is slow; off by default
+    LLM_GEMINI: {"thinking_budget": 0},  # no hidden thinking: ~1.5 s replies, fewer tokens
 }
 
 # --- STT (Groq Whisper) ---
@@ -169,6 +177,7 @@ LLM_TEMPERATURE = 0.6
 LLM_MAX_RETRIES = 3  # retries on the last model in a chain
 LLM_RETRIES_BEFORE_FALLBACK = 1  # retries before falling back to the next model
 LLM_BACKOFF_BASE_S = 1.0
+LLM_COOLDOWN_S = 120.0  # a model that answered 429 beyond the wait limit is skipped this long (its Retry-After if longer)
 LLM_MAX_WAIT_S = 20.0  # never sleep longer than this for one retry
 
 # --- chat ---
@@ -282,7 +291,17 @@ DIRECT_REPLY_TOOLS = {"open_url": "open", "open_app": "open", "audio": "audio", 
                       "close_app": "said", "open_folder": "said", "open_path": "said", "app_control": "said",
                       "window": "said", "generate_image": "said", "write_document": "said"}  # a job STARTED is
 #                     not "has been sent" (trace 54045016: the AI said the picture was sent while it was being made)
-DIRECT_REPLY_STEPS = {"window": ("focus", "list"), "app_control": ("task", "enable")}  # these continue a task
+# Phase 3 token cut: these actions' own sentence ends a SHORT single request too (no second AI call, ~1,000 tokens
+# each; 2.2 AI calls per AI turn on 10-29..11-01). Longer / multi-part requests still let the AI go on.
+DIRECT_REPLY_SINGLE = ("make_folder", "set_timer", "set_alarm", "add_reminder", "youtube", "video_download", "music",
+                       "write_file", "send_file_telegram", "move_path", "delete_to_trash", "saved_links",
+                       "organize_files", "code_to_file")
+DIRECT_REPLY_TOOLS.update({k: "said" for k in DIRECT_REPLY_SINGLE})
+DIRECT_REPLY_MAX_WORDS = 14
+DIRECT_REPLY_STEPS = {"window": ("focus", "list"), "app_control": ("task", "enable"), "saved_links": ("list", "get"),
+                      "music": ("playlists", "status", "now"), "organize_files": ("edit",)}  # these continue a task
+CONTEXT_TOOL_SEL_MIN = 0.80  # the text tool joins an AI request (VS Code open) when its meaning is a selection action
+CONTEXT_TOOL_MARGIN = 0.10  # ... or the text area is this close to the best area
 # --- OCR (read_text): Tesseract first (0 tokens); the vision model only for handwriting / hard photos ---
 OCR_LANGS = os.getenv("KURAMA_OCR_LANGS", "eng+nep")
 OCR_MIN_CONF = float(os.getenv("KURAMA_OCR_MIN_CONF", "75"))  # Tesseract's mean word confidence below this = poor
@@ -1001,7 +1020,8 @@ JOBS_NOTIFY = os.getenv("JARVIS_JOBS_NOTIFY", "1").lower() not in ("0", "false",
 # Groq free tier per model. Per-model overrides: MODEL_LIMITS[model] = {"tpm": ..., "rpm": ...}.
 MODEL_TPM = int(os.getenv("JARVIS_MODEL_TPM", "8000"))
 MODEL_RPM = int(os.getenv("JARVIS_MODEL_RPM", "30"))
-MODEL_LIMITS: dict[str, dict[str, int]] = {}
+MODEL_LIMITS: dict[str, dict[str, int]] = {LLM_GEMINI: {"tpm": 200_000, "rpm": 9},  # Gemini free tier (per minute)
+                                           LLM_GEMINI_LITE: {"tpm": 200_000, "rpm": 14}}
 RATE_BACKGROUND_RESERVE = 0.3  # share of TPM/RPM background jobs must leave free for interactive
 RATE_INTERACTIVE_MAX_WAIT_S = 3.0  # interactive calls wait at most this long, then go anyway
 
@@ -1185,11 +1205,16 @@ MEANING_SHORTCUTS: dict[str, tuple[str, ...]] = {
                    "begin the queued jobs", "work on your job list now"),
     "jobs_list": ("show my job list", "what jobs are waiting", "list the jobs you have", "what is in your job list",
                   "show the queued jobs", "which jobs are pending"),
+    # a short text message to the owner's Telegram (the words after 'send' / 'saying' are the message): 0 tokens
+    "tg_message": ("send X to telegram", "send X to my telegram", "message me on telegram saying X",
+                   "send a message to my telegram saying X", "text X to my phone", "send X on telegram",
+                   "telegram me X", "send me X on telegram"),
 }
 MEANING_SHORTCUT_AREAS = {"save_link": "links", "list_links": "links", "read_later_add": "links", "copy_path": "clipboard",
                           "open_vscode": "files", "jobs_start": "jobs", "jobs_list": "jobs",
                           "clean_ram": "system", "clean_kurama": "system", "clean_storage": "system", "show_desktop": "windows", "switch_tab": "windows",
-                          "list_tabs": "windows", "close_tab": "windows", "scroll_down": "windows", "scroll_up": "windows", "colab_setup": "watch", "new_folder": "files"}  # the router offers it too
+                          "list_tabs": "windows", "close_tab": "windows", "scroll_down": "windows", "scroll_up": "windows", "colab_setup": "watch", "new_folder": "files",
+                          "tg_message": "telegram"}  # the router offers it too
 MEANING_SHORTCUT_MIN = 0.82
 # actions that change everything on screen need more certainty ("show my screen" is not "go to the home screen": 0.86)
 MEANING_SHORTCUT_MIN_BY = {"show_desktop": 0.90}

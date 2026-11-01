@@ -3221,6 +3221,28 @@ def _bare_yes_no(t: str) -> bool:
     return bool(yes_no(t)) and len(re.findall(r"[\w']+", t)) <= 4
 
 
+_TG_TO = re.compile(r"\b(?:send|text|message|forward)\s+(?:me\s+)?(?:a\s+message\s+)?(?:saying\s+)?"
+                    r"(?P<m>.+?)\s+(?:to|on|in|via|through)\s+(?:my\s+)?(?:telegram|phone|mobile)$", I)
+_TG_SAYING = re.compile(r"\b(?:telegram|phone|mobile)\s*[,:]?\s+(?:me\s+)?(?:saying|that\s+says|says|that)?\s*:?\s*(?P<m>.+)$", I)
+
+
+def tg_message_text(raw: str) -> str | None:
+    """The message in 'send hello to telegram' / 'message me on telegram saying X' (None when it is a FILE or 'it':
+    'send the essay to telegram' sends the essay, never the word 'the essay')."""
+    from jarvis.core import focus, workmem
+    t = " ".join((raw or "").split()).strip(" .!?")
+    m = _TG_TO.search(t) or _TG_SAYING.search(t)
+    if not m:
+        return None
+    msg = m.group("m").strip(" \"'")
+    if re.match(r"(?:this|that|these|those|the|my|your|its|it)\b", msg, I):
+        return None  # 'my location', 'this link', 'the result': a THING to send, not the words themselves
+    if not msg or len(msg) > 500 or focus.is_anaphora(msg) or workmem.kind_named(msg) \
+            or re.search(r"(?:^|\s)(?:/|~/)|\b[\w-]+\.[a-z0-9]{2,5}\b|https?://", msg, I):
+        return None  # a file, a path, a link or 'it': the send-file / send-last tools
+    return msg
+
+
 _IN_PLACE = re.compile(r"\b(?:in|inside|into|under|at)\s+(?:the\s+|my\s+)?(?P<loc>[\w.-]+(?:\s+[\w.-]+){0,3}?)"
                        r"(?:\s+(?:folder|directory|dir))?(?=\s*(?:$|[,.!]|\b(?:and|then|named|name|called|with)\b))", I)
 
@@ -3412,6 +3434,12 @@ def meaning_intent(text: str) -> Intent | None:
             return None  # words that aren't a new-folder request (or a place that isn't a real folder): the AI
         it = Intent("mkdir", "make_folder", "files", {"path": str(here / (nm.group("n").strip() if nm else "New folder"))},
                     known=raw[m.start():m.end()].strip() if said != raw else "")
+        return it if meaning_ok(t, it) else None
+    if label == "tg_message":  # "send hello to telegram", "message me on telegram saying I'm late": the message
+        msg = tg_message_text(raw)
+        if msg is None:
+            return None
+        it = Intent("tgmsg", "send_message_telegram", "telegram", {"text": msg}, known=msg)
         return it if meaning_ok(t, it) else None
     if label in ("save_link", "switch_tab", "close_tab"):  # the words left over ARE the name ("save this website names
         if pos and (pos[-1] - pos[0] + 1 != len(pos) or pos[0] == 0):  # whatsapp" -> whatsapp)

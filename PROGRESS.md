@@ -872,4 +872,19 @@ Phases (one at a time, owner tests after each):
       caught. Live: the owner's folder request (with "let's work ..", list instead of VS Code) = 2 steps, 0 tokens,
       folder made and listed. Tests: test_taskgraph.py (14) + updated p7c/evening; suite 1378 passed; scorecard
       67% / 100% / 98%. Next: Phase 3 (Gemini fallback when GEMINI_API_KEY is set; token cuts).
+- [x] 2026-11-01 20:20 Memory + multitasking rebuild, PHASE 3 (fallback + token cuts). Evidence (traces 10-29..11-01,
+      445 AI turns): 2,175 input tokens per AI turn, 2.24 AI calls per turn; the text tool (~300 tokens) went with 45%
+      of AI turns just because VS Code was open; when both gpt-oss hit Groq's daily limit, every request first failed
+      on them, then qwen claimed actions it never did. Done: (1) Gemini fallback (langchain-google-genai 4.4.2, no
+      torch): gemini-2.5-flash (thinking off, ~1.5 s, tool calls OK) then gemini-flash-lite-latest, after Groq's
+      gpt-oss and before qwen; only with GEMINI_API_KEY; tests never call it. (2) A model answering 429 beyond the
+      wait limit is skipped for its Retry-After (min 120 s, max 1 h) instead of failing first on every request.
+      (3) Short single actions (make_folder, timers, reminders, music, youtube, downloads, write_file, send file,
+      move/trash, links, organize, code_to_file) end on the tool's own sentence: no second AI call (~1,000 tokens);
+      longer or multi-part requests still let the AI go on. (4) The text tool joins only when the request MEANS the
+      open file/highlight (selection meaning >= 0.80 or the text area within 0.10 of the best). (5) "send hello to
+      telegram" / "message me on telegram saying X" = 0-token tg_message ('it', 'my location', 'this link', files and
+      paths are never sent as words). Live: "send hello to telegram" 0 tokens (was 1,323); with gpt-oss used up,
+      Gemini answered (1,275 tokens, no failed calls first). Telegram timing: getMe 0.2-0.8 s; the one 6 s send was
+      13 s after a restart (startup load). Tests: test_phase3.py (29); suite 1407 passed; scorecard 68% / 100% / 98%.
 

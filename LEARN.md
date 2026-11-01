@@ -487,6 +487,7 @@ from you.
 | Technology | Used for | Why this one (and what was rejected) |
 |---|---|---|
 | **Groq** (gpt-oss-20b fast, gpt-oss-120b smart, qwen3.8-27b voice/vision, Whisper) | the AI, speech-to-text | Free tier, very fast. Rejected: local LLMs (no GPU, 8 GB RAM), paid APIs. |
+| **Gemini** (2.5-flash, flash-lite; optional `GEMINI_API_KEY`) | fallback when Groq's daily limits are used up | Free tier, ~10 requests/min. Before qwen, which claimed actions it never did. A model that answers 429 is skipped for a while (`llm._cool`). |
 | **LangChain** (`ChatGroq`, tool schemas) | one interface for messages and tools | Readable, swappable provider. Raw Groq SDK only for Whisper. |
 | **LangGraph** | the agent as a graph (plan/route/llm/tools/join), parallel fan-out with `Send` | Explicit, testable states; easy to add a node. Rejected: a hand-written while-loop (hard to extend), multi-agent frameworks (too many tokens). |
 | **fastembed + ONNX Runtime** (`bge-small-en-v1.5`) | meaning: routing, shortcuts, search | ~250 MB, CPU only, no PyTorch. Rejected: sentence-transformers (pulls in torch, >1 GB). |

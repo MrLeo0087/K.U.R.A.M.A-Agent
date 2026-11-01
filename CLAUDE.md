@@ -10,7 +10,7 @@
 
 ## Stack (do not change without asking)
 - Python 3.11+. LangChain + LangGraph are the PRIMARY framework (user can read them): ChatGroq (langchain-groq) for LLM calls, langchain_core tools for tool definitions, LangGraph StateGraph for routing, tool loops and parallel fan-out (Send). Only drop to the raw Groq SDK where LangChain has no support (e.g. Whisper STT). Reuse my existing Flet UI and widget.
-- LLM: Groq only. Model IDs live only in config.py. Groq retired the Llama models (2026-10), so: smart tier openai/gpt-oss-120b ("70b" below), fast tier openai/gpt-oss-20b ("8b" below), voice tier and vision qwen/qwen3.8-27b.
+- LLM: Groq first; Gemini free tier (GEMINI_API_KEY, gemini-2.5-flash then flash-lite) only as the fallback after Groq's gpt-oss models and before qwen (owner-approved 2026-11-01). Model IDs live only in config.py. Groq retired the Llama models (2026-10), so: smart tier openai/gpt-oss-120b ("70b" below), fast tier openai/gpt-oss-20b ("8b" below), voice tier and vision qwen/qwen3.8-27b.
 - STT: Groq whisper-large-v3-turbo (fallback whisper-large-v3). Languages: English, Nepali, Hindi.
 - TTS: edge-tts. Voices in config: en en-GB-RyanNeural, en-US-AvaMultilingualNeural, hi hi-IN-MadhurNeural, ne ne-NP-SagarNeural. Offline fallback: piper.
 - VAD: webrtcvad (no torch). Wake word: openwakeword.

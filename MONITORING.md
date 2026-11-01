@@ -180,6 +180,13 @@ every tool of that kind, not just the sentence in the trace.
   need made things. Watch: steps "failed" that really worked (a tool answering "error"-like text), "skipped" chains,
   filler dropped wrongly (FILLER_EXAMPLES), learned plans reused for a different request (data/learned_plans.json,
   TASK_PLAN_MATCH 0.93), "close X" asking when it shouldn't.
+- **Phase 3 (11-01 night)**: Gemini (`gemini-2.5-flash`, then `gemini-flash-lite-latest`) answers after Groq's
+  gpt-oss models and before qwen; a model that answers 429 past the wait limit is skipped (`llm._cool`, log
+  "is rate-limited: skipped for N s"). Token cuts: short single actions end on the tool's own sentence (no second AI
+  call: config.DIRECT_REPLY_SINGLE); the text tool joins an AI request only when it means the open file
+  (`_about_context`); "send hello to telegram" = 0-token `tg_message`. Watch: llm entries with gemini (Groq used up),
+  a short action whose reply should have been worded by the AI, a request about the open file answered without the
+  text tool, tg_message sending words that meant a thing ("send the result to telegram").
 - Watch: `path: fastpath` traces with intents tab / tabs / desktop / colab / links / clean (meaning actions taking
   the wrong request), "llm" entries with model qwen (the fallback in use = daily limit reached), hang.log dumps,
   stt.log lines with no trace (speech heard but not sent).
@@ -254,3 +261,5 @@ video now" rule in `video_dl_intent`, the filler-word list in `tools/general/vid
   history per step, checked steps, one re-plan, skipped-with-reason, follow-ups after jobs, learned plans, filler by
   meaning, close only what the plan opened); new folder in a named real place (0 tokens); "Done. Folder X created in
   Downloads" with no tool is now caught as a claim; "list files in this folder" is its own task.
+- 2026-11-01 20:20: memory rebuild Phase 3: Gemini fallback (after gpt-oss, before qwen), used-up models skipped
+  (cooldown), direct replies for short single actions, text tool only by meaning, 0-token Telegram message.

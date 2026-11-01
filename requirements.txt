@@ -12,6 +12,7 @@ pynput==1.8.2
 langgraph==1.2.16
 langchain-core==1.7.0
 langchain-groq==1.1.3
+langchain-google-genai==4.4.2  # optional Gemini fallback (no torch); pulls google-genai 2.34.0
 # P6 Background core: stdlib + psutil + httpx only
 httpx==0.28.1  # Telegram Bot API + n8n webhooks (already pulled in by groq)
 # dev

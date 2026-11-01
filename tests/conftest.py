@@ -27,6 +27,10 @@ def tmp_store(tmp_path, monkeypatch):
     monkeypatch.setattr(browsertab, "_SEL", {"text": "", "url": "", "title": "", "ts": 0.0})  # no highlight leaks
     monkeypatch.setattr(config, "JOBS_NOTIFY", False)  # never pop desktop notifications in tests
     monkeypatch.setattr(config, "TELEGRAM_BOT_TOKEN", "")  # never message the real phone from a test
+    monkeypatch.setattr(config, "GEMINI_API_KEY", "")  # never call the real Gemini (Phase 3 tests opt in with fakes)
+    monkeypatch.setattr(config, "TIER_CHAIN", {k: [m for m in v if not m.startswith("gemini")]
+                                               for k, v in config.TIER_CHAIN.items()})
+    llm._cool.clear()
     monkeypatch.setattr(config, "NOTIFY_DESKTOP", False)
     monkeypatch.setattr(config, "SOUNDS", False)  # no alarm sounds from tests
     monkeypatch.setattr(config, "CORE_TOOLS", False)  # old-tool tests see the specialised tools; v2 tests opt in

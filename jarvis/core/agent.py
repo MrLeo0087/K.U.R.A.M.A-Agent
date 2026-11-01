@@ -425,7 +425,7 @@ class Agent:
         routed = list(r.groups)  # what the request itself needs (before the editor's context area)
         try:  # code open in VS Code or text highlighted anywhere: the text/code tool is always offered (the context
             from jarvis.core import context, rewrite  # line says what is open / selected)
-            if self.channel != "telegram" and "clipboard" not in r.groups and (
+            if self.channel != "telegram" and "clipboard" not in r.groups and _about_context(state["user_text"]) and (
                     context.editor_open() or (config.CONTEXT and rewrite.peek().strip())):
                 r = router.Route(["clipboard", *r.groups][: config.ROUTER_MAX_GROUPS], r.method, r.reasoning, r.latency_ms)
         except Exception as e:  # noqa: BLE001
@@ -681,6 +681,9 @@ class Agent:
         real = {m.tool_call_id: underlying(m.name, (calls.get(m.tool_call_id) or {}).get("args") or {}) for m in results}
         if not results or any(real[m.tool_call_id][0] not in config.DIRECT_REPLY_TOOLS for m in results):
             return ""
+        if any(real[m.tool_call_id][0] in config.DIRECT_REPLY_SINGLE for m in results) and (
+                len(state["user_text"].split()) > config.DIRECT_REPLY_MAX_WORDS or planner.is_multi(state["user_text"])):
+            return ""  # a bigger request ('set up a project folder with ...'): the AI may go on after this call
         lang = state.get("lang") or "en"
         said = []
         for m in results:
@@ -1137,6 +1140,20 @@ def tidy(text: str) -> str:
     """Invisible characters out, a run of ellipses down to one space."""
     text = _DID.sub("", _ZW.sub("", text)).replace("\u00a0", " ").replace("\u202f", " ")
     return re.sub(r"(?:\s*(?:\.\.\.|\u2026)\s*){2,}", " ", text)
+
+
+def _about_context(text: str) -> bool:
+    """Does the request mean the open file / highlight ('fix this', 'explain', 'write a function in this file')? Then
+    the text tool comes with it. 'send hello to telegram' with VS Code open used to pay ~300 tokens for it (45% of AI
+    turns, 10-29..11-01). Model not loaded: offered as before."""
+    from jarvis.core import semantic
+    if not semantic.ready():
+        return True
+    best = semantic.best_of(text, "selection", config.SELECTION_EXAMPLES)
+    if best and best[1] >= config.CONTEXT_TOOL_SEL_MIN:
+        return True
+    sc = dict(semantic.scores(text))
+    return bool(sc) and sc.get("clipboard", 0.0) >= max(sc.values()) - config.CONTEXT_TOOL_MARGIN
 
 
 def _sentence(text: str) -> str:

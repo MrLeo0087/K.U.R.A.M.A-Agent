@@ -32,7 +32,8 @@ from jarvis.core import budget, config, ratelimit, store
 log = logging.getLogger("jarvis.llm")
 
 _client: Any = None
-_models: dict[str, ChatGroq] = {}
+_models: dict[str, Any] = {}  # ChatGroq, or ChatGoogleGenerativeAI for the Gemini fallback
+_cool: dict[str, float] = {}  # model -> time until which it is skipped (its daily / per-minute limit is used up)
 _models_lock = threading.Lock()
 _sleep = time.sleep  # patched in tests
 
@@ -104,10 +105,26 @@ def model_settings(model: str) -> dict:
     return kw
 
 
-def model_for(model: str) -> ChatGroq:
-    """Cached ChatGroq for one model id (max_retries=0: retries are ours)."""
+def is_gemini(model: str) -> bool:
+    return model.startswith("gemini")
+
+
+def _gemini(model: str) -> Any:
+    """Google's Gemini through LangChain: the fallback after Groq's models (their daily limits)."""
+    from langchain_google_genai import ChatGoogleGenerativeAI  # lazy: only when the fallback is used
+    if not config.GEMINI_API_KEY:
+        raise LLMError("GEMINI_API_KEY missing")
+    return ChatGoogleGenerativeAI(model=model, google_api_key=config.GEMINI_API_KEY, temperature=config.LLM_TEMPERATURE,
+                                  max_output_tokens=config.LLM_MAX_TOKENS, max_retries=0, timeout=config.LLM_TIMEOUT_S,
+                                  **config.MODEL_PARAMS.get(model, {}))
+
+
+def model_for(model: str) -> Any:
+    """Cached chat model for one model id (max_retries=0: retries are ours)."""
     with _models_lock:
         m = _models.get(model)
+        if m is None and is_gemini(model):
+            m = _models[model] = _gemini(model)
         if m is None:
             m = ChatGroq(model=model, temperature=config.LLM_TEMPERATURE,
                          max_tokens=config.LLM_MAX_TOKENS, max_retries=0,
@@ -222,7 +239,13 @@ def get_chat_model(tier: str = "fast", purpose: str = "") -> Any:
 
 # --- retry helpers ---
 def _status(err: Exception) -> int | None:
-    return getattr(err, "status_code", None)
+    s = getattr(err, "status_code", None) or getattr(err, "code", None)
+    if isinstance(s, int):
+        return s
+    m = re.search(r"\b(429|5\d\d)\b|RESOURCE_EXHAUSTED|UNAVAILABLE|DEADLINE_EXCEEDED", str(err)[:300])
+    if m:  # Gemini errors carry the code in the message ("429 RESOURCE_EXHAUSTED", "504 DEADLINE_EXCEEDED")
+        return int(m.group(1)) if m.group(1) else (429 if "EXHAUSTED" in m.group(0) else 503)
+    return None
 
 
 def _retryable(err: Exception) -> bool:
@@ -281,7 +304,10 @@ def _chain(tier: str) -> list[str]:
     if level == "fast" and tier == "smart":  # Light / Laptop only: the small model only
         tier = "fast"
     chain = config.TIER_CHAIN[tier]
-    allowed = [m for m in chain if budget.allow(m)]
+    now = time.time()
+    allowed = [m for m in chain if budget.allow(m) and _cool.get(m, 0) <= now]  # a used-up model isn't tried
+    if not allowed:  # every model cooling down: still try them (a limit may have reset early)
+        allowed = [m for m in chain if budget.allow(m)]
     if not allowed:  # all self-budgets spent: still try the cheapest; Groq enforces real limits
         log.warning("daily token budget exhausted for %s; trying %s anyway", chain, chain[-1])
         allowed = [chain[-1]]
@@ -313,6 +339,11 @@ def _on_error(e: Exception, model: str, attempt: int, retries: int) -> bool:
     We never raise here: a non-retryable error on one model (e.g. a 400, or that model being down) should
     still let the next model try. _complete/_stream raise LLMError only after every model has failed."""
     wait = _plan_retry(e, attempt, retries)
+    if _status(e) == 429 and wait is None:  # its daily (or minute) limit is used up: skip it for a while instead
+        cool = min(max(_retry_after(e) or config.LLM_COOLDOWN_S, config.LLM_COOLDOWN_S), 3600)  # of failing first
+        _cool[model] = time.time() + cool  # on every request (2 wasted calls per turn on 11-01 evening)
+        log.warning("%s is rate-limited: skipped for %.0f s", model, cool)
+        return False
     if wait is None:
         if not _retryable(e):
             log.warning("%s failed (%s): %s — trying the next model", model, type(e).__name__, str(e)[:120])
@@ -330,6 +361,11 @@ def _bound(model: str, tools: Sequence | None, max_tokens: int | None, temperatu
     m: Any = model_for(model)
     if tools:
         m = m.bind_tools(list(tools), tool_choice=tool_choice or "auto")
+    if is_gemini(model):  # its own names; Groq-only settings (timeout per call, reasoning) are dropped
+        kw = {"max_output_tokens": max_tokens or config.LLM_MAX_TOKENS}
+        if temperature is not None:
+            kw["temperature"] = temperature
+        return m.bind(**kw)
     kw: dict[str, Any] = {"max_tokens": max_tokens or config.LLM_MAX_TOKENS, **extra}
     if temperature is not None:
         kw["temperature"] = temperature
@@ -452,6 +488,8 @@ def structured(messages: Sequence[Any], schema: type, tier: str = "fast", purpos
             base = model_for(model)
             if "max_tokens" in type(base).model_fields:
                 base = base.model_copy(update={"max_tokens": rate[2]})
+            elif "max_output_tokens" in type(base).model_fields:
+                base = base.model_copy(update={"max_output_tokens": rate[2]})
             # Strict json_schema = constrained decoding: the reply is always valid JSON.
             # (function_calling on gpt-oss occasionally emits broken JSON -> Groq 400.)
             method = config.STRUCTURED_METHOD.get(model, "function_calling")
