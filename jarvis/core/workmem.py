@@ -15,12 +15,14 @@ their output. Shared across processes via the kv store (laptop and Telegram are 
 """
 from __future__ import annotations
 
+import contextlib
+import contextvars
 import json
 import logging
 import re
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from jarvis.core import config, store
 
@@ -72,6 +74,22 @@ def kind_named(text: str) -> str:
     return ""
 
 
+# --- what one step of a plan did (taskgraph): its calls, the things it made, the jobs it started ---
+_COLLECT: contextvars.ContextVar[dict | None] = contextvars.ContextVar("kurama_workmem_collect", default=None)
+
+
+@contextlib.contextmanager
+def collect() -> Iterator[dict]:
+    """Within the block, every tool call is added to the yielded {"calls": [(name, ok)], "things": [path],
+    "jobs": [id]} (threads started inside see the same dict through the copied context)."""
+    got: dict = {"calls": [], "things": [], "jobs": []}
+    token = _COLLECT.set(got)
+    try:
+        yield got
+    finally:
+        _COLLECT.reset(token)
+
+
 # --- things ---
 def _load(key: str, default: Any) -> Any:
     try:
@@ -99,6 +117,8 @@ def note(path: str | Path, by: str = "") -> dict | None:
         item = {"p": str(p), "k": kind_of(p), "by": by, "t": time.time()}
         rest = [t for t in _load(_THINGS, []) if t.get("p") != item["p"]]
         store.kv_set(_THINGS, json.dumps(([item] + rest)[:MAX_THINGS]))
+        if (got := _COLLECT.get()) is not None and item["p"] not in got["things"]:
+            got["things"].append(item["p"])
         return item
     except Exception as e:  # noqa: BLE001  (memory must never break a tool call)
         log.debug("workmem note failed: %s", e)
@@ -186,6 +206,7 @@ def _arg_paths(args: Any) -> list[Path]:
     return out
 
 
+_FAILED = ("error", "refused", "the user declined", "sorry, that didn't work", "no open window")
 _NUMBERED = re.compile(r"^\s*(?:\d{1,2}[.)]|[-*•])\s+")
 
 
@@ -194,6 +215,10 @@ def record_call(name: str, args: Any, ok: bool, result: str) -> None:
     numbered list of real paths ('I found three copies: 1. ... 2. ...') becomes a choice the next reply can pick."""
     if name in _SKIP_TOOLS or name.startswith("_"):
         return
+    ok = bool(ok) and not str(result or "").lstrip().lower().startswith(_FAILED)  # many tools return "error: ..."
+    if (got := _COLLECT.get()) is not None:
+        got["calls"].append((name, ok))
+        got["jobs"].extend(int(j) for j in re.findall(r"\bjob #(\d+)", str(result or "")) if int(j) not in got["jobs"])
     try:
         res = str(result or "")
         listed = [p for ln in res.splitlines() if _NUMBERED.match(ln) for p in paths_in(ln)]

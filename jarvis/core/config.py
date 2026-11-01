@@ -974,7 +974,19 @@ REMOTE_HELPER = "/usr/local/sbin/kurama-rustdesk"  # root-owned helper (scripts/
 TELEGRAM_PIN_WINDOW_S = float(os.getenv("TELEGRAM_PIN_WINDOW_S", "1800"))  # risky PIN is remembered this long (30 min)
 
 # --- Multitasking (P3b-2): planner, background jobs, rate limiter ---
-PLANNER_MAX_TASKS = 4
+PLANNER_MAX_TASKS = 8
+TASK_GRAPH = True  # Phase 2: planned requests run as a task graph (steps with real inputs/outputs); False = old chains
+TASK_REPLAN = True  # a failed step gets one corrected try (one small fast-tier call)
+TASK_REPLAN_MAX_TOKENS = 150
+TASK_PLANS_KEEP = 60  # learned plans kept (data/learned_plans.json)
+TASK_PLAN_MATCH = 0.93
+# a part of a multi-task request that asks for nothing ("let's work .. create a folder X"): no step (by meaning)
+FILLER_EXAMPLES = ("let's work", "let's start", "let's do this", "ok so", "so", "now then", "alright let's go",
+                   "come on", "listen", "okay now", "bro", "ok bro", "yaar", "let's begin", "right", "well then")
+NOT_FILLER_EXAMPLES = ("tell me a joke", "what is the capital of nepal", "open youtube", "create a folder",
+                       "play some music", "send it to telegram", "what time is it", "how are you", "write a poem",
+                       "work on my essay", "start the timer", "show my jobs")
+FILLER_MIN = 0.86  # a request this close in meaning to a learned plan reuses it (0 tokens)
 PLANNER_MAX_TOKENS = 300
 LONG_JOB_MIN_WORDS = 150  # writing requests at least this long run as background jobs
 WORDS_PER_LINE = 12  # "a 1000-line essay" ~ 12 words per line
@@ -1144,7 +1156,8 @@ MEANING_SHORTCUTS: dict[str, tuple[str, ...]] = {
                     "code to paste in my kaggle notebook so you can watch the training",
                     "setup colab notebook to watch out my training"),
     "new_folder": ("create a new folder here named X", "make a folder called X in this folder", "new folder here",
-                   "create folder X here", "make a new folder in this folder", "create a new folder in here, name it X"),
+                   "create folder X here", "make a new folder in this folder", "create a new folder in here, name it X",
+                   "create a new folder in X named X", "make a folder called X in X"),
     "show_desktop": ("go to the home screen", "show me the desktop", "minimize all windows", "hide every window",
                      "take me to the home screen"),
     "copy_path": ("copy the path of this folder", "copy this file's path", "put the path of the selected folder in "

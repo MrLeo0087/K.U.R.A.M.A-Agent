@@ -34,7 +34,7 @@ from langchain_core.messages import (AIMessage, BaseMessage, HumanMessage, Syste
                                      ToolMessage)
 
 from jarvis.core import (config, fastpath, identity, selfknow, jobs, llm, meta, notify, planner, profile, registry, router, trace,
-                         modes, safety, store, workmem, workspace)
+                         modes, safety, store, taskgraph, workmem, workspace)
 
 log = logging.getLogger("jarvis.agent")
 
@@ -95,6 +95,10 @@ class AgentState(TypedDict, total=False):
     request: str  # P7c: the user's whole original request (sub-tasks keep it for tool context)
     idx: int
     results: Annotated[list, operator.add]  # fan-out results, merged by the join node
+    done: Annotated[list, operator.add]  # Phase 2 task graph: finished steps {idx, text, status, answer, things, job}
+    step: dict  # one step of the task graph (Send payload)
+    inputs: list[dict]  # the finished steps this step needs
+    windows: list[str]  # window ids open before the plan started (a 'close X' step closes only new ones)
     retried: bool  # P7b: the refusal retry already happened this turn
     again: bool  # P7b: llm -> llm (refusal retry with request_tools bound)
 
@@ -159,6 +163,16 @@ class Agent:
             g.add_edge(START, "route")
             return g.compile()
         g.add_node("plan", self._plan_node)
+        if config.TASK_GRAPH:  # Phase 2: schedule -> every ready step at once -> schedule ... -> finish
+            g.add_node("schedule", lambda s: {})
+            g.add_node("step", self._step_node)
+            g.add_node("finish", self._finish_node)
+            g.add_edge(START, "plan")
+            g.add_conditional_edges("plan", self._after_plan, ["route", "schedule"])
+            g.add_conditional_edges("schedule", self._after_schedule, ["step", "finish"])
+            g.add_edge("step", "schedule")
+            g.add_edge("finish", END)
+            return g.compile()
         g.add_node("quick", self._quick_node)
         g.add_node("long", self._long_node)
         g.add_node("chain", self._chain_node)
@@ -184,15 +198,21 @@ class Agent:
         p = planner.plan(state["user_text"])
         self.last["plan"] = {"method": p.method, "tasks": p.tasks,
                              "ms": int((time.monotonic() - t0) * 1000)}
-        return {"tasks": p.tasks}
+        out: dict = {"tasks": p.tasks}
+        if config.TASK_GRAPH and len(p.tasks) > 1:
+            out["windows"] = taskgraph.window_ids()  # 'close X' later in the plan closes only what the plan opened
+        return out
 
     @staticmethod
     def _after_plan(state: AgentState) -> Any:
         from langgraph.types import Send
 
         tasks = state.get("tasks") or []
-        if len(tasks) <= 1 and (not tasks or tasks[0]["kind"] == "quick"):
+        if len(tasks) <= 1 and (not tasks or tasks[0]["kind"] == "quick") and (
+                not config.TASK_GRAPH or not tasks or tasks[0]["text"] == state["user_text"]):
             return "route"  # normal single request: unchanged path
+        if config.TASK_GRAPH:
+            return "schedule"
         base = {"mode": state.get("mode", "text"), "lang": state.get("lang"),
                 "user_text": state["user_text"]}
         sends = []
@@ -206,14 +226,101 @@ class Agent:
                                             "idx": group[0]}))
         return sends
 
-    def _run_task(self, text: str, mode: str, lang: str | None, prev: str = "", request: str = "") -> str:
-        """One quick task through the route->llm->tools subgraph (prev: earlier step's result)."""
-        if not prev:
+    # --- Phase 2: the task graph ---
+    @staticmethod
+    def _after_schedule(state: AgentState) -> Any:
+        """Every step whose needs all finished OK runs now, together; nothing ready -> finish."""
+        from langgraph.types import Send
+
+        tasks = state.get("tasks") or []
+        done = {r["idx"]: r for r in state.get("done") or []}
+        base = {"mode": state.get("mode", "text"), "lang": state.get("lang"), "user_text": state["user_text"],
+                "windows": state.get("windows")}
+        sends = []
+        for i, t in enumerate(tasks):
+            needs = [n for n in t.get("depends_on", []) if 0 <= n < len(tasks)]
+            if i in done or not all(n in done and done[n]["status"] == "ok" for n in needs):
+                continue
+            sends.append(Send("step", {**base, "step": {**t, "idx": i}, "inputs": [done[n] for n in needs]}))
+        return sends or "finish"
+
+    def _step_node(self, state: AgentState) -> dict:
+        s, inputs = state["step"], state.get("inputs") or []
+        mode, lang, request = state.get("mode", "text"), state.get("lang"), state.get("user_text", "")
+        for r in inputs:  # what the needed steps made is the freshest "it / this folder / that image"
+            for p in r.get("things") or []:
+                workmem.note(p, by=f"step {r['idx'] + 1}")
+        res = {"idx": s["idx"], "text": s["text"], "things": [], "job": None}
+        if s.get("kind") == "long":
+            job_text = s["text"] + taskgraph.inputs_text(inputs)
+            try:
+                job = jobs.start_task(job_text, lang=lang or planner.detect_lang(s["text"]))
+            except Exception as e:  # noqa: BLE001
+                log.exception("could not start job")
+                return {"done": [{**res, "status": "failed", "answer": TASK_FAILED.format(text=s["text"]),
+                                  "error": str(e)}]}
+            self.last.setdefault("jobs", []).append(job.id)
+            return {"done": [{**res, "status": "waiting", "job": job.id, "long": True,
+                              "answer": job_started_text(job.id, job.title, job.kind, lang or "en")}]}
+        text, status, answer, got = s["text"], "failed", "", {}
+        for attempt in range(2):  # the step, then (failed) one corrected step from a re-plan
+            with workmem.collect() as got, taskgraph.plan_windows(state.get("windows")):
+                answer = self._run_task(text, mode, lang, taskgraph.inputs_text(inputs), request=request,
+                                        fast_first=all(r.get("things") for r in inputs), history=False)
+            status = taskgraph.judge(answer, got, (*HONEST, TASK_FAILED.split("{")[0], NO_ANSWER))
+            if status != "failed" or attempt or not config.TASK_REPLAN:
+                break
+            fix = taskgraph.replan(text, answer, request)
+            if not fix:
+                break
+            log.info("step %d re-planned: %r -> %r", s["idx"] + 1, text, fix)
+            self.last.setdefault("replanned", []).append({"step": s["idx"], "from": text, "to": fix})
+            text = fix
+        jobs_ = got.get("jobs") or []
+        return {"done": [{**res, "status": status, "answer": answer, "things": got.get("things") or [],
+                          "job": jobs_[-1] if jobs_ else None}]}
+
+    def _finish_node(self, state: AgentState) -> dict:
+        """Skipped steps say why; steps waiting for a background job become a follow-up job; one answer."""
+        tasks = state.get("tasks") or []
+        lang = state.get("lang") or planner.detect_lang(state["user_text"])
+        final = taskgraph.settle(tasks, {r["idx"]: r for r in state.get("done") or []})
+        follow: dict[int, list[int]] = {}
+        for i in sorted(final):
+            if final[i]["status"] == "after" and final[i].get("job"):
+                follow.setdefault(final[i]["job"], []).append(i)
+        for job_id, idxs in follow.items():
+            try:
+                f = start_after_job(job_id, [tasks[i]["text"] for i in idxs], lang)
+                for i in idxs:
+                    final[i]["answer"] = AFTER_JOB.format(text=tasks[i]["text"], job=job_id, follow=f.id)
+            except Exception as e:  # noqa: BLE001
+                log.warning("follow-up job failed: %s", e)
+                for i in idxs:
+                    final[i].update(status="failed", answer=TASK_FAILED.format(text=tasks[i]["text"]))
+        self.last["steps"] = [{"idx": i, "status": final[i]["status"], "things": final[i].get("things") or []}
+                              for i in sorted(final)]
+        self.last.setdefault("jobs", []).extend(r["job"] for r in final.values() if r.get("long") and r.get("job"))
+        if (self.last.get("plan") or {}).get("method") == "llm" and all(r["status"] in ("ok", "waiting", "after")
+                                                                         for r in final.values()):
+            taskgraph.learn_plan(state["user_text"], planner.parts(state["user_text"]), tasks)
+        said = fastpath.merge_opens([_sentence(final[i]["answer"]) for i in sorted(final)
+                                     if final[i].get("answer") and not final[i].get("long")])
+        self.last.setdefault("route", router.Route([], "graph", False, 0))
+        started = [final[i]["answer"] for i in sorted(final) if final[i].get("long")]  # "Writing X (job #4)" last
+        return {"answer": " ".join(said + started).strip() or NO_ANSWER}
+
+    def _run_task(self, text: str, mode: str, lang: str | None, prev: str = "", request: str = "",
+                  fast_first: bool | None = None, history: bool = True) -> str:
+        """One quick task through the route->llm->tools subgraph (prev: earlier step's result). A task-graph step:
+        fast_first = try the shortcut even with inputs (they made things it can point at); history=False."""
+        if (not prev) if fast_first is None else fast_first:
             fast = self._fast(text, lang, mode, record=False)
             if fast is not None:  # zero-token quick task
                 return fast.answer
-        content = text + (PREV_RESULT.format(result=prev[:PREV_RESULT_MAX]) if prev else "")
-        msgs = self._messages(text, mode, lang)
+        content = text + ((prev if prev.startswith("\n(Results") else PREV_RESULT.format(result=prev[:PREV_RESULT_MAX]))
+                          if prev else "")
+        msgs = self._messages(text, mode, lang, history=history)
         msgs[-1] = HumanMessage(content=content)
         sub: AgentState = {"user_text": text, "messages": msgs, "stream": False, "mode": mode, "lang": lang,
                            "rounds": 0, "pending": [], "request": request or text}
@@ -600,22 +707,22 @@ class Agent:
         return " ".join(fastpath.merge_opens(said)).strip()
 
     # --- history ---
-    def _messages(self, user_text: str, mode: str, lang: str | None) -> list[BaseMessage]:
+    def _messages(self, user_text: str, mode: str, lang: str | None, history: bool = True) -> list[BaseMessage]:
         system = SYSTEM_PROMPT.replace("{name}", identity.name())
         if getattr(self, "channel", "") != "telegram":
             system += SCREEN_SUFFIX
         if mode == "voice":
             system += VOICE_SUFFIX.format(lang=LANG_NAMES.get(lang or "en", "English"))
         with self._lock:
-            if self.summary:
+            if self.summary and history:  # a task-graph step gets its inputs, not the chat
                 system += SUMMARY_SUFFIX.format(summary=self.summary)
-            recent = self.history[-2 * config.HISTORY_TURNS:]
+            recent = self.history[-2 * config.HISTORY_TURNS:] if history else []
         old_ai = [i for i, m in enumerate(recent) if isinstance(m, AIMessage)][:-config.DID_TURNS]
         recent = [AIMessage(content=_DID.sub("", str(m.content))) if i in old_ai else m for i, m in enumerate(recent)]
         # (what the tools did is kept for the last DID_TURNS replies only: older ones cost tokens on every request)
         if things := workmem.line():  # what this chat made/touched: "that image", "open it" point at these
             system += " " + things
-        if asked := getattr(self, "_asked", ""):
+        if history and (asked := getattr(self, "_asked", "")):
             system += f' Your latest message to the user asked: "{asked[-220:]}". If their reply answers it, do what it agreed to.'
         if getattr(self, "reply_to", ""):  # Telegram reply: the user is answering one earlier message
             system += f' The user is replying to this earlier message of yours: "{self.reply_to}".'
@@ -877,7 +984,7 @@ class Agent:
 
     @staticmethod
     def _config() -> dict:
-        return {"recursion_limit": 2 * config.AGENT_MAX_TOOL_ROUNDS + 6}
+        return {"recursion_limit": max(2 * config.AGENT_MAX_TOOL_ROUNDS + 6, 2 * config.PLANNER_MAX_TASKS + 8)}
 
     def run(self, user_text: str, mode: str = "text", lang: str | None = None) -> str:
         tr = trace.begin(user_text, mode, getattr(self, "channel", "") or "", enabled=self.persist)
@@ -1030,6 +1137,12 @@ def tidy(text: str) -> str:
     """Invisible characters out, a run of ellipses down to one space."""
     text = _DID.sub("", _ZW.sub("", text)).replace("\u00a0", " ").replace("\u202f", " ")
     return re.sub(r"(?:\s*(?:\.\.\.|\u2026)\s*){2,}", " ", text)
+
+
+def _sentence(text: str) -> str:
+    """'Created folder /a/b' -> 'Created folder /a/b.' (step answers are joined into one reply)."""
+    t = text.strip()
+    return t if not t or t[-1] in ".!?…:)]`'\"\u0964" or "\n" in t else t + "."
 
 
 _DID = re.compile(r"\s*\[tools this turn:[^\]]*\]?\s*$")

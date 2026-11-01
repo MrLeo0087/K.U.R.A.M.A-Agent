@@ -174,6 +174,12 @@ every tool of that kind, not just the sentence in the trace.
   `[tools this turn: ...]` (last 2 only); the laptop chat resumes after a restart. Keys/passwords: a private file
   (.env, *.pem, id_rsa...) or a highlighted key is never context, never sent. Watch: route method `answer` with
   wrong tools, `choice` intents, a "Things from this chat" line naming the wrong file, BARE replies after a question.
+- **Memory rebuild, Phase 2 (11-01 night)**: task graph (`jarvis/core/taskgraph.py`, config.TASK_GRAPH; False =
+  the old chains). Trace `plan.method` rules / learned / llm; agent `last.steps` = status per step (ok / failed /
+  skipped / waiting / after), `last.replanned`. Steps run without chat history, shortcut first when the steps they
+  need made things. Watch: steps "failed" that really worked (a tool answering "error"-like text), "skipped" chains,
+  filler dropped wrongly (FILLER_EXAMPLES), learned plans reused for a different request (data/learned_plans.json,
+  TASK_PLAN_MATCH 0.93), "close X" asking when it shouldn't.
 - Watch: `path: fastpath` traces with intents tab / tabs / desktop / colab / links / clean (meaning actions taking
   the wrong request), "llm" entries with model qwen (the fallback in use = daily limit reached), hang.log dumps,
   stt.log lines with no trace (speech heard but not sent).
@@ -244,3 +250,7 @@ video now" rule in `video_dl_intent`, the filler-word list in `tools/general/vid
 - 2026-11-01 19:15: memory rebuild Phase 1 (working memory, answers to KURAMA's questions by the question's meaning,
   choices, tool lines in history, laptop chat resumes) + private files/keys never in context (a 'yes' with .env open
   printed the Groq key). Test fixture time bomb fixed (Telegram tests went stale once the suite ran > 4 min).
+- 2026-11-01 19:45: memory rebuild Phase 2: task graph (steps with real inputs/outputs, shortcut-first steps, no
+  history per step, checked steps, one re-plan, skipped-with-reason, follow-ups after jobs, learned plans, filler by
+  meaning, close only what the plan opened); new folder in a named real place (0 tokens); "Done. Folder X created in
+  Downloads" with no tool is now caught as a claim; "list files in this folder" is its own task.

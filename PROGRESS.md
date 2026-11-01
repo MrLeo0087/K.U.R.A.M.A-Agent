@@ -855,4 +855,21 @@ Phases (one at a time, owner tests after each):
       Tests: test_workmem.py (37), test_privacy_guard.py (21); suite 1364 passed; scorecard 67% / 100% / 98%.
       Next: Phase 2 (task graph: steps with real inputs/outputs, learned plans, re-plan on failure), Phase 3 (Gemini
       fallback when GEMINI_API_KEY is set, token cuts).
+- [x] 2026-11-01 19:45 Memory + multitasking rebuild, PHASE 2 (task graph). Owner: tasks that depend on each other
+      fail ("create folder X in downloads and open this folder in vs code": the folder wasn't made, VS Code opened an
+      old Webcam folder, 5,500 tokens). Causes: 'this' didn't mark a dependency, so both ran at once; a step only got
+      the previous step's SENTENCE; "let's work" became a task; each step was a full AI call with the whole chat;
+      qwen's "Made it" with no tool wasn't caught. New: jarvis/core/taskgraph.py + agent nodes schedule -> step (all
+      ready steps at once, LangGraph Send) -> schedule -> finish. A step's inputs are what the needed steps MADE
+      (noted as the freshest things, so "it/this folder/that image" resolve to them) + their answers; shortcut first
+      when inputs made things; AI steps get no chat history; judge(): claim with no tool / all tools failed / "error:"
+      results = failed; one re-plan (fast tier, ~150 tokens) per failed step; steps needing a failed step are skipped
+      with the reason; steps needing a background job become one follow-up job; plans the AI made that worked are
+      learned by meaning (data/learned_plans.json: same request shape next time = 0 tokens); filler by meaning
+      (FILLER_EXAMPLES); max 8 steps; "close X" inside a plan closes only windows the plan opened (asks otherwise).
+      Also: new folder in a named real place ("in download folder name X") is a 0-token action; "list files in this
+      folder" is no longer glued to the previous clause; claims like "Done. Folder X created in Downloads" are
+      caught. Live: the owner's folder request (with "let's work ..", list instead of VS Code) = 2 steps, 0 tokens,
+      folder made and listed. Tests: test_taskgraph.py (14) + updated p7c/evening; suite 1378 passed; scorecard
+      67% / 100% / 98%. Next: Phase 3 (Gemini fallback when GEMINI_API_KEY is set; token cuts).
 

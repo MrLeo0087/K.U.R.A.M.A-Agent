@@ -3221,6 +3221,10 @@ def _bare_yes_no(t: str) -> bool:
     return bool(yes_no(t)) and len(re.findall(r"[\w']+", t)) <= 4
 
 
+_IN_PLACE = re.compile(r"\b(?:in|inside|into|under|at)\s+(?:the\s+|my\s+)?(?P<loc>[\w.-]+(?:\s+[\w.-]+){0,3}?)"
+                       r"(?:\s+(?:folder|directory|dir))?(?=\s*(?:$|[,.!]|\b(?:and|then|named|name|called|with)\b))", I)
+
+
 def registry_group(tool: str) -> str:
     from jarvis.core import registry
     t = registry.REGISTRY.get(tool)
@@ -3389,15 +3393,25 @@ def meaning_intent(text: str) -> Intent | None:
     extra = [toks[i] for i in pos]
     if label == "new_folder":  # 0 tokens, in the folder in use (Files app / pasted path / last folder)
         from jarvis.core import focus
-        here = focus.refer("this")
+        from jarvis.core.paths import smart_path
+        here, said = None, raw
+        for m in _IN_PLACE.finditer(raw):  # "in download folder", "inside my documents": a REAL folder named
+            loc = m.group("loc").strip()
+            if not focus.is_anaphora(loc) and (p := smart_path(loc, want="dir")) is not None:
+                here, said = p, raw[:m.start()] + " " + raw[m.end():]
+                break
         if here is None:
-            return None
-        here = here if here.is_dir() else here.parent
-        nm = re.search(r"\b(?:named|name(?:\s+it)?|called|call\s+it|as)\s+(?P<n>[\w .()-]{1,60}?)\s*[.!]*$", raw, I)
-        rest = raw[:nm.start()] if nm else raw
+            here = focus.refer("this")
+            if here is None:
+                return None
+            here = here if here.is_dir() else here.parent
+        said = " ".join(said.split())
+        nm = re.search(r"\b(?:named|name(?:\s+it)?|called|call\s+it|as)\s+(?P<n>[\w .()-]{1,60}?)\s*[.!]*$", said, I)
+        rest = said[:nm.start()] if nm else said
         if any(not _known(w, _vocab[label]) for w in re.findall(r"[\w'.+#-]+", rest)):
-            return None  # another place is named ("in downloads"): the AI / the folder tools resolve it
-        it = Intent("mkdir", "make_folder", "files", {"path": str(here / (nm.group("n").strip() if nm else "New folder"))})
+            return None  # words that aren't a new-folder request (or a place that isn't a real folder): the AI
+        it = Intent("mkdir", "make_folder", "files", {"path": str(here / (nm.group("n").strip() if nm else "New folder"))},
+                    known=raw[m.start():m.end()].strip() if said != raw else "")
         return it if meaning_ok(t, it) else None
     if label in ("save_link", "switch_tab", "close_tab"):  # the words left over ARE the name ("save this website names
         if pos and (pos[-1] - pos[0] + 1 != len(pos) or pos[0] == 0):  # whatsapp" -> whatsapp)

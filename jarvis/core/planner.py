@@ -60,13 +60,13 @@ _LEAD = re.compile(r"^\s*(?:(?:hey\s+)?jarvis[\s,]+)?(?:please\s+)?(?:(?:can|cou
                    r"\s+(?:me\s+)?(?:an?\s+|the\s+)?", re.I)
 
 PLAN_PROMPT = (
-    "Split the request into separate tasks, one per action (max 4). Each different action is its "
+    "Split the request into separate tasks, one per action (max 8). Each different action is its "
     "own task, even if joined by and/also/then/र/अनि/और. Keep each task in the user's own words and "
     "language (only fix obvious speech-to-text slips), e.g. 'what is the time in Nepal'. kind=long only for "
     "writing long text (essay, article, story, report), generating code, or scanning a whole "
-    "project; else quick. depends_on: indices of earlier tasks whose result this task needs (it, that, "
-    "the folder/file/poem, then). 'give me the result', 'tell me', 'summarize it' are part of the "
-    "previous task, never a task of their own.\n"
+    "project; else quick. depends_on: indices of earlier tasks whose result this task needs (it, this, that, "
+    "the folder/file/image/document, then). 'give me the result', 'tell me', 'summarize it' are part of the "
+    "previous task, never a task of their own. Leave out words that ask for nothing (let's work, ok so).\n"
     "Example: 'open google and tell me the time' -> [open Google (quick), tell me the time (quick)]"
 )
 
@@ -187,7 +187,7 @@ _PATH_TAIL = re.compile(r"^(?:(?:and|then)\s+)?(?:(?:in|inside|into)\s+)?(?:the\
 def split_clauses(text: str) -> list[str]:
     out: list[str] = []
     for c in (c.strip() for c in _SEP.split(text) if c and c.strip()):
-        if out and _PATH_TAIL.match(c):
+        if out and _PATH_TAIL.match(c) and not router.looks_like_command(c):  # "list files in this folder" is a task
             out[-1] = f"{out[-1]} then {c}"
         else:
             out.append(c)
@@ -204,7 +204,7 @@ RESULT_TAIL = re.compile(
     r"(?:मुझे\s+)?बताओ|मलाई\s+भन\S*|नतिजा\s+देखाउ\S*)\s*[.!?।]*$", re.I)
 # Refers back to an earlier task's result -> depends on the previous task (P7c).
 _REF = re.compile(
-    r"(?<![\w'])(?:it|its|that|them|those|then|after\s+that|afterwards|the\s+(?:folder|file|directory|poem|"
+    r"(?<![\w'])(?:it|its|that|them|those|this|these|then|after\s+that|afterwards|the\s+(?:folder|file|directory|poem|"
     r"text|results?|output|note|story|essay|code|script|song|list|summary|answer|message|page|image|photo|"
     r"document|project|repo))(?![\w'])|त्यो|त्यसलाई|त्यसमा|यसलाई|यसमा|उसे|इसे|उसमें|इसमें|फिर|त्यसपछि", re.I)
 
@@ -389,10 +389,36 @@ def _kind(text: str, llm_kind: str = "quick") -> str:
     return "quick"
 
 
+def parts(text: str) -> list[str]:
+    """The request's clauses without filler ("let's work ..", "ok so"): what the steps are made of."""
+    from jarvis.core import taskgraph
+    cl = split_clauses(text)
+    kept = [c for c in cl if not taskgraph.filler(c)]
+    return kept or cl
+
+
+def drop_filler(tasks: list[dict]) -> list[dict]:
+    """The model's tasks without the ones that ask for nothing; depends_on indices follow."""
+    from jarvis.core import taskgraph
+    keep = [i for i, t in enumerate(tasks) if not taskgraph.filler(t["text"])]
+    if not keep or len(keep) == len(tasks):
+        return tasks
+    remap = {old: new for new, old in enumerate(keep)}
+    out = []
+    for old in keep:
+        t = dict(tasks[old])
+        deps = sorted({remap[d] for d in t.get("depends_on", []) if d in remap})
+        t.pop("depends_on", None)
+        if deps:
+            t["depends_on"] = deps
+        out.append(t)
+    return out
+
+
 def _rule_tasks(text: str) -> list[dict]:
     """Fallback split: command clauses; other clauses are glued to the previous command."""
     out: list[str] = []
-    for c in split_clauses(text):
+    for c in parts(text):
         if is_command(c) or not out:
             out.append(c)
         else:
@@ -418,12 +444,12 @@ def decompose(text: str) -> list[dict]:
 def _shortcut_tasks(text: str) -> list[dict]:
     """Independent quick parts that each match an instant shortcut ('weather in Pokhara and what time is it')."""
     from jarvis.core import fastpath
-    parts = split_clauses(text)
-    if not 1 < len(parts) <= config.PLANNER_MAX_TASKS:
+    ps = parts(text)
+    if not 1 <= len(ps) <= config.PLANNER_MAX_TASKS:
         return []
-    if any(is_long_job(p) or refers_back(p) or fastpath.match(p) is None for p in parts):
-        return []
-    return [{"text": p, "kind": "quick"} for p in parts]
+    if any(is_long_job(p) or fastpath.match(p) is None for p in ps):
+        return []  # a part that refers back ('open it in vs code') is fine: the step gets what the earlier one made
+    return [{"text": p, "kind": "quick"} for p in ps]
 
 
 def plan(text: str) -> Plan:
@@ -432,9 +458,12 @@ def plan(text: str) -> Plan:
     if not is_multi(text):
         return Plan([{"text": text, "kind": "long" if is_long_job(text) else "quick"}], "single")
     if quick := _shortcut_tasks(text):  # every part is a 0-token shortcut on its own: no planner call
-        return Plan(quick, "rules")
+        return Plan(add_dependencies(quick, text), "rules")
+    from jarvis.core import taskgraph
+    if config.TASK_GRAPH and (seen := taskgraph.learned_plan(text, parts(text))):  # planned (and worked) before
+        return Plan(add_dependencies(seen, text), "learned")
     try:
-        tasks = decompose(text)
+        tasks = drop_filler(decompose(text))
         method = "llm"
     except llm.LLMError as e:
         log.info("planner decomposition failed, splitting by rules: %s", e)

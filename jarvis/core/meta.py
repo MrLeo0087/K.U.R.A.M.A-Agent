@@ -63,6 +63,12 @@ _DONE = re.compile(r"\b(?:i'?ve|i have)\s+(?:now\s+|just\s+|already\s+)?" + _ACT
                    r"running|downloading|installed|active|visible|showing|minimized|closed)\b|"
                    # "You're now on the home screen", "Opening https://nepalgon.com." (traces 11-01 09:35)
                    r"\byou(?:'re|\s+are)\s+now\s+(?:on|in|at|back)\b|"
+                   # "Made it — new_project2 is in your Downloads folder.", "All set, the folder is ready." (11-01)
+                   r"^\W*(?:made\s+it|all\s+set|all\s+done)\b|\b(?:is|are)\s+(?:now\s+)?ready\s+(?:in|at|on)\b|"
+                   # "Done. Folder `x` created in Downloads", "saved to your Desktop" (qwen, 11-01 19:40)
+                   r"^\W*done\s*[.!,]|\b(?:created|saved|moved|copied|downloaded|sent|opened|written)\s+(?:in|into|to|on)\s+"
+                   r"(?:your\s+|the\s+|my\s+)?(?:downloads|documents|desktop|pictures|videos|music|home|telegram|phone|"
+                   r"vs\s*code|folder)\b|"
                    r"^\W*(?:opening|closing|launching|switching|showing|minimizing|muting|playing)\s+(?!(?:a|an|some|any)\b)\S|"
                    # "I'm writing 'yes' into main.txt right now", "Writing ... in the background"
                    r"^\W*(?:sure\W+|okay\W+)?(?:i'?m|i am)?\s*(?:now\s+)?(?:writing|saving|copying|deleting|removing|"

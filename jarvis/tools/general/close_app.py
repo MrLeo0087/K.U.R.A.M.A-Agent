@@ -16,6 +16,18 @@ def close_app(name: str) -> str:
     wins, label = _apps.match_windows(name)
     if not wins:
         return f"no open window matches {name!r}"
+    from jarvis.core import safety, taskgraph
+    before = taskgraph.windows_before()
+    if before is not None:  # a step of a multi-step request: close only what the request opened
+        new = [w for w in wins if w["id"] not in before]
+        if new:
+            for w in new:
+                _apps.wmctrl(["-i", "-c", w["id"]])
+            kept = len(wins) - len(new)
+            return f"closed {len(new)} window(s) of {label} opened by this request" + \
+                (f"; your other {kept} window(s) stay open" if kept else "")
+        if not safety.ask(f"{label} was already open before this request (maybe with your work). Close it anyway?"):
+            return f"Left {label} open: it was open before this request, and I only close what I opened."
     for w in wins:
         _apps.wmctrl(["-i", "-c", w["id"]])
     return f"closed {len(wins)} window(s) of {label}"

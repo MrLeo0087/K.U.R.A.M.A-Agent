@@ -224,7 +224,7 @@ def test_folder_then_file_runs_in_order(respond, roots, monkeypatch):
     bot = agent.Agent(confirm=lambda p: True)
     ans = bot.run(f"create a folder {demo} and then make a file called main.py in it that prints hello")
     assert (demo / "main.py").read_text() == "print('hello')\n"
-    assert bot.last["chain"] == [0, 1] and "Created folder" in ans and "main.py" in ans
+    assert [s["status"] for s in bot.last["steps"]] == ["ok", "ok"] and "Created folder" in ans and "main.py" in ans
 
 
 def test_poem_then_send_in_order_and_independent_task_parallel(respond, tg, monkeypatch):
@@ -242,7 +242,7 @@ def test_poem_then_send_in_order_and_independent_task_parallel(respond, tg, monk
             order.append(("poem", time.monotonic()))
             return AIMessage(content="Mountains rise in morning light, Nepal shines so bright.")
         if "send_message_telegram" in names(kw):
-            poem = h.split("use it: ", 1)[1].rstrip(")")
+            poem = h.split(" -> ", 1)[1].rstrip(")")  # the step it needs: its answer
             return tc("send_message_telegram", {"text": poem})
         return AIMessage(content="?")
     respond(fn)
