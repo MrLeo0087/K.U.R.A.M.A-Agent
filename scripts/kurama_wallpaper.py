@@ -62,11 +62,10 @@ BUBBLE = 56  # floating button size (px)
 PANEL_W, PANEL_H = 400, 600  # mini chat panel (default size; a resized panel remembers its size)
 PANEL_MIN_W, PANEL_MIN_H = 300, 260
 MINI_HOTKEY = os.getenv("KURAMA_MINI_HOTKEY", "<Control><Alt>k")  # opens / hides the mini chat (GNOME shortcut; '' = none)
-# typing cursor to KURAMA's chat box and back again; the chat itself never hides (owner's choice 11-01: Ctrl+Shift+L;
-# plain Ctrl+L is Brave's address bar / the terminal's clear; while KURAMA runs, VS Code's own Ctrl+Shift+L
-# "select all occurrences" is taken over)
-FOCUS_HOTKEY = os.getenv("KURAMA_FOCUS_HOTKEY", "<Control><Shift>l")
-_OLD_FOCUS_KEYS = ("<Control><Alt>l",)  # earlier defaults: replaced by the new one (a key you set yourself is kept)
+# typing cursor to KURAMA's chat box and back again; the chat itself never hides. Ctrl+L is Brave's address bar /
+# the terminal's clear, Ctrl+Shift+L VS Code's "select all occurrences", Ctrl+Alt+L clashed with hold-Alt.
+FOCUS_HOTKEY = os.getenv("KURAMA_FOCUS_HOTKEY", "<Super>j")  # Super + J: home row, no app or GNOME uses it
+_OLD_FOCUS_KEYS = ("<Control><Alt>l", "<Control><Shift>l")  # earlier defaults: moved to the new one (yours are kept)
 ALERT_POLL_S = 5  # mini KURAMA checks for new alerts this often (one tiny local request)
 PID_FILE = STATE_FILE.with_name("wallpaper.pid")  # the shortcut signals this process (SIGUSR1)
 BUSY_STATES = ("listening", "capturing", "thinking", "speaking")  # closing the panel now keeps it alive
@@ -1197,7 +1196,9 @@ class Mini:
         return False
 
     def focus_toggle(self) -> None:
-        if self.open and self.panel is not None and self.panel.is_active():  # typing here: back to where you were
+        # "am I in KURAMA?" from the window manager (any KURAMA window: the chat or the dashboard), not GTK's
+        # is_active (it said no while the owner typed in the chat, so the key never went back, 11-01)
+        if self.open and self.panel is not None and self._user_window(top=False) == 0:  # typing here: go back
             back = getattr(self, "came_from", 0) or self._user_window(top=True)
             if back:
                 subprocess.run(["wmctrl", "-i", "-a", hex(back)], capture_output=True, timeout=3)

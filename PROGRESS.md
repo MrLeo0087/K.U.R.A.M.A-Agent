@@ -817,3 +817,7 @@ Phases (one at a time, owner tests after each):
       already down (Ctrl/Shift + Alt = a shortcut; a "down" older than 10 s counts as a lost release). The focus key
       is Ctrl+Shift+L (owner's choice; the old binding is migrated) and the chat stays on screen: only the typing
       cursor moves (tested with Wnck: VS Code <-> kurama-mini four times, chat visible every time).
+- [x] 2026-11-01 14:45 Focus key -> Super+J (home row, used by no app or GNOME here; Ctrl+Shift+L is VS Code's
+      "select all occurrences"; old bindings are moved). "Pressed again it doesn't come back": the back step asked
+      GTK whether the chat was active; now the window manager says whether ANY KURAMA window (chat or dashboard) has
+      the keyboard, then the cursor goes back to where you came from (tested: VS Code <-> chat, chat stays open).
