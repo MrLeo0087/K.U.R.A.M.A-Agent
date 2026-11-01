@@ -102,18 +102,21 @@ def search(query: str) -> list[dict]:
         entries = json.loads(out).get("entries") or []
     except (OSError, subprocess.SubprocessError, ValueError):
         return []
-    long_ok = bool(LONG_OK.search(query))
-    good = []
-    for e in entries:
-        dur = e.get("duration") or 0
-        if e.get("live_status") in ("is_live", "is_upcoming") or not dur or not e.get("id"):
-            continue  # live streams / premieres
-        if not long_ok and not 60 <= dur <= 12 * 60:
-            continue  # a song, not a 3-hour compilation
-        if long_ok and dur > 5 * 3600:
-            continue
-        good.append({"url": f"https://www.youtube.com/watch?v={e['id']}", "id": e["id"], "title": e.get("title") or "",
-                     "duration": dur})
+    def pick(long_ok: bool) -> list[dict]:
+        good = []
+        for e in entries:
+            dur = e.get("duration") or 0
+            if e.get("live_status") in ("is_live", "is_upcoming") or not dur or not e.get("id"):
+                continue  # live streams / premieres
+            if not long_ok and not 60 <= dur <= 12 * 60:
+                continue  # a song, not a 3-hour compilation
+            if long_ok and dur > 5 * 3600:
+                continue
+            good.append({"url": f"https://www.youtube.com/watch?v={e['id']}", "id": e["id"],
+                         "title": e.get("title") or "", "duration": dur})
+        return good
+    # a mood ("relaxing music", "lofi for study") finds only long mixes: then a mix it is, not "couldn't find" (11-01)
+    good = pick(bool(LONG_OK.search(query))) or pick(True)
     good = _distinct(good)[:PICK]
     if good:
         store.kv_set(key, json.dumps({"at": time.time(), "items": good}))

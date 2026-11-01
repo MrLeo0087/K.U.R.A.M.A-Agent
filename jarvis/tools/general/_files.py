@@ -32,7 +32,9 @@ def resolve(path: str, create: bool = False) -> Path:
     p = Path(raw).expanduser()
     if not p.is_absolute():
         said = str(safety.context().get("user_text", "")).lower()
-        cur = focus.cwd()
+        cur = focus.refer("here")  # the folder open in Files (when it's the app in use), else KURAMA's last folder
+        if cur is not None and cur.is_file():  # (it used focus.cwd() only: "create a new folder here" with Files on
+            cur = cur.parent  # Tara made it in KURAMA's own folder, 11-01)
         if cur and "/" not in raw and re.search(r"\b(?:here|in\s+it|inside\s+it|in\s+there|in\s+this\s+(?:folder|directory)|"
                                                  r"in\s+the\s+same\s+folder|in\s+that\s+folder)\b", said):
             return (cur / raw).resolve()  # "create notes.txt here" -> in the current folder

@@ -343,7 +343,11 @@ def send_output(job: "Job") -> str:
         text = p.read_text(encoding="utf-8", errors="replace").strip()
         if len(text) <= config.TELEGRAM_MAX_REPLY_CHARS:
             return "Sent it to your Telegram." if notify.telegram_send(text) else "error: Telegram didn't accept it"
+    t0 = time.time()
     out = deliver(p, caption=job.title[:200])
+    # evidence for "pictures / videos reach Telegram late" (owner 11-01): how long after the job ended, and the upload
+    log.info("telegram: job #%s sent %.0f s after it finished (upload %.1f s, %.1f MB): %s", job.id,
+             t0 - float(job.finished or t0), time.time() - t0, p.stat().st_size / 1e6, str(out)[:80])
     if out.startswith("error"):
         log.warning("job #%d: %s", job.id, out)
     return out

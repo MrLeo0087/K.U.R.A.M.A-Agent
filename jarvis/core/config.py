@@ -1139,6 +1139,8 @@ MEANING_SHORTCUTS: dict[str, tuple[str, ...]] = {
                     "setup kaggle notebook for training", "connect my colab training to kurama", "colab setup code",
                     "code to paste in my kaggle notebook so you can watch the training",
                     "setup colab notebook to watch out my training"),
+    "new_folder": ("create a new folder here named X", "make a folder called X in this folder", "new folder here",
+                   "create folder X here", "make a new folder in this folder", "create a new folder in here, name it X"),
     "show_desktop": ("go to the home screen", "show me the desktop", "minimize all windows", "hide every window",
                      "take me to the home screen"),
     "copy_path": ("copy the path of this folder", "copy this file's path", "put the path of the selected folder in "
@@ -1170,7 +1172,7 @@ MEANING_SHORTCUTS: dict[str, tuple[str, ...]] = {
 MEANING_SHORTCUT_AREAS = {"save_link": "links", "list_links": "links", "read_later_add": "links", "copy_path": "clipboard",
                           "open_vscode": "files", "jobs_start": "jobs", "jobs_list": "jobs",
                           "clean_ram": "system", "clean_kurama": "system", "clean_storage": "system", "show_desktop": "windows", "switch_tab": "windows",
-                          "list_tabs": "windows", "close_tab": "windows", "scroll_down": "windows", "scroll_up": "windows", "colab_setup": "watch"}  # the router offers it too
+                          "list_tabs": "windows", "close_tab": "windows", "scroll_down": "windows", "scroll_up": "windows", "colab_setup": "watch", "new_folder": "files"}  # the router offers it too
 MEANING_SHORTCUT_MIN = 0.82
 # actions that change everything on screen need more certainty ("show my screen" is not "go to the home screen": 0.86)
 MEANING_SHORTCUT_MIN_BY = {"show_desktop": 0.90}

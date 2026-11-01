@@ -375,7 +375,7 @@ class Agent:
         hold = self._retry_ok(state)  # stream: hold the first sentence back until it is not "I can't"
         unread = hold and self._data_area(state)  # the user's saved things: no tool yet = nothing read yet
         try:
-            reply = self._chat(msgs, kw, state.get("stream", False) and not unread, hold)
+            reply = self._chat(msgs, kw, state.get("stream", False) and not unread and not state.get("retried"), hold)
         except llm.LLMError as e:
             low = str(e).lower()
             if "tool" not in low and "400" not in low:
@@ -417,6 +417,12 @@ class Agent:
             return {"messages": msgs + [msg], "pending": calls + bad, "tools": tools or state.get("tools") or []}
         answer = reply.text.strip() or (TOO_MANY_ROUNDS if ai.tool_calls else NO_ANSWER)
         answer = honest(answer, msgs)
+        if state.get("retried") and not last_round and meta.claims(answer) and not any(
+                isinstance(m, ToolMessage) and m.name != meta.NAME for m in msgs):
+            # retried once and STILL "Sent" / "Opened" with no tool (11-01 17:58: the fallback model qwen answered
+            # "Sent" twice and nothing reached Telegram): never deliver an action that did not happen
+            log.warning("tool-less claim after the retry: %r", answer[:60])
+            answer = "I didn't do it: the action didn't run this time. Please say it again."
         if hold and not last_round and not self.last.get("denied") and (unread or meta.needs_tool(answer) and (
                 meta.claims(answer) or worth_retry(state["user_text"]))):
             # (never after a "no" to a yes/no question; a refusal to small talk / an emoji isn't worth a retry)

@@ -3362,6 +3362,18 @@ def meaning_intent(text: str) -> Intent | None:
     toks = re.findall(r"[\w'.+#-]+", said)
     pos = [i for i, w in enumerate(toks) if not _known(w, _vocab[label])]
     extra = [toks[i] for i in pos]
+    if label == "new_folder":  # 0 tokens, in the folder in use (Files app / pasted path / last folder)
+        from jarvis.core import focus
+        here = focus.refer("this")
+        if here is None:
+            return None
+        here = here if here.is_dir() else here.parent
+        nm = re.search(r"\b(?:named|name(?:\s+it)?|called|call\s+it|as)\s+(?P<n>[\w .()-]{1,60}?)\s*[.!]*$", raw, I)
+        rest = raw[:nm.start()] if nm else raw
+        if any(not _known(w, _vocab[label]) for w in re.findall(r"[\w'.+#-]+", rest)):
+            return None  # another place is named ("in downloads"): the AI / the folder tools resolve it
+        it = Intent("mkdir", "make_folder", "files", {"path": str(here / (nm.group("n").strip() if nm else "New folder"))})
+        return it if meaning_ok(t, it) else None
     if label in ("save_link", "switch_tab", "close_tab"):  # the words left over ARE the name ("save this website names
         if pos and (pos[-1] - pos[0] + 1 != len(pos) or pos[0] == 0):  # whatsapp" -> whatsapp)
             return None  # two unknown parts ('save this FILE as REPORT') or a leading one (the request starts with
@@ -3617,14 +3629,20 @@ FOLDER_OPEN = _rx(
     r"(?:open|show|go to|goto|browse|reveal|take me to)(?: up)? " + _FOLDLEAD + r"(?P<target>.+?) (?:folder|directory|dir)(?: in " + _FM + r")?",
     r"(?:open|show|go to|goto|browse|reveal)(?: up)? " + _FOLDLEAD + r"folder (?:called |named )?(?P<target>.+?)",
     r"(?:open|show|go to|goto|browse|reveal|take me to)(?: up)? " + _FOLDLEAD + r"(?P<target>.+?) in " + _FM,
+    # "open file manager in downloads", "open files from the kurama folder" (the app named first, then where)
+    r"(?:open|launch|start|show)(?: up)? " + _FM + r" (?:in|from|at|on|for|to|inside)(?: the| my)? (?P<target>.+?)(?: folder| directory| dir)?",
 )
 
 
 def _folder_intent(target: str) -> Intent | None:
     target = (target or "").strip(" ,'\"")
+    target = re.sub(r"^(?:the |my )?(?:file manager|files app|file explorer|nautilus|files)\s+(?:in|from|at|on|for)\s+(?:the |my )?", "",
+                    target, flags=I)  # "open file manager from kurama folder" -> kurama
     if not target or len(target.split()) > 6 or re.fullmatch(r"(?:it|this|that|here|there)", target, I):
         return None
-    return Intent("openfolder", "open_folder", "filesearch", {"name": target}, target)
+    from jarvis.core.paths import smart_path  # a folder that really exists: the gate judges "open X folder", not the
+    real = smart_path(target, want="dir") is not None  # name ("open kurama folder" is not about KURAMA itself)
+    return Intent("openfolder", "open_folder", "filesearch", {"name": target}, target, known=target if real else "")
 
 
 def _open_intent(target: str, verb: str) -> Intent | None:

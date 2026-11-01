@@ -830,3 +830,12 @@ Phases (one at a time, owner tests after each):
       encoded; measured with GNOME's own screenshot: blur 0 / light 150 vs blur 60 / light 30 -> backdrop detail 17.0
       vs 14.1, brightness 44.8 vs 35.1. Corners, tint, colour and font are CSS and work. Added ready looks (Clear,
       Frosted, Dark) and Reset.
+- [x] 2026-11-01 18:15 Evening traces: both gpt-oss models had hit Groq's 200k tokens/day (test rounds + use), so
+      the qwen fallback answered "Sent" / "Opened" / "Playing Stabba" / "I made a new folder..." with NO tool, twice
+      (retry included): nothing reached Telegram. Now a claim that survives the retry is never delivered ("I didn't do
+      it: the action didn't run this time"), and the retry round doesn't stream the lie first. "Play some music" found
+      nothing: mood searches only return long mixes, which the song filter dropped -> falls back to a mix. "open file
+      manager in/from X" opens X; "open Kurama folder" (a real folder named like the assistant) is judged without the
+      name. "Create a new folder here, name it X" = 0-token action in the folder open in Files (or pasted / last);
+      file tools' "here" now use the Files folder too (was KURAMA's remembered folder). Telegram lateness: no evidence
+      yet (the image job took 4 s); each send now logs its delay and upload time (jobs log "telegram: job #").
