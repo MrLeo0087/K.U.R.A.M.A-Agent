@@ -27,6 +27,12 @@ sys.path.insert(0, str(ROOT))
 
 OUT = ROOT / "data" / "eval"
 SKIP_GROUPS = {"core", "skills", "toolsmith", "agents"}
+# tools whose own work is a big AI job (essays, code review, video scripts...): left out of the rounds, so a round
+# costs only the request's routing + one or two small calls (owner 11-01: keep rounds cheap)
+HEAVY = {"write_document", "review_code", "coding", "make_video", "videomaker", "text_assist", "fix_error",
+         "make_tool", "organize_files", "summarize_page", "page_summary", "explain_error", "study", "lecture",
+         "generate_requirements", "scaffold_project", "dependency_doctor", "env_doctor", "training", "kaggle_gpu"}
+ROUND_TOKEN_CAP = 40000  # a round stops here; the rest is run next time (--failed)
 PER_ROUND = 25
 PER_TOOL = 3
 
@@ -51,7 +57,7 @@ def pick_tools(round_no: int) -> list:
     by_group: dict[str, list] = defaultdict(list)
     for t in registry.REGISTRY.tools.values():
         g = registry.group_of(t)
-        if g not in SKIP_GROUPS and t.description:
+        if g not in SKIP_GROUPS and t.description and t.name not in HEAVY:
             by_group[g].append(t)
     rnd = random.Random(1000 + round_no)
     picked = []
@@ -93,20 +99,27 @@ def make_questions(tools: list, style: list[str]) -> list[dict]:
 
 
 def budget_left() -> bool:
-    """Stop before Groq's daily limit: a round run on an empty budget only measures error messages (round 1, 11-01:
-    28 'something went wrong' answers were the exhausted budget, not KURAMA)."""
-    from jarvis.core import budget
-    try:
-        return budget.allow("openai/gpt-oss-20b", 3000) or budget.allow("openai/gpt-oss-120b", 3000)
-    except Exception:  # noqa: BLE001
-        return True
+    """KURAMA's own daily budget is a soft limit (it says "trying anyway" and Groq still answers); only Groq's real
+    refusals stop a round. (Round 1's 'something went wrong' answers were the AI calling an action as a tool.)"""
+    return True
 
 
-def run(questions: list[dict], pace_s: float = 3.0) -> list[dict]:
+# --real: these READ-ONLY tools really run (real data, real results); everything that changes the laptop, the screen,
+# files or sends something stays fake (recorded, never done): Wi-Fi off, Telegram sends, closing apps...
+READ_ONLY = {"get_time", "weather", "live_search", "web_search", "wikipedia", "git_info", "list_folder", "find_files",
+             "recall", "recall_session", "ask_knowledge", "search_knowledge", "daily_digest", "token_usage",
+             "battery_status", "laptop_doctor", "status_now", "watchdog_status", "calculate", "page_summary",
+             "read_webpage", "make_chart", "list_windows", "resource_status", "where_was_i", "time_machine",
+             "find_capability", "about_me", "list_skills", "dictionary", "overview", "training", "code_nav",
+             "convert_units", "nepali_date", "ports"}
+
+
+def run(questions: list[dict], pace_s: float = 3.0, real_tools: bool = False) -> list[dict]:
     from types import SimpleNamespace
 
     from tests.eval import harness
-    harness._isolated_store()
+    if not real_tools:
+        harness._isolated_store()
     from jarvis.core import agent, fastpath, jobs, registry, safety, semantic, store
     from jarvis.core.registry import ToolResult
     from jarvis.tools.core._hub import underlying
@@ -114,8 +127,14 @@ def run(questions: list[dict], pace_s: float = 3.0) -> list[dict]:
     semantic.ensure_ready()
     calls: list[tuple[str, dict]] = []
 
+    real_exec = safety.execute
+
     def fake_execute(name, args=None, confirm=None, reg=None, ctx=None):
-        calls.append((name, args if isinstance(args, dict) else {}))
+        a = args if isinstance(args, dict) else {}
+        calls.append((name, a))
+        tool, targs = underlying(name, a)
+        if real_tools and registry.REGISTRY.resolve(tool, targs)[0] in READ_ONLY:
+            return real_exec(tool, targs, confirm=lambda p: False, reg=reg, ctx=ctx)  # really runs; never says yes
         return ToolResult(True, "done")
 
     def fake_job(text, lang="en"):
@@ -130,6 +149,9 @@ def run(questions: list[dict], pace_s: float = 3.0) -> list[dict]:
     rows = []
     try:
         for q in questions:
+            if sum(r["tokens"] for r in rows) > ROUND_TOKEN_CAP:
+                print(f"  stopped at the round's cap ({ROUND_TOKEN_CAP} tokens); the rest runs next time (--failed)")
+                break
             if not budget_left():
                 print("  stopped: today's Groq budget is used up; run the same round again tomorrow (questions are kept)")
                 break
@@ -151,13 +173,14 @@ def run(questions: list[dict], pace_s: float = 3.0) -> list[dict]:
             row = {**q, "got": names, "args": [a for _, a in ran][:2], "ok": want in names,
                    "area_ok": want_group in groups, "path": "fastpath" if last.get("fastpath") else "ai",
                    "tokens": used, "ms": int((time.monotonic() - t0) * 1000), "answer": str(answer)[:160]}
-            if row["path"] == "ai" and re.match(r"(?:ERROR|Sorry, something went wrong)", row["answer"]):
+            if row["path"] == "ai" and re.match(r"(?:ERROR|Sorry, something went wrong|Sorry, my AI service is busy)",
+                                                row["answer"]):
                 row["infra"] = True  # Groq refused (limit / outage): not a KURAMA mistake, retried next run
             rows.append(row)
             print(f"  {'✓' if row['ok'] else ('~' if row['area_ok'] else '✗')} {want:<20} {row['path']:<8} "
                   f"got {','.join(names[:2]) or '-':<26} {used:>5} tok  {q['text'][:55]}", flush=True)
-            if row["path"] == "ai":
-                time.sleep(pace_s)  # Groq free tier: tokens per minute
+            if row["path"] == "ai":  # Groq free tier ~8k tokens a minute: wait in proportion to what was used
+                time.sleep(max(pace_s, used / 8000 * 60))
     finally:
         safety.execute, jobs.start_task, fastpath._internal = real
     return rows
@@ -185,6 +208,8 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--round", type=int, default=1)
     ap.add_argument("--report", action="store_true")
+    ap.add_argument("--failed", action="store_true", help="run again only what failed / wasn't judged")
+    ap.add_argument("--real", action="store_true", help="read-only tools really run (real data); others stay fake")
     a = ap.parse_args()
     OUT.mkdir(parents=True, exist_ok=True)
     path = OUT / f"round{a.round}.json"
@@ -194,12 +219,19 @@ def main() -> int:
     qfile = OUT / f"round{a.round}_questions.json"
     if qfile.exists():
         questions = json.loads(qfile.read_text())
+        if a.failed and path.exists():  # only what failed or couldn't be judged last time; the rest is kept
+            old = json.loads(path.read_text())["rows"]
+            keep = [r for r in old if r["ok"] and not r.get("infra")]
+            done = {r["text"] for r in keep}
+            questions = [q for q in questions if q["text"] not in done]
     else:
         tools = pick_tools(a.round)
         questions = make_questions(tools, owner_style())
         qfile.write_text(json.dumps(questions, ensure_ascii=False, indent=1))
     print(f"round {a.round}: {len(questions)} questions for {len({q['tool'] for q in questions})} tools")
-    rows = run(questions)
+    rows = run(questions, real_tools=a.real)
+    if a.failed and path.exists():
+        rows = keep + rows
     path.write_text(json.dumps({"round": a.round, "when": time.strftime("%F %T"), "rows": rows}, ensure_ascii=False, indent=1))
     print("\n" + report(rows))
     return 0

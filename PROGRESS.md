@@ -795,3 +795,14 @@ Phases (one at a time, owner tests after each):
       image / document job replies with its own words (the AI said "has been sent" while the picture was being made).
       (4) "Setup, Colab, Notebook" got a generic guide: the ready-made training cell (Colab AND Kaggle) is a 0-token
       action by meaning, reachable by the code tool (training colab), and is copied to the clipboard to paste.
+- [x] 2026-11-01 13:40 Test round 1 (scripts/tool_round.py: 75 owner-style questions for 25 tools; read-only tools
+      real, the rest fake). Proven classes fixed: (1) the AI called an action as a tool ('git' instead of
+      code(action=git)) -> Groq 400 -> retry without tools -> "something went wrong": now retried WITH the tools and a
+      hint. (2) With a file open in VS Code and nothing highlighted, a general request ("open the docs folder ..") was
+      taken as a question about that file: generic selection actions now need a highlight. (3) "set up a fastapi
+      skeleton" installed an app: "install X" stays instant (X judged out of the meaning), "set up X" only when the
+      sentence means installing. (4) "plot line graph for monthly sales" made an image: create's chart = graphs of
+      numbers. (5) Both gpt-oss models hit Groq's 200k tokens/day (a new key in the same Groq organization shares
+      it): qwen is now the last fallback for the fast and smart chains (tested: it calls the right tool). Round
+      script: owner-style questions, pacing by tokens, --failed re-runs, connection / limit errors not judged,
+      heavy-AI tools left out, 40k tokens per round cap.

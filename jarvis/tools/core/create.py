@@ -21,7 +21,8 @@ TABLE = {
 @tool(group="core", safety="safe",
       description="Make something: image (picture; can also set it as wallpaper or send it to Telegram), document "
                   "(essay, article, report: runs in the background), audio (speech from text or the selection), chart "
-                  "(e.g. of my spending), diagram, video.")
+                  "(a line / bar / pie GRAPH of numbers: sales, my spending, a CSV or Excel file; never an image), "
+                  "diagram, video.")
 def create(action: Literal["image", "document", "audio", "chart", "diagram", "video"], what: str = "",
            telegram: bool = False, wallpaper: bool = False) -> str:
     """Create.

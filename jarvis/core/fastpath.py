@@ -1426,7 +1426,8 @@ def app_install_intent(t: str) -> Intent | None:
     if _APP_UPDATE.match(t):
         return Intent("app", "install_app", "apps", {"action": "update", "name": ""})
     if m := _APP_REMOVE.match(t):
-        return Intent("app", "install_app", "apps", {"action": "remove", "name": (m.group("a") or m.group("b")).strip()})
+        n = (m.group("a") or m.group("b")).strip()
+        return Intent("app", "install_app", "apps", {"action": "remove", "name": n}, known=n)
     m = _APP_INSTALL.match(t)
     if not m or _PY_HINT.search(t):
         return None
@@ -1434,7 +1435,11 @@ def app_install_intent(t: str) -> Intent | None:
     if (name.lower() in _PY_COMMON or name.lower() in ("it", "this", "that", "them") or re.search(r"[=<>\[]", name)
             or re.search(r"\s(?:in|into|for)\s", name, I)):  # "install timm in my project" = a Python package
         return None
-    return Intent("app", "install_app", "apps", {"action": "install", "name": name})
+    name = re.sub(r"\s+(?:bro|pls|please|plz|now)$", "", name, flags=I)
+    # "install X" says what it is, so X is judged out of the meaning; "set up X" may be a project ("set up a fastapi
+    # skeleton", test round 1): there the whole sentence must mean installing
+    explicit = re.match(r"(?:please\s+)?(?:install|download\s+and\s+install)\b", t, I) is not None
+    return Intent("app", "install_app", "apps", {"action": "install", "name": name}, known=name if explicit else "")
 
 
 _WIFI = r"(?:wi[\s-]*fi|wifi|lan|local\s+network|hotspot)"
@@ -3441,8 +3446,8 @@ def selection_intent(text: str) -> Intent | None:
         return None
     from jarvis.core.assist import is_code, lang_of
     if not sel.strip():  # it means "this code / this" but nothing is highlighted: ask before using the whole file
-        if action in ("translate", "run"):
-            return None
+        if action in ("translate", "run", "ask", "use"):  # a general request ('open the docs folder ..') is not
+            return None  # about the file open in VS Code when nothing is highlighted (test round 1, 11-01)
         return Intent("assist", "text_assist", "clipboard", {"action": "file_ask", "request": t, "path": str(f),
                                                              "text": action, "lang": lang_of(t) or ""})
     code = is_code(sel)

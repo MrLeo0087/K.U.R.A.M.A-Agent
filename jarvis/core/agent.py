@@ -387,6 +387,15 @@ class Agent:
                 tools = [*tools, extra]  # history): offer that one too and retry WITH tools (it answered with no
                 kw = {**kw, "tools": tools}  # tool call before: "copy the path" copied nothing)
                 log.warning("model called the unoffered tool %s; retrying with it", extra.name)
+            elif (bad := re.search(r"attempted to call tool '([A-Za-z0-9_]+)'", str(e))) and tools:
+                # it used an ACTION or an area as a tool name ('git' instead of code(action='git'), 'files'...):
+                # retry WITH the tools and say which tool holds it (it fell back to no tools, then 'Tool choice is
+                # none, but model called a tool' -> "something went wrong"; test round 1, 11-01)
+                names = [meta.tool_name(t) for t in tools]
+                msgs = msgs + [SystemMessage(content=f"There is no tool called '{bad.group(1)}'. Call one of "
+                                                     f"{', '.join(names)} and put '{bad.group(1)}' in its action.")]
+                extra = True
+                log.warning("model called the non-tool %r; retrying with a hint", bad.group(1))
             else:
                 log.warning("tool-call generation failed (%s); retrying without tools", str(e)[:120])
             notools = {k: v for k, v in kw.items() if k != "tools"}

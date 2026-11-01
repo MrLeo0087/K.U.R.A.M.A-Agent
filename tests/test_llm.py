@@ -119,11 +119,11 @@ def test_non_retryable_falls_back_to_next_model(sleeps):
 
 
 def test_raises_only_when_all_models_fail(sleeps):
-    fc = FakeClient([err(400), err(400)])  # both models in the smart chain fail
+    fc = FakeClient([err(400), err(400), err(400)])  # all three models in the smart chain fail
     llm.set_client(fc)
     with pytest.raises(llm.LLMError):
         llm.chat(MSGS, tier="smart")
-    assert fc.models == [config.LLM_DEFAULT, config.LLM_FAST]
+    assert fc.models == [config.LLM_DEFAULT, config.LLM_FAST, config.LLM_VISION]
 
 
 def test_bind_tools_and_tool_call_parsing():

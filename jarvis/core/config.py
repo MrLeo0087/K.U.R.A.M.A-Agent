@@ -34,8 +34,9 @@ TIERS: dict[str, str] = {"smart": LLM_DEFAULT, "fast": LLM_FAST, "vision": LLM_V
                          "voice": LLM_VOICE}
 # Fallback chain per tier (first entry is preferred).
 TIER_CHAIN: dict[str, list[str]] = {
-    "smart": [LLM_DEFAULT, LLM_FAST],
-    "fast": [LLM_FAST, LLM_DEFAULT],  # if the fast model errors/is rate-limited, fall back to the smart one
+    "smart": [LLM_DEFAULT, LLM_FAST, LLM_VISION],  # qwen last: when both gpt-oss models hit their daily limit (200k
+    #                                                tokens each, 11-01) KURAMA keeps answering instead of "busy"
+    "fast": [LLM_FAST, LLM_DEFAULT, LLM_VISION],  # rate-limited: the smart one, then qwen (its own daily quota)
     "vision": [LLM_VISION, LLM_DEFAULT],  # second vision model; the text fallback still answers non-image asks
     "voice": list(dict.fromkeys([LLM_VOICE, LLM_FAST])),
     # Background writer jobs: smart model only (never falls back onto the fast/voice models' TPM).
@@ -384,7 +385,7 @@ FILES_CONTEXT = os.getenv("KURAMA_FILES_CONTEXT", "1").lower() not in ("0", "fal
 MEANING_GATE_MARGIN = 0.15  # a shortcut runs only if its area scores within this of the best area (by meaning)
 # Shortcuts whose pattern takes ANY words as their subject (live search: "show <team> result") must also be (nearly)
 # the best area by meaning: "show job 1 result" made "job 1" a sports team (web 0.72 vs jobs/schedule 0.75).
-MEANING_GATE_STRICT = {"live": 0.02}
+MEANING_GATE_STRICT = {"live": 0.02, "app": 0.03}  # app: "set up a fastapi skeleton" is a new project, not an install
 # Selection first (Phase C): when text/code is highlighted (VS Code / browser / another app), a request whose MEANING
 # is one of these actions is about the selection, whatever the words. Phrasings, never keywords.
 SELECTION_EXAMPLES: dict[str, tuple[str, ...]] = {
