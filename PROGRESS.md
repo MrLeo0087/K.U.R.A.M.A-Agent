@@ -821,3 +821,6 @@ Phases (one at a time, owner tests after each):
       "select all occurrences"; old bindings are moved). "Pressed again it doesn't come back": the back step asked
       GTK whether the chat was active; now the window manager says whether ANY KURAMA window (chat or dashboard) has
       the keyboard, then the cursor goes back to where you came from (tested: VS Code <-> chat, chat stays open).
+- [x] 2026-11-01 15:00 The mini chat's Look button (blur, glass light, corners, tint, font) opened its panel but it
+      was invisible: the frosted header (backdrop-filter) clips everything inside it; the panel sat inside the
+      header. It now lives on <body> (position fixed): checked in an offscreen copy of the mini page, all sliders show.

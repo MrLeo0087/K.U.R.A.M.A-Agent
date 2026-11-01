@@ -1514,7 +1514,7 @@ body.mini .ask:focus-within { border-color: rgba(150, 160, 255, 0.55); }
 body.mini .ask .seg { padding: 0; gap: 0; background: transparent; border: 0; }
 body.mini .ask .seg::before, body.mini .ask .seg::after { display: none !important; }
 body.mini #m-look { order: 8; } body.mini .m-lang { order: 8; }
-body.mini .m-lookp { position: absolute; z-index: 30; top: 52px; right: 10px; width: 230px; padding: 12px 14px 10px; display: grid; gap: 10px;
+body.mini .m-lookp { position: fixed; z-index: 30; top: 52px; right: 10px; width: 230px; padding: 12px 14px 10px; display: grid; gap: 10px;
   border-radius: 14px; border: 1px solid var(--m-hair); background: rgba(22, 25, 50, 0.97); box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45); }
 body.mini .m-lookp[hidden] { display: none; }
 body.mini .m-lookp label { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; font-size: 12px; color: var(--m-sub); }

@@ -2836,6 +2836,8 @@ if (MINI && !WSONLY) {
   });
   $("lk-color").addEventListener("input", (e) => { look.color = e.target.value; save(); });
   $("lk-font").addEventListener("change", (e) => { look.font = e.target.value; save(); });
+  // the frosted header clips anything inside it (backdrop-filter): the panel lives on <body> so it is never cut off
+  document.body.appendChild($("m-lookp"));
   $("m-look").onclick = (e) => { e.stopPropagation(); $("m-lookp").hidden = !$("m-lookp").hidden; };
   document.addEventListener("click", (e) => { if (!e.target.closest("#m-lookp, #m-look")) $("m-lookp").hidden = true; });
   applyLook();
