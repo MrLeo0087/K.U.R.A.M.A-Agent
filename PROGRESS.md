@@ -782,3 +782,8 @@ Phases (one at a time, owner tests after each):
       0-token actions by meaning; keys go to the app below KURAMA's chat when the chat is in front; "press super key"
       (and the "P.S. Super Key" mishearing); finishing window/app actions reply with the tool's own words (no claims
       of what another tool did). Tests: tests/test_tabs_and_scroll.py, tests/test_screen_actions.py.
+- [x] 2026-11-01 10:20 Hold-to-talk said "Listening…" and did nothing: stt.log heard "Sort down the laptop" (10:08:22,
+      10:08:26) but no trace = the page never sent it. sendChat dropped a new request when the previous turn was still
+      "busy" or a yes/no card was open (ptt.log: busy=thinking for every hold after 10:07:53; the server had no pending
+      question). Now a stale card is cleared (checked with the server), a stuck turn is aborted, and the new request
+      always goes; a real pending question is said in the caption.

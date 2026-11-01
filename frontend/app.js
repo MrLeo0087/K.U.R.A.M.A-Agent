@@ -538,10 +538,15 @@ async function sendChat(text, { voice = false, lang = null, speak = false, ambie
   if (!text) return;
   if (wantsSleep(text) && mode === "conv") { addUser(text, voice); goSleep(); return; } // talk mode: "sleep" puts KURAMA to sleep, never the laptop
   if (busy) { // e.g. a barge-in utterance while the previous turn is still closing
-    if (openConfirm) { abortChat(); return; } // the question first (abortChat says so)
-    abortChat();
+    if (openConfirm) { // a yes/no card: only if the server really still waits for it (a stale one blocked every
+      let live = true; // later request: hold-to-talk said "Listening…" and dropped "shut down the laptop", 11-01 10:08)
+      try { live = ((await api.pendingConfirms()).pending || []).length > 0; } catch { /* offline: keep it */ }
+      if (live) { abortChat(); miniCaption("bot", "A yes/no question is waiting: say yes or no first.", true); return; }
+      openConfirm = null;
+    }
+    abortChat(true);
     for (let i = 0; busy && i < 40; i++) await new Promise((r) => setTimeout(r, 50));
-    if (busy) return;
+    busy = false; // a turn that never closed must not swallow every later request: it was aborted above
   }
   busy = true;
   const userBubble = addUser(text, voice);
