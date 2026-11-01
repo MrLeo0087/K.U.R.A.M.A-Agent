@@ -45,8 +45,6 @@ the cause and fixes the class of problem. Tracing started with v2 on **2026-10-2
 
 ## What one trace holds
 
-## What one trace holds
-
 | Column | Meaning |
 |---|---|
 | `id`, `ts`, `day` | trace id (12 letters), start time, date |
@@ -145,6 +143,33 @@ every tool of that kind, not just the sentence in the trace.
 - **Mini UI:** glass panel (Blur my Shell, `scripts/kurama_glass.py`, Look button: blur / light / corners / tint /
   font), Inter font, job strip, panel page kept 20 min and shown only when loaded.
 
+- **Since 11-01 (round 1 of the trace fixes):** the meaning model is loaded before routing (~0.6 s once; the word
+  rules no longer decide the first request after idle). One embedding-model process is shared by the router and the
+  document search. 0-token actions by MEANING (`config.MEANING_SHORTCUTS` + `fastpath.meaning_intent`): save / list
+  links (unknown words are masked as X; the left-over words are the name), copy this folder's path, open it in VS
+  Code, start / list jobs, clean RAM / KURAMA / storage; the router also offers the masked action's area. The link
+  store is its own area ("links", served by `memory`), with list / open / delete (name, number, all) / rename. A
+  tool-less "done" claim in any grammar, or a tool-less answer in a saved-things area (`config.DATA_AREAS`), is
+  retried with the turn's tools. Junk gpt-oss streams are held and replaced by the tool's result. Talk mode keeps
+  greetings and clear requests by meaning. "Free RAM" offers (asks) to close windowless idle apps; `/clear ram |
+  storage | kurama`. The architecture guide for humans is `LEARN.md`.
+
+## Watch in the next report (round 2)
+
+- **Meaning actions taking the wrong request**: a link saved under a wrong name (a word of the request taken as the
+  name), copy-path / VS Code / clean actions firing on something else. Look at `path: fastpath` traces with intents
+  `links`, `copypath`, `openpath`, `clean`, `jobs`. Fix by examples (`MEANING_SHORTCUTS`), never by word rules.
+- **Retries that cost tokens for nothing**: `retried: 1` traces whose second answer is the same (the claim check or
+  the data-area rule fired on a real answer). The server log has "junk-looking stream held (garbled|kept)".
+- **Talk mode**: room talk now answered (a TV line taken as a request), or your speech still ignored. Compare
+  `data/logs/stt.log` lines with traces (a recognition with no trace = ignored or dropped).
+- **RAM**: `data/logs/worker_resource_guard.log`. Core should stay near 390 MB with the model loaded, ~140 MB without.
+  Answers "Left the background apps running" = you said no to closing idle apps.
+- **Hold-to-talk**: `data/logs/ptt.log` "waking up" / page reloading lines (the panel page is kept 20 min; after that
+  the first hold reloads it).
+- **Still open from round 1**: Alt-Tab pressed but no switch (needs a look at what the window manager did); the AI
+  sometimes refuses with its tools in hand ("I can't save without a URL"): more 0-token meaning actions are the fix.
+
 ## Known shortcuts that are still word patterns (replace them by meaning when touched)
 
 `fastpath.link_play_intent`, `fastpath.clean_intent`, `fastpath.to_file_intent`, `fastpath._code_not_file`, the "this
@@ -159,10 +184,9 @@ video now" rule in `video_dl_intent`, the filler-word list in `tools/general/vid
 | `docs/HANDOFF.md` (top section) | the current state changes: what is done, what is next, open decisions |
 | `docs/FIX_PLAN.md` | a planned step is done (mark DONE) or a new plan is agreed |
 | `docs/NIGHT_SHIFT.md` | Night Agent / heavy-tool steps are done or decided |
+| `LEARN.md` | a new layer, a new kind of mechanism, a moved / renamed core file (keep the map true) |
 | `CLAUDE.md` | only when the owner changes a rule |
 | `COMMAND.md` | never by Claude (the owner's own file) |
-
-## Fix history
 
 ## Fix history
 

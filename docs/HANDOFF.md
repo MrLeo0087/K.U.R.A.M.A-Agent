@@ -24,7 +24,12 @@ FIX_PLAN steps 1-6 all DONE (docs/FIX_PLAN.md). Job list (jarvis/core/jobqueue.p
 questions, retries, notices). Files app context (scripts/kurama_fm.py + jarvis/core/filemanager.py). Telegram: one
 upload try (no duplicates), big folders as gofile.io links. New side logs for evidence.
 
-### Unproven / watch in the next report
+### Done 2026-11-01 morning (trace report round 1; details: PROGRESS.md, MONITORING.md "Since 11-01")
+Link store through the AI + 0-token save/list by meaning; model loaded before routing; one shared embedding process
+(the 611 MB alert); fake "done" claims and saved-things answers retried with tools; junk streams replaced; talk-mode
+greetings by meaning; free RAM / `/clear ram|storage|kurama`. `LEARN.md` = the architecture guide for the owner.
+
+### Unproven / watch in the next report (see MONITORING.md "Watch in the next report (round 2)")
 - Hold-to-talk: a caption auto-hide timer fired during a hold (ptt.log); hides are now blocked while Ctrl is held and
   logged with their caller — find which timer it was.
 - Files: with two windows on the same folder the TOP one is matched by creation order (one data point); fm.log "pick".
@@ -34,7 +39,7 @@ upload try (no duplicates), big folders as gofile.io links. New side logs for ev
 - gpt-oss occasionally streams a garbled reply ("Folder … has been … It seems…").
 
 ### Next (ask the owner which; one at a time)
-1. Read 2-3 days of traces + side logs (MONITORING.md prompt) and fix what they prove.
+1. After 2-3 more days: trace report round 2 (MONITORING.md prompt + its "Watch" list).
 2. Night Shift steps 2-3 (docs/NIGHT_SHIFT.md: Safe Copy, Agent Brain), then heavy agents. The owner wants the job
    list as the night agent's input, started by hand (no timer), and advanced tools later.
 3. Old open items: merge the coding agent into normal tools; offline /commands for every tool.
