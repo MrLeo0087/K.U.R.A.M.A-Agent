@@ -40,7 +40,19 @@ fi
 #    second until the API answers, so the desktop never shows anything else
 mkdir -p data/logs
 [[ -f data/logs/wallpaper.log && $(stat -c %s data/logs/wallpaper.log) -gt 1048576 ]] && mv -f data/logs/wallpaper.log data/logs/wallpaper.log.1
-nohup "$PY" "$SCRIPT" --url "$URL" $WINDOW >> data/logs/wallpaper.log 2>&1 &
+# a frozen window exits with code 1 after logging its stacks (hang_guard, data/logs/hang.log), and a crash exits with
+# 1 too: start it again (at most 20 times; 2 s apart). A normal stop (pkill: 143) or a clean exit ends the loop.
+run_window() {
+  for _ in $(seq 20); do
+    "$PY" "$SCRIPT" --url "$URL" $WINDOW >> data/logs/wallpaper.log 2>&1
+    code=$?
+    [[ $code -eq 1 && ! -f "$HOME/.local/share/kurama/off" ]] || break
+    echo "$(date '+%F %T') window exited with code 1 (frozen or crashed): starting it again" >> data/logs/wallpaper.log
+    sleep 2
+  done
+}
+run_window </dev/null >/dev/null 2>&1 &
+disown
 
 # 2) API server in parallel (skip if already up)
 if ! curl -fs "http://127.0.0.1:${PORT}/api/v1/health" >/dev/null 2>&1; then

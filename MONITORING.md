@@ -113,6 +113,7 @@ every tool of that kind, not just the sentence in the trace.
 | Slow or expensive | `llm` in the trace: planner / router / summary calls that could be skipped, a big tier where the fast one would do; long work belongs in a background job (`jobs.get_manager().submit`) |
 | Speech dropped / misheard | `stt.py` (`not_ours`, `_gate`), `config.STT_FIXES`, the mic volume (Settings > Voice; it was 39%) |
 | Wake word missed | `wake.py` `match_wake` (+ `config.WAKE_PHRASES`), the page fallback `wakeRest` in `frontend/app.js` |
+| The window froze / "not responding" | `data/logs/hang.log` (stacks of every thread), `hang_guard` in `scripts/kurama_wallpaper.py` |
 | Hold-to-talk stops / sticks | `jarvis/core/ptt.py` (keys), `scripts/kurama_wallpaper.py` `Mini.ptt` / `Caption`, `kuramaPTT` in `frontend/app.js` |
 | "this folder / file" wrong | `scripts/kurama_fm.py` (window, selection), `jarvis/core/filemanager.py`, `focus.refer` |
 | A job-list job failed | `jarvis/core/jobqueue.py` (runner, retries, Telegram questions) |
@@ -168,6 +169,11 @@ every tool of that kind, not just the sentence in the trace.
 - **Hold-to-talk (Alt since 11-01)**: `data/logs/ptt.log`. The hidden panel is preloaded and never closed
   ("panel page ready (shown=False)" ~8 s after start), so "Getting ready" should only appear right after a restart.
   In VS Code a lone Alt may focus the menu bar (`window.customMenuBarAltFocus`).
+- **Window freezes** ("KURAMA-mini is not responding", 11-01 09:17 after a burst of hold-to-talk presses: the window's
+  main thread blocked on a lock while another of its threads ran at 100% CPU; no stack could be read: ptrace is
+  off on this laptop). Now `hang_guard` in the window script writes every thread's Python stack to
+  `data/logs/hang.log` after 20 s frozen and exits; `kurama-wallpaper.sh` starts a fresh window. The report's
+  "Window freezes" section shows the last dump: that stack is the root cause to fix.
 - **Still open from round 1**: Alt-Tab pressed but no switch (needs a look at what the window manager did); the AI
   sometimes refuses with its tools in hand ("I can't save without a URL"): more 0-token meaning actions are the fix.
 

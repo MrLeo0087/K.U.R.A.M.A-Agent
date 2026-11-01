@@ -1418,8 +1418,34 @@ def main() -> int:
     with contextlib.suppress(OSError):
         PID_FILE.write_text(str(os.getpid()))
     threading.Thread(target=install_hotkey, daemon=True).start()
+    hang_guard()
     Gtk.main()
     return 0
+
+
+HANG_S = 20  # the window's main loop stuck this long ("KURAMA-mini is not responding") -> stacks logged, exit, relaunch
+
+
+def hang_guard() -> None:
+    """Never stay frozen. A C-level timer thread (faulthandler) is re-armed every 2 s by the GTK main loop; if the loop
+    stops for HANG_S, every thread's Python stack goes to data/logs/hang.log (the evidence: which call froze, which
+    thread held the lock) and the process exits with code 1, so kurama-wallpaper.sh starts a fresh window at once.
+    11-01 09:17: the window froze after a burst of hold-to-talk presses (main thread blocked on a lock, another thread
+    at 100% CPU) and stayed frozen until restarted by hand."""
+    import faulthandler
+    try:
+        fh = (STATE_FILE.parent / "logs" / "hang.log").open("a", encoding="utf-8")
+    except OSError:
+        return
+
+    def rearm() -> bool:
+        faulthandler.dump_traceback_later(HANG_S, repeat=False, file=fh, exit=True)
+        return True
+    fh.write(time.strftime("%m-%d %H:%M:%S") + f" window started (pid {os.getpid()}); a freeze of {HANG_S} s is "
+             "logged here with every thread's stack, then the window restarts\n")
+    fh.flush()
+    rearm()
+    GLib.timeout_add_seconds(2, rearm)
 
 
 if __name__ == "__main__":

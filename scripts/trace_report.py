@@ -180,6 +180,11 @@ def side_report(days: float) -> str:
     section(f"Hold-to-talk ({downs} holds, data/logs/ptt.log)",
             [f"  caption hides (check those during a hold): {len(held_hide)}; mic failed: {len(micfail)}; "
              f"page was reloading: {len(waking)}"] + [f"  {ln[:120]}" for ln in (held_hide + micfail)[-6:]])
+    hang = logs / "hang.log"  # the window froze for 20 s: every thread's stack, then a fresh window (hang_guard)
+    text = hang.read_text(encoding="utf-8", errors="replace") if hang.exists() else ""
+    dumps = text.split("Timeout (")
+    section(f"Window freezes ({len(dumps) - 1} ever, data/logs/hang.log)",
+            [f"  {ln[:150]}" for ln in ("Timeout (" + dumps[-1]).splitlines()[:14]] if len(dumps) > 1 else [])
     fm = _log_lines(logs / "fm.log", days)
     multi = [ln for _, ln in fm if '"pick": ["top by creation order"' in ln or '"pick": ["title"' in ln]
     section(f"Files app context ({len(fm)} reads, data/logs/fm.log)",

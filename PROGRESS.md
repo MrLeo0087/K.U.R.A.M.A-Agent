@@ -758,3 +758,11 @@ Phases (one at a time, owner tests after each):
       spoken-spelling aliases come only from .env (KURAMA_PASSWORD_HASH, KURAMA_PASSWORD_ALIASES; empty = never
       unlocks), tests use their own test password, and `python -m jarvis.core.selfknow` prints a new hash. Old commits
       still contain the old password: the owner should set a new one.
+- [x] 2026-11-01 09:25 "KURAMA-mini is not responding" (09:17, after a burst of hold-to-talk presses): ptt.log shows
+      the window's last action at 09:17:51.66 (end_ghost); later key presses reached the server but not the window.
+      Evidence: the window's main thread blocked on a futex with 0 wake-ups, another of its threads at 100% CPU (235 s
+      CPU), no network churn. The stack could not be read (ptrace_scope=1, perf paranoid 4), so the exact line is NOT
+      proven, and a replay of a similar burst did not freeze it. Fix so it can never stay stuck + evidence next time:
+      `hang_guard` (faulthandler re-armed every 2 s by the GTK loop): frozen 20 s -> every thread's Python stack to
+      data/logs/hang.log, exit 1 -> kurama-wallpaper.sh starts a fresh window (up to 20 times; a normal stop ends it).
+      Tested with a frozen GLib loop + a spinning thread: both stacks logged, exit 1. trace_report shows the dumps.
