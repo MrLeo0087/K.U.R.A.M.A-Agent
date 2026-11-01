@@ -309,9 +309,13 @@ class Registry:
         from jarvis.core import semantic
         if not semantic.ready():  # never wait for the model to load in a request
             return names
-        key = "core:" + ",".join(sorted(names))
-        best = semantic.best_of(text, key, {n: (self.tools[n].description,) for n in names})
-        return [best[0]] + [n for n in names if n != best[0]] if best else names
+        scored = []  # every candidate by meaning (moving only the best one first let the 3-tool cap drop the
+        for n in names:  # second-best: "save this link to socolive" lost the link-saving tool)
+            b = semantic.best_of(text, "core1:" + n, {n: (self.tools[n].description,)})
+            if b is None:
+                return names
+            scored.append((b[1], n))
+        return [n for _, n in sorted(scored, reverse=True)]
 
     def openai_schemas_for(self, groups: list[str] | tuple[str, ...]) -> list[dict]:
         return [schema_of(t) for t in self.schemas_for(groups)]

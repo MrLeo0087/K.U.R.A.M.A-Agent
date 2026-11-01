@@ -176,3 +176,8 @@ video now" rule in `video_dl_intent`, the filler-word list in `tools/general/vid
   the big model; mic 39% -> 70% and forced-pass speech kept; wake phrases + mishearings; router 90% -> 98% with
   typo-tolerant routing; no yes/no loops); job list with Telegram questions; Files app context; Telegram: no
   duplicate uploads, big folders as links. New side logs: wake.log, ptt.log, fm.log (+ stt.log) in the report.
+- 2026-11-01 (morning): link store through the AI (own "links" area, list/delete/rename/clear, only this message's
+  link/name, learned wordings follow their tool), fake "done" claims in any grammar retried with the turn's tools,
+  junk streams held and replaced by the tool result, 0-token actions by meaning (copy path, VS Code here, start /
+  list jobs), video link kept when words come before it, "Slowest" without yes/no waits. Watch: "junk-looking stream
+  held" in server.log, link-store traces, meaning shortcuts taking a request they shouldn't.

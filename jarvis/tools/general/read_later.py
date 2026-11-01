@@ -6,7 +6,7 @@ from typing import Literal
 from jarvis.core.registry import tool
 
 
-@tool(group="browser", safety="safe", description="My list (to-dos + read later, Excel): add the highlighted link/open "
+@tool(group="links", safety="safe", description="My list (to-dos + read later, Excel): add the highlighted link/open "
       "page or a to-do, optional tag and time (reminds 10 min before + at the time), list, done N (removes it), open N.")
 def read_later(action: Literal["add", "todo", "list", "last", "open", "done", "remove", "clear", "today", "ask", "reschedule", "rename"] = "add", url: str = "",
                n: int = 0, text: str = "", tag: str = "", when: str = "") -> str:

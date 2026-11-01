@@ -117,8 +117,9 @@ def report(rows: list[dict], days: float) -> str:
                 fails.append(f"  {r['id']} {t['name']} {short(json.dumps(t.get('args'), ensure_ascii=False), 40)}: "
                              f"{short(t.get('result'), 60)!r}")
     section("Failed tool calls", fails)
-    section("Slowest", [f"  {r['id']} {r['ms']} ms {r['path']} {short(r['text'], 60)!r}"
-                        for r in sorted(rows, key=lambda r: -r["ms"])[:10]])
+    section("Slowest (requests that waited for your yes/no are left out: that time was yours)",
+            [f"  {r['id']} {r['ms']} ms {r['path']} {short(r['text'], 60)!r}"
+             for r in sorted((r for r in rows if not r["asked"]), key=lambda r: -r["ms"])[:10]])
     section("Most tokens", [f"  {r['id']} {r['tokens']} tok ({r['llm_calls']} calls) {short(r['text'], 60)!r}"
                             for r in sorted(ai, key=lambda r: -r["tokens"])[:10]])
     norm = Counter(re.sub(r"[^\w\s]", "", (r["text"] or "").lower()).strip() for r in ai)

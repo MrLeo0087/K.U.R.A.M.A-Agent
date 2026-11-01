@@ -49,7 +49,7 @@ TOOL_INTENT = {
     "generate_image": "image.generate", "write_document": "writing.job", "jobs": "writing.job",
     "make_audio": "audio.make", "make_chart": "chart.make", "text_assist": "text.selected",
     "fix_error": "code.fix", "where_was_i": "code.where", "time_machine": "code.changes", "git_info": "code.git",
-    "git_change": "code.git", "clipboard": "clipboard", "dictate": "dictate", "recall": "memory.recall",
+    "git_change": "code.git", "clipboard": "clipboard", "write_clipboard": "clipboard", "open_path": "open.folder", "dictate": "dictate", "recall": "memory.recall",
     "remember": "memory.remember", "forget": "memory.forget", "recall_session": "memory.session",
     "contacts": "contacts", "expenses": "money", "habits": "habits", "goals": "goals", "saved_links": "links",
     "find_my_phone": "phone.find", "location_history": "phone.location", "laptop_guard": "laptop.location",
@@ -134,6 +134,11 @@ def _isolated_store() -> None:
     # requests (4 false "text.selected" mistakes) and the score depended on what happened to be open
     rewrite.peek = lambda *a, **k: ""
     context.snapshot = lambda *a, **k: {"file": None, "selection": None, "browser": None}
+    from jarvis.core import filemanager  # nor the Files app ("this folder" = whatever happened to be open)
+    filemanager.current = lambda *a, **k: None
+    from jarvis.core import focus  # "this folder" = a fixed folder the user was just in (the same on every run)
+    here = Path(tempfile.mkdtemp(prefix="kurama-eval-here-"))
+    focus.set_path(str(here))
 
 
 # --- level 1: shortcut ---

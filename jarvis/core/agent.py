@@ -44,8 +44,9 @@ SYSTEM_PROMPT = (
     "You are {name}, a warm helper on the user's laptop. Talk like a kind friend, simple words, no jargon. "
     "One short sentence when enough, 2 at most unless asked. "
     "Do it the way the user asks. Answer in the user's language (English, Hindi or Nepali). Plain text, no "
-    "emojis or tables. Get what the user really wants; for a problem, use tools to find the cause and "
-    "give the fix. Use tools only when needed; never invent results or say you did something no tool did; if it fails or you don't know, "
+    "emojis or tables. For a problem, use tools to find the cause and give the fix. "
+    "Use tools only when needed; never invent results, say you did what no tool did, or answer saved lists from "
+    "old replies; if it fails or you don't know, "
     "say so. Stuck or 'what can you do': find_capability or about_me. Never ask yes/no in chat before "
     "acting: call the tool (risky ones ask the user themselves)."
 )
@@ -405,8 +406,11 @@ class Agent:
             log.info("tool-less refusal, retrying once with %s: %r", meta.NAME, answer[:80])
             self._log_meta(state["user_text"], [])
             self.last["meta_retry"] = True
-            retry_tools: list[Any] = [meta.schema()]
-            hint = meta.HINT
+            # the tools it already had come too: it answered "All links have been cleared" with the link tool in
+            # hand (trace f8ac97af102e) - a retry with only request_tools cost an extra round to get them back
+            retry_tools: list[Any] = [t for t in state.get("tools") or [] if meta.tool_name(t) != meta.NAME]
+            retry_tools.append(meta.schema())
+            hint = meta.HINT if not state.get("tools") else meta.DO_IT_HINT + " " + meta.HINT
             if router.looks_like_command(state["user_text"]):  # a real task with no tool: offer the toolsmith
                 retry_tools += [t for t in registry.schemas_for(["toolsmith"]) if t.name == "make_tool"]
                 hint += " " + meta.TOOLSMITH_HINT if len(retry_tools) > 1 else ""
@@ -865,10 +869,16 @@ class Agent:
         abort = self._abort = threading.Event()  # per turn: an old turn's late close can't stop this one
         parts: list[str] = []
         final: dict | None = None
+        raw: list[str] = []  # what the model sent, before cleaning (to judge it)
+        held: list[str] = []  # once the stream looks like junk, nothing more is shown until it is judged
         try:
             for kind, chunk in self.graph.stream(state, self._config(),
                                                  stream_mode=["custom", "values"]):
                 if kind == "custom":
+                    raw.append(chunk or "")
+                    if held or _JUNK.search("".join(raw[-6:])):  # gpt-oss-120b sometimes streams "Your … … …"
+                        held.append(chunk or "")  # after a tool ran (14 of 191 replies, traces 10-29..11-01)
+                        continue
                     chunk = _ZW.sub("", chunk or "")
                     if not chunk or (_DOTS.fullmatch(chunk) and _DOTS.search("".join(parts[-2:]) + "$")):
                         continue  # a run of "… … …" (the model stalling): at most one
@@ -878,15 +888,24 @@ class Agent:
                     final = chunk
             answer = (final or {}).get("answer") or ""
             said = "".join(parts)
-            if answer and not said.strip():  # nothing streamed (template/fallback text): emit it whole
+            if held:
+                log.info("junk-looking stream held (%s): %r", "garbled" if garbled("".join(raw)) else "kept",
+                         "".join(raw)[:120])
+            if held and not garbled("".join(raw)):  # a false alarm: show the rest, cleaned
+                rest = tidy("".join(held))
+                parts.append(rest)
+                yield rest
+                said = "".join(parts)
+            if answer and not said.strip() and not held:  # nothing streamed (template/fallback text): emit it whole
                 parts.append(answer)
                 yield answer
-            elif said and (garbled(said) or (answer.startswith(HONEST) and answer not in said)):
+            elif (said or held) and (garbled("".join(raw)) or (answer.startswith(HONEST) and answer not in said)):
                 fix = answer if answer.startswith(HONEST) else last_result((final or {}).get("messages") or [])
                 if final is not None:
                     final["answer"] = fix
-                parts.append("\n" + fix)
-                yield "\n" + fix
+                fix = ("\n" if said.strip() else "") + fix
+                parts.append(fix)
+                yield fix
         finally:
             if final is None or not final.get("answer"):
                 abort.set()  # stopped early (barge-in / error): tell the graph thread to quit
@@ -914,9 +933,25 @@ _DOTS = re.compile(r"[\s.\u2026]*(?:\.\.\.|\u2026)[\s.\u2026]*")
 HONEST = ("I didn't do it", "That didn't work")
 
 
+# the first signs of a junk stream (held back until judged): two invisible spaces, two ellipses in a row, or an
+# ellipsis glued to a no-break space ("Folder\u00a0…\u00a0has") - normal replies have none of these
+_JUNK = re.compile("[\u200b-\u200d\u2060\ufeff]{2}|(?:\\.\\.\\.|\u2026)[\\s\u00a0\u202f\u200b]*(?:\\.\\.\\.|\u2026)"
+                   "|[\u00a0\u202f](?:\\.\\.\\.|\u2026)|(?:\\.\\.\\.|\u2026)[\u00a0\u202f]")
+
+
 def garbled(text: str) -> bool:
-    """A streamed reply that is mostly '… … …' with hardly a word in it."""
-    return len(re.findall(r"[^\W\d_]{2,}", text)) <= 2 and len(re.findall(r"\.\.\.|\u2026", text)) >= 3
+    """A streamed reply broken by '… … …' / invisible-space runs: a few words lost in the junk (gpt-oss-120b after
+    a tool: "Folder … has been … …It seems… … …"). Real answers never have three ellipses in a row."""
+    words = len(re.findall(r"[^\W\d_]{2,}", text))
+    dots = len(re.findall(r"\.\.\.|\u2026", text))
+    return (dots >= 3 and words <= 2) or (dots >= 3 or len(_ZW.findall(text)) >= 3) and bool(_JUNK.search(text)) \
+        and (dots * 2 >= words or words < 12 or len(_ZW.findall(text)) >= 3)
+
+
+def tidy(text: str) -> str:
+    """Invisible characters out, a run of ellipses down to one space."""
+    text = _ZW.sub("", text).replace("\u00a0", " ").replace("\u202f", " ")
+    return re.sub(r"(?:\s*(?:\.\.\.|\u2026)\s*){2,}", " ", text)
 
 
 def last_result(msgs: list) -> str:

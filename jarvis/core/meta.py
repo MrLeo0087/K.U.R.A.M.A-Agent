@@ -16,6 +16,7 @@ NAME = "request_tools"
 HINT = ("Tool groups are available through request_tools. If one fits the user's request, call it now. "
         "If none fits but it is a real task doable on this computer, request toolsmith. "
         "Otherwise reply kindly in one short sentence that you can't do that yet.")
+DO_IT_HINT = "You answered without calling a tool, so nothing happened. If a tool you have fits, call it now."
 TOOLSMITH_HINT = ("No tool exists for this task yet: call make_tool now (it asks the user before building "
                   "anything) instead of saying you can't.")
 LOADED = "Loaded tools for: {groups}. Call the right tool now."
@@ -45,10 +46,23 @@ def looks_like_refusal(text: str) -> bool:
     return bool(_REFUSAL.search((text or "")[:240].replace("\u2019", "'")))  # curly apostrophes too
 
 
-_DONE = re.compile(r"\b(?:i'?ve|i have)\s+(?:now\s+|just\s+)?(?:removed|deleted|downloaded|moved|renamed|installed|"
-                   r"stopped|killed|uploaded|copied|replaced|fixed|connected|unlocked)\b|"
-                   r"\b(?:has|have)\s+been\s+(?:removed|deleted|saved|sent|opened|downloaded|started|created|installed|"
-                   r"moved|renamed|stopped|replaced|uploaded|turned\s+(?:on|off))\b", re.I)
+# the state-change verbs (a closed set: what KURAMA's tools do), in every form an answer reports them
+_ACT = (r"(?:add|sav|clear|remov|delet|edit|updat|cop|creat|open|clos|mov|renam|start|stopp|install|download|upload|"
+        r"replac|fix|connect|unlock|lock|kill|mut|play|paus|schedul|set|sen|writ|chang|empti|turn)")
+_DONE = re.compile(r"\b(?:i'?ve|i have)\s+(?:now\s+|just\s+|already\s+)?" + _ACT + r"\w*\b|"
+                   r"\b(?:has|have)\s+(?:now\s+)?been\s+" + _ACT + r"\w*\b|"
+                   # "Chat cleared.", "Added to your list.", "Edited test.py ...", "Saved the URL ... as notion"
+                   r"^\W*(?:(?!(?:is|are|was|were|be|been|gets?|got)\b)[\w-]+[,:]?\s+){0,3}(?:added|saved|cleared|removed|deleted|edited|updated|copied|created|"
+                   r"opened|closed|moved|renamed|installed|downloaded|uploaded|replaced|written|sent|emptied)\b(?!\s+(?:by|to\s+be))|"
+                   # "The link is saved as notion", "Your reminder was set"
+                   r"\b(?:your|the|it|this|that|all|everything)\b[^.!?\n]{0,40}?\b(?:is|are|was|were)\s+(?:now\s+|successfully\s+)?(?:saved|added|cleared|removed|deleted|copied|"
+                   r"created|renamed|updated|edited|sent|set|emptied|downloaded|installed)\b(?!\s+(?:by|when|if|with|using|from|through|via))|"
+                   # "The path is now in your clipboard", "Your link store is now empty"
+                   r"\b(?:is|are)\s+now\s+(?:in\s+your|empty|clear|gone|on|off|open|closed|saved|set|playing|muted|"
+                   r"running|downloading|installed)\b|"
+                   # "I'm writing 'yes' into main.txt right now", "Writing ... in the background"
+                   r"^\W*(?:sure\W+|okay\W+)?(?:i'?m|i am)?\s*(?:now\s+)?(?:writing|saving|copying|deleting|removing|"
+                   r"clearing|downloading|sending|creating|moving|editing|updating)\b", re.I)
 
 
 def claims(text: str) -> bool:
@@ -60,7 +74,7 @@ def claims(text: str) -> bool:
 def needs_tool(text: str) -> bool:
     """A tool-less answer that refuses, or claims an action no tool did: retried once with request_tools."""
     t = (text or "")[:240].replace("\u2019", "'")
-    return looks_like_refusal(t) or bool(_CLAIM.search(t))
+    return looks_like_refusal(t) or bool(_CLAIM.search(t) or _DONE.search(t))
 
 
 def gloss(group: str) -> str:

@@ -257,7 +257,7 @@ CORE_COVERS: dict[str, tuple[str, ...]] = {
     "media": ("media",),
     "web": ("web", "browser"),
     "info": ("general", "weather", "daily", "memory", "system", "power"),
-    "memory": ("memory", "knowledge", "browser", "self"),
+    "memory": ("memory", "knowledge", "links", "self"),
     "create": ("image", "jobs", "tracker"),
     "text": ("clipboard", "screen", "windows", "devutils"),
     "code": ("dev", "git", "codequality", "watch", "devutils"),
@@ -495,14 +495,20 @@ for _g, _ex in {
               "how far is the video download", "did the youtube download complete", "show the download progress"),
     "watch": ("is any training running right now", "is my model still training"),
     "tracker": ("I drank 2 liters of water today", "finished 3 litres of water", "done 30 pushups today"),
-    "browser": ("show my read later list", "what's in my reading list",
-                "delete that saved link", "remove this link from my links", "forget the link I saved"),
+    "links": ("show my read later list", "what's in my reading list", "remove it from read later",
+              "delete that saved link", "remove this link from my links", "forget the link I saved",
+              "list every link I have saved", "empty my saved links", "delete the 3rd bookmark",
+              "keep the address of the page I'm on under a name", "bookmark this site as my bank",
+              "rename one of my saved links", "open a link I bookmarked earlier"),
     "daily": ("what is 12 times 8", "how much is 250 minus 75"),
     "screen": ("read what's on my screen", "what does my screen say"),
     "image": ("make an audio of this text", "turn this paragraph into speech"),
 }.items():
     ROUTER_EXAMPLES[_g] = ROUTER_EXAMPLES.get(_g, ()) + _ex
 ROUTER_URL_GROUP = "browser"  # group for messages containing a URL/domain
+# while the meaning model is not loaded (first request after 10 min idle: 17 of 87 AI requests 10-31..11-01) the word
+# rules decide; an area split out of another keeps riding along with it so its tools are still offered
+ROUTER_RULE_NEIGHBORS = {"browser": "links"}
 ROUTER_SITE_OVER_APPS = True  # "open youtube": a known site/URL drops the apps group (browser wins)
 FASTPATH = os.getenv("JARVIS_FASTPATH", "1").lower() not in ("0", "false", "no", "off")  # regex intents, 0 tokens
 ASSISTANT_NAME = os.getenv("KURAMA_NAME", "KURAMA")  # default name; the user can change it (core/identity.py)
@@ -704,6 +710,8 @@ TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
     "files": "create folders, write files, move/copy, move to trash",
     "filesearch": "find files by name or by text content; open a folder by name",
     "telegram": "send a file (by path or name) or a message to the user's Telegram (phone); mute alerts",
+    "links": "the user's link store (saved links by name: save this page's link, list, open, rename, remove) and read "
+             "later list",
     "toolsmith": "no tool fits a real task: offer to build a small new tool; saved tools list/run/delete",
     "skills": "small tools KURAMA built earlier (saved skills)",
     "system": "laptop doctor (why it is slow: RAM, CPU, heat, disk; free RAM, ports, stop a process), internet "
@@ -761,7 +769,7 @@ TOOL_GROUP_GLOSS: dict[str, str] = {
     "apps": "", "media": "music", "desktop": "wallpaper", "git": "", "dev": "tests", "codequality": "review",
     "devutils": "notebooks", "study": "lectures",
     "web": "search", "memory": "notes",
-    "knowledge": "code", "usage": "tokens", "browser": "",
+    "knowledge": "code", "usage": "tokens", "browser": "", "links": "",
     "jobs": "writing",
     "schedule": "remind",
     "todo": "",
@@ -1096,6 +1104,23 @@ JOB_MAX_WAIT_S = 600.0  # then they start anyway (with a note)
 # per-job time/token caps, paused while RAM is short / battery is low / (needs_power) not charging.
 LONG_JOBS_MAX_WORKERS = 2  # own threads; at most ONE CPU-heavy long job runs at a time (heavy=True)
 # "keep this for later" vs "do it now" (planner.queue_meant, by meaning): a job-list add must never start the work
+# 0-token shortcuts chosen by MEANING (fastpath.meaning_intent): the request is closest to one of these actions,
+# and it names nothing the examples don't (a job number, another folder): else the AI does it. Seen in traces as
+# frequent AI requests (10-29..11-01: 'copy the path of this folder' 7x, 'open this folder in vs code' 11x,
+# 'start the jobs' 4x up to 8.5k tokens).
+MEANING_SHORTCUTS: dict[str, tuple[str, ...]] = {
+    "copy_path": ("copy the path of this folder", "copy this file's path", "put the path of the selected folder in "
+                  "my clipboard", "copy the full path of the current folder", "copy the location of this file",
+                  "path copy gara"),
+    "open_vscode": ("open this folder in vs code", "open vs code in this folder", "open the selected folder in code",
+                    "open this file with visual studio code", "open the current folder in my code editor",
+                    "launch vscode here"),
+    "jobs_start": ("start the jobs", "start working on my job list", "run all the waiting jobs", "do the jobs now",
+                   "begin the queued jobs", "work on your job list now"),
+    "jobs_list": ("show my job list", "what jobs are waiting", "list the jobs you have", "what is in your job list",
+                  "show the queued jobs", "which jobs are pending"),
+}
+MEANING_SHORTCUT_MIN = 0.82  # this close to the action's examples (bge-small cosine) to run it without the AI
 QUEUE_EXAMPLES: dict[str, tuple[str, ...]] = {
     "later": ("add a job: write an essay about Nepal", "keep this job for later", "put this in your job list",
               "add to my job list: research black holes and send it to telegram", "save this as a job, don't start it",

@@ -287,4 +287,4 @@ ROUTES = {
 def test_routing():
     for text, group in ROUTES.items():
         assert group in router.route(text, log_it=False).groups, text
-    assert router.route("open youtube", log_it=False).groups == ["browser"]
+    assert router.route("open youtube", log_it=False).groups == ["browser", "links"]  # cold path: link store rides along

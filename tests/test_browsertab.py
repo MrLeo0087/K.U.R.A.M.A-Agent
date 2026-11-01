@@ -1,3 +1,4 @@
+import pytest
 import time
 
 from fastapi.testclient import TestClient
@@ -25,3 +26,17 @@ def test_old_tab_info_expires(monkeypatch):
     real = time.time
     monkeypatch.setattr(browsertab.time, "time", lambda: real() + 7 * 3600)
     assert browsertab.get() is None
+
+
+@pytest.mark.parametrize("text,q", [
+    ("downlaod this movie from youtbe in 1080p with audio \n\nhttps://www.youtube.com/watch?v=RcyW7YQ_5WU", "1080p"),
+    ("download this video then https://www.youtube.com/watch?v=RcyW7YQ_5WU", ""),
+    ("download this youtube video in 720p https://www.youtube.com/watch?v=RcyW7YQ_5WU", "720p"),
+    ("download this video now in 4k https://www.youtube.com/watch?v=RcyW7YQ_5WU&list=RDRcyW7YQ_5WU&start_radio=1", "4k"),
+])
+def test_words_before_a_pasted_link_never_replace_the_link(text, q):
+    """trace 4ad71202be1b: 'in 1080p with audio <link>' became source '' = the browser's open tab, quality lost."""
+    from jarvis.core import fastpath
+    it = fastpath.video_dl_intent(fastpath.normalize(text))
+    assert it.args["source"].startswith("https://www.youtube.com/watch?v=RcyW7YQ_5WU") and it.args["quality"] == q
+    assert it.args["audio"] is False  # "with audio" = the video with its sound, not an MP3

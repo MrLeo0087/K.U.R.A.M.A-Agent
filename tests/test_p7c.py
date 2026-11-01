@@ -64,7 +64,7 @@ def tg(monkeypatch):
     monkeypatch.setattr(config, "TELEGRAM_CHAT_ID", "42")
     monkeypatch.setattr(notify, "telegram_call",
                         lambda method, payload=None, timeout=None, files=None: sent.append(
-                            (method, payload, {k: v[0] for k, v in (files or {}).items()}, time.monotonic())) or {})
+                            (method, payload, {k: v[0] for k, v in (files or {}).items()}, time.monotonic())) or {"ok": True})
     return sent
 
 
@@ -358,7 +358,8 @@ def test_refusal_with_tools_bound_retries_with_meta(respond, monkeypatch):
     from jarvis.core import router
     monkeypatch.setattr(router, "route", lambda text, log_it=True: router.Route(["display"], "rules"))
     agent.Agent().run("set dark mode")
-    assert len(seen) == 2 and seen[1] == ["request_tools", "make_tool"] and "toolsmith" in meta_hint()
+    # the retry keeps the tools it had (it may just have skipped calling one) + request_tools + make_tool
+    assert len(seen) == 2 and seen[1] == seen[0] + ["request_tools", "make_tool"] and "toolsmith" in meta_hint()
 
 
 def meta_hint():

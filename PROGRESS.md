@@ -701,3 +701,28 @@ Phases (one at a time, owner tests after each):
       (2) Big folders to Telegram: anything over ~2 GB raw was refused before zipping; the owner wants the zip + a
       download link (gofile.io, multi-GB) every time -> up to config.SHARE_MAX_MB (20 GB), with a free-disk check.
       Seen: the AI answered "too large" from history without calling the tool (honesty retry didn't catch a refusal).
+- [x] 2026-11-01 Trace report 10-30..11-01, all classes fixed (raw phrasings from the traces in the tests):
+      (1) Link store / read later through the AI: the AI's memory tool had only save/get (no list/delete/rename ->
+      it used "forget a fact", searched the disk, or claimed); link tools sat in the "browser" area, which 3 general
+      tools serve, so the 3-tool cap dropped memory ("save this link to socolive" opened the site); the AI copied an
+      old link / old name from the chat. Now: own area "links" (memory only), memory gets list/open/delete (name,
+      number, 'all' with a backup copy)/rename links + remove from read later; a link or name not in THIS message is
+      ignored (open page / KURAMA asks the name); cold path (model unloaded, 17/87 AI requests) brings "links" with
+      "browser" (config.ROUTER_RULE_NEIGHBORS). Learned wordings now store their tool and follow it to its current
+      area (6 stale "browser" rows migrated from the traces; one learned from a failed page read dropped).
+      Also adopted the earlier session's uncommitted browser-tab context (context.py, pageread.py, registry.py).
+      (2) Fake "done" with no tool ("All links have been cleared", "path is now in your clipboard", "Chat cleared"):
+      the claim check knew only "I've ..."; now every form of the state-change verbs (passive, "is now", leading
+      participle, "I'm writing...") -> retried once WITH the tools it had + request_tools. Prompt: never answer saved
+      lists from old replies (still < 250 tokens).
+      (3) Garbled gpt-oss-120b streams (14/191 after a tool, 0/168 on 20b): the first junk sign (2 invisible spaces,
+      2 ellipses in a row, ellipsis next to a no-break space) holds the stream; junk -> the tool's result is said,
+      a false alarm -> shown cleaned. Logged ("junk-looking stream held").
+      (4) Speech "Open Youtube"/"Hello" dropped as Danish/German: already fixed by af7c090 (replayed: kept now).
+      (5) "yes" loops on overwrite: already fixed 10-30 02:18 (all 8 traces were before it).
+      (6) 0-token by MEANING (config.MEANING_SHORTCUTS): copy this folder's path, open this folder in VS Code,
+      start the jobs, show the job list; anything named beyond the examples (job 2, another folder) -> the AI.
+      (7) Video link + words ("in 1080p <link>", "then <link>") lost the link to the browser tab: the link is the
+      source, the words give the quality. Report: "Slowest" leaves out yes/no waits. Not proven: Alt-Tab (the tool
+      reported "Pressed alt+Tab"; needs a live look at what the window manager did).
+      Scorecard 66% instant / 100% right / 98% router; 1182 tests pass.

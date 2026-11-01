@@ -2182,6 +2182,11 @@ def video_dl_intent(t: str) -> Intent | None:
     src, kind, q = (m.group("src") or "").strip(), (m.group("kind") or "").lower(), m.group("q") or ""
     if qm := re.fullmatch(r"(?:in|at|with)\s+(?:the\s+)?(4k|2k|\d{3,4}\s*p?|full\s+hd|hd|fhd|best|high|good|extra\s+high|highest|max(?:imum)?|ultra(?:\s+hd)?|top)(?:\s+qu\w*)?", src, I):
         src, q = "", qm.group(1)  # "download this video in 1080p": no words left, the quality was all of it
+    if (u := re.search(r"https?://\S+", src)) and u.start() > 0:  # "<words> <link>": the link is the video, the words
+        rest = src[:u.start()] + " " + src[u.end():]  # only add details ("in 1080p", "then", "from youtube") — they
+        if not q and (qm := re.search(r"\b(4k|2k|\d{3,4}\s*p|full\s+hd|fhd)\b", rest, I)):  # used to replace the link
+            q = qm.group(1)  # with the browser's open tab (trace 4ad71202be1b)
+        src = u.group(0)
     is_url = bool(re.match(r"https?://", src))
     if is_url and not re.search(_VID_SITES, src, I) and not (kind or q or m.group("aud")):
         return None  # a plain file link -> download_file
@@ -2383,7 +2388,7 @@ _L_SAVE = r"(?:save|store|keep|remember|bookmark|add)"
 def links_intent(t: str) -> Intent | None:
     from jarvis.core import links
     low = t.strip(" .!?").lower()
-    L = lambda a, **k: Intent("links", "saved_links", "browser", {"action": a, **k})  # noqa: E731
+    L = lambda a, **k: Intent("links", "saved_links", "links", {"action": a, **k})  # noqa: E731
     u = links.URL.search(t)
     url = {"url": u.group(0)} if u and re.search(r"https?://|www\.", u.group(0), I) else {}
     if links.pending():  # 'What should I call this link?' was asked
@@ -2444,7 +2449,7 @@ def todo_now_intent(t: str) -> Intent | None:
     from jarvis.core import readlater, reminders, todos
     low = t.strip(" .!?").lower()
     T = lambda a, **k: Intent("todo", "todo", "todo", {"action": a, **k})  # noqa: E731  (to-do list)
-    R = lambda a, **k: Intent("readlater", "read_later", "browser", {"action": a, **k})  # noqa: E731  (reading list)
+    R = lambda a, **k: Intent("readlater", "read_later", "links", {"action": a, **k})  # noqa: E731  (reading list)
     S = lambda a, **k: Intent("schedules", "schedules", "schedule", {"action": a, **k})  # noqa: E731  (reminders)
     lead = r"(?:okay\W+|ok\W+|so\W+|please\W+|kurama\W+|can\s+you\s+|could\s+you\s+|now\W+)*"
     from jarvis.core import pageread
@@ -2866,11 +2871,11 @@ def todo_intent(t: str) -> Intent | None:
                     r"|(?:number\s+|item\s+)?\d{1,3}\s+is\s+(?:done|complete(?:d)?|finished))"
                     r"(?:\s+(?:in|on|from)\s+(?:my\s+|the\s+)?" + _LIST_ANY + r")?", low, I):
         if re.search(_RL_LIST + r"|\bread\b", low, I):
-            return Intent("readlater", "read_later", "browser", {"action": "done", "n": _nth(low)})
+            return Intent("readlater", "read_later", "links", {"action": "done", "n": _nth(low)})
         return Intent("todo", "todo", "todo", {"action": "done", "item": str(_nth(low))})
     if re.fullmatch(r"(?:please\s+)?(?:remove|delete)\s+(?:number\s+|item\s+)?\d{1,3}\s+(?:from|in|on)\s+(?:my\s+|the\s+)?" + _LIST_ANY, low, I):
         if re.search(_RL_LIST, low, I):
-            return Intent("readlater", "read_later", "browser", {"action": "remove", "n": _nth(low)})
+            return Intent("readlater", "read_later", "links", {"action": "remove", "n": _nth(low)})
         return Intent("todo", "todo", "todo", {"action": "delete", "item": str(_nth(low))})
     # show
     if m := re.fullmatch(r"(?:please\s+|kurama\W+)*(?:show(?:\s+me)?|what(?:'s|\s+is|\s+are)?(?:\s+(?:on|in))?|list|open|see|check|give\s+me|read)?"
@@ -2914,13 +2919,13 @@ def read_later_intent(t: str) -> Intent | None:
     if re.search(_RL_CUE, t, I) and len(t.split()) <= 24:
         if re.search(r"\b(?:give|show|tell|send|what(?:'s|\s+is|\s+was)|which|where)\b.{0,40}\b(?:link|links|url|page|article)\b"
                      r"|\b(?:link|links|url)\b.{0,30}\b(?:i\s+(?:gave|give|saved|save|added|kept)|you\s+saved)\b", t, I):
-            return Intent("readlater", "read_later", "browser", {"action": "last" if not re.search(
+            return Intent("readlater", "read_later", "links", {"action": "last" if not re.search(
                 r"\b(?:links|all|list|everything)\b", t, I) else "list"})
         if re.search(r"\b(?:keep|save|store|add|put|bookmark|remember|note)\b", t, I) and not re.search(
                 r"\b(?:open|show|remove|delete|mark)\b", t, I):
             u = URL_RE.search(t)
             extra, _ = _extras(URL_RE.sub(" ", t))
-            return Intent("readlater", "read_later", "browser", {"action": "add", "url": u.group(0) if u else "", **extra})
+            return Intent("readlater", "read_later", "links", {"action": "add", "url": u.group(0) if u else "", **extra})
     plain = URL_RE.sub(" ", t)
     extra, rest = _extras(plain)
     if re.fullmatch(r"(?:please\s+|kurama\W+)*(?:i(?:'ll|\s+will)\s+read\s+(?:this|it|that)(?:\s+(?:link|page|article|post|video))?\s+later|"
@@ -2931,26 +2936,26 @@ def read_later_intent(t: str) -> Intent | None:
                 r"(?:please\s+|kurama\W+)*(?:(?:i(?:'ll|\s+will|\s+want\s+to)|let\s+me|remind\s+me\s+to)\s+)?read\s+(?:this|it|that)"
                 r"(?:\s+(?:link|page|article|post|video))?(?:\s+later)?[\s.!]*", rest, I)):
         u = URL_RE.search(t)
-        return Intent("readlater", "read_later", "browser", {"action": "add", "url": u.group(0) if u else "", **extra})
+        return Intent("readlater", "read_later", "links", {"action": "add", "url": u.group(0) if u else "", **extra})
     if not re.search(_RL_LIST, t, I):
         return None
     if re.search(r"\b(?:open|read|show\s+me\s+the)\b.*\b(?:article|link|item|page|one|number|\d)\b", t, I):
-        return Intent("readlater", "read_later", "browser", {"action": "open", "n": _nth(t)})
+        return Intent("readlater", "read_later", "links", {"action": "open", "n": _nth(t)})
     if re.search(r"\bmark\b.*\bread\b|\b(?:done|finished)\s+(?:with|reading)\b", t, I):
-        return Intent("readlater", "read_later", "browser", {"action": "done", "n": _nth(t)})
+        return Intent("readlater", "read_later", "links", {"action": "done", "n": _nth(t)})
     if re.search(r"\b(?:remove|delete)\b", t, I):
-        return Intent("readlater", "read_later", "browser", {"action": "remove", "n": _nth(t)})
+        return Intent("readlater", "read_later", "links", {"action": "remove", "n": _nth(t)})
     if re.search(r"\b(?:show|what|list|open|see|check|my)\b", t, I) and len(t.split()) <= 12:
-        return Intent("readlater", "read_later", "browser", {"action": "list", "text": "read"})
+        return Intent("readlater", "read_later", "links", {"action": "list", "text": "read"})
     return None
     if re.search(r"\b(?:open|read|show\s+me\s+the)\b.*\b(?:article|link|item|page|one|number|\d)\b", t, I):
-        return Intent("readlater", "read_later", "browser", {"action": "open", "n": _nth(t)})
+        return Intent("readlater", "read_later", "links", {"action": "open", "n": _nth(t)})
     if re.search(r"\bmark\b.*\bread\b|\b(?:done|finished)\s+(?:with|reading)\b", t, I):
-        return Intent("readlater", "read_later", "browser", {"action": "read", "n": _nth(t)})
+        return Intent("readlater", "read_later", "links", {"action": "read", "n": _nth(t)})
     if re.search(r"\b(?:remove|delete)\b", t, I):
-        return Intent("readlater", "read_later", "browser", {"action": "remove", "n": _nth(t)})
+        return Intent("readlater", "read_later", "links", {"action": "remove", "n": _nth(t)})
     if re.search(r"\b(?:show|what|list|open|see|check|my)\b", t, I) and len(t.split()) <= 12:
-        return Intent("readlater", "read_later", "browser", {"action": "list"})
+        return Intent("readlater", "read_later", "links", {"action": "list"})
     return None
 
 
@@ -3201,7 +3206,10 @@ def match(text: str) -> Intent | None:
                                                            "readlater": config.READLATER_EXAMPLES})
         if best and best[0] == "job":
             return None
-    return it if it is None or meaning_ok(text, it) else None
+    if it is not None and meaning_ok(text, it):
+        return it
+    return meaning_intent(text)  # no pattern, or its meaning disagreed ('Open VS Code from this folder' is not a
+    #                              folder named 'VS Code from this'): an action picked by meaning, else the AI
 
 
 _AGENT_ON = re.compile(r"(?:please\s+|kurama\W+)?(?:start|open|turn\s+on|switch\s+(?:on|to)|enable|activate|use|"
@@ -3278,6 +3286,54 @@ def _assist_waiting(t: str) -> bool:
     return bool((assist.pending_code_active() and (not text_offer or yes_no(t) or _APPLY_CODE.search(t)))
                 or assist.use_waiting() or assist.ask_back_waiting()
                 or assist.file_ref_waiting() or ((assist.more_waiting() or assist.retry_active()) and yes_no(t)))
+
+
+# words that add nothing to a request ("bro", "please", the assistant's name): they don't count as naming something
+_NO_DETAIL = {"bro", "pls", "plz", "please", "hey", "ok", "okay", "now", "can", "could", "you", "will", "just",
+           "for", "me", "my", "the", "a", "an", "of", "in", "to", "it", "this", "that", "here", "current", "selected",
+           "and", "yaar", "dai", "na", "quickly", "again", "also", "all", "i", "want", "need", "your", "with", "on",
+           "from", "is", "are", "what", "which"}
+_vocab: dict[str, set[str]] = {}
+
+
+def _words(t: str) -> set[str]:
+    return set(re.findall(r"[a-z0-9]+", t.lower()))
+
+
+def meaning_intent(text: str) -> Intent | None:
+    """0-token actions picked by MEANING (config.MEANING_SHORTCUTS), not by word patterns: the request must be close to
+    one action's examples (MEANING_SHORTCUT_MIN, and nearer than plain chat) AND name nothing those examples don't —
+    'start job 2' or 'open vs code from the kurama folder' carry a detail only the AI can use, so they go to the AI.
+    'this' is resolved like every tool: a pasted path > the Files app's selection / open folder > the last folder."""
+    from jarvis.core import router, semantic
+    t = router.fix_typos(" ".join((text or "").split())).strip(" .!?")
+    if not t or len(t) > 120 or not semantic.ready():
+        return None
+    best = semantic.best_of(t, "meaning_shortcuts", config.MEANING_SHORTCUTS)
+    if best is None or best[1] < config.MEANING_SHORTCUT_MIN:
+        return None
+    label, score = best
+    chat = next((s for g, s in semantic.scores(t) if g == semantic.CHAT), 0.0)
+    if score < chat + config.SEMANTIC_OVER_CHAT:
+        return None
+    if label not in _vocab:
+        _vocab[label] = set().union(*(_words(e) for e in config.MEANING_SHORTCUTS[label]))
+    said = re.sub(r"^\W*(?:(?:hey|hi|ok)\s+)?(?:" + "|".join(config.ASSISTANT_NAMES) + r")\b\W*", "", t, flags=I)
+    if _words(said) - _vocab[label] - _NO_DETAIL:  # something the examples don't cover: a number, a name, a place
+        return None
+    if label == "jobs_start":
+        return Intent("jobs", "jobs", "jobs", {"action": "start"})
+    if label == "jobs_list":
+        return Intent("jobs", "jobs", "jobs", {"action": "list"})
+    from jarvis.core import focus
+    p = focus.refer("this")
+    if p is None:
+        return None
+    if p.is_file() and re.search(r"\b(?:folder|directory|dir)\b", t, I):
+        p = p.parent  # "this folder" while the last thing used was a file: the folder it is in
+    if label == "copy_path":
+        return Intent("copypath", "write_clipboard", "clipboard", {"text": str(p)})
+    return Intent("openpath", "open_path", "files", {"path": str(p), "app": "vscode"}, "VS Code")
 
 
 def selection_intent(text: str) -> Intent | None:
@@ -3597,6 +3653,9 @@ def _say(key: str, lang: str, x: str) -> str:
 def render(intent: Intent, ok: bool, output: str, lang: str) -> str:
     if intent.name == "say":
         return intent.args.get(lang) or intent.args["en"]
+    if intent.name == "copypath" and ok:
+        return {"hi": f"पाथ कॉपी कर दिया: {intent.args['text']}", "ne": f"पाथ कपी गरें: {intent.args['text']}"}.get(
+            lang, f"Copied the path: {intent.args['text']}")
     if intent.name == "where" and ok:
         return {"hi": f"पूरा पाथ: {output}", "ne": f"पूरा पाथ: {output}"}.get(lang, f"The full path is {output}")
     if intent.name == "date" and ok:

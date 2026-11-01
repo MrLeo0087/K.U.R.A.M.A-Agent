@@ -64,8 +64,9 @@ def _embed(text: str) -> Any:
     return semantic.embedder().embed([text], query=True)[0]
 
 
-def add(text: str, group: str = "", neg_intent: str = "", source: str = "") -> None:
-    """Learn one wording: it belongs to `group` (may be empty) and/or is NOT `neg_intent`."""
+def add(text: str, group: str = "", neg_intent: str = "", source: str = "", tool: str = "") -> None:
+    """Learn one wording: it belongs to `group` (may be empty) and/or is NOT `neg_intent`. `tool` = the tool that
+    did it: its CURRENT area is used when scoring, so moving a tool to another area moves what was learned too."""
     import numpy as np
     text = " ".join((text or "").split())[:300]
     if not text or not (group or neg_intent):
@@ -75,7 +76,7 @@ def add(text: str, group: str = "", neg_intent: str = "", source: str = "") -> N
         rows, vecs = _load()
         keep = [i for i, r in enumerate(rows) if r["text"].lower() != text.lower()]  # a newer verdict replaces
         rows = [rows[i] for i in keep] + [{"text": text, "group": group, "neg": neg_intent, "src": source,
-                                           "ts": time.time()}]
+                                           "ts": time.time(), **({"tool": tool} if tool else {})}]
         vecs = np.vstack([vecs[keep] if len(vecs) and len(keep) else np.zeros((0, len(v)), np.float32), v[None]])
         rows, vecs = rows[-config.LEARN_MAX:], vecs[-config.LEARN_MAX:]
         globals().update(_rows=rows, _vecs=vecs)
@@ -97,9 +98,19 @@ def group_scores(q: Any) -> dict[str, float]:
         sims = (vecs @ q).tolist()
     best: dict[str, float] = {}
     for r, s in zip(rows, sims):
-        if r["group"] and s > best.get(r["group"], -1.0):
-            best[r["group"]] = s
+        g = _group_now(r)
+        if g and s > best.get(g, -1.0):
+            best[g] = s
     return best
+
+
+def _group_now(row: dict) -> str:
+    """The learned wording's area today: its tool's current group (areas get reorganised), else the stored one."""
+    if row.get("tool") and row.get("group"):
+        from jarvis.core import registry
+        if (t := registry.REGISTRY.get(row["tool"])) is not None and (g := registry.group_of(t)) not in ("core", ""):
+            return g
+    return row.get("group", "")
 
 
 def vetoed(q: Any, intent: str) -> bool:
@@ -144,15 +155,15 @@ def correction_score(text: str) -> float:
     return float((_corr_vecs @ _embed(text)).max())
 
 
-def _area(tools: list[dict], done: bool = False) -> str:
-    """The area (tool group) of the first specialised tool that ran fine (done: and really did the thing)."""
+def _area(tools: list[dict], done: bool = False) -> tuple[str, str]:
+    """(area, tool) of the first specialised tool that ran fine (done: and really did the thing)."""
     from jarvis.core import registry
     for t in tools:
         ok = t.get("ok") and (not done or _really_did(t.get("result")))
         tool = registry.REGISTRY.get(t.get("name") or "") if ok else None
         if tool is not None and (g := registry.group_of(tool)) not in ("core", "self", ""):
-            return g
-    return ""
+            return g, t["name"]
+    return "", ""
 
 
 def on_turn(turn: dict) -> None:
@@ -175,12 +186,13 @@ def _judge(turn: dict) -> None:
             failed = any(re.match(r"\W*(?:error|i couldn'?t|i can'?t|sorry|i'm sorry)", str(t.get("result") or ""), re.I)
                          for t in prev["tools"])
             neg = "" if failed else prev.get("intent") or ""
-            if area := _area(turn["tools"]):
-                add(prev["text"], area, neg, "correction")
+            area, tool = _area(turn["tools"])
+            if area:
+                add(prev["text"], area, neg, "correction", tool)
             elif prev.get("path") == "fastpath" and neg:
                 add(prev["text"], "", prev["intent"], "correction")
         elif prev.get("path") == "ai" and corr < config.LEARN_WORKED_MAX_CORR and standalone(prev["text"]) \
-                and (area := _area(prev["tools"], done=True)):
-            add(prev["text"], area, "", "worked")
+                and (found := _area(prev["tools"], done=True))[0]:
+            add(prev["text"], found[0], "", "worked", found[1])
     except Exception as e:  # noqa: BLE001 - learning must never break KURAMA
         log.warning("learning failed: %s", e)

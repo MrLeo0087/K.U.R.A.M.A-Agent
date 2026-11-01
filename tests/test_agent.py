@@ -197,3 +197,23 @@ def test_final_round_tool_choice_error_answers_from_tool_results(fake, monkeypat
     monkeypatch.setattr(agent.Agent, "_chat", chat)
     ans = agent.Agent().run("what time is it")
     assert ans and "went wrong" not in ans and "Tool choice" not in ans
+
+
+@pytest.mark.parametrize("junk", [
+    "Folder … has been …  …It seems…   …  … It…  … The  …",  # 7cb067220644
+    "Your ​​   ?  …...  ... ... ... ...",            # 4667e987aca6
+    "Playing the ​​  ​ ​ ……… We need to answer what is playing.",       # 9667c67e674a
+])
+def test_junk_stream_after_a_tool_is_replaced_by_the_tool_result(fake, junk):
+    """gpt-oss-120b streams '… … …' / invisible spaces after a tool ran (14 of 191 replies): the junk is held back
+    and the tool's own result is said instead."""
+    fake(call(), AIMessage(content=junk))
+    out = "".join(agent.Agent().stream("what time is it bro", mode="text"))
+    assert "…" not in out and "​" not in out and "We need" not in out
+    assert len(out.strip()) > 5 and out.strip() == agent.last_result([]) or ":" in out
+
+
+@pytest.mark.parametrize("ok", ["It is playing now... enjoy!", "Wait... it is 5 pm in Tokyo.", "Done, it's 9:15 pm."])
+def test_a_normal_reply_with_one_ellipsis_streams_unchanged(fake, ok):
+    fake(call(), AIMessage(content=ok))
+    assert "".join(agent.Agent().stream("time in tokyo?", mode="text")).strip() == ok

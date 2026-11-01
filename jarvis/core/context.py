@@ -69,12 +69,17 @@ def snapshot() -> dict:
 
 def line() -> str:
     """One short sentence for the system prompt ('' when nothing useful is open)."""
-    try:  # the Files app first when it is the app the user used last ("open this folder in VS Code")
-        from jarvis.core import filemanager
+    top = None
+    try:  # the app the user used LAST decides what "this" means (with VS Code always open, the browser tab used to
+        from jarvis.core import filemanager  # be hidden: "save this link" saved an old link from the chat)
+        st = filemanager.state()
+        top = st.get("top")
         if fm := filemanager.line():
             return fm
     except Exception:  # noqa: BLE001
         pass
+    if top == "browser" and (tab := _tab_line()):
+        return tab
     s = snapshot()
     if s["file"] is not None:
         txt = f"Open in VS Code: {s['file'].name} ({s['file'].parent.name})."
@@ -95,6 +100,21 @@ def line() -> str:
             txt += f" Highlighted on the page: `{sel[:160]}{'…' if len(sel) > 160 else ''}` — 'this/it/the text' means it."
         return txt
     return ""
+
+
+def _tab_line() -> str:
+    """The browser tab line from the extension (url + title), '' when there is none."""
+    try:
+        from jarvis.core import browsertab
+        tab = browsertab.get()
+        if not tab:
+            return ""
+        txt = f"Open in the browser: {tab[1][:80]} ({tab[0][:150]}) — 'this page/link/website' means it."
+        if sel := " ".join((browsertab.selection() or "").split()):
+            txt += f" Highlighted on the page: `{sel[:160]}{'…' if len(sel) > 160 else ''}`."
+        return txt
+    except Exception:  # noqa: BLE001
+        return ""
 
 
 def editor_open() -> bool:

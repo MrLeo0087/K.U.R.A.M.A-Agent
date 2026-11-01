@@ -28,13 +28,17 @@ DETAIL_PROMPT = ("Write a detailed, well organised overview of this web page in 
 
 def current() -> tuple[str, str, str] | str:
     """(url, title, text) of the page in the browser window the user is looking at, or a message."""
-    from jarvis.core import readlater, rewrite
-    wid, _ = rewrite.target_window()
-    title = rewrite._window_name(wid) if wid else ""
-    if not readlater._browser_of(title):
-        return "Open the page in your browser first (Brave, Chrome or Firefox), then ask me again."
-    page = readlater.current_page(title)
-    url, ptitle = page if page else ("", title.rsplit(" - ", 1)[0])
+    from jarvis.core import browsertab, readlater, rewrite
+    tab = browsertab.get()  # the browser extension knows the open tab exactly, whichever window is in front
+    if tab:
+        url, ptitle = tab
+    else:  # no extension: the browser window in front, its address from the browser's history
+        wid, _ = rewrite.target_window()
+        title = rewrite._window_name(wid) if wid else ""
+        if not readlater._browser_of(title):
+            return "Open the page in your browser first (Brave, Chrome or Firefox), then ask me again."
+        page = readlater.current_page(title)
+        url, ptitle = page if page else ("", title.rsplit(" - ", 1)[0])
     text = ""
     if url:
         try:

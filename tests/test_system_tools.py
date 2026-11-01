@@ -394,7 +394,7 @@ ROUTES = {
 def test_routing_each_group():
     for text, group in ROUTES.items():
         assert group in router.route(text, log_it=False).groups, text
-    assert router.route("open youtube", log_it=False).groups == ["browser"]  # media no longer joins
+    assert router.route("open youtube", log_it=False).groups == ["browser", "links"]  # media no longer joins (links: config.ROUTER_RULE_NEIGHBORS)
 
 
 def test_set_theme_keeps_custom_theme_family(monkeypatch):

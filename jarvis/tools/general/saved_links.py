@@ -6,7 +6,7 @@ from typing import Literal
 from jarvis.core.registry import tool
 
 
-@tool(group="browser", safety="safe", description="Saved links by name (Excel): save the highlighted link / open page "
+@tool(group="links", safety="safe", description="Saved links by name (Excel): save the highlighted link / open page "
       "under a name, give or open a saved link by name, list, rename, delete.")
 def saved_links(action: Literal["save", "name", "cancel", "get", "open", "list", "rename", "delete"] = "get",
                 name: str = "", url: str = "", new_name: str = "") -> str:

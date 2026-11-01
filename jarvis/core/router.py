@@ -258,6 +258,9 @@ def route(text: str, log_it: bool = True) -> Route:
         r.groups = refine(text, site_over_apps(text, [g for g in matched if g in available]))
         if len(r.groups) < config.ROUTER_MAX_GROUPS and (more := semantic.extra(text, r.groups)) in available:
             r.groups.append(more)  # the meaning wants a group the keywords missed
+        for g in list(r.groups):  # "link" -> browser: the link store (now its own area) comes too
+            if (n := config.ROUTER_RULE_NEIGHBORS.get(g)) and n in available and n not in r.groups:
+                r.groups.insert(r.groups.index(g) + 1, n)
     elif "web" in available and _WEB_QUESTION.search(text):
         r.method, r.groups = "rules", ["web"]
     elif available and not is_small_talk(text) and (sem := [g for g in semantic.match(text) if g in available]):

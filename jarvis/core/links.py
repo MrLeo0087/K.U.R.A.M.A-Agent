@@ -85,7 +85,45 @@ def find_link(url: str = "") -> tuple[str, str] | str:
     return "I couldn't find a link. Select the link (or open the page in your browser) and say it again."
 
 
+_ORD = {"first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5, "sixth": 6, "seventh": 7, "eighth": 8,
+        "ninth": 9, "tenth": 10, "last": -1}
+
+
+def position(text: str) -> int | None:
+    """'2', '2nd', 'second', 'no 2', 'the second one' -> 2; 'last' -> -1; None when it isn't a position."""
+    t = re.sub(r"\b(?:the|one|link|item|number|no|#)\b|[.#]", " ", (text or "").lower()).split()
+    if len(t) != 1:
+        return None
+    if m := re.fullmatch(r"(\d{1,3})(?:st|nd|rd|th)?", t[0]):
+        return int(m.group(1))
+    return _ORD.get(t[0])
+
+
+def _said() -> str:
+    """What the user typed/said in this request ('' outside a tool call, e.g. tests calling run() directly)."""
+    try:
+        from jarvis.core import safety
+        return str(safety.context().get("user_text") or "")
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _from_user(url: str, name: str) -> tuple[str, str]:
+    """Only what the user gave in THIS request counts: the AI copied an old link and an old name from the chat
+    ('save this link name notion' saved the site opened a turn before; 'save this link for whatsapp' was named
+    'notion'). A link not in the message -> the open page / highlight; a name not in the message -> KURAMA asks."""
+    said = _said()
+    if not said:
+        return url, name
+    if url and _norm_url(url).split("://")[-1].removeprefix("www.").rstrip("/") not in said:
+        url = ""
+    if name and _key(clean_name(name)) not in _key(said):
+        name = ""
+    return url, name
+
+
 def save(name: str = "", url: str = "") -> str:
+    url, name = _from_user(url, name)
     found = find_link(url)
     if isinstance(found, str):
         return found
@@ -164,8 +202,29 @@ def show() -> str:
     return "🔗 Your links:\n" + "\n".join(f"{i}. {r['name']}: {r['link']}" for i, r in enumerate(rows, 1))
 
 
+def _nth_row(name: str) -> dict | None:
+    n = position(name)
+    rows = _rows() if n is not None and path().exists() else []
+    if not rows or not (-len(rows) <= (n - 1 if n > 0 else n) < len(rows)) or n == 0:
+        return None
+    return rows[n - 1 if n > 0 else n]
+
+
+def clear() -> str:
+    rows = _rows() if path().exists() else []
+    if not rows:
+        return "The link store is already empty."
+    with sheets.locked(path()):
+        import shutil
+        shutil.copy2(path(), path().with_suffix(".backup.xlsx"))  # one undo copy, editable by hand
+        _save([])
+    return f"Removed all {len(rows)} links ({', '.join(r['name'] for r in rows)}). A copy is in {path().with_suffix('.backup.xlsx').name}."
+
+
 def delete(name: str) -> str:
-    r = lookup(name)
+    if clean_name(name).lower() in ("all", "everything", "all links", "every link", "the whole list", "whole list"):
+        return clear()
+    r = _nth_row(name) or lookup(name)
     if not r:
         return f"No saved link called '{clean_name(name)}'."
     with sheets.locked(path()):
@@ -174,7 +233,7 @@ def delete(name: str) -> str:
 
 
 def rename(name: str, new: str) -> str:
-    r = lookup(name)
+    r = _nth_row(name) or lookup(name)
     if not r:
         return f"No saved link called '{clean_name(name)}'."
     new = clean_name(new)

@@ -220,9 +220,9 @@
 {"id": 220, "text": "my budjet of this mosnth is 2k", "expect": "route.areas", "groups": ["tracker"], "args": {}, "channel": "laptop", "source": "traces 2026-10-29..11-01"}
 {"id": 221, "text": "my monthly budget is 15k", "expect": "route.areas", "groups": ["tracker"], "args": {}, "channel": "laptop", "source": "traces 2026-10-29..11-01"}
 {"id": 222, "text": "budget for november is 10000 rupees", "expect": "route.areas", "groups": ["tracker"], "args": {}, "channel": "laptop", "source": "traces 2026-10-29..11-01"}
-{"id": 223, "text": "remove that link", "expect": "route.areas", "groups": ["browser"], "args": {}, "channel": "laptop", "source": "traces 2026-10-29..11-01"}
-{"id": 224, "text": "delete my saved github link", "expect": "route.areas", "groups": ["browser"], "args": {}, "channel": "laptop", "source": "traces 2026-10-29..11-01"}
-{"id": 225, "text": "forget the link named google drive", "expect": "route.areas", "groups": ["browser"], "args": {}, "channel": "laptop", "source": "traces 2026-10-29..11-01"}
+{"id": 223, "text": "remove that link", "expect": "route.areas", "groups": ["links"], "args": {}, "channel": "laptop", "source": "traces 2026-10-29..11-01"}
+{"id": 224, "text": "delete my saved github link", "expect": "route.areas", "groups": ["links"], "args": {}, "channel": "laptop", "source": "traces 2026-10-29..11-01"}
+{"id": 225, "text": "forget the link named google drive", "expect": "route.areas", "groups": ["links"], "args": {}, "channel": "laptop", "source": "traces 2026-10-29..11-01"}
 {"id": 226, "text": "still now complete downlaod ?", "expect": "route.areas", "groups": ["media"], "args": {}, "channel": "laptop", "source": "traces 2026-10-29..11-01"}
 {"id": 227, "text": "is the youtube download done", "expect": "route.areas", "groups": ["media"], "args": {}, "channel": "laptop", "source": "traces 2026-10-29..11-01"}
 {"id": 228, "text": "how much is downloaded of my video", "expect": "route.areas", "groups": ["media"], "args": {}, "channel": "laptop", "source": "traces 2026-10-29..11-01"}
@@ -230,3 +230,26 @@
 {"id": 230, "text": "show my job list", "expect": "route.areas", "groups": ["jobs"], "args": {}, "channel": "laptop", "source": "traces 2026-10-29..11-01"}
 {"id": 231, "text": "start working on the jobs", "expect": "route.areas", "groups": ["jobs"], "args": {}, "channel": "laptop", "source": "traces 2026-10-29..11-01"}
 {"id": 232, "text": "result of job 2", "expect": "route.areas", "groups": ["jobs"], "args": {}, "channel": "laptop", "source": "traces 2026-10-29..11-01"}
+{"id": 233, "text": "show me link stroe", "expect": "route.areas", "groups": ["links"], "args": {}, "channel": "laptop", "source": "traces 2026-11-01 link store"}
+{"id": 234, "text": "remove sofascore from link store", "expect": "route.areas", "groups": ["links"], "args": {}, "channel": "laptop", "source": "traces 2026-11-01 link store"}
+{"id": 235, "text": "clear link store", "expect": "route.areas", "groups": ["links"], "args": {}, "channel": "laptop", "source": "traces 2026-11-01 link store"}
+{"id": 236, "text": "i say delete all link from link store and make empty", "expect": "route.areas", "groups": ["links"], "args": {}, "channel": "laptop", "source": "traces 2026-11-01 link store"}
+{"id": 237, "text": "store this website link as notion", "expect": "route.areas", "groups": ["links"], "args": {}, "channel": "laptop", "source": "traces 2026-11-01 link store"}
+{"id": 238, "text": "save this link to socolive", "expect": "route.areas", "groups": ["links"], "args": {}, "channel": "laptop", "source": "traces 2026-11-01 link store"}
+{"id": 239, "text": "no on.. notion link is this website", "expect": "route.areas", "groups": ["links"], "args": {}, "channel": "laptop", "source": "traces 2026-11-01 link store"}
+{"id": 240, "text": "remove second link", "expect": "route.areas", "groups": ["links"], "args": {}, "channel": "laptop", "source": "traces 2026-11-01 link store"}
+{"id": 241, "text": "save this link in website for whatsapp", "expect": "route.areas", "groups": ["links"], "args": {}, "channel": "laptop", "source": "traces 2026-11-01 link store"}
+{"id": 242, "text": "bro delete gemini link frm link store", "expect": "route.areas", "groups": ["links"], "args": {}, "channel": "laptop", "source": "traces 2026-11-01 link store"}
+{"id": 243, "text": "rename nchat link to chat app", "expect": "route.areas", "groups": ["links"], "args": {}, "channel": "laptop", "source": "traces 2026-11-01 link store"}
+{"id": 244, "text": "link store ma k k xa", "expect": "route.areas", "groups": ["links"], "args": {}, "channel": "laptop", "source": "traces 2026-11-01 link store"}
+{"id": 245, "text": "start the jobs", "expect": "writing.job", "args": {}, "channel": "laptop", "source": "traces 2026-10-29..11-01 frequent AI requests"}
+{"id": 246, "text": "start all jobs bro", "expect": "writing.job", "args": {}, "channel": "laptop", "source": "traces 2026-10-29..11-01 frequent AI requests"}
+{"id": 247, "text": "ok now start the jobs", "expect": "writing.job", "args": {}, "channel": "laptop", "source": "traces 2026-10-29..11-01 frequent AI requests"}
+{"id": 248, "text": "start job 2", "expect": "writing.job", "args": {}, "channel": "laptop", "source": "traces 2026-10-29..11-01 frequent AI requests"}
+{"id": 249, "text": "copy the path of this folder", "expect": "clipboard", "args": {}, "channel": "laptop", "source": "traces 2026-10-29..11-01 frequent AI requests", "groups": ["clipboard"]}
+{"id": 250, "text": "Copy the path.", "expect": "clipboard", "args": {}, "channel": "laptop", "source": "traces 2026-10-29..11-01 frequent AI requests", "groups": ["clipboard"]}
+{"id": 251, "text": "copy this folder path pls", "expect": "clipboard", "args": {}, "channel": "laptop", "source": "traces 2026-10-29..11-01 frequent AI requests", "groups": ["clipboard"]}
+{"id": 252, "text": "open this folder in vs code", "expect": "open.folder", "args": {}, "channel": "laptop", "source": "traces 2026-10-29..11-01 frequent AI requests", "groups": ["files", "apps"]}
+{"id": 253, "text": "Open VS Code from this folder.", "expect": "open.folder", "args": {}, "channel": "laptop", "source": "traces 2026-10-29..11-01 frequent AI requests", "groups": ["files", "apps"]}
+{"id": 254, "text": "open selected folder in vscode", "expect": "open.folder", "args": {}, "channel": "laptop", "source": "traces 2026-10-29..11-01 frequent AI requests", "groups": ["files", "apps"]}
+{"id": 255, "text": "open vs code from kurama folder from tara", "expect": "open.folder", "args": {}, "channel": "laptop", "source": "traces 2026-10-29..11-01 frequent AI requests", "groups": ["files", "apps"]}
