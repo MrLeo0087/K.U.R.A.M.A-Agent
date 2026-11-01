@@ -545,7 +545,22 @@ SWITCHES = [  # (intent name, tool, group, args, patterns); first full match win
 ]
 
 
+_MAXW = r"(?:max|maximum|full|highest|top|100\s*%)"
+_MINW = r"(?:min|minimum|lowest|zero)"
+
+
+def _levels_words(t: str) -> str:
+    """'set the volume maximum' / 'full volume' / 'brightness to lowest' -> the same request with 100 / 0, so the
+    fixed volume and brightness commands read them (11-01: 'Set the volume maximum.' went to the AI)."""
+    for words, n in ((_MAXW, "100"), (_MINW, "0")):
+        t = re.sub(r"\b" + words + r"\s+(volume|sound|brightness)\b", r"\1 " + n, t, flags=I)
+        t = re.sub(r"\b(volume|sound|brightness)(\s+level)?\s+(?:to\s+|at\s+)?(?:the\s+)?" + words + r"\b",
+                   r"\1\2 " + n, t, flags=I)
+    return t
+
+
 def _system_intent(t: str) -> Intent | None:
+    t = _levels_words(t)
     for name, (tool, group, actions) in LEVELS.items():
         for action, pats in actions.items():
             if m := _full(pats, t):
@@ -3250,6 +3265,28 @@ _IN_PLACE = re.compile(r"\b(?:in|inside|into|under|at)\s+(?:the\s+|my\s+)?(?P<lo
                        r"(?:\s+(?:folder|directory|dir))?(?=\s*(?:$|[,.!]|\b(?:and|then|named|name|called|with)\b))", I)
 
 
+def player_intent(text: str) -> Intent | None:
+    """While KURAMA's music player is on, a SHORT request that MEANS a player control ('pause', 'continue', 'continue
+    play', 'next one', 'louder', 'volume max', 'stop it') controls it: 0 tokens, whatever the words. The player being
+    on is the context that makes 'continue' mean the music (11-01: 'continue' rewrote the highlighted text, 'pause'
+    and 'continue play' went to the AI). Off: nothing here runs."""
+    from jarvis.core import music, semantic
+    t = " ".join((text or "").split()).strip(" .!?")
+    if not t or len(t.split()) > config.PLAYER_CONTROL_MAX_WORDS or not music.running() or not semantic.ready():
+        return None
+    best = semantic.best_of(t, "player", {**config.PLAYER_CONTROL_EXAMPLES, "other": config.PLAYER_NOT_EXAMPLES})
+    if not best or best[0] == "other" or best[1] < config.PLAYER_CONTROL_MIN:
+        return None
+    act = best[0]
+    if act in ("pause", "resume", "next", "previous"):
+        return Intent("media", "media_control", "media", {"action": "play" if act == "resume" else act}, "media")
+    if act == "stop":
+        return Intent("music", "music", "media", {"action": "stop", "query": ""})
+    if act in ("volume_up", "volume_down"):
+        return Intent("music", "music", "media", {"action": act, "query": ""})
+    return Intent("music", "music", "media", {"action": "volume_set", "query": "100" if act == "volume_max" else "30"})
+
+
 def registry_group(tool: str) -> str:
     from jarvis.core import registry
     t = registry.REGISTRY.get(tool)
@@ -3262,6 +3299,8 @@ def match(text: str) -> Intent | None:
     if (picked := workmem.choose(text)) is not None:  # "2" / "the second one" after "I found 3 copies: 1. ... 2. ..."
         tool, args = picked
         return Intent("choice", tool, registry_group(tool), args)
+    if (played := player_intent(text)) is not None:  # 'pause' / 'continue' while KURAMA's music is on
+        return played
     it = agent_intent(text) or agent_coding_intent(text) or link_play_intent(text) or clean_intent(text) \
         or shutdown_later_intent(text) or to_file_intent(text) or selection_intent(text) \
         or _code_not_file(_match(text)) or daily_intent(text)

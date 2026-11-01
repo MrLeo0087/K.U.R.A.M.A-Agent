@@ -906,4 +906,17 @@ Phases (one at a time, owner tests after each):
       so ~5x less to push through a slow uplink); uploads get their own connection (never behind the bot's long poll
       on the shared client); every upload logs "telegram upload: <method> <KB> in <s> (<KB/s>)" in server.log, so a
       slow send next time shows whether it was the network. Test: test_phase3 (photo shrink). Suite 1412 passed.
+- [x] 2026-11-01 21:25 Owner: "pause music", "play", "continue" cost tokens. Causes (traces 21:04-21:14): (1) "pause
+      music" ran at 0 tokens at 21:04, then the learner took the next request "play song" for a CORRECTION (0.82
+      against the example "no no, play it in the music player") and vetoed the pause shortcut for "pause" / "pause
+      music": every later pause went to the AI (~1,000 tokens). Same flaw had taught "What is the date today?", "Open
+      VS Code from this folder.", "I am very tired today." wrong lessons. Fix: a correction must be closer to the
+      correction examples than to plain next requests (learn.NOT_CORRECTIONS, margin 0.05); the 5 wrong rows removed
+      (backup data/learned.*.bak-1101). (2) "continue", "continue play", "resume" had no shortcut ("continue" even
+      rewrote the highlighted text). Fix: while KURAMA's player is on, a short request (<= 5 words) that MEANS a
+      player control (config.PLAYER_CONTROL_EXAMPLES vs PLAYER_NOT_EXAMPLES, >= 0.86) controls it: pause, resume,
+      next, previous, stop, louder, quieter, volume max/low; checked before the highlight actions. (3) "Set the volume
+      maximum." went to the AI: max/full/highest/lowest/minimum are read as 100/0 by the volume and brightness
+      commands. Live: "pause music", "pause" = 0 tokens. Tests: test_player_controls.py (18); suite 1430; scorecard
+      68% / 100% / 98%.
 

@@ -145,14 +145,30 @@ def _really_did(result: str) -> bool:
         and not r.rstrip().endswith("?")  # a question back ("How much should the budget be?") is not done
 
 
+# Plain next requests, so a new command is never taken for a correction of the one before: "pause music" then "play
+# song" scored 0.82 against "no no, play it in the music player" and taught KURAMA that "pause music" was WRONG (its
+# shortcut was vetoed and every later "pause music" cost ~1,000 tokens; traces 11-01 21:05-21:14).
+NOT_CORRECTIONS = (
+    "play song", "play the next song", "play other song", "play some hindi song", "pause music", "continue music",
+    "stop the music", "open youtube", "set volume to 100", "what time is it", "send it to telegram",
+    "open it in vs code", "create a folder", "now open the folder", "next", "thank you",
+)
+_not_vecs: Any = None
+
+
 def correction_score(text: str) -> float:
-    global _corr_vecs
+    """How much the message is a CORRECTION ('no, I meant...', 'wrong file'): its closeness to the example
+    corrections, or 0 when it is closer to a plain next request (contrast, not a lone threshold)."""
+    global _corr_vecs, _not_vecs
     from jarvis.core import semantic
     if not text.strip():
         return 0.0
     if _corr_vecs is None:
         _corr_vecs = semantic.embedder().embed(list(CORRECTIONS), query=True)
-    return float((_corr_vecs @ _embed(text)).max())
+        _not_vecs = semantic.embedder().embed(list(NOT_CORRECTIONS), query=True)
+    q = _embed(text)
+    corr, plain = float((_corr_vecs @ q).max()), float((_not_vecs @ q).max())
+    return corr if corr > plain - config.LEARN_CORRECTION_MARGIN else 0.0  # 'no I meant play the song' ties
 
 
 def _area(tools: list[dict], done: bool = False) -> tuple[str, str]:

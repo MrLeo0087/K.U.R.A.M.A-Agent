@@ -444,6 +444,7 @@ SELECTION_MARGIN = 0.02  # ...unless another area (not the selection's own) is c
 SMALL_TALK_SIM = 0.86  # the whole request this close to a small-talk example = its ready answer (0 tokens)
 LEARN = os.getenv("KURAMA_LEARN", "1").lower() not in ("0", "false", "no", "off")  # learn areas from corrections
 LEARN_WINDOW_S = 120  # a correction counts within this long after the request it corrects
+LEARN_CORRECTION_MARGIN = 0.05  # ...and not closer (by more than this) to a plain next request (learn.NOT_CORRECTIONS)
 LEARN_CORRECTION_SIM = 0.80  # similarity to an example correction ("no, I meant...") to count as one
 LEARN_WORKED_MAX_CORR = 0.65  # "it worked" is learned only if the next message is not even close to a correction
 LEARN_VETO_SIM = 0.92  # a corrected wording this similar never runs that shortcut again
@@ -996,6 +997,24 @@ TELEGRAM_PIN_WINDOW_S = float(os.getenv("TELEGRAM_PIN_WINDOW_S", "1800"))  # ris
 
 # --- Multitasking (P3b-2): planner, background jobs, rate limiter ---
 PLANNER_MAX_TASKS = 8
+# While KURAMA's music plays, a short request that MEANS one of these controls the player (fastpath.player_intent)
+PLAYER_CONTROL_EXAMPLES = {
+    "pause": ("pause", "pause music", "pause the song", "hold on stop for a second", "wait pause it"),
+    "resume": ("continue", "continue playing", "continue play", "resume", "resume the music", "play again", "unpause",
+               "continue music", "start it again"),
+    "next": ("next", "next song", "skip", "skip this song", "play the next one", "change the song"),
+    "previous": ("previous song", "play the previous one", "go back to the last song", "back one song"),
+    "stop": ("stop music", "stop the song", "stop playing", "turn off the music", "music off"),
+    "volume_up": ("louder", "volume up", "increase the volume", "turn it up", "more volume"),
+    "volume_down": ("quieter", "volume down", "lower the volume", "turn it down", "less volume"),
+    "volume_max": ("volume max", "full volume", "set the volume maximum", "maximum volume", "loudest"),
+    "volume_low": ("volume very low", "minimum volume", "lowest volume"),
+}
+PLAYER_NOT_EXAMPLES = ("continue the code", "continue writing", "open youtube", "what time is it", "explain this",
+                       "next tab", "close it", "stop the timer", "pause the download", "continue the essay",
+                       "translate it", "next slide", "go back to the previous folder", "play a video on youtube")
+PLAYER_CONTROL_MIN = 0.86
+PLAYER_CONTROL_MAX_WORDS = 5
 TASK_GRAPH = True  # Phase 2: planned requests run as a task graph (steps with real inputs/outputs); False = old chains
 TASK_REPLAN = True  # a failed step gets one corrected try (one small fast-tier call)
 TASK_REPLAN_MAX_TOKENS = 150

@@ -336,4 +336,7 @@ message; the action itself is chosen by meaning), the reference nouns (`workmem.
   root folders ("/") are never remembered as "it".
 - 2026-11-01 20:55: Telegram photos shrunk to 1280 px JPEG before upload (354 -> 73 KB), uploads on their own
   connection, every upload logged with its speed (`grep "telegram upload" data/logs/server.log`).
+- 2026-11-01 21:25: music controls by meaning while KURAMA's player is on (pause / continue / next / volume max...);
+  volume/brightness max-min words; the learner no longer takes a plain next request for a correction (wrong vetoes
+  removed). Watch: `learned.json` rows with src correction (each should be a real correction).
 
