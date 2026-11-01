@@ -153,3 +153,15 @@ def test_alt_held_alone_talks_alt_shortcuts_never_do(key):
     t[0] = 5; h.press(key); h.press("f4"); h.release("f4"); h.release(key)        # Alt+F4
     t[0] = 7; h.press(key); t[0] = 7.1; h.release(key)                            # a quick tap
     assert told == ["down", "up"]
+
+
+@pytest.mark.parametrize("other", ["shift", "shift_r", "esc"])
+def test_alt_then_shift_cancels_while_listening(other):
+    """Owner 11-01: a mistaken long Alt is cancelled by pressing Shift (any other key) while still holding Alt;
+    letting go of Alt afterwards sends nothing."""
+    told, t, timers = [], [0.0], []
+    h = ptt.Holder("alt", tell=told.append, now=lambda: t[0], min_hold=0.0,
+                   schedule=lambda d, fn: timers.append(FakeTimer(fn)) or timers[-1], dismiss="double:shift")
+    h.press("alt_l"); t[0] = 0.3; fire(timers); t[0] = 2.0
+    h.press(other); h.release(other); t[0] = 2.5; h.release("alt_l")
+    assert told == ["down", "cancel"]

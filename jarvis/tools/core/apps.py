@@ -44,7 +44,7 @@ TABLE = {
 
 @tool(group="core", safety="safe",
       description="Open an app, website or folder by name; close or force-kill an app; arrange a window "
-                  "(minimize/maximize/left/right/focus); press keys, type or click in the app in front; install an app.")
+                  "(minimize/maximize/left/right/focus, or the home screen = desktop); browser tab N = press ctrl+N; press keys, type or click in the app in front; install an app.")
 def apps(action: Literal["open", "close", "kill", "window", "press", "type", "click", "install"], target: str = "",
          how: str = "", text: str = "") -> str:
     """Apps, websites, folders and windows.
@@ -53,7 +53,7 @@ def apps(action: Literal["open", "close", "kill", "window", "press", "type", "cl
         action: open, close, kill (force), window, press (keys like 'ctrl+v', 'enter'), type, click, install.
         target: App / website / folder name ('brave', 'youtube', 'tara'), or several sites 'youtube, facebook'.
         how: open: the app to open it IN ('vscode' for a folder/file in VS Code); window: focus, minimize, maximize,
-            left, right, restore, list; install: install, remove, search, update.
+            left, right, restore, list, desktop (go to the home screen); install: install, remove, search, update.
         text: What to type, the keys to press, or what to click.
     """
     if action == "open" and re.search(r",|\band\b", target or "") and all(len(p.split()) <= 3 for p in re.split(r",|\band\b", target)):

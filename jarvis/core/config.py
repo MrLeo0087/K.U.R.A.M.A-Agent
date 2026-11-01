@@ -1117,6 +1117,8 @@ LONG_JOBS_MAX_WORKERS = 2  # own threads; at most ONE CPU-heavy long job runs at
 # frequent AI requests (10-29..11-01: 'copy the path of this folder' 7x, 'open this folder in vs code' 11x,
 # 'start the jobs' 4x up to 8.5k tokens).
 MEANING_SHORTCUTS: dict[str, tuple[str, ...]] = {
+    "show_desktop": ("go to the home screen", "show me the desktop", "minimize all windows", "hide every window",
+                     "take me to the home screen"),
     "copy_path": ("copy the path of this folder", "copy this file's path", "put the path of the selected folder in "
                   "my clipboard", "copy the full path of the current folder", "copy the location of this file",
                   "path copy gara"),
@@ -1145,8 +1147,10 @@ MEANING_SHORTCUTS: dict[str, tuple[str, ...]] = {
 }
 MEANING_SHORTCUT_AREAS = {"save_link": "links", "list_links": "links", "read_later_add": "links", "copy_path": "clipboard",
                           "open_vscode": "files", "jobs_start": "jobs", "jobs_list": "jobs",
-                          "clean_ram": "system", "clean_kurama": "system", "clean_storage": "system"}  # the router offers it too
+                          "clean_ram": "system", "clean_kurama": "system", "clean_storage": "system", "show_desktop": "windows"}  # the router offers it too
 MEANING_SHORTCUT_MIN = 0.82
+# actions that change everything on screen need more certainty ("show my screen" is not "go to the home screen": 0.86)
+MEANING_SHORTCUT_MIN_BY = {"show_desktop": 0.90}
 # talk mode, speech long after KURAMA spoke: it is for KURAMA if it greets it or clearly MEANS an action (calibrated on
 # stt.log 10-30..11-01: 'Hello, shut down the laptop.' power 0.88; room talk 0.65-0.72)
 AMBIENT_ACTION_MIN = 0.80

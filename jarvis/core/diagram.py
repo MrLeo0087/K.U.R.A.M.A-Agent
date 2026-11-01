@@ -48,8 +48,8 @@ def readme_tree(text: str, name: str) -> tuple[list[str], list[tuple[int, int]]]
     in_code = False
     for line in text.splitlines():
         if line.strip().startswith(("```", "~~~")):
-            in_code = not in_code
-            continue
+                    in_code = not in_code
+                    continue
         if in_code or line.strip().startswith("|"):
             continue
         if m := re.match(r"^(#{1,4})\s+(.+)", line):

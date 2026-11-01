@@ -238,6 +238,25 @@ class DesktopBackground:
         return False
 
 
+def take_focus(win, view, stamp: int = 0) -> None:
+    """Give the window the keyboard. A shortcut arrives as a signal, not a click, so there is no event time and the
+    window manager refused focus (Brave kept it; you had to click the chat box). The X server's current time counts
+    as a fresh user action."""
+    gw = win.get_window()
+    if not stamp and gw is not None:
+        try:
+            gi.require_version("GdkX11", "3.0")
+            from gi.repository import GdkX11
+            stamp = GdkX11.x11_get_server_time(gw)
+        except (ValueError, ImportError, TypeError):
+            stamp = 0
+    win.present_with_time(stamp)
+    if gw is not None:
+        gw.focus(stamp)
+    if view is not None:
+        view.grab_focus()
+
+
 def run_js(view, code: str) -> None:
     if view is None:  # the dashboard's view is gone while minimized
         return
@@ -958,10 +977,14 @@ class Mini:
             return
         pttlog(f"got {state}: open={self.open} ghost={self.ghost} ready={getattr(self, 'page_ready', False)} "
                f"busy={self.state}")
+        was_listening = self.ptt_active
         self.ptt_active = state == "down"
         if self.open:  # the chat is open: it all happens there
             run_js(self.view, f"window.kuramaPTT && window.kuramaPTT({js})")
             return
+        if state == "cancel" and was_listening and self.caption is not None:  # Alt + Shift (or any key): say so,
+            self.caption.you.set_text("")  # "Listening…" used to stay on screen
+            self.caption.show("bot", "Cancelled. Nothing was sent.", True)
         if state != "down" and not self.ghost:
             return
         if state == "down":
@@ -1101,8 +1124,8 @@ class Mini:
             self.panel.show_all()
             self.place_panel()
             self.fade(self.panel, True)
-            self.panel.present_with_time(stamp)
-            run_js(self.view, "window.kuramaMiniShown && window.kuramaMiniShown(true)")
+            take_focus(self.panel, self.view, stamp)  # type at once, wherever you were (Ctrl+Alt+K came as a signal:
+            run_js(self.view, "window.kuramaMiniShown && window.kuramaMiniShown(true)")  # no event time -> no focus)
             self.bubble.queue_draw()
         self.when_ready(show)
         self.bubble.queue_draw()

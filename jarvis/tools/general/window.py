@@ -12,16 +12,30 @@ from jarvis.tools.general.list_windows import list_windows
 from jarvis.tools.general.snap_window import snap_window
 
 
+def show_desktop(on: bool = True) -> str:
+    """'go to the home screen' / 'show desktop': every window minimized (wmctrl's show-desktop mode; nothing closes)."""
+    from jarvis.tools.general import _sys
+    try:
+        _sys.run(["wmctrl", "-k", "on" if on else "off"])
+    except Exception as e:  # noqa: BLE001 - no wmctrl / no X11
+        return f"error: couldn't show the desktop ({e})"
+    return "Showing the desktop: every window is minimized (nothing was closed)." if on else "Windows are back."
+
+
 @tool(group="windows", safety="safe",
-      description="Windows: list the open ones, switch to an app's window, or snap left/right, maximize, minimize, restore.")
-def window(action: Literal["list", "focus", "left", "right", "maximize", "minimize", "restore"] = "list",
-           name: str = "") -> str:
+      description="Windows: list the open ones, switch to an app's window, snap left/right, maximize, minimize, "
+                  "restore, or desktop (go to the home screen: minimize every window; undesktop brings them back).")
+def window(action: Literal["list", "focus", "left", "right", "maximize", "minimize", "restore", "desktop",
+                           "undesktop"] = "list", name: str = "") -> str:
     """Manage windows.
 
     Args:
-        action: list, focus (switch to `name`), or a position for the active window / `name`'s window.
+        action: list, focus (switch to `name`), desktop (home screen: minimize all), undesktop, or a position for
+            the active window / `name`'s window.
         name: The app or window title (empty = the active window for positions).
     """
+    if action in ("desktop", "undesktop"):
+        return show_desktop(action == "desktop")
     if action == "focus":
         return focus_app(name) if name else "error: which app should I switch to?"
     if action == "list":

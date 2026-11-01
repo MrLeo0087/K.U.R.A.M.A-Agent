@@ -766,3 +766,14 @@ Phases (one at a time, owner tests after each):
       `hang_guard` (faulthandler re-armed every 2 s by the GTK loop): frozen 20 s -> every thread's Python stack to
       data/logs/hang.log, exit 1 -> kurama-wallpaper.sh starts a fresh window (up to 20 times; a normal stop ends it).
       Tested with a frozen GLib loop + a spinning thread: both stacks logged, exit 1. trace_report shows the dumps.
+- [x] 2026-11-01 09:55 (1) Hold-to-talk cancel: Alt + Shift (any other key) while listening already cancelled, but the
+      caption kept saying "Listening…"; now it says "Cancelled. Nothing was sent." (test: Alt then Shift/Esc -> down,
+      cancel). (2) Traces 09:35: "Open setting." went to the AI (1.7 s, 1.1k tokens): the meaning gate judged the WORD
+      "settings" (window settings 0.90 vs apps 0.72); shortcuts now carry the words checked against the laptop
+      (`Intent.known`: an installed app / a known site) and the gate masks them ("Open X.") -> 0 tokens, ~0.6 s; also
+      fixes "launch telegram". "Close or open app and go to home screen" was answered "you're now on the home screen"
+      with no tool: there was no such action -> window action desktop / undesktop (wmctrl -k), a 0-token meaning action
+      (stricter 0.90: "show my screen" is not it), and the claim check now knows "are closed", "you're now on",
+      "Opening <name>", "is now active". (3) Ctrl+Alt+K opened the chat without the keyboard (Wnck: Brave kept focus):
+      a signal has no event time, so the window manager refused focus; the X server time is used now (Wnck: kurama-mini
+      focused). Not fixed: tab switching by name ("switch to the Facebook tab" needs the extension's tabs API).

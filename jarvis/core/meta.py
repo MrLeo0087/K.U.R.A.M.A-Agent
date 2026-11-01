@@ -56,10 +56,14 @@ _DONE = re.compile(r"\b(?:i'?ve|i have)\s+(?:now\s+|just\s+|already\s+)?" + _ACT
                    r"opened|closed|moved|renamed|installed|downloaded|uploaded|replaced|written|sent|emptied)\b(?!\s+(?:by|to\s+be))|"
                    # "The link is saved as notion", "Your reminder was set"
                    r"\b(?:your|the|it|this|that|all|everything)\b[^.!?\n]{0,40}?\b(?:is|are|was|were)\s+(?:now\s+|successfully\s+)?(?:saved|added|cleared|removed|deleted|copied|"
-                   r"created|renamed|updated|edited|sent|set|emptied|downloaded|installed)\b(?!\s+(?:by|when|if|with|using|from|through|via))|"
+                   r"created|renamed|updated|edited|sent|set|emptied|downloaded|installed|closed|opened|minimized|started|"
+                   r"stopped|muted|paused|moved|switched|turned\s+(?:on|off))\b(?!\s+(?:by|when|if|with|using|from|through|via))|"
                    # "The path is now in your clipboard", "Your link store is now empty"
                    r"\b(?:is|are)\s+now\s+(?:in\s+your|empty|clear|gone|on|off|open|closed|saved|set|playing|muted|"
-                   r"running|downloading|installed)\b|"
+                   r"running|downloading|installed|active|visible|showing|minimized|closed)\b|"
+                   # "You're now on the home screen", "Opening https://nepalgon.com." (traces 11-01 09:35)
+                   r"\byou(?:'re|\s+are)\s+now\s+(?:on|in|at|back)\b|"
+                   r"^\W*(?:opening|closing|launching|switching|showing|minimizing|muting|playing)\s+(?!(?:a|an|some|any)\b)\S|"
                    # "I'm writing 'yes' into main.txt right now", "Writing ... in the background"
                    r"^\W*(?:sure\W+|okay\W+)?(?:i'?m|i am)?\s*(?:now\s+)?(?:writing|saving|copying|deleting|removing|"
                    r"clearing|downloading|sending|creating|moving|editing|updating)\b", re.I)

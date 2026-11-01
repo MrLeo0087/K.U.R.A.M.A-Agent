@@ -34,6 +34,8 @@ class Intent:
     group: str
     args: dict = field(default_factory=dict)
     label: str = ""  # display name (app/site/place)
+    known: str = ""  # the request's words that were CHECKED against the laptop (an installed app, a known site): the
+    #                  meaning gate judges the action without them ('open settings' is an app, not window settings)
 
 
 @dataclass
@@ -3027,6 +3029,8 @@ def meaning_ok(text: str, it: Intent) -> bool:
     if not semantic.ready():
         semantic.warm_soon()
         return True
+    if it.known and len(it.known) >= 2:  # 'Open setting.' -> 'Open X.': the name's own meaning (window settings,
+        text = re.sub(re.escape(it.known), "X", text, flags=I)  # the Telegram area) used to veto opening the app
     ranked = [(g, s) for g, s in semantic.scores(text) if g != semantic.CHAT]
     if not ranked:  # non-English script: the model can't judge
         return True
@@ -3339,7 +3343,7 @@ def meaning_intent(text: str) -> Intent | None:
     # words no action knows (a name: 'whatsapp', 'watest') become X, like in the examples, so the name never pulls
     # the meaning away ('save this website names whatsapp' -> 'save this website names X')
     best = meaning_label(t)
-    if best is None or best[1] < config.MEANING_SHORTCUT_MIN:
+    if best is None or best[1] < config.MEANING_SHORTCUT_MIN_BY.get(best[0], config.MEANING_SHORTCUT_MIN):
         return None
     label, score = best
     chat = next((s for g, s in semantic.scores(t) if g == semantic.CHAT), 0.0)
@@ -3364,6 +3368,9 @@ def meaning_intent(text: str) -> Intent | None:
         return it if meaning_ok(t, it) else None
     if label == "read_later_add":
         it = Intent("readlater", "read_later", "links", {"action": "add", "url": ""})
+        return it if meaning_ok(t, it) else None
+    if label == "show_desktop":
+        it = Intent("desktop", "window", "windows", {"action": "desktop"})
         return it if meaning_ok(t, it) else None
     if label.startswith("clean_"):
         it = Intent("clean", "cleanup", "system", {"action": label[6:]})
@@ -3604,7 +3611,7 @@ def _open_intent(target: str, verb: str) -> Intent | None:
 
     url = open_url.resolve(target)
     if url:
-        return Intent("open", "open_url", "browser", {"target": target}, target)
+        return Intent("open", "open_url", "browser", {"target": target}, target, known=target)
     if verb == "go to":
         return None
     entry, score = _apps.find_app(target)
@@ -3615,7 +3622,7 @@ def _open_intent(target: str, verb: str) -> Intent | None:
         if verb == "open" and place and smart_path(place, want="dir") is not None:
             return Intent("openfolder", "open_folder", "filesearch", {"name": place}, place)
         return None
-    return Intent("open", "open_app", "apps", {"name": target}, entry["name"])
+    return Intent("open", "open_app", "apps", {"name": target}, entry["name"], known=target)
 
 
 # --- templates ---
