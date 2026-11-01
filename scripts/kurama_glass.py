@@ -52,6 +52,10 @@ def _v(x):
         return GLib.Variant("av", [_v(i) for i in x])
     if isinstance(x, dict):
         return GLib.Variant("a{sv}", {k: _v(i) for k, i in x.items()})
+    if isinstance(x, tuple):  # e.g. a colour (r, g, b, a) in another effect of the extension's pipelines: every
+        sig = "".join("b" if isinstance(i, bool) else "i" if isinstance(i, int) else "d" if isinstance(i, float)
+                      else "s" for i in x)  # change failed with "TypeError: <class 'tuple'>" and nothing moved
+        return GLib.Variant(f"({sig})", x)
     raise TypeError(type(x))
 
 

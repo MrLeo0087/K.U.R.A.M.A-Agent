@@ -1521,6 +1521,10 @@ body.mini .m-lookp label { display: grid; grid-template-columns: 1fr auto; gap: 
 body.mini .m-lookp output { color: var(--m-text); font-variant-numeric: tabular-nums; }
 body.mini .m-lookp input[type="range"] { grid-column: 1 / -1; width: 100%; accent-color: var(--m-acc); }
 body.mini .m-lookp small { color: var(--m-dim); font-size: 11px; }
+body.mini .lk-presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+body.mini .lk-presets button { padding: 5px 0; font-size: 11.5px; color: var(--m-text); background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--m-hair); border-radius: 8px; cursor: pointer; }
+body.mini .lk-presets button:hover { background: rgba(255, 255, 255, 0.12); }
 body.mini .m-lookp small:empty { display: none; }
 @media (max-width: 459px) { body.mini #m-look { order: 9; } body.mini .m-lookp { top: 92px; } }
 body.mini .ask .seg button, body.mini .ask .mute-btn { width: 34px; height: 34px; border-radius: 50%; background: transparent; box-shadow: none; color: var(--m-sub); transition: none; }

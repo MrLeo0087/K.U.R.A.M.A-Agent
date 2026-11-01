@@ -824,3 +824,9 @@ Phases (one at a time, owner tests after each):
 - [x] 2026-11-01 15:00 The mini chat's Look button (blur, glass light, corners, tint, font) opened its panel but it
       was invisible: the frosted header (backdrop-filter) clips everything inside it; the panel sat inside the
       header. It now lives on <body> (position fixed): checked in an offscreen copy of the mini page, all sliders show.
+- [x] 2026-11-01 15:20 Look panel checked option by option. Blur and Glass light did NOTHING: every change failed in
+      scripts/kurama_glass.py with "TypeError: <class 'tuple'>" (another effect in Blur my Shell's pipelines holds a
+      colour tuple, which the re-writer couldn't encode) - the panel even showed "Blur: TypeError". Tuples are now
+      encoded; measured with GNOME's own screenshot: blur 0 / light 150 vs blur 60 / light 30 -> backdrop detail 17.0
+      vs 14.1, brightness 44.8 vs 35.1. Corners, tint, colour and font are CSS and work. Added ready looks (Clear,
+      Frosted, Dark) and Reset.

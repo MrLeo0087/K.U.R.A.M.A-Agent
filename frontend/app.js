@@ -2836,6 +2836,15 @@ if (MINI && !WSONLY) {
   });
   $("lk-color").addEventListener("input", (e) => { look.color = e.target.value; save(); });
   $("lk-font").addEventListener("change", (e) => { look.font = e.target.value; save(); });
+  const PRESETS = { // ready looks: one click sets the blur, light, corners and tint together
+    clear: { blur: 18, light: 105, corner: 18, tint: 25, color: "#101328" },
+    frost: { blur: 48, light: 95, corner: 18, tint: 45, color: "#1a1f3d" },
+    dark: { blur: 30, light: 55, corner: 14, tint: 85, color: "#07080f" },
+    reset: { blur: 40, light: 90, corner: 15, tint: 58, color: "#101328", font: "inter" },
+  };
+  for (const b of document.querySelectorAll(".lk-presets [data-look]")) b.onclick = (e) => {
+    e.stopPropagation(); Object.assign(look, PRESETS[b.dataset.look]); save(); pushGlass();
+  };
   // the frosted header clips anything inside it (backdrop-filter): the panel lives on <body> so it is never cut off
   document.body.appendChild($("m-lookp"));
   $("m-look").onclick = (e) => { e.stopPropagation(); $("m-lookp").hidden = !$("m-lookp").hidden; };
