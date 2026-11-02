@@ -87,6 +87,12 @@ HANG_S = float(os.getenv("KURAMA_WP_HANG_S", "25"))  # a page that doesn't answe
 PROBE_IN = Path(__file__).resolve().parent.parent / "data" / "wp_probe.js"  # developer probe: JS to run in the page
 PROBE_OUT = PROBE_IN.with_suffix(".out")  # ...its answer (read-only checks: CPU / frame costs, no clicks)
 PING_S = 10  # how often the watchdog asks the page for a tiny answer
+PAUSE_RESEND_S = 15  # the covered / uncovered state is sent to the page again this often (cheap, idempotent)
+FD_LIMIT = 65536  # open-file limit for this window and its web processes (the desktop's default is 1024)
+FD_CHECK_S = 30  # how often the web processes' open files are counted
+FD_WARN = 600  # past this (and every +300 after) hang.log gets a line with what kind of files they are
+FD_RECYCLE = 6000  # past this the window restarts itself (a leak): a fresh window instead of a black, stuck one
+PANEL_READY_S = 12  # the mini chat's page not loaded this long after a hold: its web process is restarted
 WEB_MEM_MB = int(os.getenv("KURAMA_WP_MEM_MB", "220"))  # web process memory budget (WebKit's default: 3 GB)
 
 
@@ -615,8 +621,13 @@ class Wallpaper:
             covered = desktop_covered(self.screen)
         except Exception:
             covered = False
-        if covered != self.paused:
+        now = time.monotonic()
+        # sent on a change AND again every PAUSE_RESEND_S: a pause sent before the page's script had loaded was lost,
+        # and the page drew its animations behind full-screen windows all day (11-02: the web process at 25-60% CPU
+        # while covered; a re-sent pause took it to 0%)
+        if covered != self.paused or now - getattr(self, "_pause_sent", 0.0) >= PAUSE_RESEND_S:
             self.paused = covered
+            self._pause_sent = now
             run_js(self.view, f"window.kuramaPause && window.kuramaPause({str(covered).lower()})")
         return True
 
@@ -1018,6 +1029,8 @@ class Mini:
                 self.caption = Caption(self)
             ready = getattr(self, "page_ready", False)
             self.caption.show("you", "Listening…" if ready else "Getting ready… keep holding", False)
+            if not ready:  # never stuck on "Getting ready" (11-02: the page's web process was broken)
+                GLib.timeout_add_seconds(PANEL_READY_S, self._ready_or_restart)
         self.ptt_last = state
         if getattr(self, "page_ready", False):
             run_js(self.view, f"window.kuramaMiniShown && window.kuramaMiniShown(false, true); "
@@ -1068,9 +1081,29 @@ class Mini:
         v.connect("decide-policy", self.wp.on_policy)
         self.page_ready, self.on_ready = False, []
         v.connect("load-changed", self._page_loaded)
+        v.connect("web-process-terminated", self._panel_crashed)
         u = urlsplit(self.wp.url)
-        v.load_uri(f"{u.scheme}://{u.netloc}/?mini=1" + ("" if visual is not None else "&opaque=1"))
+        self.panel_url = f"{u.scheme}://{u.netloc}/?mini=1" + ("" if visual is not None else "&opaque=1")
+        v.load_uri(self.panel_url)
         p.add(v)
+
+    def _panel_crashed(self, view, reason) -> None:
+        """The mini chat's web process died: load it again (it stayed blank and "Getting ready" forever)."""
+        pttlog(f"panel page process ended ({getattr(reason, 'value_nick', reason)}); reloading")
+        self.page_ready = False
+        GLib.timeout_add(800, lambda: (view.load_uri(self.panel_url), False)[1])
+
+    def _ready_or_restart(self) -> bool:
+        """A hold showed "Getting ready" and the page still isn't there: its web process is stuck -> restart it."""
+        if getattr(self, "page_ready", False) or self.view is None:
+            return False
+        pttlog(f"panel page not ready after {PANEL_READY_S} s: restarting its web process")
+        if self.caption is not None:
+            self.caption.show("bot", "The chat window got stuck, so I'm restarting it. Hold the key again in a few "
+                                     "seconds.", True)
+        with contextlib.suppress(Exception):
+            self.view.terminate_web_process()  # -> _panel_crashed -> load again
+        return False
 
     def _page_loaded(self, view, event) -> None:
         if event != WebKit2.LoadEvent.FINISHED or self.page_ready:
@@ -1506,7 +1539,62 @@ def install_hotkey() -> None:
         note(f"couldn't set the {MINI_HOTKEY} shortcut: {e}")
 
 
+def raise_fd_limit() -> None:
+    """The page's web process inherits this process's open-file limit. The desktop gives 1024; on 11-02 07:54 the
+    web process used them all after ~5 min of voice use ("per-process limit on the number of open file descriptors
+    has been reached", GStreamer "cannot create wakeup pipe", pulse "Too many open files"): the wallpaper went black
+    and the mini chat hung on "Getting ready". Raised to the hard limit (capped), before any web process starts."""
+    import resource
+    with contextlib.suppress(ValueError, OSError):
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        want = min(hard, FD_LIMIT) if hard != resource.RLIM_INFINITY else FD_LIMIT
+        if soft < want:
+            resource.setrlimit(resource.RLIMIT_NOFILE, (want, hard))
+
+
+_fd_seen = {"max": 0}
+
+
+def _web_pids() -> list[int]:
+    """WebKit processes started by this window (their parent is us)."""
+    out = []
+    for d in Path("/proc").glob("[0-9]*"):
+        with contextlib.suppress(OSError, ValueError, IndexError):
+            stat = (d / "stat").read_text()
+            if int(stat.rsplit(")", 1)[1].split()[1]) == os.getpid():
+                out.append(int(d.name))
+    return out
+
+
+def fd_guard() -> bool:
+    """Every FD_CHECK_S: the web processes' open files. Growing past FD_WARN (and every +FD_WARN after) is logged to
+    hang.log with what kind of files they are (evidence for the leak); past FD_RECYCLE the window restarts itself
+    cleanly (kurama-wallpaper.sh starts a fresh one) instead of going black and stuck."""
+    worst, kinds = 0, {}
+    for pid in _web_pids():
+        with contextlib.suppress(OSError):
+            fds = list(Path(f"/proc/{pid}/fd").iterdir())
+            if len(fds) > worst:
+                worst, kinds = len(fds), {}
+                for f in fds:
+                    with contextlib.suppress(OSError):
+                        k = os.readlink(f).split("[")[0].split(":")[0]
+                        k = k if not k.startswith("/") else "/" + k.strip("/").split("/")[0]
+                        kinds[k] = kinds.get(k, 0) + 1
+    if worst >= FD_WARN and worst >= _fd_seen["max"] + FD_WARN // 2:
+        _fd_seen["max"] = worst
+        top = ", ".join(f"{k} {n}" for k, n in sorted(kinds.items(), key=lambda x: -x[1])[:6])
+        with contextlib.suppress(OSError), (STATE_FILE.parent / "logs" / "hang.log").open("a") as fh:
+            fh.write(time.strftime("%m-%d %H:%M:%S") + f" web process has {worst} open files ({top})\n")
+    if worst >= FD_RECYCLE:
+        with contextlib.suppress(OSError), (STATE_FILE.parent / "logs" / "hang.log").open("a") as fh:
+            fh.write(time.strftime("%m-%d %H:%M:%S") + f" {worst} open files: restarting the window before it breaks\n")
+        os._exit(1)  # kurama-wallpaper.sh starts a fresh window (its respawn loop)
+    return True
+
+
 def main() -> int:
+    raise_fd_limit()
     ap = argparse.ArgumentParser(description="KURAMA live wallpaper (GTK + WebKit)")
     ap.add_argument("--window", action="store_true", help="normal window instead of wallpaper (testing)")
     ap.add_argument("--url", default=DEFAULT_URL, help=f"page to show (default {DEFAULT_URL})")
@@ -1522,6 +1610,7 @@ def main() -> int:
         PID_FILE.write_text(str(os.getpid()))
     threading.Thread(target=install_hotkey, daemon=True).start()
     hang_guard()
+    GLib.timeout_add_seconds(FD_CHECK_S, fd_guard)
     Gtk.main()
     return 0
 

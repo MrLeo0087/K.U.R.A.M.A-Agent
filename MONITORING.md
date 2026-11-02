@@ -12,6 +12,9 @@ answers to KURAMA's questions and the model per call since the memory + multitas
 > (Ubuntu X11, no GPU, 8 GB RAM, Groq free tier). Read, in this order and nothing else first: `CLAUDE.md`, the top
 > "CURRENT STATE" section of `docs/HANDOFF.md`, this file (`MONITORING.md`) and the last ~30 lines of `PROGRESS.md`.
 >
+> For how the code works, `LEARN.md` is the map (sections 2-4: a request, short-term memory, the task graph; section
+> 20: the monitoring routine).
+>
 > Then run `venv/bin/python scripts/trace_report.py --days 3` (traces + the side logs: speech, wake word,
 > hold-to-talk, Files app, job list) and open the worst traces with `--show <id>`.
 >
@@ -339,4 +342,7 @@ message; the action itself is chosen by meaning), the reference nouns (`workmem.
 - 2026-11-01 21:25: music controls by meaning while KURAMA's player is on (pause / continue / next / volume max...);
   volume/brightness max-min words; the learner no longer takes a plain next request for a correction (wrong vetoes
   removed). Watch: `learned.json` rows with src correction (each should be a real correction).
+- 2026-11-02 08:50: the window's web process: open-file limit raised + leak guard (hang.log "web process has N open
+  files (kinds)"), mini chat self-reload, wallpaper pause re-sent (idle CPU 25-60% -> 0%). Watch: hang.log open-file
+  lines after voice use (they name the leaking file kind), "panel page not ready ... restarting" in ptt.log.
 

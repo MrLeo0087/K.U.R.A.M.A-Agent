@@ -1888,6 +1888,7 @@ function shrinkPage() { // covered for a while: drop what isn't on screen so Web
   for (const it of ws.items) if (it !== ws.items[ws.cur]) it.text = null; // re-read from disk when shown again
 }
 window.kuramaPause = (on) => {
+  if (!!on === paused && (paused || !shrinkTimer)) return paused; // re-sent every 15 s by the window: no restart
   paused = !!on;
   clearTimeout(shrinkTimer);
   shrinkTimer = paused ? setTimeout(shrinkPage, 60000) : 0;

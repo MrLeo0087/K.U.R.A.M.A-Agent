@@ -919,4 +919,16 @@ Phases (one at a time, owner tests after each):
       maximum." went to the AI: max/full/highest/lowest/minimum are read as 100/0 by the volume and brightness
       commands. Live: "pause music", "pause" = 0 tokens. Tests: test_player_controls.py (18); suite 1430; scorecard
       68% / 100% / 98%.
+- [x] 2026-11-02 08:50 Owner: the mini chat stuck on "Getting ready... keep holding", the wallpaper black, the UI laggy.
+      Proven causes: (1) the page's web process hit the desktop's open-file limit (1024) after ~5 min of voice use
+      (wallpaper.log 07:54: "per-process limit on the number of open file descriptors has been reached", GStreamer
+      "cannot create wakeup pipe", pulse "Too many open files") -> no audio, black page, the panel never loaded. An
+      offscreen test (20 AudioContexts, 20 <audio> plays) leaked ~1-2 files, so the leak source is still open (mic
+      capture is the suspect; it can't run offscreen). Fix: the window raises its open-file limit (65,536) before any
+      web process starts; a guard counts the web process's open files every 30 s, logs growth with the file kinds to
+      hang.log (the evidence for the leak) and restarts the window cleanly past 6,000; the mini chat's page reloads if
+      its process dies, and a hold that waits "Getting ready" for 12 s restarts it with a message. (2) Laggy UI: the
+      web process used 25-60% CPU while every window covered the wallpaper: the "covered" pause had been sent before
+      the page's script loaded and was never sent again. A re-sent pause took it to 0%. Fix: the state is re-sent every
+      15 s (the page ignores repeats). Measured after restart: 0.0-0.3% CPU while covered, 29 open files.
 
