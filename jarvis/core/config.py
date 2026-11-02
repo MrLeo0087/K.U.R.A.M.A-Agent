@@ -1238,8 +1238,11 @@ LONG_JOBS_MAX_WORKERS = 2  # own threads; at most ONE CPU-heavy long job runs at
 MEANING_SHORTCUTS: dict[str, tuple[str, ...]] = {
     "switch_tab": ("switch to the X tab", "go to the X tab in my browser", "show me the X tab", "open the X tab",
                    "switch to X tab of my brave browser", "take me to the X tab"),
-    "list_tabs": ("what tabs are open", "list my browser tabs", "which tabs do i have open", "show all my tabs"),
+    "list_tabs": ("what tabs are open", "list my browser tabs", "which tabs do i have open", "show all my tabs",
+                  "give me the list of tabs open in my browser", "tell me the tabs open in my browser"),
     "close_tab": ("close the X tab", "close X tab in my browser", "shut the X tab"),
+    "close_all_tabs": ("close all tabs", "close every tab in my browser", "close all the browser tabs",
+                       "shut all my tabs"),
     "scroll_down": ("scroll down", "scroll down a bit", "scroll down a lot", "go down the page", "scroll down more", "scroll down a little",
                     "move the page down"),
     "scroll_up": ("scroll up", "scroll up a bit", "scroll up a lot", "go up the page", "scroll up more", "scroll up a little",
@@ -1286,7 +1289,7 @@ MEANING_SHORTCUTS: dict[str, tuple[str, ...]] = {
 MEANING_SHORTCUT_AREAS = {"save_link": "links", "list_links": "links", "read_later_add": "links", "copy_path": "clipboard",
                           "open_vscode": "files", "jobs_start": "jobs", "jobs_list": "jobs",
                           "clean_ram": "system", "clean_kurama": "system", "clean_storage": "system", "show_desktop": "windows", "switch_tab": "windows",
-                          "list_tabs": "windows", "close_tab": "windows", "scroll_down": "windows", "scroll_up": "windows", "colab_setup": "watch", "new_folder": "files",
+                          "list_tabs": "windows", "close_tab": "windows", "close_all_tabs": "windows", "scroll_down": "windows", "scroll_up": "windows", "colab_setup": "watch", "new_folder": "files",
                           "tg_message": "telegram"}  # the router offers it too
 MEANING_SHORTCUT_MIN = 0.82
 # actions that change everything on screen need more certainty ("show my screen" is not "go to the home screen": 0.86)

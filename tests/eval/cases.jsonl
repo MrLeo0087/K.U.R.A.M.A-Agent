@@ -268,3 +268,14 @@
 {"id": 268, "text": "take me to home screen bro", "expect": "window", "args": {}, "channel": "laptop", "source": "traces 2026-11-01 09:35"}
 {"id": 269, "text": "minimize all windows", "expect": "window", "args": {}, "channel": "laptop", "source": "traces 2026-11-01 09:35"}
 {"id": 270, "text": "Close or open app and go to home screen.", "expect": "route.areas", "groups": ["windows", "apps"], "args": {}, "channel": "laptop", "source": "traces 2026-11-01 09:35"}
+{"id": 271, "text": "Make the volume 130.", "expect": "volume", "args": {}, "channel": "laptop", "source": "traces 2026-11-01"}
+{"id": 272, "text": "make volume to 130%", "expect": "volume", "args": {}, "channel": "laptop", "source": "traces 2026-11-01"}
+{"id": 273, "text": "Increase the more volume.", "expect": "volume", "args": {}, "channel": "laptop", "source": "traces 2026-11-01"}
+{"id": 274, "text": "increase the volume more", "expect": "volume", "args": {}, "channel": "laptop", "source": "traces 2026-11-01"}
+{"id": 275, "text": "close all tabs", "expect": "close.app", "args": {}, "channel": "laptop", "source": "traces 2026-11-01"}
+{"id": 276, "text": "Close all tab.", "expect": "close.app", "args": {}, "channel": "laptop", "source": "traces 2026-11-01"}
+{"id": 277, "text": "Give me the list of the tab open in my browser.", "expect": "ui.control", "args": {}, "channel": "laptop", "source": "traces 2026-11-01"}
+{"id": 278, "text": "Press Alt and Tab key together.", "expect": "ui.control", "args": {}, "channel": "laptop", "source": "traces 2026-11-01"}
+{"id": 279, "text": "generate a random image and send to telegram", "expect": "image.generate", "args": {}, "channel": "laptop", "source": "traces 2026-11-01"}
+{"id": 280, "text": "generate iamge of futurestic computer and send it to telegram", "expect": "image.generate", "args": {}, "channel": "laptop", "source": "traces 2026-11-01"}
+{"id": 281, "text": "create a cute image", "expect": "image.generate", "args": {}, "channel": "laptop", "source": "traces 2026-11-01"}

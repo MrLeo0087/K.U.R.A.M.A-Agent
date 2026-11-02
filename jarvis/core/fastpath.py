@@ -426,14 +426,16 @@ _BRI = r"(?:the )?(?:screen )?brightness"
 _BRI_HI = r"(?:brightness|ब्राइटनेस|चमक)"
 LEVELS = {  # name -> (tool, group, {action: patterns})
     "volume": ("volume", "audio", {
-        "set": _rx(r"(?:set|change|put|turn) " + _VOL + r"(?: level)? (?:to |at )?" + _N + _PCT,
+        "set": _rx(r"(?:set|change|put|turn|make|keep) " + _VOL + r"(?: level)? (?:to |at )?" + _N + _PCT,
                    r"(?:volume|sound)(?: level)? (?:to |at )?" + _N + _PCT,
                    _VOL_HI + " " + _N + _PCT + " " + _DO_HI),
         "up": _rx(r"(?:turn|bump|crank) up " + _VOL + _BY, r"(?:turn|bump|crank) " + _VOL + " up" + _BY,
-                  r"(?:increase|raise) " + _VOL + _BY, r"(?:volume|sound) up" + _BY, r"(?:make it )?louder",
+                  r"(?:increase|raise) (?:the )?(?:more )?(?:volume|sound)(?: more| a bit| a little)?" + _BY,
+                  r"(?:volume|sound) up" + _BY, r"(?:make it )?louder",
                   _VOL_HI + " " + _UP_HI),
         "down": _rx(r"turn down " + _VOL + _BY, r"turn " + _VOL + " down" + _BY,
-                    r"(?:decrease|lower|reduce) " + _VOL + _BY, r"(?:volume|sound) down" + _BY,
+                    r"(?:decrease|lower|reduce) (?:the )?(?:more )?(?:volume|sound)(?: more| a bit| a little)?" + _BY,
+                    r"(?:volume|sound) down" + _BY,
                     r"(?:make it )?(?:quieter|softer)", _VOL_HI + " " + _DOWN_HI),
         "get": _rx(r"what(?:'s| is) the (?:current )?volume(?: level)?(?: now)?", r"(?:current )?volume level"),
     }),
@@ -3421,8 +3423,22 @@ def _known(word: str, vocab: set[str]) -> bool:
         return w in vocab
     if len(w) < 2 or w in vocab or w in _NO_DETAIL or w.endswith("'s") and w[:-2] in vocab:
         return True
+    if w + "s" in vocab or w.endswith("s") and w[:-1] in vocab:  # 'tab' / 'tabs'
+        return True
     from difflib import SequenceMatcher
     return len(w) >= 4 and any(len(v) >= 4 and SequenceMatcher(None, w, v).ratio() >= 0.75 for v in vocab)
+
+
+_SHARED: dict[str, set[str]] = {}
+
+
+def _shared(label: str) -> set[str]:
+    """Content words every example of a name-slot action has ('tab' for switch_tab / close_tab): the request must
+    say them too, else the name slot swallows a different request."""
+    if label not in _SHARED:
+        sets = [_words(e) - {"x"} for e in config.MEANING_SHORTCUTS[label]]
+        _SHARED[label] = {w for w in set.intersection(*sets) if len(w) > 2 and w not in _NO_DETAIL} if sets else set()
+    return _SHARED[label]
 
 
 def meaning_label(t: str) -> tuple[str, float] | None:
@@ -3494,6 +3510,10 @@ def meaning_intent(text: str) -> Intent | None:
         if pos and (pos[-1] - pos[0] + 1 != len(pos) or pos[0] == 0):  # whatsapp" -> whatsapp)
             return None  # two unknown parts ('save this FILE as REPORT') or a leading one (the request starts with
             #              what to do: 'show me link stroe' is not a link named 'show'): not just a name -> the AI
+        if any(not any(_known(w, {need}) or w.lower().rstrip("s") == need.rstrip("s") for w in toks)
+               for need in _shared(label)):
+            return None  # a word EVERY example of this action has is missing: 'Open sitting.' is not 'open the X
+            #              tab' (it switched to a tab named 'sitting'; the owner meant Settings)
         if label in ("switch_tab", "close_tab"):
             if not extra:
                 return None
@@ -3512,6 +3532,9 @@ def meaning_intent(text: str) -> Intent | None:
         return it if meaning_ok(t, it) else None
     if label == "colab_setup":  # the ready-made notebook cell (Colab / Kaggle), copied: 0 tokens
         it = Intent("colab", "training", "watch", {"action": "colab"})
+        return it if meaning_ok(t, it) else None
+    if label == "close_all_tabs":  # every tab = the browser window (11-01 'Close all tab.' cost an AI call)
+        it = Intent("close", "close_app", "windows", {"name": "browser"})
         return it if meaning_ok(t, it) else None
     if label == "list_tabs":
         it = Intent("tabs", "app_control", "windows", {"action": "shortcut", "text": "tabs"})

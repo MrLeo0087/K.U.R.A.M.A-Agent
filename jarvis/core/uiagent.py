@@ -217,7 +217,7 @@ def keys_from_words(words: str) -> str | None:
     w = re.sub(r"\bpage (up|down)\b", r"page\1", w)
     parts, out = w.split(), []
     for p in parts:
-        if p in ("and", "then", "the", "key", "button"):
+        if p in ("and", "then", "the", "key", "keys", "button", "together", "at", "once", "same", "time"):
             continue
         k = _KEYWORDS.get(p) or (p.upper() if re.fullmatch(r"f\d{1,2}", p) else None) or (
             p if re.fullmatch(r"[a-z0-9]", p) else None)

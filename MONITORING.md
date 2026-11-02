@@ -368,3 +368,8 @@ message; the action itself is chosen by meaning), the reference nouns (`workmem.
   "done" (config.CLAIM_EXAMPLES vs NOT_CLAIM_EXAMPLES) is retried with tools like the worded claims; "generate a
   random image (and send it to Telegram)" and image typos are one 0-token generate_image. Watch: retried: 1 on real
   answers (a false claim by meaning), "That's taking a while" on tools that usually finish in < 8 s.
+- 2026-11-02 10:15 (master plan phase 3): 0-token commands the traces sent to the AI: volume to N (also > 100, "make
+  / keep"), "more volume", close all tabs (= the browser), list the tabs in any wording, key combos with "and /
+  together". A name-slot meaning action needs the word all its examples share ('Open sitting.' switched to a tab
+  named "sitting"). apps(action=tab) with no name lists the tabs (was "tab:None"). Watch: intents tab / tabs / close
+  on requests that meant something else.

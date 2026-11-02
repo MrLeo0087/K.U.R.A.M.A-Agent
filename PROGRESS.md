@@ -963,3 +963,12 @@ Phases (one at a time, owner tests after each):
       no shortcut (the AI wrote a 1x1 PNG by hand, 7,897 tokens) -> the image shortcut takes a style word without a
       subject ("random", "cute"); a bare "generate an image" still asks. Tests: test_lane_executors.py (19); suite
       1487; scorecard 69% / 100% / 98%.
+- [x] 2026-11-02 10:15 Master plan phase 3, 0-token actions from the traces. Fixed commands: volume "make / keep the
+      volume N" (130 included), "increase the (more) volume (more)"; key combos with "and" / "together" / "at once".
+      Meaning actions: close_all_tabs (closes the browser), more list_tabs examples, plural-aware action words
+      ('tab' / 'tabs'); a name-slot action (switch_tab / close_tab) must contain the word every example shares
+      ('Open sitting.' had switched to a tab named "sitting"). Live check found apps(action='tab') with no target
+      sent 'tab:None' -> lists the tabs. The separate per-tool index from the plan was not built: the meaning router
+      + general tools already pick tools by real phrasings (98% on the scorecard) and a second index would be a second
+      router. Tests: test_shortcuts_1102.py (19), 11 trace phrasings in tests/eval/cases.jsonl; suite 1506;
+      scorecard 71% (was 69%) / 100% / 98%.

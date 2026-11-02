@@ -35,7 +35,8 @@ TABLE = {
     "close": Act("close_app", lambda a: {"name": a.get("target")}),
     "kill": Act("kill_app", lambda a: {"name": a.get("target"), "force": True}),
     "window": Act("window", lambda a: {"action": a.get("how", "focus"), "name": a.get("target")}),
-    "tab": Act("app_control", lambda a: {"action": "shortcut", "text": f"tab:{a.get('target') or a.get('text')}"}),
+    "tab": Act("app_control", lambda a: {"action": "shortcut", "text": (  # no tab named: list them (was 'tab:None')
+        f"tab:{t}" if (t := (a.get('target') or a.get('text') or "").strip()) else "tabs")}),
     "press": Act("app_control", lambda a: {"action": "press", "text": a.get("text") or a.get("target")}),
     "type": Act("app_control", lambda a: {"action": "type", "text": a.get("text"), "app": a.get("target")}),
     "click": Act("app_control", lambda a: {"action": "click", "text": a.get("text") or a.get("target")}),
@@ -51,7 +52,7 @@ def apps(action: Literal["open", "close", "kill", "window", "tab", "press", "typ
     """Apps, websites, folders and windows.
 
     Args:
-        action: open, close, kill (force), window, tab (switch to a browser tab: target = its name or number), press
+        action: open, close, kill (force), window, tab (switch to a browser tab: target = its name or number; no target = list the open tabs), press
             (keys like 'ctrl+v', 'enter'), type, click, install.
         target: App / website / folder name ('brave', 'youtube', 'tara'), or several sites 'youtube, facebook'.
         how: open: the app to open it IN ('vscode' for a folder/file in VS Code); window: focus, minimize, maximize,

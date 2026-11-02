@@ -8,13 +8,22 @@ import pytest
 from jarvis.core import config, fastpath, lanes, meta, safety, semantic, store, templates
 
 
+
+def _fresh():
+    """Embeddings cached by other tests' fake model (another size) must not meet the real one."""
+    from jarvis.core import lanes as _l, meta as _m, templates as _t
+    _t._st = _l._mat = _m._claim_mat = None
+    semantic._tables.clear()
+
+
 @pytest.fixture
 def model(monkeypatch):
     monkeypatch.setattr(config, "SEMANTIC_ROUTER", True)
+    _fresh()
     if not semantic.ensure_ready(30):
         pytest.skip("meaning model not available")
     yield
-    templates._st = lanes._mat = meta._claim_mat = None
+    _fresh()  # other tests use a fake embedder (other size)
 
 
 @pytest.mark.parametrize("runs,want", [([], 3.0), ([4.0, 4.5, 5.0], 6.25), ([2.6, 2.9, 3.1, 3.3], 4.125),
