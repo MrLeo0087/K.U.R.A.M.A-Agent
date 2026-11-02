@@ -1012,3 +1012,9 @@ Phases (one at a time, owner tests after each):
       Groq speech, edge-tts); /offline = only what works without internet. Telegram replies longer than one message
       are split at lines (up to 4) instead of cut. Tests: test_slash_tools.py (13), test_workers updated; suite
       1544; scorecard 71% / 100% / 98%.
+- [x] 2026-11-02 16:00 Mini chat size: data/mini.json held panel 1 x 1 - the invisible 1 x 1 panel added today
+      (holds, preload) was saved as the owner's size, so the chat came back at the minimum. The saver now skips
+      the shrunk panel and any size under the minimum; a broken saved size falls back to the default (saved_size).
+      The last size you set is kept across restarts. /control: the lock screen needs the Ubuntu login password,
+      not the RustDesk one (auth.log 13:58-13:59: 4 lock-screen failures); the reply says so. /offline: phrase
+      commands classified by the pattern layer (the meaning gate hid /weather). Tests: test_voice_fixes (+1).

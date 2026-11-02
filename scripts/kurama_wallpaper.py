@@ -1078,8 +1078,9 @@ class Mini:
         p.stick()
         wa = workarea()
         p.set_size_request(PANEL_MIN_W, PANEL_MIN_H)
-        p.set_default_size(min(int(self.wp.state.get("panel_w") or PANEL_W), wa.width - 40),
-                           min(int(self.wp.state.get("panel_h") or PANEL_H), wa.height - 40))
+        sw, sh = self.saved_size()
+        p.set_default_size(min(sw, wa.width - 40),
+                           min(sh, wa.height - 40))
         p.connect("configure-event", self.on_configure)
         p.connect("delete-event", lambda *_: self.hide_panel() or True)
         v = self.view = WebKit2.WebView(web_context=self.wp.ctx, user_content_manager=self.wp.ucm)
@@ -1238,6 +1239,12 @@ class Mini:
             self.fade(self.panel, False, gone)
         self.bubble.queue_draw()
 
+    def saved_size(self) -> tuple[int, int]:
+        """The chat size you last set (kept across restarts); a missing or broken one (1 x 1 saved by the shrunk
+        invisible panel, 11-02) is the default size."""
+        w, h = int(self.wp.state.get("panel_w") or 0), int(self.wp.state.get("panel_h") or 0)
+        return (w, h) if w >= PANEL_MIN_W and h >= PANEL_MIN_H else (PANEL_W, PANEL_H)
+
     def shrink_ghost(self) -> None:
         """An invisible (ghost) panel still got Blur my Shell's glass: the owner saw an empty frosted box beside the
         reply caption during every hold (11-02 screenshot). The extension blurs by window class, whatever the
@@ -1254,8 +1261,8 @@ class Mini:
         self.shrunk = False
         wa = workarea()
         self.panel.set_size_request(PANEL_MIN_W, PANEL_MIN_H)
-        self.panel.resize(min(int(self.wp.state.get("panel_w") or PANEL_W), wa.width - 40),
-                          min(int(self.wp.state.get("panel_h") or PANEL_H), wa.height - 40))
+        sw, sh = self.saved_size()
+        self.panel.resize(min(sw, wa.width - 40), min(sh, wa.height - 40))
         self.place_panel()
 
     def unghost(self, hide_caption: bool = True) -> None:
@@ -1371,8 +1378,11 @@ class Mini:
 
         def save():
             self.size_timer = 0
-            if self.panel is not None and self.panel.get_visible() and not self.ghost:
+            if self.panel is not None and self.panel.get_visible() and not self.ghost and \
+                    not getattr(self, "shrunk", False):  # the 1 x 1 invisible panel is never "your size"
                 w, h = self.panel.get_size()
+                if w < PANEL_MIN_W or h < PANEL_MIN_H:
+                    return False
                 if (w, h) != (self.wp.state.get("panel_w"), self.wp.state.get("panel_h")):
                     self.wp.state["panel_w"], self.wp.state["panel_h"] = w, h
                     save_state(self.wp.state)

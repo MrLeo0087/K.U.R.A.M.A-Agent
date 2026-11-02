@@ -162,3 +162,13 @@ def test_the_window_moves_webkits_gc_signal_off_its_hotkey_signals():
     src = (Path(__file__).resolve().parent.parent / "scripts" / "kurama_wallpaper.py").read_text()
     assert src.index('os.environ.setdefault("JSC_SIGNAL_FOR_GC"') < src.index('gi.require_version("WebKit2"')
     assert "signal.SIGUSR1" in src  # (the hotkey still uses it: the engine must not)
+
+
+def test_the_chat_size_is_never_saved_from_the_shrunk_invisible_panel():
+    """The 1 x 1 invisible panel (holds, preload) saved itself as the owner's chat size (mini.json 1 x 1, 11-02):
+    the saver skips it and anything under the minimum, and a broken saved size falls back to the default."""
+    from pathlib import Path
+    src = (Path(__file__).resolve().parent.parent / "scripts" / "kurama_wallpaper.py").read_text()
+    saver = src[src.index("def on_configure"):src.index("def drop_panel")]
+    assert 'getattr(self, "shrunk", False)' in saver and "PANEL_MIN_W" in saver
+    assert "def saved_size" in src and "self.saved_size()" in src
