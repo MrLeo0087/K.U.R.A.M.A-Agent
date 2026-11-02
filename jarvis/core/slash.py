@@ -289,8 +289,22 @@ def tool_call(cmd: Cmd, arg: str) -> tuple[str, str, dict] | None:
 NET_MARK = "🌐"
 
 
+_PHRASE_TOOL: dict[str, str] = {}
+
+
 def _net(c: Cmd) -> bool:
-    return bool(c.tool) and c.tool[0] != "_cmd" and online(c.tool[0])
+    """The command needs the internet: its tool, or (a phrase command) the tool its phrase runs."""
+    if c.tool:
+        return c.tool[0] != "_cmd" and online(c.tool[0])
+    if c.phrase and c.name not in _PHRASE_TOOL:
+        try:
+            from jarvis.core import fastpath
+            it = fastpath.match(phrase_for(c, "pokhara") or phrase_for(c, ""))
+            if it is not None:  # (not cached when unknown: the meaning model may still be loading)
+                _PHRASE_TOOL[c.name] = it.tool
+        except Exception:  # noqa: BLE001
+            pass
+    return online(_PHRASE_TOOL.get(c.name, ""))
 
 
 def help_text(fmt: str = "plain", only_offline: bool = False) -> str:
