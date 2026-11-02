@@ -704,6 +704,9 @@ class Agent:
                 continue  # said once already
             if text.lower().startswith(("error", "the user", "refused")):
                 return ""  # something went wrong: let the model explain it
+            if bg := re.match(r"Still working after \d+ s, so this keeps running in the background as job #(\d+)", text):
+                said.append(safety.BACKGROUND_SAID.format(id=bg.group(1)))  # that note is for the AI, never spoken
+                continue  # (48c2f368 read the whole instruction to the owner)
             tool_name, args = real[m.tool_call_id]  # a general tool's call is worded as the action it ran
             if str(args.get("action") or "") in config.DIRECT_REPLY_STEPS.get(tool_name, ()):
                 return ""  # a step of something bigger ('switch to Brave' before 'open a new tab'): the AI goes on

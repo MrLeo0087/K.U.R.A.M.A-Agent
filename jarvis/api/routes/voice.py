@@ -40,14 +40,15 @@ async def stt_endpoint(request: Request):
     except (ValueError, OSError, subprocess.SubprocessError) as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     from jarvis.core import dictation, stt
-    if dictation.active():
-        # dictation is already listening to the same mic and typing it: a second Whisper call per phrase only
-        # doubled the requests (Groq ~20/min) and made everything lag
-        return {"text": "", "lang": "en", "dictation": True}
     try:
         tr = await run_in_threadpool(stt.transcribe, wav, norm_lang(request.query_params.get("lang")))
     except Exception as e:
         return JSONResponse({"error": f"transcription failed: {str(e)[:200]}"}, status_code=502)
+    if dictation.active():  # dictation types what you say; a hold-to-talk 'stop dictation' must still stop it
+        said = getattr(tr, "text", "") or ""  # (11-02: every hold during dictation came back empty: "didn't catch")
+        if dictation.STOP.match(said.strip()):
+            return {"text": said, "lang": getattr(tr, "lang", None) or "en"}
+        return {"text": "", "lang": "en", "dictation": True}
     return {"text": getattr(tr, "text", str(tr)), "lang": getattr(tr, "lang", None) or "en"}
 
 

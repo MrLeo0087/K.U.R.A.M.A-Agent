@@ -11,7 +11,7 @@ from jarvis.core.registry import tool
 from jarvis.tools.general import _tg
 
 IMG = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
-KIND_OF_JOB = {"image": ("image",), "document": ("write", "code", "scan"), "list": (), "any": None}
+KIND_OF_JOB = {"image": ("image", "chart"), "document": ("write", "code", "scan"), "list": (), "any": None}
 
 
 def _newest(kind: str) -> Path | None:

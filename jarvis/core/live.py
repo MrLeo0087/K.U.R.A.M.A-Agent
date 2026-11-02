@@ -121,21 +121,37 @@ def _scorers(sport: str, league: str, event_id: str) -> str:
 
 def sports(text: str) -> str | None:
     """Live / last / next game for the team named in `text`, or None if no team found."""
-    name = team_query(text)
+    first = re.split(r"\b(?:vs\.?|versus|against|and|v)\b", text or "", maxsplit=1, flags=re.I)[0]
+    name = team_query(first) or team_query(text)  # 'Inter Miami against New England': the first team asked about
     if not name:
         return None
-    team = find_team(name, sport_in(text))
+    words, team = name.split(), None
+    for n in range(len(words), 0, -1):  # 'Inter Miami Maze' (a misheard word): the longest start that is a team
+        if len(" ".join(words[:n])) >= 3 and (team := find_team(" ".join(words[:n]), sport_in(text))):
+            break
     if not team:
         return None  # unknown team or a sport ESPN has no schedules for here (e.g. cricket) -> fresh-news answer
     sport, league, tid = team["sport"], team["league"], team["id"]
     every = "all" if sport == "soccer" else league  # soccer: every competition (league + cups + Champions League)
 
-    def load():
-        sched = _get(f"{_ESPN}/{sport}/{every}/teams/{tid}/schedule") or {}
-        info = _get(f"{_ESPN}/{sport}/{league}/teams/{tid}") or {}
-        return sched, info
-    sched, info = _cached(("sched", sport, league, tid), 60, load)
-    events = sorted(sched.get("events", []) + (info.get("team", {}).get("nextEvent") or []), key=lambda e: e["date"])
+    def load():  # the three at once (one after another took 3-8 s: "That's taking a while" for a score)
+        from concurrent.futures import ThreadPoolExecutor
+
+        def safe(url):
+            try:
+                return _get(url) or {}
+            except Exception as e:  # noqa: BLE001 - one slow / failed source must not lose the others
+                log.info("sports source failed (%s): %s", url.rsplit("/", 2)[-2:], e)
+                return {}
+        urls = [f"{_ESPN}/{sport}/{every}/teams/{tid}/schedule", f"{_ESPN}/{sport}/{league}/teams/{tid}",
+                f"{_ESPN}/{sport}/{league}/scoreboard"]  # playoff / cup games the team schedule leaves out
+        with ThreadPoolExecutor(3) as ex:  # (11-02: Inter Miami's playoff game was only on the league scoreboard)
+            return tuple(ex.map(safe, urls))
+    sched, info, board = _cached(("sched", sport, league, tid), 60, load)
+    mine = [e for e in board.get("events", []) if any(str(x.get("team", {}).get("id")) == str(tid)
+                                                      for x in e.get("competitions", [{}])[0].get("competitors", []))]
+    events = sorted(sched.get("events", []) + (info.get("team", {}).get("nextEvent") or []) + mine,
+                    key=lambda e: e["date"])
     seen, uniq = set(), []
     for e in events:
         if e["id"] not in seen:

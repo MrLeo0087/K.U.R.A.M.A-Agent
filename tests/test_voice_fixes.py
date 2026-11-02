@@ -153,3 +153,12 @@ def test_wallpaper_processes_are_one_name():
     assert doctor.app_name(host) == "KURAMA screen"
     assert doctor.app_name(P("WebKitWebProcess", ["/usr/lib/webkit/WebKitWebProcess", "7"], host)) == "KURAMA screen"
     assert doctor.app_name(P("WebKitWebProcess", ["/usr/lib/webkit/WebKitWebProcess"], P("evolution", ["evolution"]))) == "WebKit"
+
+
+def test_the_window_moves_webkits_gc_signal_off_its_hotkey_signals():
+    """The window takes SIGUSR1 / SIGUSR2 for hotkeys; WebKit's JS engine pauses threads for garbage collection with
+    SIGUSR1 unless JSC_SIGNAL_FOR_GC says otherwise: the pause was never answered and every window froze (11-02)."""
+    from pathlib import Path
+    src = (Path(__file__).resolve().parent.parent / "scripts" / "kurama_wallpaper.py").read_text()
+    assert src.index('os.environ.setdefault("JSC_SIGNAL_FOR_GC"') < src.index('gi.require_version("WebKit2"')
+    assert "signal.SIGUSR1" in src  # (the hotkey still uses it: the engine must not)

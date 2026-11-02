@@ -386,9 +386,18 @@ def parse_press(text: str) -> dict | None:
     return None
 
 
+_THEN_KEY = re.compile(r"[\s,]+(?:and\s+)?(?:then\s+)?(?:press|hit)\s+(?:the\s+)?(?P<k>enter|return|tab)"
+                       r"(?:\s+(?:key|button))?[\s.!]*$", re.I)
+
+
 def parse_type(text: str) -> dict | None:
     m = _TYPE.match((text or "").strip())
-    return {"text": m.group("t").strip().strip("'\""), "app": m.group("app") or ""} if m else None
+    if not m:
+        return None
+    t = m.group("t").strip()
+    if k := _THEN_KEY.search(t):  # 'type X then press Enter': type X, then the key (11-02: the words were typed)
+        t = t[:k.start()] + ("\t" if k.group("k").lower() == "tab" else "\n")
+    return {"text": t.strip(" ").strip("'\""), "app": m.group("app") or ""}
 
 
 def parse_click(text: str) -> dict | None:

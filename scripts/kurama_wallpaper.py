@@ -42,6 +42,13 @@ from urllib.parse import urlsplit
 import cairo
 import gi
 
+# WebKit's JavaScript engine pauses threads for garbage collection with a signal, SIGUSR1 by default; this window
+# takes SIGUSR1 / SIGUSR2 for its own hotkeys (GLib.unix_signal_add in main), so the pause was never answered and
+# the window froze for good inside JSC (11-02, under gdb: the main thread in JSC::Heap::acquireAccessSlow, the
+# "Collector Thread" in WTF::Thread::suspend; every window since 08:45 froze within 2-8 min). A free real-time
+# signal for the engine; must be set before WebKit loads.
+os.environ.setdefault("JSC_SIGNAL_FOR_GC", str(signal.SIGRTMIN + 6))
+
 gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 gi.require_version("WebKit2", "4.1")
@@ -1025,6 +1032,7 @@ class Mini:
                 self.panel.set_keep_above(False)
                 self.place_panel()
                 self.panel.show_all()
+                self.shrink_ghost()
             if self.caption is None:
                 self.caption = Caption(self)
             ready = getattr(self, "page_ready", False)
@@ -1118,8 +1126,34 @@ class Mini:
         GLib.timeout_add(250, ready)
 
     def _preload(self) -> bool:
+        """Load the chat page before the first hold. A never-shown window's page did not load (11-02: every first
+        hold said "Getting ready… keep holding"; ptt.log 'panel page ready' came only after the panel was shown), so
+        it is shown invisible, 1 x 1 px and click-through until its page is there, then hidden again."""
         if self.panel is None:
-            self.ensure_panel()  # created hidden: nothing is shown until a click or a hold
+            self.ensure_panel()
+        p = self.panel
+        if getattr(self, "page_ready", False) or p.get_visible():
+            return False
+        self.preloading = True
+        p.realize()
+        p.set_opacity(0)
+        p.input_shape_combine_region(cairo.Region())
+        p.set_keep_above(False)
+        self.shrink_ghost()
+        p.show_all()
+
+        def done():
+            if not getattr(self, "preloading", False):
+                return
+            self.preloading = False
+            if self.ghost or self.open or self.panel is not p:  # a hold / a click took the panel over meanwhile
+                return
+            p.hide()
+            self.unshrink_ghost()
+            p.input_shape_combine_region(None)
+            p.set_opacity(1)
+            p.set_keep_above(True)
+        self.when_ready(done)
         return False
 
     def when_ready(self, fn) -> None:
@@ -1168,6 +1202,11 @@ class Mini:
         def show():  # only once its page is there: a reloaded page showed an empty glass box first
             if self.panel is None or self.ghost:
                 return
+            if getattr(self, "shrunk", False):  # opened while the invisible preload was still loading
+                self.preloading = False
+                self.unshrink_ghost()
+                self.panel.input_shape_combine_region(None)
+                self.panel.set_keep_above(True)
             self.panel.show_all()
             self.place_panel()
             self.fade(self.panel, True)
@@ -1185,6 +1224,7 @@ class Mini:
             self.panel.set_opacity(0)
             self.panel.set_keep_above(False)
             self.panel.input_shape_combine_region(cairo.Region())  # empty: clicks go through
+            self.shrink_ghost()
         elif self.open:
             run_js(self.view, "window.kuramaMiniShown && window.kuramaMiniShown(false)")  # stops the mic, saves the chat
 
@@ -1198,6 +1238,26 @@ class Mini:
             self.fade(self.panel, False, gone)
         self.bubble.queue_draw()
 
+    def shrink_ghost(self) -> None:
+        """An invisible (ghost) panel still got Blur my Shell's glass: the owner saw an empty frosted box beside the
+        reply caption during every hold (11-02 screenshot). The extension blurs by window class, whatever the
+        opacity, so the ghost is made 1 x 1 px; the page keeps running (mic, reply) as before."""
+        if self.panel is None or getattr(self, "shrunk", False):
+            return
+        self.shrunk = True
+        self.panel.set_size_request(1, 1)
+        self.panel.resize(1, 1)
+
+    def unshrink_ghost(self) -> None:
+        if self.panel is None or not getattr(self, "shrunk", False):
+            return
+        self.shrunk = False
+        wa = workarea()
+        self.panel.set_size_request(PANEL_MIN_W, PANEL_MIN_H)
+        self.panel.resize(min(int(self.wp.state.get("panel_w") or PANEL_W), wa.width - 40),
+                          min(int(self.wp.state.get("panel_h") or PANEL_H), wa.height - 40))
+        self.place_panel()
+
     def unghost(self, hide_caption: bool = True) -> None:
         if not self.ghost or self.panel is None:
             self.ghost = False
@@ -1205,6 +1265,7 @@ class Mini:
         self.ghost = False
         self.state = "idle"
         self.animate(False)
+        self.unshrink_ghost()
         self.panel.input_shape_combine_region(None)  # clickable again (the Gdk call refuses None)
         self.panel.set_opacity(1)
         self.panel.set_keep_above(True)

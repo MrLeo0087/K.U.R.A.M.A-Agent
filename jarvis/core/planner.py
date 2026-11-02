@@ -191,7 +191,22 @@ def split_clauses(text: str) -> list[str]:
             out[-1] = f"{out[-1]} then {c}"
         else:
             out.append(c)
-    return out
+    return _share_verb(out)
+
+
+_SHARED_VERB = re.compile(r"^(?:please\s+)?(?P<v>open|close|launch|quit)\s+\S", re.I)
+
+
+def _share_verb(clauses: list[str]) -> list[str]:
+    """'Open YouTube, Facebook and Instagram': the parts after the first are bare names that share its verb ->
+    'open Facebook', 'open Instagram' (11-02 fa0878a6: 'Open the YouTube and Facebook.' opened only YouTube)."""
+    if len(clauses) < 2 or not (m := _SHARED_VERB.match(clauses[0])):
+        return clauses
+    rest = [c.strip(" .!?,") for c in clauses[1:]]
+    if any(not c or len(c.split()) > 3 or router.looks_like_command(c) or re.search(r"\b(?:me|it|this|that)\b", c, re.I)
+           for c in rest):
+        return clauses
+    return [clauses[0], *[f"{m.group('v').lower()} {c}" for c in rest]]
 
 
 # "...and give me the result": asks for the previous task's answer -> part of that task (P7c).

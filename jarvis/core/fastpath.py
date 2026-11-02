@@ -364,7 +364,8 @@ def _focus_intent(said: str = "this") -> Intent | None:
 
 def sendfile_intent(t: str) -> Intent | None:
     if re.match(r"^\s*(?:(?:ok|okay|now|please)\s+)*(?:send|share|forward)\s+(?:me\s+)?(?:this|that|the|it|my)?\s*"
-                r"(?:photo|picture|image|pic|wallpaper)(?:\s+(?:you\s+)?(?:made|generated|created))?" + _TGDEST + r"?\s*[.!?]*$", t, I):
+                r"(?:photo|picture|image|pic|wallpaper|(?:pie\s+|bar\s+|line\s+)?(?:chart|graph|plot)|diagram)"  # a chart is a picture
+                r"(?:\s+(?:you\s+)?(?:made|generated|created|drew|drawn))?" + _TGDEST + r"?\s*[.!?]*$", t, I):
         return Intent("sendlast", "send_last_result", "telegram", {"kind": "image"}, "image")
     if _ANAPHORA_SEND.match(t):  # "send this folder" / "send it to telegram"
         return _focus_intent(t)
@@ -2271,6 +2272,9 @@ def yes_no(t: str) -> str:
         else:
             break
     joined = " ".join(s)
+    if s[0] in ("ok", "okay", "alright", "sure", "fine") and len(s) > 1 and s[1] not in _YES_WORDS | _NO_WORDS | {
+            "go", "do", "add", "please", "now", "then", "thanks", "thank", "bro", "kurama"}:
+        return ""  # 'Ok, replace it.' is a new request, not a yes to the offer before it (ca0ed9c4 explained more)
     if s[0] in _NO_WORDS or _NO_LEADS.match(joined):
         return "no"
     if s[0] in _YES_WORDS or _YES_LEADS.match(joined):
@@ -2319,7 +2323,7 @@ def plan_answer_intent(t: str) -> Intent | None:
             return Intent("assist", "text_assist", "clipboard", {"action": "cancel_more"})
     if assist.retry_active() and _SELECTED_NOW.match(t):  # 'nothing highlighted' earlier; now it is
         return Intent("assist", "text_assist", "clipboard", {"action": "retry"})
-    if assist.pending_code_active():  # an improved code is waiting in the workspace
+    if assist.pending_code_active() or assist.improving():  # an improved code is waiting (or still being written)
         if _NO_PLAN.match(t) or re.fullmatch(r"(?:no|nope|nah)\b[\s,.!]*(?:(?:don'?t|do\s+not|keep|leave)\b.*)?", t, I):
             return Intent("assist", "text_assist", "clipboard", {"action": "cancel_code"})
         fresh = re.search(r"\b(?:better|good|improve|fix|optimi[sz]e|detail|clean|faster|simpl|short|long|more|less|"
@@ -3426,6 +3430,7 @@ def _assist_waiting(t: str) -> bool:
     from jarvis.core import assist
     text_offer = assist.pending_code_active() and assist._pending.get("text")  # 'replace it?' after a text rewrite
     return bool((assist.pending_code_active() and (not text_offer or yes_no(t) or _APPLY_CODE.search(t)))
+                or (assist.improving() and (yes_no(t) == "yes" or _APPLY_CODE.search(t)))
                 or assist.use_waiting() or assist.ask_back_waiting()
                 or assist.file_ref_waiting() or ((assist.more_waiting() or assist.retry_active()) and yes_no(t)))
 

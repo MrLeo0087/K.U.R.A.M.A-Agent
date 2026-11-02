@@ -381,3 +381,12 @@ message; the action itself is chosen by meaning), the reference nouns (`workmem.
   Nepalgunj); app names that sound the same ('sitting' = Settings); 'remove second' / 'delete 2' act on the list
   KURAMA showed last (links, read later, to-do). Watch: "Which one?" on names that should be clear (delete a wrong
   pick from kv path_picks), intent changes from todo to saved_links / read_later.
+- 2026-11-02 14:35 (master plan phase 5 + the owner's test session): the window froze for good every 2-8 min since
+  08:45 -> JSC_SIGNAL_FOR_GC=40 (proof below in PROGRESS); invisible hold panel shrunk (no empty glass box);
+  the chat page preloads in an invisible 1x1 panel (no "Getting ready" on the first hold); the background note is
+  never spoken; "type X then press Enter"; "open A and B" opens both; "Ok, <request>" is not a yes; "replace it"
+  while the improve still runs applies it when ready; sports: league scoreboard games (playoffs) + first team of
+  "A vs B"; "this project" = the VS Code project when VS Code is in use; chart / graph / plot = the latest picture
+  ("send graph on telegram" sent the word); only the chart kind asked for; dictation reads the raw mic and logs
+  "dictation ... audio, stt ..., waiting" lines in stt.log; hold-to-talk "stop dictation" works during dictation.
+  Watch: hang.log "Timeout" (should be none), stt.log dictation lines (stt time / waiting > 0 = lag source).

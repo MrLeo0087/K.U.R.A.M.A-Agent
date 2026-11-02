@@ -26,7 +26,7 @@ def make_chart(source: str = "", request: str = "", kind: Literal["auto", "bar",
     def job(ctx):
         ctx.progress("reading the data")
         if src == "money":
-            paths, what = charts.chart_money(period)
+            paths, what = charts.chart_money(period, kind=kind)
         else:
             head, rows, name = charts.load(src)
             ctx.progress("drawing")

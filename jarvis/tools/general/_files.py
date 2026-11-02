@@ -36,7 +36,8 @@ def resolve(path: str, create: bool = False) -> Path:
         if cur is not None and cur.is_file():  # (it used focus.cwd() only: "create a new folder here" with Files on
             cur = cur.parent  # Tara made it in KURAMA's own folder, 11-01)
         if cur and "/" not in raw and re.search(r"\b(?:here|in\s+it|inside\s+it|in\s+there|in\s+this\s+(?:folder|directory)|"
-                                                 r"in\s+the\s+same\s+folder|in\s+that\s+folder)\b", said):
+                                                 r"in\s+the\s+same\s+folder|in\s+that\s+folder|in\s+(?:this|the\s+open|my\s+open)\s+(?:project|workspace|folder)|"
+                                                 r"(?:open|opened)\s+in\s+(?:vs\s*code|code|the\s+editor))\b", said):
             return (cur / raw).resolve()  # "create notes.txt here" -> in the current folder
         p = Path.home() / p
     p = p.resolve()

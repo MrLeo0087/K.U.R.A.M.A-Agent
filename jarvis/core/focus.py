@@ -134,6 +134,13 @@ def refer(text: str) -> Path | None:
             from jarvis.core import filemanager
             if (fm := filemanager.current()) is not None:
                 return fm
+            if filemanager.state().get("top") == "vscode":  # VS Code is the app in use: its project folder
+                from jarvis.core import context  # (11-02: 'create a new file in this project' went to /home/leo)
+                snap = context.snapshot()
+                root = Path(snap.get("root") or "") if snap.get("root") else (
+                    snap["file"].parent if snap.get("file") else None)
+                if root is not None and root.is_dir():
+                    return root
         except Exception:  # noqa: BLE001
             pass
         if (p := get_path(config.FOCUS_TTL_H * 3600)) and Path(p).exists():

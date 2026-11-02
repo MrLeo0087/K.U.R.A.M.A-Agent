@@ -325,7 +325,7 @@ def from_table(head: list[str], rows: list[list], request: str, name: str, kind:
     return paths, f"{title} ({len(good)} rows)"
 
 
-def chart_money(period: str = "month", now: datetime | None = None) -> tuple[list[Path], str]:
+def chart_money(period: str = "month", now: datetime | None = None, kind: str = "auto") -> tuple[list[Path], str]:
     """My spending: by category (bar + pie) and per day (line)."""
     from collections import defaultdict
     from datetime import timedelta
@@ -343,9 +343,11 @@ def chart_money(period: str = "month", now: datetime | None = None) -> tuple[lis
     cats = sorted(by, key=lambda c: -by[c])
     word = ex.period_words(period)
     sub = f"Total {ex.money(sum(by.values()))} · {word}"
-    paths = draw(cats, [("spent", [by[c] for c in cats])], f"Spending by category, {word}", "auto", sub)
+    # the kind asked for is the only view ('make a pie chart of this' drew bar + pie + line, 11-02 6f51ff20)
+    paths = draw(cats, [("spent", [by[c] for c in cats])], f"Spending by category, {word}",
+                 kind if kind in ("bar", "pie") else "auto", sub) if kind != "line" else []
     days = (z - a).days + 1
-    if days > 1:
+    if days > 1 and kind in ("auto", "all", "line"):
         per = defaultdict(float)
         for d, v, _ in rows:
             per[d] += v

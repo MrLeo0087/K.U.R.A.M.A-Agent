@@ -747,7 +747,16 @@ def start_code_improve(g, instruction: str, mode: str = "improve", note: str = "
     lang_name = _EXT_LANG.get(f.suffix.lower(), "") if f else ""
     old, name = g.text, (f.name if f else _short(g.title))
 
+    _improving.clear()
+    _improving.update(since=time.time())
+
     def run(ctx) -> str | None:
+        try:
+            return work(ctx)
+        finally:
+            _improving.pop("since", None)
+
+    def work(ctx) -> str | None:
         ctx.progress("completing the code" if mode == "complete" else "improving the code")
         lead, base, code0 = _layout(old, f)
         if mode == "complete":
@@ -772,6 +781,9 @@ def start_code_improve(g, instruction: str, mode: str = "improve", note: str = "
         _pending.update(old=old, new=new, lead=lead, file=str(f) if f else "", wid=g.wid, term=g.term, title=g.title,
                         expires=time.time() + config.ASSIST_PENDING_TTL_S)
         a, b = old.strip("\n").count("\n") + 1, new.strip("\n").count("\n") + 1
+        if _improving.pop("apply", False):  # 'replace it' came while it was still being written: do it now
+            ctx.progress("» " + apply_pending_code())
+            return str(out)
         ctx.progress(f"» I {'completed' if mode == 'complete' else 'improved'} the code ({a} → {b} lines). It's in the "
                      f"workspace. Should I replace it in {name}?")
         return str(out)
@@ -779,8 +791,19 @@ def start_code_improve(g, instruction: str, mode: str = "improve", note: str = "
     return f"{'Completing' if mode == 'complete' else 'Improving'} the selected code in {name}…"
 
 
+_improving: dict = {}  # a code improve / complete job is running (since); apply = 'replace it' already said
+
+
+def improving() -> bool:
+    import time
+    return time.time() - float(_improving.get("since", 0)) < 300
+
+
 def apply_pending_code() -> str:
     """'yes': put the improved code in place of exactly the code that was selected (at its real indentation)."""
+    if not pending_code_active() and improving():  # 'Ok, replace it.' 15 s after 'improve this code' (11-02)
+        _improving["apply"] = True
+        return "It's still being improved; I'll replace it as soon as it's ready."
     if not pending_code_active():
         _pending.clear()
         return "No code change is waiting (it expires after a few minutes)."

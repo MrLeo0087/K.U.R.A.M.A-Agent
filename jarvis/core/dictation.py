@@ -78,6 +78,12 @@ def active() -> bool:
 def _recorder() -> subprocess.Popen:
     if shutil.which("parec"):
         argv = ["parec", "--format=s16le", f"--rate={RATE}", "--channels=1", "--raw", "--latency-msec=60"]
+        try:  # the RAW mic, like the wake listener: the default is KURAMA's echo-cancelled mic only while the page
+            from jarvis.core import devaudio  # listens, and it is unloaded seconds later -> dictation started by voice
+            if raw := devaudio.raw_source():  # lost its mic (stopped, or typed minutes late)
+                argv.append(f"--device={raw}")
+        except Exception as e:  # noqa: BLE001
+            log.info("raw mic unknown: %s", e)
     elif shutil.which("arecord"):
         argv = ["arecord", "-q", "-f", "S16_LE", "-r", str(RATE), "-c", "1", "-t", "raw"]
     else:
@@ -195,6 +201,17 @@ def recognize(pcm: bytes, lang: str | None) -> tuple[str, str]:
     return text, raw
 
 
+def _trail(audio_s: float, stt_s: float, waiting: int, text: str) -> None:
+    """One line per dictated phrase in data/logs/stt.log (the evidence when typing lags: phrase length, recognition
+    time, phrases still waiting)."""
+    try:
+        with config.STT_LOG.open("a", encoding="utf-8") as fh:
+            fh.write(time.strftime("%m-%d %H:%M:%S") + f" dictation {audio_s:4.1f}s audio, stt {stt_s:.1f}s, "
+                     f"{waiting} waiting: {text[:80]!r}\n")
+    except OSError:
+        pass
+
+
 def _stt_loop(q: "queue.Queue[bytes | None]") -> None:
     from jarvis.core import stt
     lang = _state["lang"]
@@ -206,11 +223,13 @@ def _stt_loop(q: "queue.Queue[bytes | None]") -> None:
         pcm = q.get()
         if pcm is None:
             return
+        t0 = time.monotonic()
         try:
             text, raw = recognize(pcm, lang)
         except Exception as e:  # noqa: BLE001 - one failed phrase must not end dictation
             log.warning("dictation STT failed: %s", e)
             continue
+        _trail(len(pcm) / (RATE * 2), time.monotonic() - t0, q.qsize(), text)
         if is_noise(text, raw):
             continue
         if STOP.match(text):

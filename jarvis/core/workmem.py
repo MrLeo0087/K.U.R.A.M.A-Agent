@@ -45,7 +45,8 @@ KINDS = {
 # what a reference word inside an action points at ("send that image", "open the doc"): the action is already chosen
 # by meaning; these only say WHICH remembered thing
 _NOUNS = {
-    "image": r"image|images|photo|photos|picture|pictures|pic|pics|screenshot|wallpaper|drawing|poster|logo",
+    "image": r"image|images|photo|photos|picture|pictures|pic|pics|screenshot|wallpaper|drawing|poster|logo|"
+             r"chart|charts|graph|graphs|plot|diagram|diagrams",  # a chart is a picture (35c1679e sent the word "graph")
     "video": r"video|videos|clip|movie",
     "audio": r"song|audio|track|mp3|recording",
     "document": r"document|doc|docs|pdf|essay|note|notes|report|markdown|md|letter|text\s+file",

@@ -985,3 +985,22 @@ Phases (one at a time, owner tests after each):
       fastpath._to_last_list. Tests: test_resolve_names.py (24); suite 1530; scorecard 71% / 100% / 98%. Live: "open
       kurama folder" asks which of the 6 KURAMA folders (0 tokens). Note: the phase 3 live check had reached the old
       server (the restart helper didn't wait for it to stop); the tab:None bug it found was real either way.
+- [x] 2026-11-02 14:35 Master plan phase 5 (window stability) + fixes from the owner's test session. Proven: every
+      window since 08:45 froze within 2-8 min (hang.log Timeout after each start). Under gdb: main thread in
+      JSC::Heap::acquireAccessSlow, the JSC "Collector Thread" in WTF::Thread::suspend: WebKit's GC suspends
+      threads with SIGUSR1, which the window takes for its hotkey (GLib.unix_signal_add) -> the pause never
+      answered. Fix: JSC_SIGNAL_FOR_GC=SIGRTMIN+6 before WebKit loads; verified 16 min with use, no freeze (was 2-8).
+      Owner's session (11:08-11:21, 14:00-14:16): empty frosted box during holds (Blur my Shell blurs the class even
+      at opacity 0) -> the ghost panel is 1x1; first hold "Getting ready" (a never-shown panel's page did not load:
+      'panel page ready' only after the first hold) -> invisible 1x1 preload; the AI's background note spoken
+      (48c2f368) -> BACKGROUND_SAID; "type X then press Enter" typed the words (uiagent.parse_type); "Open the
+      YouTube and Facebook" opened one (planner._share_verb); "Ok, replace it." = yes to "want more?" (yes_no) and
+      the improve took 8 min (assist: replace when ready); Inter Miami "no match" (ESPN team schedule lacks playoff
+      games; two-team / misheard names) -> league scoreboard merged, first team, longest-prefix team, sources in
+      parallel; 'create a new file in this project' went to /home/leo -> focus.refer = VS Code project when VS Code
+      is the top app; "send graph on telegram" sent the word "graph" (35c1679e) -> charts are pictures for
+      send_last_result; "make a pie chart" drew 3 charts -> only the kind asked; dictation stopped / lagged: it read
+      the default mic = KURAMA's echo-cancelled source, unloaded seconds after the page stops listening -> the raw
+      mic + timing lines in stt.log; /stt answered "" to every hold during dictation -> 'stop dictation' passes.
+      Tests: test_voice_fixes (GC signal); suite 1530 + 1 timing flake (test_p9b passes alone, also fails without
+      these changes); scorecard 71% / 100% / 98%.
