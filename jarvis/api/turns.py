@@ -256,7 +256,10 @@ class Engine:
                            "workspace": list(last.get("workspace") or []), "jobs": list(last.get("jobs") or [])})
             except Exception as e:
                 log.exception("chat turn failed")
-                turn.push({"type": "error", "text": f"Something went wrong: {type(e).__name__}: {str(e)[:200]}"})
+                from jarvis.core import llm as _llm
+                text = _llm.user_text(e) if isinstance(e, _llm.LLMError) else \
+                    f"Something went wrong: {type(e).__name__}: {str(e)[:200]}"
+                turn.push({"type": "error", "text": text})
                 turn.push({"type": "done", "text": "", "route": None, "tier": "", "tokens": _turn_tokens(ts0),
                            "ms": int((time.monotonic() - t0) * 1000), "lang": lang or "en"})
             finally:

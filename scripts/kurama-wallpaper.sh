@@ -44,7 +44,7 @@ mkdir -p data/logs
 # 1 too: start it again (at most 20 times; 2 s apart). A normal stop (pkill: 143) or a clean exit ends the loop.
 run_window() {
   for _ in $(seq 20); do
-    "$PY" "$SCRIPT" --url "$URL" $WINDOW >> data/logs/wallpaper.log 2>&1
+    KURAMA_WP_LOOP=1 "$PY" "$SCRIPT" --url "$URL" $WINDOW >> data/logs/wallpaper.log 2>&1
     code=$?
     [[ $code -eq 1 && ! -f "$HOME/.local/share/kurama/off" ]] || break
     echo "$(date '+%F %T') window exited with code 1 (frozen or crashed): starting it again" >> data/logs/wallpaper.log

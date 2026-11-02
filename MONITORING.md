@@ -351,3 +351,8 @@ message; the action itself is chosen by meaning), the reference nouns (`workmem.
   files (kinds)"), mini chat self-reload, wallpaper pause re-sent (idle CPU 25-60% -> 0%). Watch: hang.log open-file
   lines after voice use (they name the leaking file kind), "panel page not ready ... restarting" in ptt.log.
 
+- 2026-11-02 09:30 (master plan phase 0, docs/MASTER_PLAN.md): Gemini's thought signatures kept through the tool
+  round (every Gemini call after a tool answered 400 "missing a thought_signature"), a used-up Gemini quota is not
+  retried and stays skipped until it resets (per day: 1 h; else its retryDelay), flash-lite in the voice chain, a
+  refused key is said plainly, a window started by hand goes through the restart loop. Watch: llm entries with
+  "thought_signature" (should be none), two 2.5-flash 429s in one trace (should be one per hour).

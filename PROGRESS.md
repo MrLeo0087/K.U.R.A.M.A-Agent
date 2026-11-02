@@ -932,3 +932,13 @@ Phases (one at a time, owner tests after each):
       the page's script loaded and was never sent again. A re-sent pause took it to 0%. Fix: the state is re-sent every
       15 s (the page ignores repeats). Measured after restart: 0.0-0.3% CPU while covered, 29 open files.
 
+- [x] 2026-11-02 09:30 Master plan (docs/MASTER_PLAN.md: the 11-02 trace report + lanes from Version_4) phase 0,
+      stable fallbacks. Proven causes: agent.py rebuilt the AI message with only text + tool calls, dropping Gemini's
+      thought signatures (additional_kwargs) -> 400 on every Gemini call after a tool (73a5f773, 99ccd1f4, f9eec047,
+      a8ae2840); Gemini's quota 429 has no Retry-After, so it was retried with backoff and then cooled 120 s ->
+      2 wasted calls per request, and 51ff16b4 failed outright (the exhausted model was the only one left in the
+      voice chain). Fix: the model's own content + extras are kept; a 429 that says "quota" with no Retry-After is not
+      retried, cooled 1 h for a per-day quota, else its retryDelay (llm._quota_wait); voice chain gets flash-lite;
+      llm.user_text says "key refused" / "busy" instead of the raw error (11-01 18:14 401s); kurama_wallpaper.py
+      started by hand re-execs kurama-wallpaper.sh (the 08:52 freeze left no window). Tests: test_fallbacks.py (8);
+      suite 1438; scorecard 69% / 100% / 98%. Open: the open-file leak needs ~10 min of hold-to-talk, then hang.log.

@@ -45,7 +45,7 @@ TIER_CHAIN: dict[str, list[str]] = {
     #                                                tokens each, 11-01) KURAMA keeps answering instead of "busy"
     "fast": [LLM_FAST, LLM_DEFAULT, *_GEM, LLM_VISION],  # rate-limited: the smart one, then qwen (its own daily quota)
     "vision": [LLM_VISION, LLM_DEFAULT, *_GEM[:1]],  # second vision model; the text fallback still answers non-image asks
-    "voice": list(dict.fromkeys([LLM_VOICE, LLM_FAST, *_GEM[:1]])),
+    "voice": list(dict.fromkeys([LLM_VOICE, LLM_FAST, *_GEM])),
     # Background writer jobs: smart model only (never falls back onto the fast/voice models' TPM).
     "writer": [LLM_DEFAULT, *_GEM[:1]],
 }

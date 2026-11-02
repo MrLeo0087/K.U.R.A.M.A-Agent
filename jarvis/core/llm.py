@@ -290,6 +290,25 @@ def _retry_after(err: Exception) -> float | None:
     return None
 
 
+def _quota_wait(err: Exception) -> float:
+    """How long a used-up quota stays used up, from the error text (Gemini: 'retryDelay': '27s', a PerDay quota)."""
+    text = str(err)
+    if re.search(r"per ?day", text, re.I):
+        return 3600.0  # a daily quota: try again in an hour, not on every request (51ff16b4: 4 calls, then "all failed")
+    m = re.search(r"retryDelay\W+(\d+(?:\.\d+)?)s", text)
+    return float(m.group(1)) if m else config.LLM_COOLDOWN_S
+
+
+def user_text(err: Exception) -> str:
+    """What the owner hears when every model failed (not the raw error: 11-01 18:14 showed '401 Invalid API Key')."""
+    low = str(err).lower()
+    if "401" in low or "invalid api key" in low or "invalid_api_key" in low:
+        return "My AI key was refused (wrong or revoked key in .env). Put the new key in .env and restart me."
+    if any(w in low for w in ("rate", "429", "busy", "quota", "budget", "exhausted")):
+        return "Sorry, my AI service is busy or rate-limited right now — please try again in a few seconds."
+    return "Sorry, something went wrong on my side. Please try again."
+
+
 def _backoff(attempt: int) -> float:
     return min(config.LLM_MAX_WAIT_S, config.LLM_BACKOFF_BASE_S * (2 ** attempt) + random.uniform(0, 0.25))
 
@@ -319,6 +338,8 @@ def _plan_retry(err: Exception, attempt: int, retries: int) -> float | None:
     if not _retryable(err) or attempt >= retries:
         return None
     wait = _retry_after(err)
+    if wait is None and _status(err) == 429 and "quota" in str(err).lower():
+        return None  # Gemini's "You exceeded your current quota" has no Retry-After: retrying wasted 2 calls a turn
     if wait is None:
         return _backoff(attempt)
     if wait > config.LLM_MAX_WAIT_S:
@@ -340,7 +361,7 @@ def _on_error(e: Exception, model: str, attempt: int, retries: int) -> bool:
     still let the next model try. _complete/_stream raise LLMError only after every model has failed."""
     wait = _plan_retry(e, attempt, retries)
     if _status(e) == 429 and wait is None:  # its daily (or minute) limit is used up: skip it for a while instead
-        cool = min(max(_retry_after(e) or config.LLM_COOLDOWN_S, config.LLM_COOLDOWN_S), 3600)  # of failing first
+        cool = min(max(_retry_after(e) or _quota_wait(e), config.LLM_COOLDOWN_S), 3600)  # of failing first
         _cool[model] = time.time() + cool  # on every request (2 wasted calls per turn on 11-01 evening)
         log.warning("%s is rate-limited: skipped for %.0f s", model, cool)
         return False

@@ -1599,6 +1599,12 @@ def main() -> int:
     ap.add_argument("--window", action="store_true", help="normal window instead of wallpaper (testing)")
     ap.add_argument("--url", default=DEFAULT_URL, help=f"page to show (default {DEFAULT_URL})")
     a = ap.parse_args()
+    if not a.window and os.environ.get("KURAMA_WP_LOOP") != "1":
+        # started by hand (not by kurama-wallpaper.sh): a freeze exits with code 1 and nothing started it again
+        # (11-02 08:52: the window stayed gone). Go through the launcher's restart loop instead.
+        launcher = Path(__file__).resolve().parent / "kurama-wallpaper.sh"
+        if launcher.exists():
+            os.execv("/bin/bash", ["/bin/bash", str(launcher)])
     if not Gdk.Display.get_default():
         print("no display (needs an X11 session)", file=sys.stderr)
         return 1

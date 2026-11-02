@@ -530,7 +530,10 @@ class Agent:
         if calls or bad:
             calls = [{**tc, "id": tc.get("id") or f"call_{rounds}_{i}"} for i, tc in enumerate(calls)]
             bad = [{**tc, "id": tc.get("id") or f"bad_{rounds}_{i}"} for i, tc in enumerate(bad)]
-            msg = AIMessage(content=reply.text, tool_calls=calls, invalid_tool_calls=bad)
+            # the model's own content + extras stay: Gemini keeps its thought signatures there and answers 400
+            # "Function call is missing a thought_signature" on the next call without them (11-01 evening traces)
+            msg = AIMessage(content=ai.content if reply.message is not None else reply.text, tool_calls=calls,
+                            invalid_tool_calls=bad, additional_kwargs=dict(ai.additional_kwargs or {}))
             return {"messages": msgs + [msg], "pending": calls + bad, "tools": tools or state.get("tools") or []}
         answer = reply.text.strip() or (TOO_MANY_ROUNDS if ai.tool_calls else NO_ANSWER)
         answer = honest(answer, msgs)
@@ -1021,9 +1024,7 @@ class Agent:
         except llm.LLMError as e:
             log.warning("agent run failed: %s", e)
             self.last["error"] = str(e)[:300]
-            answer = ("Sorry, my AI service is busy or rate-limited right now — please try again in a few seconds."
-                      if any(w in str(e).lower() for w in ("rate", "429", "busy", "quota", "budget"))
-                      else "Sorry, something went wrong on my side. Please try again.")
+            answer = llm.user_text(e)
         self._remember(user_text, answer)
         return answer
 
