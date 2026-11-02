@@ -79,6 +79,7 @@ STT_EN_MIN_LOGPROB = -0.6  # auto "English" below this confidence is treated as 
 STT_NO_SPEECH_MAX = 0.6  # Whisper's no_speech_prob above this...
 STT_GARBAGE_LOGPROB = -1.0  # a short transcript (<= 4 words) below this confidence = noise ('The', 'RUN', 'E aí')
 STT_FOREIGN_MAX_LOGPROB = -0.6  # Whisper says a language we don't speak AND confidence is below this = noise
+STT_UNSURE_LANE_MIN = 0.66  # unsure speech (foreign label, low confidence) below this for every lane = ask again
 STT_NOISE_MAX_LOGPROB = -0.8  # ...and confidence below this: background noise, not a command
 # The owner's own names and places, so speech-to-text spells them right (dictation + voice chat). Add more in .env:
 # JARVIS_MY_WORDS="Darshan Chaulagain, Nepalgunj, ..."
@@ -441,6 +442,45 @@ SELECTION_EXAMPLES: dict[str, tuple[str, ...]] = {
 }
 SELECTION_MIN = 0.78  # a request this close to a selection action is about the highlighted text...
 SELECTION_MARGIN = 0.02  # ...unless another area (not the selection's own) is clearly closer
+# Lanes (master plan phase 1, docs/MASTER_PLAN.md): what KIND of request it is, by meaning (jarvis/core/lanes.py).
+# A confident "general" = no tools, the small fast model, one call (owner 11-02: general must answer very quickly).
+LANE_MIN = 0.80  # below this for every lane = unclear (garbled speech, or something new: the old routing decides)
+LANE_GENERAL_MARGIN = 0.03  # general must beat every other lane by this much to skip the tools
+LANE_EXAMPLES: dict[str, tuple[str, ...]] = {
+    "general": (
+        "how are you", "hello bro how are you", "what's going on with you", "kya ho raha hai", "k xa khabar",
+        "tell me a joke", "i am sad today", "i feel tired", "i am bored", "i am happy today", "thank you so much",
+        "what is gravity", "explain machine learning simply", "who was isaac newton", "why is the sky blue",
+        "what does photosynthesis mean", "what is the difference between ram and storage", "how does a car engine work",
+        "do you think ai is dangerous", "what is your opinion on this", "give me advice to stay motivated",
+        "how can i be happy", "suggest a name for a black cat", "say hi in three words", "what is the capital of japan",
+        "how many legs does a spider have", "who are you", "what can you do", "are you a robot", "you are funny",
+        "good morning how was your night", "let's chat for a bit", "okay go on", "tell me something interesting",
+        "translate thank you into nepali", "how do i learn python fast",
+    ),
+    "search": (
+        "what is the latest news", "who won the match today", "what is the score of barcelona", "price of gold today",
+        "bitcoin price now", "what is the weather today", "will it rain tomorrow in kathmandu", "latest result of chelsea",
+        "what happened in nepal today", "current dollar rate", "search the web for new laptops", "news about ai this week",
+        "when is the next football match", "stock price of tesla",
+    ),
+    "create": (
+        "write an essay about nepal", "write a poem about rain", "make python code for a calculator", "generate an image of a dog",
+        "create a report on black holes", "draw a picture of a house", "write a story for kids", "make a diagram of my project",
+        "write an email to my teacher", "generate a logo", "make a chart of my spending", "compose a song lyric",
+        "create a presentation about climate", "write a cover letter",
+    ),
+    "auto": (
+        "open youtube", "open vs code in this folder", "close the browser", "play some music", "pause music", "next song",
+        "set the volume to 50", "increase the volume", "make the screen brighter", "turn on bluetooth", "take a screenshot",
+        "send hello to telegram", "send this file to telegram", "create a new folder in downloads", "delete this file",
+        "find my resume file", "remind me at 5 pm", "set a timer for 10 minutes", "add milk to my to-do list",
+        "save this link", "show my link store", "what time is it", "what is the date today", "shut down the laptop",
+        "lock the screen", "free ram", "organize this folder", "copy the path of this folder", "switch to the second tab",
+        "scroll down", "press enter", "what is open on my screen", "read the text on screen", "show git status",
+        "start the job list", "how much battery is left", "what is using my cpu", "open settings", "run this command",
+    ),
+}
 SMALL_TALK_SIM = 0.86  # the whole request this close to a small-talk example = its ready answer (0 tokens)
 LEARN = os.getenv("KURAMA_LEARN", "1").lower() not in ("0", "false", "no", "off")  # learn areas from corrections
 LEARN_WINDOW_S = 120  # a correction counts within this long after the request it corrects

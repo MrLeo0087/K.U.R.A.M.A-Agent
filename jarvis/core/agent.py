@@ -101,6 +101,7 @@ class AgentState(TypedDict, total=False):
     windows: list[str]  # window ids open before the plan started (a 'close X' step closes only new ones)
     retried: bool  # P7b: the refusal retry already happened this turn
     again: bool  # P7b: llm -> llm (refusal retry with request_tools bound)
+    general: bool  # master plan phase 1: the general lane (no tools, one small-model call)
 
 
 def job_started_text(job_id: int, title: str, kind: str, lang: str | None) -> str:
@@ -407,7 +408,8 @@ class Agent:
     def _route_node(self, state: AgentState) -> dict:
         r = router.route(state["user_text"])
         asked = getattr(self, "_asked", "")
-        if asked and (fastpath.yes_no(state["user_text"]) or not r.groups):
+        if asked and (fastpath.yes_no(state["user_text"]) or not r.groups and r.method != "general"):
+            # (a general request after "What can I do for you?" is its own question, not an answer to mine)
             # an answer to my question ('yes', 'do it', 'the blue one'): its tools are the QUESTION's, by meaning
             q = router.route(asked)
             groups = [*r.groups, *[g for g in q.groups if g not in r.groups]][: config.ROUTER_MAX_GROUPS]
@@ -441,12 +443,15 @@ class Agent:
         tier = "smart" if (len(real) > 1 or r.reasoning or modes.ai_level() == "best") else "fast"
         if tier == "fast" and not tools and state.get("mode") == "voice":
             tier = "voice"  # plain spoken chat: lowest time-to-first-token model
-        if not tools and self._meta_ok(state["user_text"]):
+        general = r.method == "general" and not tools
+        if general:  # the general lane (lanes.py): one call to the fast small model, no tool schemas at all; an
+            tier = "voice"  # "I can't" / a claimed action still gets the tools through the refusal retry
+        elif not tools and self._meta_ok(state["user_text"]):
             tools = [meta.schema()]  # freedom: the model may pull any group (~150 tokens)
             self.last["meta_tokens"] = meta.estimate_tokens()
         self.last.update(route=r, tier=tier, tools_sent=[meta.tool_name(t) for t in tools])
         return {"groups": r.groups, "tools": tools, "tier": tier, "rounds": 0, "pending": [],
-                "retried": False, "again": False}
+                "retried": False, "again": False, "general": general}
 
     @staticmethod
     def _meta_ok(text: str) -> bool:
@@ -768,6 +773,23 @@ class Agent:
     # --- sessions + profile (P7) ---
     _SELF_TALK = re.compile(r"\b(?:i|i'm|i am|my|mero|mera)\b|मेरो|मेरा", re.I)
 
+    UNHEARD = "Sorry, I didn't catch that. Say it again?"
+
+    def _unheard(self, user_text: str, mode: str) -> str | None:
+        """Speech Whisper heard as a foreign language at low confidence AND that means nothing to any lane: ask again
+        at 0 tokens instead of an AI call (12 such voice requests cost 500-1,900 tokens each on 11-01)."""
+        if mode == "text":
+            return None
+        from jarvis.core import lanes, stt
+        if not stt.unsure(user_text):
+            return None
+        s = lanes.scores(user_text)
+        if not s or max(s.values()) >= config.STT_UNSURE_LANE_MIN:
+            return None
+        self.last = {"tools": [], "t0": time.monotonic(), "intent": "unheard"}
+        self._remember(user_text, self.UNHEARD)
+        return self.UNHEARD
+
     def _begin_turn(self, user_text: str) -> None:
         """New session after a long silence (fresh context); regex fact capture (0 tokens)."""
         self._asked = self._open_question()
@@ -1016,6 +1038,8 @@ class Agent:
             return fast.answer
         if (bare := self._bare_answer(user_text)) is not None:
             return bare
+        if (again := self._unheard(user_text, mode)) is not None:
+            return again
         if modes.ai_level() == "off":
             return modes.NO_AI
         try:
@@ -1053,6 +1077,9 @@ class Agent:
             return
         if (bare := self._bare_answer(user_text)) is not None:
             yield bare
+            return
+        if (again := self._unheard(user_text, mode)) is not None:
+            yield again
             return
         if modes.ai_level() == "off":
             self.last = {"tools": [], "t0": time.monotonic()}

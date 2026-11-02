@@ -356,3 +356,10 @@ message; the action itself is chosen by meaning), the reference nouns (`workmem.
   retried and stays skipped until it resets (per day: 1 h; else its retryDelay), flash-lite in the voice chain, a
   refused key is said plainly, a window started by hand goes through the restart loop. Watch: llm entries with
   "thought_signature" (should be none), two 2.5-flash 429s in one trace (should be one per hour).
+- 2026-11-02 09:55 (master plan phase 1): lanes by meaning (jarvis/core/lanes.py, config.LANE_EXAMPLES). A confident
+  general request (chat, knowledge, feelings) = route method `general`: one call on the voice tier, no tool schemas;
+  a general request after "What can I do for you?" is no longer routed as an answer to it. Small talk in several
+  parts ("Hello, bro. How are you?", "Thanks. Thanks.") = template; Roman Hindi / Nepali greetings added. Unsure
+  speech (foreign label, low confidence) that means nothing to any lane -> "Sorry, I didn't catch that" at 0 tokens
+  (agent._unheard, STT_UNSURE_LANE_MIN). Watch: route `general` traces that needed a tool (retried: 1 = the
+  refusal retry rescued it), intent `unheard` on real speech.

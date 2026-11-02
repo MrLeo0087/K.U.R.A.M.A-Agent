@@ -291,7 +291,22 @@ def _gate(best: Transcript, auto: Transcript) -> Transcript:
         log.info("dropped (%s): %r", why, best.text[:60])
         best.text = ""
     _trail(best, auto, heard)
+    if best.text:
+        _unsure.update(text=" ".join(best.text.split()).lower(), at=time.time(), unsure=bool(
+            auto.raw_lang.strip().lower() not in LANG_MAP and best.logprob is not None
+            and best.logprob < config.STT_EN_MIN_LOGPROB))
     return best
+
+
+_unsure: dict = {"text": "", "at": 0.0, "unsure": False}
+
+
+def unsure(text: str, within_s: float = 120.0) -> bool:
+    """This text is the last recognition, and Whisper heard a language we don't speak at low confidence (11-01:
+    'Islam Nizib', 'Maximal Zabolom', 'Please, there is still more to eat.' went to the AI). The caller decides by
+    meaning whether it is still clear enough to act on."""
+    return bool(_unsure["unsure"] and time.time() - _unsure["at"] < within_s
+                and " ".join((text or "").split()).lower() == _unsure["text"])
 
 
 def _trail(best: Transcript, auto: Transcript, heard: str) -> None:

@@ -243,7 +243,10 @@ def route(text: str, log_it: bool = True) -> Route:
     r = Route(reasoning=needs_reasoning(text))
     if not is_small_talk(text):  # load the meaning model if it was freed (~0.6 s once): routing by words while it
         semantic.ensure_ready()  # loaded sent link requests to files / web (17 of 87 AI requests 10-31..11-01)
-    if semantic.ready() and not is_small_talk(text) and (sem := [g for g in semantic.match(text) if g in available]):
+    from jarvis.core import lanes
+    if semantic.ready() and lanes.is_general(text):  # chat / knowledge / feelings by meaning: no tools, one small
+        r.method, matched = "general", []  # call (master plan phase 1; 'kya hora hai' got clock + code tools)
+    elif semantic.ready() and not is_small_talk(text) and (sem := [g for g in semantic.match(text) if g in available]):
         # by meaning first (model loaded: ~10 ms); word-rule areas only fill the free places as extra candidates —
         # the AI still picks the action by meaning
         extra = [g for g in refine(text, site_over_apps(text, [g for g in rule_groups(text) if g in available]))
@@ -257,7 +260,7 @@ def route(text: str, log_it: bool = True) -> Route:
     else:
         matched = rule_groups(text)  # model not loaded yet / meaning unclear / Nepali-Hindi script: the word rules
         semantic.warm_soon()
-    if r.groups:
+    if r.groups or r.method == "general":
         pass
     elif matched:
         r.method = "rules"

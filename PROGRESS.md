@@ -942,3 +942,14 @@ Phases (one at a time, owner tests after each):
       llm.user_text says "key refused" / "busy" instead of the raw error (11-01 18:14 401s); kurama_wallpaper.py
       started by hand re-execs kurama-wallpaper.sh (the 08:52 freeze left no window). Tests: test_fallbacks.py (8);
       suite 1438; scorecard 69% / 100% / 98%. Open: the open-file leak needs ~10 min of hold-to-talk, then hang.log.
+- [x] 2026-11-02 09:55 Master plan phase 1, lanes by meaning (the Version_4 idea, 0 tokens). jarvis/core/lanes.py:
+      general / search / create / auto by the shared embedding model against config.LANE_EXAMPLES; only a confident
+      general (>= 0.80, margin 0.03; 0 false generals on the 270 scorecard cases) changes the route: method
+      `general`, no tools at all, voice tier (qwen ~0.2 s vs gpt-oss-20b ~0.6 s), the refusal retry still adds tools
+      if it was wrong. Proven causes fixed: 'kya hora hai' / 'Okay, go on.' got clock / todo tools (1,500 tokens);
+      small talk gave up on any sentence with parts (templates.small_talk: now every part must be small talk, the
+      last part answers; one-word parts ignored); a general request after "What can I do for you?" was routed as an
+      answer to it (live check 34f442e3). Garbled speech: stt records whether the last recognition was a foreign
+      label at low confidence; if it means nothing to any lane (< 0.66) KURAMA asks again at 0 tokens. Tests:
+      test_lanes.py (30, real model); suite 1468; scorecard 69% / 100% / 98%. Live: general reply first word 1.1 s
+      (gpt-oss path while the model was still loading), 0-token small talk.
