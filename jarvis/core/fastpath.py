@@ -3319,6 +3319,7 @@ def match(text: str) -> Intent | None:
                                                            "readlater": config.READLATER_EXAMPLES})
         if best and best[0] == "job":
             return None
+    it = _to_last_list(text, it)
     if it is not None and meaning_ok(text, it):
         return it
     semantic_ensure()  # a freed model loads in ~0.6 s: cheaper than an AI request that guesses (it wrote kt1.txt)
@@ -3326,6 +3327,31 @@ def match(text: str) -> Intent | None:
         return None  # a bare yes/no names no action: it answers a question (the AI reads it with that question)
     return meaning_intent(text)  # no pattern, or its meaning disagreed ('Open VS Code from this folder' is not a
     #                              folder named 'VS Code from this'): an action picked by meaning, else the AI
+
+
+_LIST_WORD = re.compile(r"\b(?:to-?do|todo|task|list|links?|link\s+store|read(?:ing)?\s+(?:later|list)|bookmarks?|notes?)\b", I)
+
+
+def _to_last_list(text: str, it: Intent | None) -> Intent | None:
+    """'remove second' / 'open 2' that names no list: the item of the numbered list KURAMA showed last (links, read
+    later, to-do), not always the to-do list (d31dfcbc: right after the link list it deleted to-do item 2)."""
+    if it is None or it.tool not in ("todo", "read_later", "saved_links") or _LIST_WORD.search(text):
+        return it
+    from jarvis.core import workmem
+    last = workmem.last_list()
+    n = it.args.get("item") or it.args.get("n") or it.args.get("name")
+    act = str(it.args.get("action", ""))
+    if not last or last == it.tool or not str(n).strip().isdigit() or act not in ("delete", "remove", "open", "done"):
+        return it
+    n = int(n)
+    if last == "saved_links":
+        return Intent("links", "saved_links", "links", {"action": "delete" if act in ("delete", "remove") else "open",
+                                                        "name": str(n)}) if act != "done" else it
+    if last == "read_later":
+        return Intent("readlater", "read_later", "links", {"action": "remove" if act == "delete" else act, "n": n})
+    if last == "todo":
+        return Intent("todo", "todo", "todo", {"action": "delete" if act == "remove" else act, "item": str(n)})
+    return it
 
 
 _AGENT_ON = re.compile(r"(?:please\s+|kurama\W+)?(?:start|open|turn\s+on|switch\s+(?:on|to)|enable|activate|use|"
@@ -3779,8 +3805,9 @@ def _folder_intent(target: str) -> Intent | None:
     target = (target or "").strip(" ,'\"")
     target = re.sub(r"^(?:the |my )?(?:file manager|files app|file explorer|nautilus|files)\s+(?:in|from|at|on|for)\s+(?:the |my )?", "",
                     target, flags=I)  # "open file manager from kurama folder" -> kurama
-    if not target or len(target.split()) > 6 or re.fullmatch(r"(?:it|this|that|here|there)", target, I):
-        return None
+    if not target or len(target.split()) > 6 or re.search(r"\b(?:it|this|that|here|there)\b", target, I):
+        return None  # 'open code from this folder': 'this' is the folder in use, never part of a name (it opened
+        #              a folder called Code on another disk, 5712fe4c)
     from jarvis.core.paths import smart_path  # a folder that really exists: the gate judges "open X folder", not the
     real = smart_path(target, want="dir") is not None  # name ("open kurama folder" is not about KURAMA itself)
     return Intent("openfolder", "open_folder", "filesearch", {"name": target}, target, known=target if real else "")

@@ -75,6 +75,14 @@ def _score(name: str, want: str) -> float:
         return 0.0
     if a == b:
         return 1.0
+    if re.findall(r"\d+", a) != re.findall(r"\d+", b):  # 'project3' is not 'clz_project', 'tara1' not 'tara':
+        return min(_loose(a, b), 0.55)  # never opened as it, still a "did you mean" look-alike
+    return _loose(a, b)
+
+
+def _loose(a: str, b: str) -> float:
+    if b.startswith(a) and b[len(a):] not in ("s", "es"):  # the wanted name is LONGER: 'project_3' is not
+        return 0.6  # 'Project' (1c3814a8 opened /media/leo/Project1/Project twice); 'downloads' -> Download is fine
     if a.startswith(b) or b.startswith(a):  # 'down' -> Downloads; but 3 letters of a long name ('bro' ->
         short, long_ = sorted((len(a), len(b)))  # browser_ext) is a guess, not a name
         return 0.9 if short >= 4 or (short >= 3 and short / long_ >= 0.5) else 0.0
@@ -245,3 +253,53 @@ def resolve_target(name: str, src_ext: str = "") -> Path | str:
     if want:
         stem_hits = [h for h in stem_hits if convert.ext_of(h.suffix) == want] or stem_hits
     return stem_hits[0] if stem_hits else f"error: I couldn't find '{raw}'."
+
+
+def same_named(found: Path, said: str) -> list[Path]:
+    """Other folders with exactly the same name as `found` that also fit every other word of `said` ('kurama in
+    project1': New_project/KURAMA and Test_project/KURAMA both fit -> ask, c4a1679c opened the wrong one)."""
+    segs = segments(said)
+    if not segs or not found.is_dir() or norm(found.name) != norm(segs[-1]):
+        return [found]
+    same = [d for d in similar_dirs(segs[-1], k=8) if norm(d.name) == norm(found.name)]
+    fit = [d for d in dict.fromkeys([found, *same]) if all(norm(x) in norm(str(d)) for x in segs[:-1])] or [found]
+    picks = _kv_json(_PICKS)
+    if len(fit) > 1 and (mine := picks.get(norm(said))) and Path(mine) in fit:
+        return [Path(mine)]  # the owner picked this one for these words before
+    return fit
+
+
+_PICKS, _PENDING = "path_picks", "path_pick_offer"
+
+
+def _kv_json(key: str) -> dict:
+    import json
+    from jarvis.core import store
+    try:
+        return json.loads(store.kv_get(key) or "{}")
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def choices_text(said: str, options: list[Path]) -> str:
+    """A numbered list of real paths: the next reply ('2', 'the one in Test_project') picks one (workmem.choose);
+    the pick is remembered for these words (picked())."""
+    import json
+    import time
+    from jarvis.core import store
+    store.kv_set(_PENDING, json.dumps({"said": norm(said), "options": [str(p) for p in options[:4]], "t": time.time()}))
+    lines = [f"{i}. {p}" for i, p in enumerate(options[:4], 1)]
+    return f"I found more than one '{said}'. Which one?\n" + "\n".join(lines) + "\nSay the number."
+
+
+def picked(path: str) -> None:
+    """A path opened right after choices_text offered it: remember it for the words that were ambiguous."""
+    import json
+    import time
+    from jarvis.core import store
+    off = _kv_json(_PENDING)
+    if off and str(path) in off.get("options", []) and time.time() - float(off.get("t", 0)) < 600:
+        picks = _kv_json(_PICKS)
+        picks[off["said"]] = str(path)
+        store.kv_set(_PICKS, json.dumps(picks))
+        store.kv_set(_PENDING, "{}")

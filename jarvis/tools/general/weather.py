@@ -1,6 +1,7 @@
 """weather: current weather and a short forecast for any place via Open-Meteo (free, no key; safe)."""
 from __future__ import annotations
 
+import re
 from datetime import date
 
 from jarvis.core import config
@@ -60,6 +61,21 @@ def _format(where: str, data: dict, days: int) -> str:
     return " ".join(parts)
 
 
+_HERE = re.compile(r"(?:right )?(?:here|my (?:place|city|town|area|location)|current(?:ly)? location|near me|"
+                   r"this (?:place|city|area)|home|where i am|local(?:ly)?)", re.I)
+
+
+def _known_place(place: str) -> str | None:
+    """The owner's own places (home + config.MY_WORDS) that the name sounds / is spelt like (0.8+)."""
+    import difflib
+    from jarvis.core import config, profile
+    key = re.sub(r"[^a-z]", "", place.lower())
+    names = [profile.home_place(), *[w.strip() for w in config.MY_WORDS.split(",")]]
+    best = max(((difflib.SequenceMatcher(None, key, re.sub(r"[^a-z]", "", n.lower())).ratio(), n) for n in names if n),
+               default=(0.0, ""))
+    return best[1] if best[0] >= 0.8 else None
+
+
 @tool(group="weather", safety="safe", description="Current weather and up to 3-day forecast for any city or country.")
 def weather(place: str = "", days: int = 1) -> str:
     """Weather for a place.
@@ -68,15 +84,17 @@ def weather(place: str = "", days: int = 1) -> str:
         place: City, town or country (any spelling); empty = the user's home place.
         days: 1 = today, 2 = include tomorrow, up to 3.
     """
-    if not (place or "").strip():
-        from jarvis.core import profile  # learned home city, else config.HOME_PLACE
-        place = profile.home_place()
+    from jarvis.core import profile  # learned home city, else config.HOME_PLACE
+    if not (place or "").strip() or _HERE.fullmatch(place.strip(" .?!")):
+        place = profile.home_place()  # 'here' was geocoded literally: Hères, France (73a5f773)
     place = place.strip()
     days = max(1, min(int(days or 1), 3))
     key = (place.lower(), days)
     if (hit := _cache.get(key)) is not None:
         return hit
     geo = _geo.geocode(place)
+    if not geo and (known := _known_place(place)):  # misheard / misspelt: 'Nepal guns' = Nepalgunj (99ccd1f4 went
+        place, geo = known, _geo.geocode(known)  # to a web search instead: 3 more tools, 4,744 tokens)
     if not geo:
         return f"error: couldn't find a place called {place!r}"
     data = _geo.get_json(FORECAST_URL, {

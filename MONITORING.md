@@ -373,3 +373,11 @@ message; the action itself is chosen by meaning), the reference nouns (`workmem.
   together". A name-slot meaning action needs the word all its examples share ('Open sitting.' switched to a tab
   named "sitting"). apps(action=tab) with no name lists the tabs (was "tab:None"). Watch: intents tab / tabs / close
   on requests that meant something else.
+- 2026-11-02 10:35 (master plan phase 4): names are resolved or KURAMA asks. A longer / differently numbered name is
+  never another folder ('project_3' opened Project, 'project3' ~ clz_project); two folders that fit the same words
+  are a numbered choice ("I found more than one 'kurama'. Which one?"), the pick is remembered for those words
+  (kv path_picks); open_folder offers look-alikes instead of opening the closest; 'this / that / here' is never part
+  of a folder name; weather 'here / my place / near me' = home, a misheard own place by spelling (Nepal guns =
+  Nepalgunj); app names that sound the same ('sitting' = Settings); 'remove second' / 'delete 2' act on the list
+  KURAMA showed last (links, read later, to-do). Watch: "Which one?" on names that should be clear (delete a wrong
+  pick from kv path_picks), intent changes from todo to saved_links / read_later.

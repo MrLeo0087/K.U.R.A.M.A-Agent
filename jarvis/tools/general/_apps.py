@@ -122,7 +122,20 @@ def _score(target: str, e: dict) -> int:
     if len(t) >= 4 and t in name:
         return 60
     ratio = difflib.SequenceMatcher(None, t, name).ratio()
-    return int(60 * ratio) if ratio >= 0.85 else 0
+    if ratio >= 0.85:
+        return int(60 * ratio)
+    k = sound_key(t)  # sounds the same (speech-to-text): 'sitting' = Settings (11-01 'Open sitting.' went to the AI)
+    return 76 if len(k) >= 3 and k in (sound_key(name), sound_key(stem)) else 0
+
+
+def sound_key(word: str) -> str:
+    """A rough sound key: first letter + consonants, doubles and a plural s dropped ('settings' = 'sitting')."""
+    w = re.sub(r"[^a-z]", "", (word or "").lower())
+    w = w[:-1] if len(w) > 4 and w.endswith("s") else w
+    if not w:
+        return ""
+    body = re.sub(r"[aeiouyhw]", "", w[1:])
+    return re.sub(r"(.)\1+", r"\1", w[0] + body)
 
 
 def find_app(name: str, apps: list[dict] | None = None) -> tuple[dict | None, int]:

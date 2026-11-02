@@ -222,6 +222,11 @@ def record_call(name: str, args: Any, ok: bool, result: str) -> None:
         got["jobs"].extend(int(j) for j in re.findall(r"\bjob #(\d+)", str(result or "")) if int(j) not in got["jobs"])
     try:
         res = str(result or "")
+        if sum(1 for ln in res.splitlines() if _NUMBERED.match(ln) or re.match(r"^\s*\d{1,2}\.\s", ln)) >= 2 or \
+                len(re.findall(r"(?:^|\s)\d{1,2}\.\s", res)) >= 2:  # any numbered list (links, read later, to-do)
+            from jarvis.core import registry  # the real tool, not the general one around it ('memory')
+            if (t := registry.REGISTRY.tools.get(name)) is None or registry.group_of(t) != "core":
+                store.kv_set(_LAST_LIST, json.dumps({"tool": name, "t": time.time()}))
         listed = [p for ln in res.splitlines() if _NUMBERED.match(ln) for p in paths_in(ln)]
         if len(listed) >= 2 and isinstance(args, dict):
             _offer(name, args, listed)
@@ -255,6 +260,15 @@ def _offer(tool: str, args: dict, options: list[Path]) -> None:
         return
     store.kv_set(_CHOICE, json.dumps({"tool": tool, "args": args, "field": field, "t": time.time(),
                                       "options": [str(p) for p in options[:9]]}))
+
+
+_LAST_LIST = "workmem_last_list"
+
+
+def last_list(within_s: float = 300) -> str:
+    """The tool that showed the newest numbered list (in the last 5 min), or ''."""
+    c = _load(_LAST_LIST, None)
+    return str(c.get("tool", "")) if c and time.time() - float(c.get("t", 0)) < within_s else ""
 
 
 def choice() -> dict | None:

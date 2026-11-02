@@ -972,3 +972,16 @@ Phases (one at a time, owner tests after each):
       + general tools already pick tools by real phrasings (98% on the scorecard) and a second index would be a second
       router. Tests: test_shortcuts_1102.py (19), 11 trace phrasings in tests/eval/cases.jsonl; suite 1506;
       scorecard 71% (was 69%) / 100% / 98%.
+- [x] 2026-11-02 10:35 Master plan phase 4, resolve names / ask only when needed (Version_4's "ask first", KURAMA's
+      way: only when a tool can't decide, numbered, 0 tokens). Proven causes: paths._score gave 0.9 to a found name
+      that is a PREFIX of the wanted one ('project_3' -> Project, 1c3814a8) and ignored numbers ('project3' ~
+      clz_project) -> such matches score below PATH_MATCH_MIN (still offered as look-alikes); with two folders of the
+      same name the first walk won (c4a1679c Test_project/KURAMA) -> paths.same_named + choices_text (numbered,
+      workmem.choose picks, paths.picked remembers); open_folder opened the closest look-alike ('Bascode' ->
+      vscode_ext) -> numbered "Did you mean"; FOLDER_OPEN took 'code from this' as a name (5712fe4c) -> no
+      'this/that/here' in names; weather.py geocoded 'here' (Hères, France, 73a5f773) and gave up on 'Nepal guns'
+      (99ccd1f4, 3 extra tools) -> home place / the owner's own places by spelling; 'Open sitting.' had no app match
+      -> _apps.sound_key; 'remove second' after the link list hit the to-do list (d31dfcbc) -> workmem.last_list +
+      fastpath._to_last_list. Tests: test_resolve_names.py (24); suite 1530; scorecard 71% / 100% / 98%. Live: "open
+      kurama folder" asks which of the 6 KURAMA folders (0 tokens). Note: the phase 3 live check had reached the old
+      server (the restart helper didn't wait for it to stop); the tab:None bug it found was real either way.

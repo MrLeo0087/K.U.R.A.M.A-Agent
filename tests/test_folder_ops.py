@@ -13,7 +13,7 @@ def test_open_folder_opens_file_manager(monkeypatch, tmp_path):
     import jarvis.tools.interactive.list_folder as lf
     opened = []
     monkeypatch.setattr(ou, "_open", opened.append)
-    monkeypatch.setattr(lf, "_targets", lambda name: ([tmp_path / "College Project"], []))
+    monkeypatch.setattr(lf, "_targets", lambda name, **k: ([tmp_path / "College Project"], []))
     from jarvis.tools.general.open_folder import open_folder
     out = open_folder("college project")
     assert "file manager" in out and opened == [str(tmp_path / "College Project")]

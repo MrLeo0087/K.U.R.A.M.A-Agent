@@ -39,6 +39,11 @@ def open_path(path: str = "", app: str = "vscode") -> str:
     p = _find(path)
     if p is None or not p.exists():
         return f"error: I couldn't find {path or 'that'} — say its name or full path"
+    from jarvis.core.paths import choices_text, picked, same_named
+    if Path((path or "").strip()).expanduser().is_absolute():
+        picked((path or "").strip())
+    elif len(opts := same_named(p, path)) > 1:
+        return choices_text(path, opts)  # two folders fit the name: ask, never guess
     a = (app or "").strip().lower()
     focus.set_path(str(p))
     if a in _VSCODE:

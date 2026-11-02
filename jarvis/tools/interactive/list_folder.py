@@ -19,9 +19,10 @@ def _size(n: int) -> str:
     return f"{n / 1048576:.1f} MB" if n >= 1048576 else f"{max(1, n // 1024)} KB"
 
 
-def _targets(path: str) -> tuple[list[Path], list[str]]:
+def _targets(path: str, guess: bool = True) -> tuple[list[Path], list[str]]:
     """Folders to list and notes. "project1 and tara" is Tara inside Project1 when it exists there, else both;
-    a name that isn't found exactly falls back to the closest folder (and says so)."""
+    a name that isn't found exactly falls back to the closest folder (and says so). guess=False (opening): the
+    look-alikes are offered as a numbered choice instead (11-01: 'Bascode' opened vscode_ext)."""
     from jarvis.core.paths import similar_dirs, smart_path
 
     parts = [p for p in re.split(r"\s*(?:,|&|\band\b)\s*", path or "", flags=re.I) if p.strip()]
@@ -35,7 +36,10 @@ def _targets(path: str) -> tuple[list[Path], list[str]]:
         except _proc.ProcError:
             pass
         near = similar_dirs(part)
-        if near:
+        if near and not guess:
+            notes.append(f"No folder is called {part!r}. Did you mean one of these?\n"
+                         + "\n".join(f"{i}. {p}" for i, p in enumerate(near[:4], 1)) + "\nSay the number.")
+        elif near:
             dirs.append(near[0])
             more = ", ".join(str(p) for p in near[1:3])
             notes.append(f"No folder is called {part!r} exactly; showing the closest, {near[0]}"
