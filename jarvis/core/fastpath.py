@@ -1859,13 +1859,15 @@ def slash_intent(t: str) -> Intent | None:
         return Intent("slash", tc[0], tc[1], tc[2], cmd.name)
     if cmd.tool and cmd.tool[0] == "_cmd":  # the Telegram commands, done on the laptop
         return Intent("cmd", "_cmd", "self", {"cmd": cmd.tool[2]["cmd"], "arg": arg}, cmd.name)
-    if cmd.name == "list":
-        return Intent("say", "_say", "self", {"en": slash.help_text("md")})
+    if cmd.name in ("list", "offline"):
+        return Intent("say", "_say", "self", {"en": slash.help_text("md", only_offline=cmd.name == "offline")})
     if cmd.phrase and (p := slash.phrase_for(cmd, arg)):
         return match(p)
     if tc := slash.tool_call(cmd, arg):
         return Intent("slash", tc[0], tc[1], tc[2], cmd.name)
     if (cmd.tool or cmd.hint.startswith("<")) and not arg:  # '/search' alone
+        return Intent("say", "_say", "self", {"en": f"Usage: /{cmd.name} {cmd.hint} — {cmd.desc}.".replace("  ", " ")})
+    if cmd.cat.startswith("tool:"):
         return Intent("say", "_say", "self", {"en": f"Usage: /{cmd.name} {cmd.hint} — {cmd.desc}."})
     canon = f"/{cmd.name}" + (f" {arg}" if arg else "")
     return None if canon == t else match(canon)  # '/plya' -> '/play' (the media rules)

@@ -349,8 +349,8 @@ def test_telegram_ignores_other_chats_and_routes_text(tg):
                       upd(12, sticker={"file_id": "v"})]]
     bot.tick()
     assert bot._agent.calls == [("what time is it?", "text")]  # chat 999 ignored silently
-    assert len(tg["sent"]) == 2 and len(tg["sent"][0]) <= config.TELEGRAM_MAX_REPLY_CHARS
-    assert tg["sent"][0].endswith("(truncated)") and tg["sent"][1] == telegram_bot.TEXT_ONLY
+    assert len(tg["sent"]) == 3 and all(len(m) <= config.TELEGRAM_MAX_REPLY_CHARS for m in tg["sent"])
+    assert "".join(tg["sent"][:2]) == "x" * 5000 and tg["sent"][2] == telegram_bot.TEXT_ONLY  # long = split, not cut
     assert bot.offset == 13 and store.kv_get("telegram_offset") == "13"
 
 
@@ -390,10 +390,12 @@ def test_telegram_status_and_help(tg, monkeypatch):
     bot = telegram_bot.TelegramBot()
     out = bot.answer("/status")
     assert "Laptop: RAM" in out and "essay about Nepal" in out  # /status = the full overview now
-    assert bot.answer("/help") == telegram_bot.HELP and bot.answer("/start@JarvisBot") == telegram_bot.HELP
+    from jarvis.core import slash  # /list and /help: every command and every tool (11-02, the owner's ask)
+    assert bot.answer("/help") == slash.help_text() and bot.answer("/start@JarvisBot") == telegram_bot.HELP
     assert "/camera" in telegram_bot.HELP and "/where" in telegram_bot.HELP  # the laptop-control list
-    assert bot.answer("give me all laptop control commands") == telegram_bot.HELP
-    assert bot.answer("/list") == telegram_bot.HELP  # /list = the main command list
+    assert bot.answer("give me all laptop control commands") in (telegram_bot.HELP, slash.help_text())
+    assert bot.answer("/list") == slash.help_text()  # /list = every command + every tool
+    assert "/camera" in slash.help_text() and "/where" in slash.help_text()
     for c in ("/mute", "/battery", "/ram", "/camera", "/screen", "/guard", "/track", "/clip", "/control", "/lock"):
         assert c in telegram_bot.HELP
     assert {c for c, _ in telegram_bot.MENU} >= {"list", "mute", "camera", "where", "status"}
@@ -462,7 +464,8 @@ def test_telegram_plain_words_work_like_slash_commands(tg, monkeypatch):
     monkeypatch.setattr(resource_guard, "snapshot", lambda cpu_avg=None: dict(SNAP))
     bot = telegram_bot.TelegramBot()
     assert bot.answer("ram usage") == resource_guard.summary(dict(SNAP))  # same answer as /ram, 0 tokens
-    assert bot.answer("show all commands") == telegram_bot.HELP
+    from jarvis.core import slash
+    assert bot.answer("show all commands") == slash.help_text()
 
 
 def test_core_alert_says_kurama_and_one_model_process(monkeypatch):

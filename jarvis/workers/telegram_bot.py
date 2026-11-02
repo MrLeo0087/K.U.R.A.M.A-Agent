@@ -251,13 +251,25 @@ class TelegramBot(Worker):
     def send(self, text: str) -> None:
         text = (text or "(no answer)").strip()
         limit = config.TELEGRAM_MAX_REPLY_CHARS
-        if len(text) > limit:
-            text = text[: limit - 20].rstrip() + "\n…(truncated)"
-        try:
-            notify.telegram_call("sendMessage", {"chat_id": config.TELEGRAM_CHAT_ID, "text": text,
-                                                 "disable_web_page_preview": True})
-        except RuntimeError as e:
-            self.log.warning("reply failed: %s", e)
+        parts: list[str] = []
+        while text and len(parts) < 4:  # a long reply (the /list of every command) in up to 4 messages, cut at lines
+            if len(text) <= limit:
+                parts.append(text)
+                break
+            cut = text.rfind("\n", 0, limit)
+            cut = cut if cut > limit // 2 else limit
+            parts.append(text[:cut].rstrip())
+            text = text[cut:].lstrip("\n")
+        else:
+            if text:
+                parts[-1] = parts[-1][: limit - 20].rstrip() + "\n…(truncated)"
+        for part in parts:
+            try:
+                notify.telegram_call("sendMessage", {"chat_id": config.TELEGRAM_CHAT_ID, "text": part,
+                                                     "disable_web_page_preview": True})
+            except RuntimeError as e:
+                self.log.warning("reply failed: %s", e)
+                return
 
     def _own_message(self, update: dict) -> dict | None:
         msg = update.get("message") or update.get("edited_message")
@@ -465,10 +477,10 @@ class TelegramBot(Worker):
                     return ("This wipes EVERYTHING: every chat, fact, reminder, to-do and result (a backup is kept). "
                             f"Send '{cmd} yes' to do it.")
                 return reset.reset_all(self._agent)
-            if cmd in ("/all", "/commands", "/command", "/kurama"):
-                from jarvis.core import slash
+            if cmd in ("/all", "/commands", "/command", "/kurama", "/list", "/help", "/menu"):
+                from jarvis.core import slash  # every command + every tool (the same list as the laptop chat)
                 return slash.help_text()
-            if cmd in ("/list", "/help", "/start", "/?", "/menu"):
+            if cmd in ("/start", "/?"):
                 return HELP
             if cmd in ("/battery", "/bat"):
                 from jarvis.tools.general.battery_status import battery_status

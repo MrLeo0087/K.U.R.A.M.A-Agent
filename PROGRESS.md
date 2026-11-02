@@ -1004,3 +1004,11 @@ Phases (one at a time, owner tests after each):
       mic + timing lines in stt.log; /stt answered "" to every hold during dictation -> 'stop dictation' passes.
       Tests: test_voice_fixes (GC signal); suite 1530 + 1 timing flake (test_p9b passes alone, also fails without
       these changes); scorecard 71% / 100% / 98%.
+- [x] 2026-11-02 15:50 Slash commands for every tool (owner: no routing cost when the tool is named). Every registered
+      tool is a command: '/<tool> [action] <text>' runs it directly (action word = the tool's own action, numbers for
+      number args, typos matched; '/<tool>' alone = its usage). Writing commands go straight to the writer: /poem,
+      /essay, /story, /letter (/mail), /report, /lyrics <topic>. /list (laptop + Telegram /list, /help, /menu) shows
+      the curated commands, then every tool by area; 🌐 = needs internet (slash.ONLINE_TOOLS: AI, web, Telegram,
+      Groq speech, edge-tts); /offline = only what works without internet. Telegram replies longer than one message
+      are split at lines (up to 4) instead of cut. Tests: test_slash_tools.py (13), test_workers updated; suite
+      1544; scorecard 71% / 100% / 98%.

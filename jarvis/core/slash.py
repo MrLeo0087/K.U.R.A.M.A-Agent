@@ -20,6 +20,8 @@ class Cmd:
     phrase: str = ""  # '{a}' = the text after the command; 'x|y' = without | with text
     tool: tuple = ()  # (tool, group, args, name of the arg that gets the text)
     aliases: tuple = field(default=())
+    template: str = ""  # the text arg built from the typed text: 'a poem about {a}'
+    actions: tuple = ()  # a tool's own action words: '/backup run' -> action=run
 
 
 def _git_repo() -> str:
@@ -158,6 +160,20 @@ COMMANDS: tuple[Cmd, ...] = (
         phrase="meaning of this word|what is the meaning of {a}"),
     Cmd("summary", "summary of the highlighted text", "Web & text", phrase="summary of this paragraph"),
     Cmd("calc", "calculate", "Web & text", "<sum>", phrase="calculate {a}"),
+    # writing: straight to the writer (a background job), no routing / planning call
+    Cmd("poem", "write a poem", "Web & text", "<topic>", tool=("write_document", "jobs", {}, "request"),
+        template="a poem about {a}"),
+    Cmd("essay", "write an essay", "Web & text", "<topic>", tool=("write_document", "jobs", {}, "request"),
+        template="an essay about {a}"),
+    Cmd("story", "write a story", "Web & text", "<topic>", tool=("write_document", "jobs", {}, "request"),
+        template="a short story about {a}"),
+    Cmd("letter", "write a letter / email", "Web & text", "<to whom, about what>",
+        tool=("write_document", "jobs", {}, "request"), template="a letter: {a}", aliases=("mail",)),
+    Cmd("report", "write a report", "Web & text", "<topic>", tool=("write_document", "jobs", {}, "request"),
+        template="a report on {a}"),
+    Cmd("lyrics", "write song lyrics", "Web & text", "<topic>", tool=("write_document", "jobs", {}, "request"),
+        template="song lyrics about {a}"),
+    Cmd("offline", "the commands that work without internet", "KURAMA"),
     Cmd("alerts", "recent alerts / which are muted", "KURAMA", phrase="notification status"),
 )
 _BY_NAME: dict[str, Cmd] = {}
@@ -174,11 +190,55 @@ def lookup(text: str) -> tuple[Cmd | None, str, str]:
     if not m:
         return None, "", ""
     name, arg = m.group("c").lower(), (m.group("a") or "").strip()
-    cmd = _BY_NAME.get(name)
+    cmd = _BY_NAME.get(name) or tool_cmd(name.replace("-", "_"))
     if cmd is None and len(name) >= 3:
-        close = difflib.get_close_matches(name, list(_BY_NAME), n=1, cutoff=0.7 if len(name) >= 4 else 0.8)
-        cmd = _BY_NAME.get(close[0]) if close else None
+        every = [*_BY_NAME, *tool_cmds()]
+        close = difflib.get_close_matches(name, every, n=1, cutoff=0.7 if len(name) >= 4 else 0.8)
+        cmd = (_BY_NAME.get(close[0]) or tool_cmd(close[0])) if close else None
     return cmd, arg, name
+
+
+# --- every tool is a command too: '/<tool> [action] <text>' runs it directly (no routing, no AI call to pick it) ---
+# Tools that need the internet: the AI (Groq / Gemini), the web, Telegram, Groq speech-to-text, edge-tts voices.
+# Everything else runs on the laptop alone (files, apps, sound, screen, git, notes, money, timers...). Reading each
+# tool's source for network calls was wrong both ways (tools hand their work to core modules), so this is a list.
+ONLINE_TOOLS = frozenset({
+    "ask_knowledge", "code_to_file", "coding", "dictate", "download_file", "find_my_phone", "fix_error",
+    "generate_image", "install_app", "kaggle_train", "lecture", "live_search", "location_history", "make_audio",
+    "make_tool", "make_video", "music", "open_url", "page_summary", "python_env", "quiz", "read_text", "read_webpage",
+    "remote_desktop", "review_code", "send_file_telegram", "send_last_result", "send_message_telegram", "text_assist",
+    "video_download", "weather", "web_search", "web_watch", "wifi_share", "wikipedia", "write_document", "youtube",
+})
+_TOOLS: dict[str, Cmd] = {}
+
+
+def online(tool: str) -> bool:
+    """The tool needs the internet (ONLINE_TOOLS)."""
+    return tool in ONLINE_TOOLS
+
+
+def tool_cmds() -> dict[str, Cmd]:
+    """A command for every registered tool (the general v2 tools left out: they wrap these)."""
+    if not _TOOLS:
+        from jarvis.core import registry
+        registry.REGISTRY.discover()
+        for name, t in sorted(registry.REGISTRY.tools.items()):
+            group = registry.group_of(t)
+            if group == "core" or name.startswith("_"):
+                continue
+            props = registry.parameters_of(t).get("properties") or {}
+            req = registry.parameters_of(t).get("required") or []
+            text = [k for k, v in props.items() if k != "action" and v.get("type") in ("string", "number", "integer")]
+            key = next((k for k in req if k in text), text[0] if text else "")
+            acts = tuple((props.get("action") or {}).get("enum") or ())
+            desc = (t.description or "").split(". ")[0].split(": ")[0][:70]
+            hint = (f"[{'|'.join(acts[:4])}{'|…' if len(acts) > 4 else ''}] " if acts else "") + (f"<{key}>" if key else "")
+            _TOOLS[name] = Cmd(name, desc, f"tool:{group}", hint.strip(), tool=(name, group, {}, key), actions=acts)
+    return _TOOLS
+
+
+def tool_cmd(name: str) -> Cmd | None:
+    return tool_cmds().get(name)
 
 
 def phrase_for(cmd: Cmd, arg: str) -> str:
@@ -202,35 +262,69 @@ def tool_call(cmd: Cmd, arg: str) -> tuple[str, str, dict] | None:
         return None
     tool, group, fixed, key = cmd.tool
     args = {k: (v() if callable(v) else v) for k, v in fixed.items()}
+    if cmd.actions and arg and (first := arg.split()[0].lower()) in cmd.actions:  # '/backup run', '/saved_links list'
+        args["action"], arg = first, arg[len(first):].strip()
+    if cmd.template and arg:
+        arg = cmd.template.replace("{a}", arg)
+    if cmd.cat.startswith("tool:") and key and arg:
+        from jarvis.core import registry
+        kind = ((registry.parameters_of(registry.REGISTRY.tools[tool]).get("properties") or {}).get(key) or {}).get("type")
+        if kind in ("number", "integer"):
+            try:
+                args[key] = float(arg) if kind == "number" else int(arg)
+            except ValueError:
+                return None
+            return tool, group, args
     if key and arg:
         default = fixed.get(key)
         args[key] = int(arg) if isinstance(default, int) and arg.isdigit() else arg
     elif key and key not in args:
-        if cmd.hint.startswith("<"):
-            return None  # '/search' with nothing to search
-        args[key] = ""
+        if cmd.hint.startswith("<") or (cmd.cat.startswith("tool:") and not args):
+            return None  # '/search' with nothing to search ('/write_document' alone: the usage line)
+        if not cmd.cat.startswith("tool:"):
+            args[key] = ""
     return tool, group, args
 
 
-def help_text(fmt: str = "plain") -> str:
-    """Every command grouped. fmt='plain' for Telegram, 'md' for the desktop chat."""
-    lines = ["Commands (0 tokens, type them in the chat or on Telegram):"]
+NET_MARK = "🌐"
+
+
+def _net(c: Cmd) -> bool:
+    return bool(c.tool) and c.tool[0] != "_cmd" and online(c.tool[0])
+
+
+def help_text(fmt: str = "plain", only_offline: bool = False) -> str:
+    """Every command grouped, then every tool as a command. fmt='plain' for Telegram, 'md' for the desktop chat.
+    🌐 = needs the internet (everything else also works offline)."""
+    lines = [("Commands that work without internet" if only_offline else
+              f"Commands (no routing, type them in the chat or on Telegram; {NET_MARK} = needs internet):")]
     for cat in CATS:
-        rows = [c for c in COMMANDS if c.cat == cat]
+        rows = [c for c in COMMANDS if c.cat == cat and not (only_offline and (_net(c) or c.template))]
         if not rows:
             continue
         lines.append(f"\n{'**' + cat + '**' if fmt == 'md' else cat.upper()}")
         for c in rows:
             usage = f"/{c.name}" + (f" {c.hint}" if c.hint else "")
-            lines.append(f"{'`' + usage + '`' if fmt == 'md' else usage} — {c.desc}")
+            lines.append(f"{'`' + usage + '`' if fmt == 'md' else usage} — {c.desc}" + (f" {NET_MARK}" if _net(c) else ""))
+    shown = {c.tool[0] for c in COMMANDS if c.tool}
+    groups: dict[str, list[str]] = {}
+    for c in tool_cmds().values():
+        if c.name in shown or (only_offline and online(c.name)):
+            continue
+        groups.setdefault(c.cat[5:], []).append(f"/{c.name}" + ("" if only_offline or not online(c.name) else NET_MARK))
+    if groups:
+        lines.append(f"\n{'**Every tool**' if fmt == 'md' else 'EVERY TOOL'} (/<tool> [action] <text>; /<tool> alone = how)")
+        for g in sorted(groups):
+            lines.append(f"{g}: " + " ".join(groups[g]))
     lines.append("\nPlain words work too: 'what's on today', 'find this function'.")
     return "\n".join(lines)
 
 
 def catalog() -> list[dict]:
     """For the chat box suggestions."""
-    return [{"cmd": c.name, "hint": c.hint, "desc": c.desc, "cat": c.cat, "aliases": list(c.aliases)}
-            for c in COMMANDS]
+    return [{"cmd": c.name, "hint": c.hint, "desc": c.desc, "cat": c.cat, "aliases": list(c.aliases),
+             "online": _net(c)} for c in (*COMMANDS, *[t for t in tool_cmds().values()
+                                                        if t.name not in {c.tool[0] for c in COMMANDS if c.tool}])]
 
 
 def telegram_menu(limit: int = 100) -> list[tuple[str, str]]:
