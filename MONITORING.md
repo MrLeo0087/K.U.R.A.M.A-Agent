@@ -26,6 +26,11 @@ answers to KURAMA's questions and the model per call since the memory + multitas
 > as proof, the root cause of each (proven from traces / logs / code, not guessed) and the fix you suggest. Also list
 > AI requests that should become 0-token shortcuts. If a cause can't be proven, say what evidence is missing.
 >
+> Work style: core problem first, then the solution. Prove the root cause before touching code, then make one
+> general fix for it. Be efficient with Claude Code tokens: read only the files and line ranges you need, don't
+> re-read what you wrote, run the related tests while working and the full suite + scorecard ONCE at the end of a
+> fix (not after every edit), no repeated live checks, short reports.
+>
 > Don't change code until I say which ones to fix. Then: one class at a time, fix the class (never one sentence),
 > add tests (3+ phrasings), run the related tests, the full suite and `venv/bin/python -m tests.eval.harness`
 > (must stay >= 65% instant / 100% right / 98% router), one live check, update PROGRESS.md + this file's Fix
