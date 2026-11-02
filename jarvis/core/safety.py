@@ -7,6 +7,7 @@ text mode, a spoken yes/no hook in voice mode; anything unanswered is denied.
 from __future__ import annotations
 
 import contextvars
+import json
 import logging
 import re
 import select
@@ -197,10 +198,52 @@ BACKGROUND_NOTE = ("Still working after {s:.0f} s, so this keeps running in the 
                    "you'll tell them when it's done. Don't wait for it and don't make up the result.")
 
 
+_waits: dict[str, tuple[float, float]] = {}  # tool -> (seconds to wait, when computed)
+
+
+def _wait_for(name: str) -> float:
+    """How long a tool may run before it goes to the background: long enough for its own usual runs (most of its
+    last successful runs, +25%), at least TOOL_BACKGROUND_AFTER_S, at most TOOL_BACKGROUND_MAX_S. One fixed 3 s sent
+    live search / music / Telegram sends to the background 0.2-2.6 s before they finished (11-01: jobs #23, #45-47:
+    "That's taking a while" for a reply that came a moment later)."""
+    base = config.TOOL_BACKGROUND_AFTER_S
+    if not base:
+        return base
+    hit = _waits.get(name)
+    if hit and time.time() - hit[1] < 600:
+        return hit[0]
+    wait = base
+    try:
+        from jarvis.core import store
+        runs = sorted(json.loads(store.kv_get(_RUNS_KEY) or "{}").get(name) or [])  # real run times (the tool_calls log only
+        if len(runs) >= 3:  # has the time until it went to the background: 3.0 s for every spilled live search)
+            usual = runs[min(len(runs) - 1, int(len(runs) * 0.8))]
+            wait = min(max(base, usual * 1.25), config.TOOL_BACKGROUND_MAX_S)
+    except Exception as e:  # noqa: BLE001 - no history: the fixed wait
+        log.debug("tool wait history failed: %s", e)
+    _waits[name] = (wait, time.time())
+    return wait
+
+
+_RUNS_KEY = "tool_run_seconds"
+
+
+def _ran(name: str, seconds: float) -> None:
+    """Remember a tool's real run time (last 20), for _wait_for."""
+    try:
+        from jarvis.core import store
+        runs = json.loads(store.kv_get(_RUNS_KEY) or "{}")
+        runs[name] = [*(runs.get(name) or [])[-19:], round(seconds, 2)]
+        store.kv_set(_RUNS_KEY, json.dumps(runs))
+        _waits.pop(name, None)
+    except Exception as e:  # noqa: BLE001
+        log.debug("tool run time not saved: %s", e)
+
+
 def _call_or_background(reg: registry.Registry, name: str, clean: Any, ctx: dict) -> ToolResult:
     """Run the tool; if it is still busy after config.TOOL_BACKGROUND_AFTER_S, hand it to a background job so the
     turn (and the voice loop) is free again. The job saves the result (Workspace) and announces it when done."""
-    wait = config.TOOL_BACKGROUND_AFTER_S
+    wait = _wait_for(name)
     if (not wait or name in config.TOOL_NO_BACKGROUND or "jobs" not in ctx
             or threading.current_thread().name.startswith(("job", "tool-"))):
         return reg.call(name, clean)
@@ -209,12 +252,15 @@ def _call_or_background(reg: registry.Registry, name: str, clean: Any, ctx: dict
     run_ctx = contextvars.copy_context()  # keeps _CTX (confirm hook, workspace shelf) in the worker thread
 
     def work() -> None:
+        t0 = time.monotonic()
         try:
             box["res"] = run_ctx.run(reg.call, name, clean)
         except Exception as e:  # reg.call already catches tool errors; this is a last guard
             box["res"] = ToolResult(False, f"error: {type(e).__name__}: {e}", str(e))
         finally:
             finished.set()
+        if box["res"].ok:
+            _ran(name, time.monotonic() - t0)
 
     threading.Thread(target=work, name=f"tool-{name}", daemon=True).start()
     live = _CTX.get()  # the same dict the tool thread sees: it says when the tool is waiting on the user

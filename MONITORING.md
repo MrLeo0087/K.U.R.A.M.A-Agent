@@ -363,3 +363,8 @@ message; the action itself is chosen by meaning), the reference nouns (`workmem.
   speech (foreign label, low confidence) that means nothing to any lane -> "Sorry, I didn't catch that" at 0 tokens
   (agent._unheard, STT_UNSURE_LANE_MIN). Watch: route `general` traces that needed a tool (retried: 1 = the
   refusal retry rescued it), intent `unheard` on real speech.
+- 2026-11-02 10:00 (master plan phase 2): each tool waits for its own usual run time (most of its last 20 real runs
+  +25%, 3-8 s; kv `tool_run_seconds`, safety._wait_for) before "That's taking a while"; a tool-less answer that MEANS
+  "done" (config.CLAIM_EXAMPLES vs NOT_CLAIM_EXAMPLES) is retried with tools like the worded claims; "generate a
+  random image (and send it to Telegram)" and image typos are one 0-token generate_image. Watch: retried: 1 on real
+  answers (a false claim by meaning), "That's taking a while" on tools that usually finish in < 8 s.

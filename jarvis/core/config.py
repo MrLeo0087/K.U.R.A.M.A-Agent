@@ -91,7 +91,7 @@ STT_PROMPT = os.getenv("JARVIS_STT_PROMPT", MY_WORDS + ", "
 # Common mishearings fixed after transcription (regex, case-insensitive, word-bounded).
 # Typing slips seen in the real chat log, fixed before matching (word-level, case-insensitive)
 TYPO_FIXES: dict[str, str] = {
-    "volumn": "volume", "volum": "volume", "valume": "volume", "volumne": "volume", "voulme": "volume",
+    "iamge": "image", "imgae": "image", "imaeg": "image", "imgage": "image", "volumn": "volume", "volum": "volume", "valume": "volume", "volumne": "volume", "voulme": "volume",
     "alram": "alarm", "alaram": "alarm", "allarm": "alarm", "remainder": "reminder", "remiander": "reminder",
     "traning": "training", "trainig": "training", "usuage": "usage", "useage": "usage", "staus": "status",
     "statsu": "status", "thsi": "this", "niw": "now", "insdie": "inside", "insde": "inside", "plz": "please",
@@ -323,6 +323,7 @@ WORKSPACE_SKIP_TOOLS = ("read_webpage", "search_knowledge", "ask_knowledge", "re
 # A tool still running after this many seconds keeps going as a background job; the user can keep talking and
 # is told when it's done (0 = off)
 TOOL_BACKGROUND_AFTER_S = float(os.getenv("KURAMA_TOOL_BG_AFTER_S", "3"))
+TOOL_BACKGROUND_MAX_S = 8.0  # a tool's own usual run time decides the wait (safety._wait_for), never longer than this
 TOOL_NO_BACKGROUND = ("start_job", "generate_image", "write_document", "jobs", "make_tool",
                       "focus_mode", "gesture_control", "power_off", "suspend_computer",
                       "read_text", "scan_qr")  # these wait for the user to drag a box: never "still working"
@@ -442,6 +443,17 @@ SELECTION_EXAMPLES: dict[str, tuple[str, ...]] = {
 }
 SELECTION_MIN = 0.78  # a request this close to a selection action is about the highlighted text...
 SELECTION_MARGIN = 0.02  # ...unless another area (not the selection's own) is clearly closer
+# A tool-less answer that MEANS "I did it" (meta.claims_by_meaning): retried with tools, never delivered as done.
+CLAIM_MIN, CLAIM_MARGIN = 0.65, 0.12
+CLAIM_EXAMPLES = ("I opened it for you", "done, I sent the message", "I created the file in your workspace",
+                  "here is the image I made for you", "the volume is now at 80 percent", "I saved the link",
+                  "playing the song now", "I made a new folder", "the folder has been deleted",
+                  "I set a reminder for 5 pm", "your plan is ready in the workspace", "I closed the app")
+NOT_CLAIM_EXAMPLES = ("the sky is blue because of light scattering", "hello, how can I help you today",
+                      "I'm sorry you're feeling low", "here are some tips to be happy", "a good name would be shadow",
+                      "I don't know what you mean", "could you say that again", "here is a quick explanation",
+                      "gravity is the force that pulls things together", "I'm doing great, thanks",
+                      "you could try opening the settings app", "which folder do you mean?")
 # Lanes (master plan phase 1, docs/MASTER_PLAN.md): what KIND of request it is, by meaning (jarvis/core/lanes.py).
 # A confident "general" = no tools, the small fast model, one call (owner 11-02: general must answer very quickly).
 LANE_MIN = 0.80  # below this for every lane = unclear (garbled speech, or something new: the old routing decides)

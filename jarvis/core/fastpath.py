@@ -864,9 +864,10 @@ def _days(m: re.Match, text: str) -> int:
 
 
 _IMAGE = re.compile(r"^(?:can you\s+|could you\s+)?(?:generate|create|make|draw|paint|design|render)\s+(?:me\s+)?"
-                    r"(?:an?\s+|the\s+)?(?:(?P<q>hd|high[\s-]quality|detailed|realistic|beautiful|nice|cool|cute|simple|4k)\s+)?(?:ai\s+)?"
-                    r"(?:image|picture|photo|pic|drawing|painting|illustration|artwork)s?\s+"
-                    r"(?:of|about|showing|with|for)\s+(?P<p>.{3,})$", I)
+                    r"(?:an?\s+|the\s+)?(?:(?P<q>hd|high[\s-]quality|detailed|realistic|beautiful|nice|cool|cute|simple|4k|"
+                    r"random|funny|any|surprise)\s+)?(?:ai\s+)?"
+                    r"(?:image|picture|photo|pic|drawing|painting|illustration|artwork)s?"
+                    r"(?:\s+(?:of|about|showing|with|for)\s+(?P<p>.{3,}))?$", I)  # no subject: 'a random image' (04e9edfd)
 _DRAW = re.compile(r"^(?:can you\s+)?draw\s+(?:me\s+)?(?P<p>.{3,})$", I)
 
 
@@ -1068,8 +1069,14 @@ def image_intent(t: str) -> Intent | None:
     m = _IMAGE.match(t) or _DRAW.match(t)
     if not m or re.search(r"\b(?:and|then)\s+(?:send|open|set)\b", t, I):  # multi-step: let the planner split it
         return None
-    prompt = m.group("p").strip(" .,!?")
-    if q := m.groupdict().get("q"):  # 'an HD image of', 'a realistic photo of': the quality/style belongs to the prompt
+    prompt = (m.group("p") or "").strip(" .,!?")
+    q = m.groupdict().get("q")
+    if not prompt and not q:
+        return None  # 'generate an image': of what? (the AI asks)
+    if not prompt:  # 'generate a random image': KURAMA picks the subject (the AI wrote a 1x1 PNG by hand, 7,897 tokens)
+        prompt = "a surprising, beautiful scene of anything" if q.lower() in ("random", "any", "surprise") \
+            else f"something {q}"
+    elif q:  # 'an HD image of', 'a realistic photo of': the quality/style belongs to the prompt
         prompt = f"{prompt}, {q}"
     detailed = bool(_DETAIL.search(prompt))
     prompt = _DETAIL.sub("", prompt).strip(" ,") or prompt

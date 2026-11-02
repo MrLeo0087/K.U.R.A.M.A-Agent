@@ -76,15 +76,40 @@ _DONE = re.compile(r"\b(?:i'?ve|i have)\s+(?:now\s+|just\s+|already\s+)?" + _ACT
 
 
 def claims(text: str) -> bool:
-    """The answer says an action was done ("I've opened...", "Sure, playing...", "the link has been removed")."""
+    """The answer says an action was done ("I've opened...", "Sure, playing...", "the link has been removed"), in
+    those words or by meaning ("Here is a cozy house plan in your workspace": nothing was made, c6123814)."""
     t = (text or "")[:240].replace("\u2019", "'")
-    return bool(_CLAIM.search(t) or _DONE.search(t))
+    return bool(_CLAIM.search(t) or _DONE.search(t)) or claims_by_meaning(t)
 
 
 def needs_tool(text: str) -> bool:
     """A tool-less answer that refuses, or claims an action no tool did: retried once with request_tools."""
     t = (text or "")[:240].replace("\u2019", "'")
-    return looks_like_refusal(t) or bool(_CLAIM.search(t) or _DONE.search(t))
+    return looks_like_refusal(t) or claims(t)
+
+
+_claim_mat: tuple | None = None
+
+
+def claims_by_meaning(text: str) -> bool:
+    """Closer to "I did / made / sent X" (config.CLAIM_EXAMPLES) than to an answer (NOT_CLAIM_EXAMPLES), by a clear
+    margin. 0 tokens (~10 ms); False when the meaning model isn't loaded."""
+    from jarvis.core import semantic
+    t = " ".join((text or "").split())[:200]
+    if len(t) < 4 or not semantic.ready():
+        return False
+    global _claim_mat
+    try:
+        if _claim_mat is None:
+            e = semantic.embedder()
+            _claim_mat = (e.embed(list(config.CLAIM_EXAMPLES), query=True),
+                          e.embed(list(config.NOT_CLAIM_EXAMPLES), query=True))
+        cm, nm = _claim_mat
+        v = semantic.embedder().embed([t], query=True)[0]
+        c, n = max((cm @ v).tolist()), max((nm @ v).tolist())
+    except Exception:  # noqa: BLE001 - the model failed: the word patterns decide
+        return False
+    return c >= config.CLAIM_MIN and c >= n + config.CLAIM_MARGIN
 
 
 def gloss(group: str) -> str:

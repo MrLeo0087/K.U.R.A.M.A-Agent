@@ -953,3 +953,13 @@ Phases (one at a time, owner tests after each):
       label at low confidence; if it means nothing to any lane (< 0.66) KURAMA asks again at 0 tokens. Tests:
       test_lanes.py (30, real model); suite 1468; scorecard 69% / 100% / 98%. Live: general reply first word 1.1 s
       (gpt-oss path while the model was still loading), 0-token small talk.
+- [x] 2026-11-02 10:00 Master plan phase 2, lane executors + contracts. The search and create lanes already run their
+      tool directly / as a job (fastpath); what was missing, proven from traces: (1) one fixed 3 s background wait for
+      every tool, and the tool log only had the time until the spill (live_search: 3.0 s every time), so the real run
+      time was unknown -> safety._ran keeps each tool's real run times, safety._wait_for waits ~their usual time
+      (+25%, 3-8 s). (2) the claim check was word patterns only (c6123814 "Here is a cozy house plan in your
+      workspace", nothing made) -> meta.claims_by_meaning (examples, min 0.65, margin 0.12; real answers like "The
+      sky looks blue...", "Shadow." stay answers). (3) "generate a random image and send to telegram" / "iamge" had
+      no shortcut (the AI wrote a 1x1 PNG by hand, 7,897 tokens) -> the image shortcut takes a style word without a
+      subject ("random", "cute"); a bare "generate an image" still asks. Tests: test_lane_executors.py (19); suite
+      1487; scorecard 69% / 100% / 98%.
