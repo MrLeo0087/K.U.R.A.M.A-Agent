@@ -199,4 +199,6 @@ def status_text(fix: dict) -> str:
     return (f"Remote desktop is on (no need to accept at the laptop). In the RustDesk app on your phone, enter:\n"
             f"ID: {fix['id']}\nPassword: {fix['password']}\n"
             f"The password works for {fix['minutes']} minutes, then stops working (a session already open stays "
-            f"connected). Say 'stop remote desktop' to end it sooner.")
+            f"connected). Say 'stop remote desktop' to end it sooner.\n"
+            f"If the laptop shows its lock screen, type your Ubuntu LOGIN password there, not this one (11-02: the "
+            f"lock screen refused 4 tries). Turn off your phone keyboard's auto-capital / auto-correct while typing it.")
