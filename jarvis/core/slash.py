@@ -299,7 +299,7 @@ def _net(c: Cmd) -> bool:
     if c.phrase and c.name not in _PHRASE_TOOL:
         try:
             from jarvis.core import fastpath
-            it = fastpath.match(phrase_for(c, "pokhara") or phrase_for(c, ""))
+            it = fastpath._match(phrase_for(c, "pokhara") or phrase_for(c, ""))  # the pattern only: which tool
             if it is not None:  # (not cached when unknown: the meaning model may still be loading)
                 _PHRASE_TOOL[c.name] = it.tool
         except Exception:  # noqa: BLE001
