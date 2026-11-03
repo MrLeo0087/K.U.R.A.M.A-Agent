@@ -128,8 +128,14 @@ def load() -> list[dict]:
 
 def _isolated_store() -> None:
     """Score on an empty throwaway database: never the owner's real data (and no side effects)."""
-    from jarvis.core import context, rewrite, store
+    from jarvis.core import config, context, recipes, rewrite, store
     store.init(Path(tempfile.mkdtemp(prefix="kurama-eval-")) / "eval.db")
+    # ...and never what the owner taught or approved (learned wordings / vetoes, learned shortcuts, own words, rules):
+    # the score measures the CODE; a live test's 👍 or one false 'correction' moved it (11-03: 73% -> 72%)
+    config.DATA_DIR = Path(tempfile.mkdtemp(prefix="kurama-eval-data-"))
+    recipes.reset_cache()
+    from jarvis.core import learn
+    learn._rows = learn._vecs = None
     # ...and never the owner's live desktop: a file open in VS Code / a highlight made the selection shortcut take
     # requests (4 false "text.selected" mistakes) and the score depended on what happened to be open
     rewrite.peek = lambda *a, **k: ""

@@ -58,6 +58,7 @@ class FakePactl:
 
     def __init__(self, sinks, default):
         self.sinks, self.default, self.loaded, self.calls = list(sinks), default, None, []
+        self.vol, self.mute = {}, {}
 
     def __call__(self, *args, timeout=5):
         self.calls.append(args)
@@ -80,6 +81,14 @@ class FakePactl:
             self.loaded = None
         if a[0] == "set-default-sink":
             self.default = a[1]
+        if a[0] == "get-sink-volume":
+            return f"Volume: front-left: 1 / {self.vol.get(a[1], 100)}% / 0 dB"
+        if a[0] == "get-sink-mute":
+            return f"Mute: {'yes' if self.mute.get(a[1]) else 'no'}"
+        if a[0] == "set-sink-volume":
+            self.vol[a[1]] = int(a[2].rstrip("%"))
+        if a[0] == "set-sink-mute":
+            self.mute[a[1]] = a[2] == "1"
         return ""
 
 
@@ -149,3 +158,27 @@ def test_the_remembered_choice_comes_back_exactly(pa):
     fake.sinks.remove(BT)  # the speaker is switched off while KURAMA listens
     devaudio.cancel_off()
     assert fake.configured["sink"] == BT and not any(c[0] == "set-default-sink" and c[1] == SPK for c in fake.calls)
+
+
+
+def test_one_volume_while_kurama_listens(pa):
+    """Live 11-03: ours 88% x the speaker 81% = 71%, and the volume keys (they move ours) stopped at 100%."""
+    fake = pa([SPK], SPK)
+    fake.vol[SPK] = 81
+    devaudio.cancel_on()
+    assert fake.vol[devaudio.EC_SINK] == 81 and fake.vol[SPK] == 100  # the same loudness, one slider
+    fake.vol[devaudio.EC_SINK] = 95  # the owner turns it up while KURAMA listens
+    fake.mute[devaudio.EC_SINK] = True
+    devaudio.cancel_off()
+    assert fake.vol[SPK] == 95 and fake.mute[SPK] is True  # their last change stays
+
+
+def test_re_aiming_gives_the_old_speaker_its_volume_back(pa):
+    fake = pa([SPK], SPK)
+    fake.vol[SPK] = 60
+    devaudio.cancel_on()
+    fake.vol[devaudio.EC_SINK] = 70
+    fake.sinks.append(BT)
+    fake.vol[BT] = 40
+    devaudio._follow(BT)
+    assert fake.vol[SPK] == 70 and fake.vol[devaudio.EC_SINK] == 40 and fake.vol[BT] == 100

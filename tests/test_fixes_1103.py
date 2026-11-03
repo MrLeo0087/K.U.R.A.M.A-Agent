@@ -190,3 +190,19 @@ def test_small_talk_with_one_word_parts(model, said):
 def test_when_i_say_is_one_request_not_two_tasks(said):
     from jarvis.core import planner
     assert not planner.is_multi(said)
+
+
+@pytest.mark.parametrize("said,args", [("increase the laptop volume", {"action": "up"}),
+                                       ("set the laptop volume to 80", {"action": "set", "level": 80}),
+                                       ("system volume 80", {"action": "set", "level": 80}),
+                                       ("turn up the laptop sound", {"action": "up"})])
+@pytest.mark.parametrize("playing", [True, False])
+def test_the_laptops_own_volume_even_while_kuramas_music_plays(monkeypatch, said, args, playing):
+    monkeypatch.setattr(music, "running", lambda: playing)
+    it = fastpath.music_intent(said) or fastpath._match(said)
+    assert it.tool == "volume" and it.args == args
+
+
+def test_plain_volume_is_the_musics_while_it_plays(monkeypatch):
+    monkeypatch.setattr(music, "running", lambda: True)
+    assert fastpath._match("increase the volume").tool == "music"

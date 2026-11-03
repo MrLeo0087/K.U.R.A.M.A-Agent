@@ -363,7 +363,220 @@ rules" removes the rules. Your words and app names stay until you forget them on
 
 ---
 
-## 16. Code map
+## 16. Small mistakes in learning that were fixed (2026-11-03), with examples
+
+Each one could have made KURAMA learn the wrong thing. They are fixed, and each has a test.
+
+**1. Answering "no" to KURAMA's question was treated as a complaint.**
+
+> KURAMA: "Here is your poem. Do you want more?"
+> You: "no"
+
+Before: KURAMA thought "no" meant "your reply was wrong" and gave the poem a 👎.
+Now: a plain yes / no / "no thanks" is your **answer to the question**, never a verdict on the reply.
+To complain, say more than one word: "no, that's wrong".
+
+**2. Two quick messages could be checked in the wrong order.**
+
+> KURAMA plays a song → you quickly say "perfect".
+
+Before: each message was checked in its own background thread. Sometimes "perfect" was checked *before* KURAMA had
+registered the song, so the praise landed on the reply **before** the song.
+Now: messages are checked one by one, in the order they happened.
+
+**3. Background noise could change how sure KURAMA was about your words.**
+
+KURAMA's wake-word listener also turns room sound into text, all day. Each time, it overwrote the "how sure was the
+speech recognition" record.
+
+> You say "perfect, that's exactly what I wanted" clearly → a second later the TV says something unclear.
+
+Before: KURAMA judged your clear "perfect" by the TV's unclear score and could ignore it.
+Now: every phrase keeps its own score.
+
+**4. An old complaint could block a shortcut that works.**
+
+> Morning: "open browser" opened Firefox (a bug that was fixed that afternoon).
+> Evening: "earlier you opened Firefox when I said open browser, that was wrong."
+
+Before: KURAMA blocked its built-in "open browser" shortcut forever, so every "open browser" afterwards went to the
+AI and cost tokens.
+Now: a late complaint records the 👎 and removes any learned shortcut that caused it, but never blocks a
+built-in one: the problem may already be fixed.
+
+**5. 👍 then 👎 on the same reply kept the 👍.**
+
+> You press 👍 on a reply, then realise it was wrong and press 👎.
+
+Before: the 👎 removed the learned shortcut, but the 👍's note ("this request belongs to this area") stayed.
+Now: the 👎 removes that too. You changed your mind, so all of it goes.
+
+**6. The same answer could be stored twice.**
+
+> You press 👍 on an answer and also say "perfect, thanks".
+
+Before: the kept answer was saved twice.
+Now: once.
+
+**7. "When I say yes, …" would have hijacked every "yes".**
+
+> "When I say yes, open YouTube."
+
+Before: this would be saved, and from then on every "yes" you say to KURAMA's questions ("Shall I delete it?" →
+"yes") would open YouTube instead.
+Now: words that answer questions (yes, no, ok, okay, sure, stop, cancel, next, back, done, thanks, haan, ho,
+hoina, na, nahi, huncha, hunna, thik cha) can't be your words. KURAMA asks you to pick other words.
+
+**8. A normal new request was taken as a complaint.**
+
+> You: "Open web WhatsApp" → KURAMA opens it.
+> You: "Save this link as a WhatsApp."
+
+Before: one of KURAMA's example complaints was "I said save the link". "Save this link as a WhatsApp" sounded close
+to it, so KURAMA thought you were correcting the "open" and blocked its "open" shortcut for wordings like
+"open web WhatsApp". From then on those went to the AI and cost tokens.
+Now: the example is "**no**, I said save the link" (a complaint starts with a no), and "save this link as …" is
+listed as a normal request. The wrong block was removed.
+
+**About the scorecard number.** The scorecard (`venv/bin/python -m tests.eval.harness`) used to read what KURAMA had
+learned from your real use, so one live 👍 or one wrong "complaint" could move it. Now it starts with an empty
+learning folder every time and measures **only the code**. Its "instant" number is 72% on that basis. Your real
+KURAMA does a little better, because it also uses what you taught it.
+
+---
+
+## 17. Sound: why it was quieter with KURAMA, and what changed
+
+### The short answer
+
+Your **Bluetooth speaker (U-2500BT) was on, but KURAMA was sending all sound to the laptop's small built-in
+speaker.** When you turned KURAMA off, the sound went back to the Bluetooth speaker, so it was loud again. The
+built-in speaker is small, so everything sounded quieter: your music, YouTube, and KURAMA's own songs.
+
+### Why KURAMA touches the sound at all
+
+When KURAMA listens to you, it must not hear its own voice or your music as if you were talking. So, only while it
+listens, it puts a small **echo filter** between your apps and the speaker:
+
+```
+Normal (KURAMA not listening):    apps ──────────────────────────► your speaker
+
+While KURAMA listens:             apps ──► KURAMA's echo filter ──► one speaker  (the filter knows what is
+                                                                                   playing, so it removes it
+                                                                                   from what the mic hears)
+```
+
+The filter must send the sound on to **one** speaker. The mistake was **which** one.
+
+### What went wrong (two mistakes together)
+
+**Mistake 1: KURAMA overwrote the system's "chosen speaker" memory.**
+Ubuntu remembers which speaker you chose, even after a reboot, and uses it whenever that speaker is connected.
+Every time KURAMA started, it set that memory to a speaker it had saved long ago: the laptop speaker. It did this
+even when it hadn't changed anything.
+
+**Mistake 2: the filter followed that wrong choice.**
+When KURAMA started listening, the filter sent everything to the system's current choice, which by then was the
+laptop speaker.
+
+```
+Before the fix:
+  KURAMA starts ──► "the chosen speaker is the LAPTOP speaker" (overwritten)
+  KURAMA listens ──► apps ──► echo filter ──► LAPTOP speaker            (quiet)
+  KURAMA off     ──► Ubuntu picks for itself ──► BLUETOOTH speaker       (loud)
+```
+
+That is exactly what you noticed: quieter with KURAMA, louder without it.
+
+### What changed
+
+1. **KURAMA no longer changes your speaker settings when it starts.** It only touches them while its echo filter
+   is actually running.
+2. **When the filter stops, KURAMA puts back exactly what Ubuntu remembered before.** Even if your Bluetooth
+   speaker is off at that moment, Ubuntu still remembers it and picks it as soon as it connects.
+3. **When the filter has to choose a speaker by itself**, it prefers: Bluetooth > USB > the laptop's own speaker >
+   HDMI (a monitor or TV).
+4. **If you chose a speaker yourself** (Ubuntu Settings → Sound), your choice always wins.
+5. **If a Bluetooth or USB speaker connects while KURAMA is listening**, the sound moves to it straight away.
+6. One-time repair: your remembered speaker was set back to the U-2500BT.
+
+```
+After the fix:
+  KURAMA starts  ──► nothing changes (the chosen speaker stays BLUETOOTH)
+  KURAMA listens ──► apps ──► echo filter ──► BLUETOOTH speaker          (loud)
+  KURAMA off     ──► Ubuntu's own choice, unchanged ──► BLUETOOTH        (loud)
+```
+
+### The second problem: two volumes multiplied
+
+Even on the right speaker, KURAMA's sound was quieter. While the echo filter runs there are **two volume sliders**,
+and the sound passes through both:
+
+```
+apps ──► echo filter  (its own volume: 88%) ──► laptop speaker (its own volume: 81%)
+
+what you hear  =  88% × 81%  ≈  71%
+```
+
+These are the real numbers read from your laptop on 2026-11-03. On top of that, your volume keys only moved the
+**filter's** slider, which stops at 100%. The speaker's own 81% stayed underneath, so with KURAMA listening you
+could never reach the loudness you get without KURAMA.
+
+**Now there is one volume.** When the filter starts, it takes the speaker's volume (81% → the filter is 81%) and
+sets the speaker itself to 100%:
+
+```
+apps ──► echo filter (81%) ──► laptop speaker (100%)        what you hear = 81%  (same as without KURAMA)
+```
+
+- Your volume keys move the filter's slider, and you can go all the way up, as without KURAMA.
+- When the filter stops, the speaker gets **your last volume**: if you turned it up to 95% while KURAMA listened,
+  the speaker is at 95% afterwards. Mute is kept the same way.
+- When the sound moves to another speaker (Bluetooth connects), the old speaker gets your volume back and the new
+  one is set up the same way.
+
+Checked live: the speaker at 100% → the filter took 100% → I set it to 90% → after the filter stopped, the speaker
+was at 90% (then I put it back to your 100%).
+
+### Examples
+
+| Situation | Where the sound goes now |
+|---|---|
+| Bluetooth speaker on, KURAMA listening | Bluetooth speaker |
+| Bluetooth speaker on, KURAMA off | Bluetooth speaker |
+| Bluetooth speaker switched off | Laptop speaker (nothing better is connected) |
+| You turn the Bluetooth speaker back on while KURAMA listens | Moves to the Bluetooth speaker |
+| You pick the laptop speaker in Settings on purpose | Laptop speaker (your choice wins) |
+| Only the laptop speaker and an HDMI monitor | Laptop speaker (HDMI comes last) |
+
+### KURAMA's own music volume (fixed the same day)
+
+- KURAMA's music player started every song at volume 60. Because of how that player counts volume, 60 sounds
+  about **4–5 times quieter** than full volume. It now starts at **100** and remembers the last music volume you
+  set ("music volume 80").
+- A song that started while KURAMA had turned the music down for your voice could stay quiet until it ended. It
+  now gets its normal volume back as soon as the player is ready.
+- "Increase the volume" while KURAMA's music plays changes **the music's** volume. To change the **laptop's**
+  volume, name it: "increase the laptop volume", "set the laptop volume to 80", "system volume 80", "turn up the
+  laptop sound" (instant, 0 tokens; before this fix none of these had a shortcut).
+
+### If the sound is quieter again
+
+Run these two commands and send me the output:
+
+```bash
+pactl list short modules | grep echo        # "sink_master=..." shows which speaker the filter uses
+pw-metadata 0 default.configured.audio.sink  # the speaker Ubuntu remembers
+for s in $(pactl list short sinks | cut -f2); do echo "$s $(pactl get-sink-volume $s | grep -o '[0-9]*%' | head -1)"; done
+                                             # every volume: with KURAMA listening, the real speaker should be 100%
+```
+
+If you'd rather KURAMA never touch the sound at all: KURAMA Settings → turn **"Hear device sound"** on. Then
+there's no echo filter. The cost: KURAMA can then hear its own voice and your music while it listens.
+
+---
+
+## 18. Code map
 
 | File | Does |
 |---|---|
@@ -376,6 +589,7 @@ rules" removes the rules. Your words and app names stay until you forget them on
 | `jarvis/tools/general/learned_shortcuts.py` | `/learned_shortcuts` |
 | `jarvis/core/fastpath.py` | Order of checks (section 3); "when I say…", rule and forget-rule shortcuts; failure reporting |
 | `jarvis/core/stt.py` | `heard_well`: speech confidence for spoken feedback |
+| `jarvis/core/devaudio.py` | The echo filter: which speaker it uses, putting your speaker choice back (section 17) |
 | `jarvis/core/trace.py` | Feedback table, trace lookups |
 | `frontend/app.js` | The 👍 / 👎 buttons (`rateButtons`) |
 | `tests/test_recipes.py`, `tests/test_learning_gaps.py`, `tests/test_learn.py` | Tests for all of the above |

@@ -421,22 +421,24 @@ _BY = r"(?: by (?P<n>\d{1,2})(?: ?%| percent)?)?"
 _UP_HI = r"(?:badhao|badha do|badhau|badhaunu|barhao|बढ़ाओ|बढाओ|बढ़ा दो|बढाउ|बढाऊ|बढाइदेउ)"
 _DOWN_HI = r"(?:kam karo|kam kar do|ghatao|ghatau|ghataunu|कम करो|कम कर दो|घटाओ|घटाउ|घटाऊ|घटाइदेउ)"
 _DO_HI = r"(?:karo|kar do|gara|garnu|garideu|करो|कर दो|गर|गर्नु|गरिदेउ)"
-_VOL = r"(?:the )?(?:volume|sound)"
+_DEV = r"(?:(?:laptop|system|computer|device|pc|speaker)(?:'s)? )?"  # 'increase the laptop volume': with KURAMA's music
+# playing, plain 'volume' is the music's, so the laptop's needed these words (11-03: none of them had a shortcut)
+_VOL = r"(?:the )?" + _DEV + r"(?:volume|sound)"
 _VOL_HI = r"(?:awaz|awaaz|awaj|awaaj|volume|आवाज़|आवाज|भोल्युम)"
 _BRI = r"(?:the )?(?:screen )?brightness"
 _BRI_HI = r"(?:brightness|ब्राइटनेस|चमक)"
 LEVELS = {  # name -> (tool, group, {action: patterns})
     "volume": ("volume", "audio", {
         "set": _rx(r"(?:set|change|put|turn|make|keep) " + _VOL + r"(?: level)? (?:to |at )?" + _N + _PCT,
-                   r"(?:volume|sound)(?: level)? (?:to |at )?" + _N + _PCT,
+                   r"" + _DEV + r"(?:volume|sound)(?: level)? (?:to |at )?" + _N + _PCT,
                    _VOL_HI + " " + _N + _PCT + " " + _DO_HI),
         "up": _rx(r"(?:turn|bump|crank) up " + _VOL + _BY, r"(?:turn|bump|crank) " + _VOL + " up" + _BY,
-                  r"(?:increase|raise) (?:the )?(?:more )?(?:volume|sound)(?: more| a bit| a little)?" + _BY,
-                  r"(?:volume|sound) up" + _BY, r"(?:make it )?louder",
+                  r"(?:increase|raise) (?:the )?(?:more )?" + _DEV + r"(?:volume|sound)(?: more| a bit| a little)?" + _BY,
+                  r"" + _DEV + r"(?:volume|sound) up" + _BY, r"(?:make it )?louder",
                   _VOL_HI + " " + _UP_HI),
         "down": _rx(r"turn down " + _VOL + _BY, r"turn " + _VOL + " down" + _BY,
-                    r"(?:decrease|lower|reduce) (?:the )?(?:more )?(?:volume|sound)(?: more| a bit| a little)?" + _BY,
-                    r"(?:volume|sound) down" + _BY,
+                    r"(?:decrease|lower|reduce) (?:the )?(?:more )?" + _DEV + r"(?:volume|sound)(?: more| a bit| a little)?" + _BY,
+                    r"" + _DEV + r"(?:volume|sound) down" + _BY,
                     r"(?:make it )?(?:quieter|softer)", _VOL_HI + " " + _DOWN_HI),
         "get": _rx(r"what(?:'s| is) the (?:current )?volume(?: level)?(?: now)?", r"(?:current )?volume level"),
     }),

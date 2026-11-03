@@ -171,6 +171,35 @@ def _best(saved: dict) -> str | None:
     return max(real, key=lambda x: (_rank(x, desc.get(x, "")), x == saved.get("sink"), real.index(x)))
 
 
+def _volume(sink: str) -> tuple[int, bool] | None:
+    """(volume %, muted) of a sink, None when it isn't there."""
+    try:
+        v = re.search(r"(\d+)%", _pactl("get-sink-volume", sink))
+        m = "yes" in _pactl("get-sink-mute", sink).lower()
+        return (int(v.group(1)), m) if v else None
+    except Exception:  # noqa: BLE001 - gone / no audio server
+        return None
+
+
+def _set_volume(sink: str, pct: int, muted: bool) -> None:
+    _pactl("set-sink-volume", sink, f"{pct}%")
+    _pactl("set-sink-mute", sink, "1" if muted else "0")
+
+
+def _take_volume(master: str) -> None:
+    """Our sink gets the speaker's volume and mute, the speaker goes to 100%: the volume keys (which now move ours)
+    reach as loud as without KURAMA, and the two never multiply."""
+    got = _volume(master) or (100, False)
+    _set_volume(EC_SINK, *got)
+    _set_volume(master, 100, False)
+
+
+def _give_volume(master: str | None) -> None:
+    """The speaker gets back the volume and mute the owner had on ours (their last change while KURAMA listened)."""
+    if master and master in _names("sinks") and (got := _volume(EC_SINK)) is not None:
+        _set_volume(master, *got)
+
+
 def cancel_on(sink: str | None = None, explicit: bool = False) -> None:
     """Load (or re-aim at `sink`) the canceller and make it the default speaker + mic. explicit: the owner chose
     that speaker in Settings (it then wins over a Bluetooth one)."""
@@ -193,12 +222,16 @@ def cancel_on(sink: str | None = None, explicit: bool = False) -> None:
             for kind, key in (("sink", "configured_sink"), ("source", "configured_source")):
                 if (c := _configured(kind)) and not c.startswith("kurama_ec"):
                     saved[key] = c
+        loaded = False
         if not first and (saved.get("sink"), saved.get("source")) == (sink, source):
             pass  # already aimed right
         else:
+            if not first:  # re-aimed: the old speaker gets back the volume the owner set on ours
+                _give_volume(saved.get("sink"))
             for mid in _ours():
                 _pactl("unload-module", mid)
             _load(sink, source)
+            loaded = True
         _save({**{k: v for k, v in saved.items() if k.startswith("configured_")},
                "sink": sink, "source": source, "explicit": bool(explicit)})
         for _ in range(20):  # the new nodes take a moment to appear
@@ -207,7 +240,8 @@ def cancel_on(sink: str | None = None, explicit: bool = False) -> None:
             time.sleep(0.1)
         _pactl("set-default-sink", EC_SINK)
         _pactl("set-default-source", EC_SOURCE)
-        _pactl("set-sink-volume", EC_SINK, "100%")  # the real speaker keeps the user's volume: nothing gets quieter
+        if loaded:  # ONE volume: ours takes the speaker's, the speaker goes to 100% (they multiplied: 88% x 81% =
+            _take_volume(sink)  # 71% while KURAMA listened, and the volume keys stopped at ours' 100%, 11-03)
 
 
 def cancel_off() -> None:
@@ -218,6 +252,7 @@ def cancel_off() -> None:
         if not mods:
             return
         saved = _load_saved()
+        _give_volume(saved.get("sink"))  # the speaker gets the volume the owner set while KURAMA listened
         for mid in mods:
             _pactl("unload-module", mid)
         sinks, sources = _names("sinks"), _names("sources")

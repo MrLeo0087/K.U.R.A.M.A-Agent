@@ -34,7 +34,7 @@ _prev: dict | None = None  # channel -> its last finished turn, judged when the 
 _corr_vecs: Any = None
 
 CORRECTIONS = (
-    "no, I meant something else", "not that", "that's wrong", "you did the wrong thing", "I said save the link",
+    "no, I meant something else", "not that", "that's wrong", "you did the wrong thing", "no, I said save the link",
     "no no, play it in the music player", "I mean the other one", "that's not what I asked", "wrong file",
     "stop, not this", "no I wanted the video not the audio", "you misunderstood me", "it didn't work, do it again",
     "hoina, maile arkai bhaneko", "galat", "nahi, maine kuch aur kaha tha", "yo hoina",
@@ -176,7 +176,8 @@ NOT_CORRECTIONS = (
     "play song", "play the next song", "play other song", "play some hindi song", "pause music", "continue music",
     "stop the music", "open youtube", "set volume to 100", "what time is it", "send it to telegram",
     "open it in vs code", "create a folder", "now open the folder", "next", "thank you",
-)
+    "save this link as whatsapp", "save this page as youtube", "save this link", "now save it to telegram",
+)  # 11-03: 'Save this link as a WhatsApp' after 'Open web WhatsApp' matched "I said save the link" and blocked 'open' 
 _not_vecs: Any = None
 
 # The owner saying the reply was RIGHT (a spoken 👍). Plain "thanks" / "ok" are politeness, not a verdict.

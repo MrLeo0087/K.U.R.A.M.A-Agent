@@ -1111,3 +1111,13 @@ Phases (one at a time, owner tests after each):
       choice exactly (pw-metadata); the canceller aims at the system's choice, else Bluetooth > USB > laptop > HDMI;
       a Bluetooth / USB speaker connecting while KURAMA listens gets the sound. One-time repair: the remembered
       output set back to the U-2500BT (streams moved). Tests: +6 learning, +6 sound; suite 1686.
+- [x] 2026-11-03 22:30 Owner: "solve volume also, it's not a speaker problem". Proven live: while the echo filter runs,
+      two volumes multiply (filter 88% x laptop speaker 81% = 71%) and the volume keys move only the filter's, which
+      stops at 100%. Fix (devaudio._take_volume / _give_volume): the filter takes the speaker's volume + mute, the
+      speaker goes to 100%; when the filter stops or moves, the speaker gets the owner's last volume back. Also:
+      "Save this link as a WhatsApp" was taken as a correction of "Open web WhatsApp" (CORRECTIONS had "I said save
+      the link") and blocked the 'open' shortcut -> "no, I said save the link" + save-link wordings as plain
+      requests, the wrong row removed; the scorecard now uses an empty learning folder (it read the owner's real
+      learned data: 73% -> 72% from one false correction; 72% is the code-only number); the laptop's own volume
+      by name ("increase the laptop volume", "system volume 80") is 0-token even while KURAMA's music plays.
+      docs/LEARNING.md sections 16-17 (examples). Tests +8; suite 1697; scorecard 72% / 100% / 98% (isolated).
