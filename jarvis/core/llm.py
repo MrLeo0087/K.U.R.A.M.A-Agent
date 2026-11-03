@@ -167,9 +167,10 @@ def _estimate_prompt(messages: Sequence[Any]) -> int:
 
 
 def _log(model: str, purpose: str, p: int, c: int, t0: float, ok: bool, error: str = "",
-         estimated: bool = False) -> None:
+         estimated: bool = False, cached: int = 0) -> None:
     try:
-        store.log_llm(model, purpose, p, c, int((time.monotonic() - t0) * 1000), ok, error, estimated)
+        store.log_llm(model, purpose, p, c, int((time.monotonic() - t0) * 1000), ok, error, estimated,
+                      cached_tokens=cached)
     except Exception as e:  # logging must never break a reply
         log.warning("store.log_llm failed: %s", e)
 
@@ -208,7 +209,8 @@ class UsageLogger(BaseCallbackHandler):
             p, c, est = usage.get("input_tokens", 0), usage.get("output_tokens", 0), False
         else:
             p, c, est = st["prompt"], _estimate_tokens(getattr(gen, "text", "") or ""), True
-        _log(st["model"], st["purpose"], p, c, st["t0"], True, estimated=est)
+        cached = ((usage or {}).get("input_token_details") or {}).get("cache_read") or 0  # Groq prompt cache
+        _log(st["model"], st["purpose"], p, c, st["t0"], True, estimated=est, cached=int(cached))
 
     def on_llm_error(self, error: BaseException, *, run_id: UUID, **kw: Any) -> None:
         with self._lock:

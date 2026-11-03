@@ -1023,6 +1023,7 @@ class Agent:
 
     def run(self, user_text: str, mode: str = "text", lang: str | None = None) -> str:
         tr = trace.begin(user_text, mode, getattr(self, "channel", "") or "", enabled=self.persist)
+        self.trace_id = tr["id"] if tr else ""  # the page's 👍 / 👎 name this request
         answer, error = "", ""
         try:
             answer = self._run(user_text, mode, lang)
@@ -1058,6 +1059,7 @@ class Agent:
     def stream(self, user_text: str, mode: str = "text", lang: str | None = None) -> Iterator[str]:
         """Yield answer text deltas. Tool rounds (and confirmations) happen before the first one."""
         tr = trace.begin(user_text, mode, getattr(self, "channel", "") or "", enabled=self.persist)
+        self.trace_id = tr["id"] if tr else ""  # the page's 👍 / 👎 name this request
         parts: list[str] = []
         error = ""
         try:

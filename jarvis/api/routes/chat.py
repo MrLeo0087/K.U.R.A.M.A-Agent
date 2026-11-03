@@ -29,6 +29,12 @@ class ChatIn(BaseModel):
                                              "answered only when it is clearly a command or names KURAMA")
 
 
+class FeedbackIn(BaseModel):
+    trace: str = Field(..., description="The reply's trace id (the done event's 'trace')")
+    vote: int = Field(..., description="1 = 👍 good reply, -1 = 👎 bad reply")
+    note: str = Field("", description="Optional: what the user wanted instead")
+
+
 class ConfirmIn(BaseModel):
     id: str
     yes: bool = False
@@ -87,3 +93,13 @@ async def confirm(body: ConfirmIn, request: Request):
     if not request.app.state.engine.answer(body.id, body.yes is True):
         return JSONResponse({"ok": False, "error": "unknown or expired confirmation"}, status_code=404)
     return {"ok": True, "yes": body.yes is True}
+
+
+@router.post("/feedback", summary="👍 / 👎 on a reply: KURAMA learns 0-token shortcuts from it (or forgets a bad one)")
+async def feedback(body: FeedbackIn):
+    from fastapi.concurrency import run_in_threadpool
+    from jarvis.core import recipes
+    if body.vote not in (1, -1):
+        return JSONResponse({"ok": False, "error": "vote must be 1 or -1"}, status_code=400)
+    out = await run_in_threadpool(recipes.feedback, body.trace, body.vote, body.note)
+    return JSONResponse(out, status_code=200 if out.get("ok") else 404)

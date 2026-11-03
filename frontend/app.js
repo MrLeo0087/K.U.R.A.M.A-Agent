@@ -500,6 +500,7 @@ class BotBubble {
     const route = ev.route && typeof ev.route === "object" ? [].concat(ev.route.groups || []).join("+") || ev.route.method : ev.route;
     const bits = [route && ["route", route], ev.tier && ["tier", ev.tier], ["tok", ev.tokens ?? 0], ev.ms != null && ["ms", ev.ms], ev.lang && ["lang", ev.lang]];
     this.meta.innerHTML = bits.filter(Boolean).map(([k, v]) => `<span class="chip"><b>${esc(k)}</b> ${esc(v)}</span>`).join("");
+    if (ev.trace && this.text) this.meta.append(rateButtons(ev.trace));
   }
   finish() {
     clearTimeout(this.timer); this.timer = 0;
@@ -507,6 +508,31 @@ class BotBubble {
     else if (!this.content.isConnected) this.bubble.innerHTML = '<span class="note">(no reply)</span>';
     scrollDown();
   }
+}
+
+// 👍 / 👎 on a reply: KURAMA learns a 0-token shortcut from a good one, forgets / vetoes a bad one (recipes.py)
+function rateButtons(trace) {
+  const box = el("span", "rate");
+  for (const [vote, icon, tip] of [[1, "👍", "Good reply: do it this way again (no AI next time)"],
+                                   [-1, "👎", "Bad reply: don't answer it this way again"]]) {
+    const b = el("button", "rate-btn", icon);
+    b.type = "button"; b.title = tip; b.setAttribute("aria-label", tip);
+    b.onclick = async () => {
+      box.querySelectorAll("button").forEach((x) => (x.disabled = true));
+      b.classList.add("picked");
+      try {
+        const r = await api.feedback(trace, vote);
+        toast(r.said || "Thanks.");
+        if (vote < 0) { input.value = "No, I meant "; autosize(); input.focus(); } // the correction teaches the right way
+      } catch (e) {
+        box.querySelectorAll("button").forEach((x) => (x.disabled = false));
+        b.classList.remove("picked");
+        toast("Couldn't save that: " + e.message);
+      }
+    };
+    box.append(b);
+  }
+  return box;
 }
 
 async function answerConfirm(id, yes, via = "") { // via: who answered (logged by the server)

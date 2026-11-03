@@ -504,6 +504,18 @@ LEARN_CORRECTION_SIM = 0.80  # similarity to an example correction ("no, I meant
 LEARN_WORKED_MAX_CORR = 0.65  # "it worked" is learned only if the next message is not even close to a correction
 LEARN_VETO_SIM = 0.92  # a corrected wording this similar never runs that shortcut again
 LEARN_MAX = 3000  # learned wordings kept (newest)
+# Learned shortcuts + kept answers from 👍 / 👎 and uncorrected turns (jarvis/core/recipes.py, data/recipes.json):
+# an AI request done with ONE safe tool becomes a 0-token shortcut after a 👍 or RECIPE_AUTO_CONFIRMS clean runs.
+RECIPES = os.getenv("KURAMA_RECIPES", "1").lower() not in ("0", "false", "no", "off")
+RECIPE_GROUPS = ("apps", "audio", "browser", "display", "desktop", "filesearch", "general", "git", "links", "media",
+                 "power", "system", "usage", "weather", "web", "windows", "knowledge")  # reads, opening, controls only
+RECIPE_AUTO_CONFIRMS = 2  # separate requests that went the same way (no correction after) before it runs alone
+RECIPE_SIM = 0.92  # a shortcut with no slot: this close in meaning, and no new content word
+RECIPE_SLOT_SIM = 0.60  # a slot shortcut must fit its wording template ('play song X') and be at least this close
+RECIPE_MAX = 400
+ANSWER_CACHE = os.getenv("KURAMA_ANSWER_CACHE", "1").lower() not in ("0", "false", "no", "off")
+ANSWER_CACHE_SIM = 0.95  # a 👍 answer is reused only for a nearly identical question
+ANSWER_CACHE_DAYS = 30
 # Plain conversation (no tools): a group has to look more like the request than these do.
 ROUTER_CHAT_EXAMPLES: tuple[str, ...] = (
     "hi there", "how are you doing", "thank you so much", "good morning", "good night, see you",

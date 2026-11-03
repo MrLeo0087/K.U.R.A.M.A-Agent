@@ -33,7 +33,7 @@ TOOL_INTENT = {
     "code_to_file": "code.to_file",
     "get_time": "time", "get_date": "date", "weather": "weather",
     "add_reminder": "reminder.add", "set_alarm": "alarm.set", "set_timer": "timer.set", "stopwatch": "stopwatch",
-    "open_app": "open.app", "open_url": "open.site", "open_folder": "open.folder", "close_app": "close.app",
+    "open_app": "open.app", "app_name": "apps.name", "open_url": "open.site", "open_folder": "open.folder", "close_app": "close.app",
     "kill_app": "kill.app", "window": "window", "app_control": "ui.control",
     "send_message_telegram": "telegram.message", "send_file_telegram": "telegram.file",
     "find_and_send": "telegram.find_send", "send_last_result": "telegram.result",

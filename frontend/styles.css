@@ -293,6 +293,12 @@ body.low-power[data-state="speaking"] .halo { animation: speak 0.5s ease-in-out 
 .chip { display: inline-flex; align-items: center; gap: 4px; font-family: var(--mono); font-size: 10.5px; padding: 2px 8px; border-radius: 999px;
   border: 1px solid var(--line); color: var(--muted); background: rgba(255, 255, 255, 0.025); animation: rise 0.3s var(--ease) both; }
 .chip b { color: var(--dim); font-weight: 400; }
+.rate { display: inline-flex; gap: 2px; margin-left: auto; }
+.rate-btn { font-size: 12px; line-height: 1; padding: 2px 6px; border-radius: 999px; border: 1px solid transparent;
+  background: transparent; cursor: pointer; opacity: 0.45; filter: grayscale(1); transition: opacity 0.15s, filter 0.15s; }
+.rate-btn:hover:not(:disabled), .rate-btn:focus-visible { opacity: 1; filter: none; border-color: var(--line); }
+.rate-btn.picked { opacity: 1; filter: none; border-color: var(--line); }
+.rate-btn:disabled:not(.picked) { opacity: 0.15; cursor: default; }
 .chip.tool.ok { color: var(--accent-2); border-color: rgba(255, 179, 71, 0.25); }
 .chip.tool.ok::before { content: "⚙"; }
 .chip.tool.fail { color: var(--danger); border-color: rgba(255, 93, 93, 0.3); }

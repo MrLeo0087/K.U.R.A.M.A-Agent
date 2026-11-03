@@ -253,7 +253,8 @@ class Engine:
                 turn.push({"type": "done", "text": reply, "route": _route(last.get("route")), "tier": tier,
                            "tokens": _turn_tokens(ts0), "ms": int((time.monotonic() - t0) * 1000),
                            "lang": reply_lang(reply, last.get("lang") or lang),
-                           "workspace": list(last.get("workspace") or []), "jobs": list(last.get("jobs") or [])})
+                           "workspace": list(last.get("workspace") or []), "jobs": list(last.get("jobs") or []),
+                           "trace": getattr(ag, "trace_id", "") or ""})
             except Exception as e:
                 log.exception("chat turn failed")
                 from jarvis.core import llm as _llm

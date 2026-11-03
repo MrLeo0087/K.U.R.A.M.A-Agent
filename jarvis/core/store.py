@@ -137,7 +137,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
         if col not in cols:
             conn.execute(f"ALTER TABLE tool_calls ADD COLUMN {col} TEXT")
     added = {  # P7: STT audio seconds, message sessions, note importance
-        "llm_calls": (("audio_s", "REAL DEFAULT 0"),),
+        "llm_calls": (("audio_s", "REAL DEFAULT 0"), ("cached_tokens", "INTEGER DEFAULT 0")),  # Groq prompt cache hits
         "messages": (("session", "INTEGER"),),
         "notes": (("hits", "INTEGER DEFAULT 0"), ("last_used", "REAL")),
     }
@@ -174,15 +174,15 @@ def _today_start() -> float:
 # --- writers ---
 def log_llm(model: str, purpose: str, prompt_tokens: int, completion_tokens: int,
             latency_ms: int, ok: bool, error: str = "", estimated: bool = False,
-            audio_s: float = 0.0) -> None:
+            audio_s: float = 0.0, cached_tokens: int = 0) -> None:
     p, c = int(prompt_tokens or 0), int(completion_tokens or 0)
     if purpose != "stt":
         from jarvis.core import trace
-        trace.on_llm(model, purpose, p, c, latency_ms, ok, error)
+        trace.on_llm(model, purpose, p, c, latency_ms, ok, error, int(cached_tokens or 0))
     _exec("INSERT INTO llm_calls(ts,model,purpose,prompt_tokens,completion_tokens,total_tokens,"
-          "latency_ms,ok,error,estimated,audio_s) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+          "latency_ms,ok,error,estimated,audio_s,cached_tokens) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
           (time.time(), model, purpose, p, c, p + c, int(latency_ms), int(bool(ok)),
-           (error or "")[:500], int(bool(estimated)), float(audio_s or 0.0)))
+           (error or "")[:500], int(bool(estimated)), float(audio_s or 0.0), int(cached_tokens or 0)))
 
 
 def log_tool(tool: str, args: Any, ok: bool, latency_ms: int, safety: str = "safe",

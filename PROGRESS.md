@@ -1045,3 +1045,17 @@ Phases (one at a time, owner tests after each):
       the whole text first; + 'kya hora hai', 'hello k xa khabar'. Still the AI's (correctly): questions, garbled
       speech, multi-step requests, 'Ovi, time kya hua hai?' (unknown word 'Ovi'). Tests: test_fixes_1103.py (53);
       suite 1601; scorecard 73% / 100% / 98% (+7 cases). Live: battery, date, 'Hello, bro.', 'When I say...' 0 tokens.
+- [x] 2026-11-03 19:30 Learning from the owner's feedback (owner: "day by day more efficient and accurate by my
+      feedback"). jarvis/core/recipes.py: an AI turn done with ONE safe tool in config.RECIPE_GROUPS (reads, opening,
+      media, controls; never reminders, money, messages, files, jobs, anything that asks yes/no, a request pointing
+      at the screen, a path-like argument) is a candidate; request words also in an argument become slots (enum /
+      bool arguments never). It turns on after a 👍 or RECIPE_AUTO_CONFIRMS (2) requests that went the same way with
+      no correction (learn._judge: survived / dropped). fastpath.match tries it LAST, after every pattern and meaning
+      shortcut. A 👍 plain answer (no tool, no today/now/news) is kept 30 days for a nearly identical question (0.95 +
+      same words). 👎 deletes what served it, learn.add veto for the shortcut that answered, feedback row; the page
+      then pre-fills "No, I meant " (the existing correction learning does the rest). UI: 👍 / 👎 on every reply
+      (done event carries the trace id). /learned_shortcuts list / forget N / clear / stats (tokens saved today,
+      this week). trace_report: 👎 list first, learned savings, Groq prompt-cache reuse (new llm_calls.cached_tokens
+      from usage input_token_details.cache_read). Tests: test_recipes.py (17, real model); suite 1618; scorecard
+      73% / 100% / 98%. Live: wikipedia summary of Mount Everest 3,113 tokens -> 👍 -> "...of kathmandu" 0 tokens
+      (test row removed after). Telegram has no buttons yet (next step if wanted).

@@ -58,6 +58,12 @@ CREATE TABLE IF NOT EXISTS traces(
   error TEXT
 );
 CREATE INDEX IF NOT EXISTS traces_ts ON traces(ts);
+CREATE TABLE IF NOT EXISTS feedback(
+  trace_id TEXT PRIMARY KEY,
+  ts REAL,
+  vote INTEGER,           -- 1 = 👍, -1 = 👎 (the owner's button on the reply)
+  note TEXT
+);
 CREATE INDEX IF NOT EXISTS traces_path ON traces(path);
 """
 
@@ -78,6 +84,32 @@ def current() -> dict | None:
     return _CUR.get()
 
 
+def get(trace_id: str) -> dict | None:
+    """One trace as a dict (id or its first letters), or None."""
+    tid = re.sub(r"[^0-9a-f]", "", (trace_id or "").lower())[:12]
+    if len(tid) < 6:
+        return None
+    with _lock:
+        cur = _db().execute("SELECT * FROM traces WHERE id LIKE ? ORDER BY ts DESC LIMIT 1", (tid + "%",))
+        row = cur.fetchone()
+        return dict(zip([d[0] for d in cur.description], row)) if row else None
+
+
+def set_feedback(trace_id: str, vote: int, note: str = "") -> None:
+    with _lock:
+        _db().execute("INSERT OR REPLACE INTO feedback VALUES (?,?,?,?)", (trace_id, time.time(), int(vote), note[:500]))
+
+
+def feedback_rows(since: float = 0.0) -> list[dict]:
+    """👍 / 👎 since a time, each with its request (newest first)."""
+    with _lock:
+        cur = _db().execute("SELECT f.trace_id, f.ts, f.vote, f.note, t.text, t.path, t.intent, t.answer, t.tokens "
+                            "FROM feedback f LEFT JOIN traces t ON t.id = f.trace_id WHERE f.ts >= ? ORDER BY f.ts DESC",
+                            (since,))
+        names = [d[0] for d in cur.description]
+        return [dict(zip(names, r)) for r in cur.fetchall()]
+
+
 def begin(text: str, mode: str = "", channel: str = "", enabled: bool = True) -> dict | None:
     """Start a trace for this request (None when tracing is off)."""
     if not (enabled and config.TRACING):
@@ -95,11 +127,12 @@ def resume(tr: dict | None) -> None:
         _CUR.set(tr)
 
 
-def on_llm(model: str, purpose: str, p: int, c: int, ms: int, ok: bool, error: str = "") -> None:
+def on_llm(model: str, purpose: str, p: int, c: int, ms: int, ok: bool, error: str = "", cached: int = 0) -> None:
     tr = _CUR.get()
     if tr is not None and not tr["done"]:
         tr["llm"].append({"model": model, "purpose": purpose, "in": int(p or 0), "out": int(c or 0), "ms": ms,
-                          "ok": bool(ok), **({"error": str(error)[:200]} if error else {})})
+                          "ok": bool(ok), **({"cached": int(cached)} if cached else {}),
+                          **({"error": str(error)[:200]} if error else {})})
 
 
 def on_tool(tool: str, args: Any, ok: bool, ms: int, outcome: str = "", result: str = "", safety: str = "") -> None:
@@ -174,7 +207,8 @@ def end(tr: dict | None, answer: str = "", last: dict | None = None, error: str 
             _prune(db)
         if not error:
             from jarvis.core import learn
-            learn.on_turn({"text": row[5], "ts": tr["ts"], "path": path, "intent": row[7], "tools": tools})
+            learn.on_turn({"text": row[5], "ts": tr["ts"], "path": path, "intent": row[7], "tools": tools,
+                           "id": tr["id"], "tokens": tin + tout})
     except Exception as e:
         log.warning("trace write failed: %s", e)
 

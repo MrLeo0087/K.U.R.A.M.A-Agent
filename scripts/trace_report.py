@@ -162,6 +162,39 @@ def report(rows: list[dict], days: float) -> str:
     return "\n".join(out)
 
 
+def learning_report(db: Path, rows: list[dict], days: float) -> str:
+    """Your 👍 / 👎 (the 👎 first: each is a reply you said was wrong), what KURAMA learned from them and from clean
+    repeats (0-token shortcuts, tokens they saved), and how much of the AI's input Groq's prompt cache reused."""
+    out = [""]
+    since = time.time() - days * 86400
+    try:
+        con = sqlite3.connect(str(db))
+        fb = con.execute("SELECT f.trace_id, f.ts, f.vote, f.note, t.text, t.path, t.intent, t.answer FROM feedback f "
+                         "LEFT JOIN traces t ON t.id = f.trace_id WHERE f.ts >= ? ORDER BY f.ts DESC", (since,)).fetchall()
+    except sqlite3.Error:
+        fb = []
+    down = [r for r in fb if r[2] < 0]
+    out.append(f"## Your feedback: 👍 {len(fb) - len(down)} · 👎 {len(down)}")
+    for tid, ts, _, note, text, path, intent, answer in down[:15]:
+        out.append(f"  👎 {tid} {when(ts)} {short(text or '')!r} → {path}/{intent or '-'} → {short(answer or '', 60)!r}"
+                   + (f"  (wanted: {short(note, 50)!r})" if note else ""))
+    try:
+        from jarvis.core import recipes
+        st = recipes.stats()
+        out.append(f"Learned shortcuts: {st['on']} on ({st['answers']} kept answers), {st['waiting']} waiting · used "
+                   f"{st['used']}x · saved ~{st['saved_today']} tokens today, ~{st['saved_week']} this week "
+                   "(list: /learned_shortcuts)")
+    except Exception as e:  # noqa: BLE001
+        out.append(f"Learned shortcuts: (couldn't read: {e})")
+    calls = [c for r in rows for c in json.loads(r.get("llm") or "[]")]
+    tin = sum(c.get("in", 0) for c in calls)
+    cached = sum(c.get("cached", 0) for c in calls)
+    if tin:
+        out.append(f"Groq prompt cache: {cached} of {tin} input tokens reused ({pct(cached, tin)})"
+                   + ("" if cached else " - none recorded yet (the cache needs the same prompt start)"))
+    return "\n".join(out)
+
+
 # --- the side logs (voice, wake word, hold-to-talk, Files app, job list): problems the traces don't show ---
 def _log_lines(path: Path, days: float) -> list[tuple[float, str]]:
     """(timestamp, line) of a log whose lines start with 'MM-DD HH:MM:SS' (the year is assumed current)."""
@@ -282,6 +315,7 @@ def main() -> int:
         print(f"wrote {len(rows)} rows to {a.csv}")
         return 0
     print(report(rows, a.days))
+    print(learning_report(db, rows, a.days))
     print(side_report(a.days))
     return 0
 

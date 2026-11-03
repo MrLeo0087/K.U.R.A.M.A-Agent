@@ -46,6 +46,8 @@ answers to KURAMA's questions and the model per call since the memory + multitas
 | Hold-to-talk | `data/logs/ptt.log` | key down/up/cancel (server), what the panel window did, page mic start / recording size, every caption hide and who hid it |
 | Files app context | `data/logs/fm.log` | per request when Files is the latest app: window title, folder, selection, which window was chosen and why (`pick`) |
 | Job list | `data/jarvis.db`, table `job_queue` | jobs kept for later, status, tries, result / error note |
+| **👍 / 👎** | `data/traces.db`, table `feedback` (trace_id, vote, note) | the owner's verdict on each reply: 👎 rows are the first thing to read |
+| Learned shortcuts | `data/recipes.json` (`/learned_shortcuts`) | 0-token shortcuts + kept answers learned from 👍 and clean repeats, uses, tokens saved per day |
 | Long jobs | `data/jarvis.db`, tables `jobs`, `job_state`, `job_steps` | background jobs, checkpoints, step log |
 | Server / workers | `data/logs/server.log`, `data/logs/worker_*.log` | yes/no answers, errors |
 | Code that writes them | `jarvis/core/trace.py`, `stt.py`, `wake.py` (`wake_log`), `ptt.py` (`pttlog`) + `scripts/kurama_wallpaper.py`, `filemanager.py`, `jobqueue.py`, `longjobs.py` | |
@@ -399,3 +401,10 @@ message; the action itself is chosen by meaning), the reference nouns (`workmem.
   ptt.log. Watch: ptt.log "ignored" lines when Alt seems dead; whole-system volume drop was NOT reproduced (echo
   canceller measured at the same level) - note the time if it happens again. Later: time / date / battery / git
   status / daily summary and "when I say X, open Y" are meaning shortcuts (0 tokens); "Hello, bro." small talk.
+- 2026-11-03 (evening): KURAMA learns from the owner's feedback. Every reply in the chat has 👍 / 👎 (POST
+  /api/v1/feedback). An AI request done with one safe tool becomes a 0-token learned shortcut after a 👍 or two
+  clean runs (words also in an argument are slots: 'tell me the wikipedia summary of X'); a 👍 plain answer is kept
+  for a nearly identical question (never today / news / prices). 👎 removes what served it, vetoes that shortcut for
+  that meaning, and pre-fills "No, I meant " so the correction teaches the right way. The report starts its
+  learning part with the 👎 list, learned-shortcut savings per day and Groq's prompt-cache reuse (llm_calls
+  .cached_tokens). Watch: 👎 lines first; `/learned_shortcuts` for anything learned wrongly (forget N).

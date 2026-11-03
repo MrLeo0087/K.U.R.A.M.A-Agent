@@ -76,6 +76,8 @@ def tmp_store(tmp_path, monkeypatch):
     monkeypatch.setattr(assist, "_screen_chat", lambda: "")  # no screenshots / OCR of the real screen in tests
     from jarvis.core import coderun
     coderun._last_error.clear()
+    from jarvis.core import recipes
+    recipes.reset_cache()  # learned shortcuts are read again from this test's own data folder
     from jarvis.core import music
     monkeypatch.setattr(music, "launch", lambda cmds, pipe=False, env=None: [])  # never start a real player (no sound from tests)
     monkeypatch.setattr(music, "_cache_dir", lambda: tmp_path)

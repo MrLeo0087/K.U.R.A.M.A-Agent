@@ -3340,8 +3340,10 @@ def match(text: str) -> Intent | None:
     semantic_ensure()  # a freed model loads in ~0.6 s: cheaper than an AI request that guesses (it wrote kt1.txt)
     if _bare_yes_no(text):
         return None  # a bare yes/no names no action: it answers a question (the AI reads it with that question)
-    return meaning_intent(text)  # no pattern, or its meaning disagreed ('Open VS Code from this folder' is not a
-    #                              folder named 'VS Code from this'): an action picked by meaning, else the AI
+    if (mi := meaning_intent(text)) is not None:  # no pattern, or its meaning disagreed ('Open VS Code from this
+        return mi  # folder' is not a folder named 'VS Code from this'): an action picked by meaning
+    from jarvis.core import recipes  # what the owner's 👍 / clean repeats taught (data/recipes.json), else the AI
+    return recipes.match(text)
 
 
 _LIST_WORD = re.compile(r"\b(?:to-?do|todo|task|list|links?|link\s+store|read(?:ing)?\s+(?:later|list)|bookmarks?|notes?)\b", I)
@@ -3959,8 +3961,10 @@ def _say(key: str, lang: str, x: str) -> str:
 
 
 def render(intent: Intent, ok: bool, output: str, lang: str) -> str:
-    if intent.name == "say":
+    if intent.name in ("say", "cached"):
         return intent.args.get(lang) or intent.args["en"]
+    if intent.name == "learned":  # a learned shortcut: the tool's own sentence
+        return (output[:1].upper() + output[1:]) if output else output
     if intent.name == "copypath" and ok:
         return {"hi": f"पाथ कॉपी कर दिया: {intent.args['text']}", "ne": f"पाथ कपी गरें: {intent.args['text']}"}.get(
             lang, f"Copied the path: {intent.args['text']}")
@@ -4171,6 +4175,8 @@ def try_answer(text: str, lang: str | None = None, confirm=None, mode: str = "te
             published = [str(path)]
     if mode == "voice" and intent.name in _VOICE_FIRST_LINE:
         answer = answer.split("\n", 1)[0]
+    if mode == "voice" and intent.name == "cached":  # a kept text answer, spoken: its first two sentences
+        answer = " ".join(re.split(r"(?<=[.!?])\s+", answer.strip())[:2])
     ms = int((time.monotonic() - t0) * 1000)
     try:
         store.log_routing(text, [intent.group], "fastpath", ms)

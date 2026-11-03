@@ -192,6 +192,11 @@ def on_turn(turn: dict) -> None:
 def _judge(turn: dict) -> None:
     global _prev
     prev, _prev = _prev, turn
+    from jarvis.core import recipes
+    try:  # this turn's decision may become a learned shortcut (recipes: switched on by 👍 or clean repeats)
+        recipes.observe(turn)
+    except Exception as e:  # noqa: BLE001 - learning must never break KURAMA
+        log.warning("shortcut learning failed: %s", e)
     if not prev or not prev.get("text"):
         return
     try:
@@ -203,6 +208,7 @@ def _judge(turn: dict) -> None:
                          for t in prev["tools"])
             neg = "" if failed else prev.get("intent") or ""
             area, tool = _area(turn["tools"])
+            recipes.dropped(prev.get("id") or "")  # what was learned from the corrected request goes
             if area:
                 add(prev["text"], area, neg, "correction", tool)
             elif prev.get("path") == "fastpath" and neg:
@@ -210,5 +216,6 @@ def _judge(turn: dict) -> None:
         elif prev.get("path") == "ai" and corr < config.LEARN_WORKED_MAX_CORR and standalone(prev["text"]) \
                 and (found := _area(prev["tools"], done=True))[0]:
             add(prev["text"], found[0], "", "worked", found[1])
+            recipes.survived(prev.get("id") or "")
     except Exception as e:  # noqa: BLE001 - learning must never break KURAMA
         log.warning("learning failed: %s", e)

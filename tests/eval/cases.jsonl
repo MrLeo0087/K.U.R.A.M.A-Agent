@@ -285,7 +285,7 @@
 {"id": 285, "text": "play song us mod se shurroo kare", "expect": "media.play", "args": {}, "channel": "laptop"}
 {"id": 286, "text": "Open Browser", "expect": "open.app", "args": {}, "channel": "laptop"}
 {"id": 287, "text": "open the browser", "expect": "open.app", "args": {}, "channel": "laptop"}
-{"id": 288, "text": "When I say open browser, open Brave Browser, not Firefox.", "expect": "tool:app_name", "args": {}, "channel": "laptop"}
+{"id": 288, "text": "When I say open browser, open Brave Browser, not Firefox.", "expect": "apps.name", "args": {}, "channel": "laptop"}
 {"id": 289, "text": "What is date today in Nepal?", "expect": "date", "args": {}, "channel": "laptop"}
 {"id": 290, "text": "What is the status of my battery?", "expect": "battery", "args": {}, "channel": "laptop"}
 {"id": 291, "text": "how much battery do I have left", "expect": "battery", "args": {}, "channel": "laptop"}
