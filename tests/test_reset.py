@@ -29,3 +29,24 @@ def test_factory_reset_forgets_everything_but_keeps_settings(tmp_path, monkeypat
     assert backups and (backups[0] / "outputs" / "essay.md").exists() and (backups[0] / "test.db").exists()
     assert (backups[0] / "logs" / "chat.log").exists()
     assert list(tmp_path.parent.glob("KURAMA-backup-*/expenses.xlsx"))
+
+
+def test_factory_reset_also_forgets_what_was_learned_and_can_keep_parts(tmp_path, monkeypatch):
+    """11-03: learned shortcuts, routing memory, plans, the owner's words / rules and the traces survived a reset."""
+    import json
+    from pathlib import Path
+    from jarvis.core import recipes, style
+    monkeypatch.setattr(config, "LOG_DIR", tmp_path / "logs")
+    monkeypatch.setattr(config, "MEMORY_DB_PATH", tmp_path / "memory.db")
+    for n in ("recipes.json", "learned.json", "learned_plans.json", "my_words.json", "app_names.json", "traces_fixed_at"):
+        (tmp_path / n).write_text("[]" if n.endswith(".json") else "1")
+    style.add("always call me boss")
+    Path(config.CONTACTS_FILE).write_text("people")
+    reset.reset_all(keep=frozenset({"words", "sheets"}))
+    assert not (tmp_path / "recipes.json").exists() and not (tmp_path / "learned.json").exists()
+    assert (tmp_path / "my_words.json").exists() and style.rules() == ["always call me boss"]  # kept
+    assert Path(config.CONTACTS_FILE).exists() and not (tmp_path / "traces_fixed_at").exists()
+    b = next((tmp_path / "reset-backups").iterdir()) / "learned"
+    assert (b / "recipes.json").exists() and (b / "traces_fixed_at").exists() and recipes.rows() == []
+    reset.reset_all()
+    assert not (tmp_path / "my_words.json").exists() and style.rules() == []

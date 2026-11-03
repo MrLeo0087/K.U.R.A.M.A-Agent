@@ -71,6 +71,10 @@ def clear_recent(agent=None) -> str:
 KEEP_KV = frozenset(("power_mode", "semantic_mode", "hear_device_sound", "telegram_offset", "todos_migrated_from_sheet"))
 KEEP_TABLES = frozenset(("config_snapshots",))
 SHEETS = ("READ_LATER_FILE", "LINKS_FILE", "GOALS_FILE", "CONTACTS_FILE", "EXPENSES_FILE", "HABITS_FILE", "GOALS_DIR")
+# what KURAMA learned from the owner (docs/LEARNING.md): moved to the backup by the full reset
+LEARNED = ("recipes.json", "learned.json", "learned.npy", "learned_plans.json")
+OWN_WORDS = ("my_words.json", "app_names.json", "style.json")  # the owner's words, app names, reply rules
+HISTORY = ("traces.db", "traces.db-wal", "traces.db-shm", "traces_fixed_at")  # the improvement record (MONITORING.md)
 
 
 def _db_path() -> Path:
@@ -106,7 +110,21 @@ def _wipe_db(path, keep_tables=frozenset(), keep_kv=frozenset()) -> int:
     return n
 
 
-def _backup(stamp: str) -> list[str]:
+def _forget_in_memory() -> None:
+    """What the running KURAMA holds in memory is read again from the (now empty) files."""
+    from jarvis.core import learn, recipes, style
+    recipes.reset_cache()
+    learn._rows = learn._vecs = None
+    learn._prev = None
+    style._dropped.clear()
+    try:
+        from jarvis.core import trace
+        trace._conn = None  # the traces file may have moved: reopen (a fresh one) on the next request
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _backup(stamp: str, keep: frozenset[str] = frozenset()) -> list[str]:
     """Everything the reset removes is MOVED (not deleted) to a backup first, so a mistake can be undone."""
     import shutil
     import sqlite3
@@ -127,8 +145,16 @@ def _backup(stamp: str) -> list[str]:
         if Path(d).is_dir() and any(Path(d).iterdir()):
             shutil.move(str(d), str(dest / Path(d).name))
             Path(d).mkdir(parents=True, exist_ok=True)
+    names = list(LEARNED) + ([] if "words" in keep else list(OWN_WORDS)) + ([] if "history" in keep else list(HISTORY))
+    learned = [Path(config.DATA_DIR) / n for n in names if (Path(config.DATA_DIR) / n).exists()]
+    if learned:
+        (dest / "learned").mkdir(exist_ok=True)
+        for f in learned:
+            shutil.move(str(f), str(dest / "learned" / f.name))
+    _forget_in_memory()
     out.append(str(dest))
-    files = [f for f in (Path(str(getattr(config, k))).expanduser() for k in SHEETS) if f.exists()]
+    files = [f for f in (Path(str(getattr(config, k))).expanduser() for k in SHEETS) if f.exists()] \
+        if "sheets" not in keep else []
     if files:  # the personal sheets (money, habits, goals, links, contacts, reading list)
         to = files[0].parent.parent / f"KURAMA-backup-{stamp}"
         to.mkdir(parents=True, exist_ok=True)
@@ -138,15 +164,17 @@ def _backup(stamp: str) -> list[str]:
     return out
 
 
-def reset_all(agent=None) -> str:
+def reset_all(agent=None, keep: frozenset[str] = frozenset()) -> str:
     """Factory reset: a brand-new KURAMA. Every chat, fact, reminder, to-do, alert, log, result, saved tool, indexed
-    document and personal sheet is gone from KURAMA (moved to a dated backup first). Kept: the password, .env keys,
-    settings (power mode, understanding model), and Telegram's read position (old messages are not answered again)."""
+    document, personal sheet and everything learned (shortcuts, routing memory, plans) is gone from KURAMA (moved to
+    a dated backup first). Kept: the password, .env keys, settings (power mode, understanding model, device sound),
+    and Telegram's read position (old messages are not answered again). keep: "sheets" (money, contacts, habits,
+    goals, links, reading list), "words" (the owner's words, app names, reply rules), "history" (traces + 👍/👎)."""
     from jarvis.core import config
     if agent is not None:
         agent.clear_conversation()
     stamp = time.strftime("%Y%m%d-%H%M%S")
-    saved = _backup(stamp)
+    saved = _backup(stamp, keep)
     rows = _wipe_db(_db_path(), KEEP_TABLES, KEEP_KV) + _wipe_db(config.MEMORY_DB_PATH)
     bump_epoch()
     return (f"KURAMA is brand new: I forgot every chat, fact, reminder, to-do, alert and result ({rows} records). "
