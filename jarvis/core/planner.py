@@ -361,6 +361,8 @@ def is_multi(text: str) -> bool:
     from jarvis.core import fastpath
     if fastpath.to_file_intent(text):  # "<code description, with ands> ... write it in this file": ONE request
         return False
+    if fastpath.app_name_intent(text):  # "when I say open browser, open Brave": two 'open's, ONE name to keep
+        return False
     if "Traceback (most recent call last)" in text or re.search(r"^\s*File \"[^\"]+\", line \d+", text, re.M):
         return False  # a pasted traceback is one thing to explain, not several tasks
     if _ONE_EDIT.search(text):

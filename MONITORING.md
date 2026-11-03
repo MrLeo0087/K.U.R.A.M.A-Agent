@@ -397,4 +397,5 @@ message; the action itself is chosen by meaning), the reference nouns (`workmem.
   was ~-13 dB) and keeps the user's last music volume; a song started while ducked gets the right volume once mpv
   answers. Alt: only modifier keys spoil a solo Alt press; a spoiled press logs "alt ignored: a shortcut (...)" in
   ptt.log. Watch: ptt.log "ignored" lines when Alt seems dead; whole-system volume drop was NOT reproduced (echo
-  canceller measured at the same level) - note the time if it happens again.
+  canceller measured at the same level) - note the time if it happens again. Later: time / date / battery / git
+  status / daily summary and "when I say X, open Y" are meaning shortcuts (0 tokens); "Hello, bro." small talk.

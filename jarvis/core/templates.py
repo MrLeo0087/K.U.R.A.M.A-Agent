@@ -97,10 +97,10 @@ def match(text: str) -> dict | None:
 # "hello, what are you doing and tell me the time" is split into parts first, so the time is still told.
 SMALL_TALK: list[tuple[tuple[str, ...], dict]] = [
     (("hello", "hi kurama", "hey there", "good morning", "namaste", "yo kurama", "hello kurama how are you", "hello bro",
-      "k xa khabar", "k cha khabar", "sanchai"),
+      "k xa khabar", "k cha khabar", "sanchai", "hello k xa khabar", "hello kurama bro"),
      {"en": "Hello! What can I do for you?", "hi": "नमस्ते! बताइए क्या करूँ?", "ne": "नमस्ते! के गरूँ?"}),
     (("how are you", "how are you doing", "are you okay", "how do you feel today", "kasto xa", "kaise ho",
-      "kya haal hai", "kya ho raha hai", "how are you bro"),
+      "kya haal hai", "kya ho raha hai", "how are you bro", "kya hora hai", "kya chal raha hai"),
      {"en": "I'm doing great, thanks! What can I do for you?", "hi": "मैं बढ़िया हूँ, धन्यवाद! क्या करूँ?",
       "ne": "म ठिकै छु, धन्यवाद! के गरूँ?"}),
     (("what are you doing", "what's up", "what are you up to", "k gardai xau", "kya kar rahe ho"),
@@ -127,21 +127,31 @@ def small_talk(text: str) -> dict | None:
     if not t or len(t.split()) > 10 or not semantic.ready():
         return None
     from jarvis.core import planner
-    parts = [p for p in planner.split_clauses(t) if len(p.split()) > 1] or planner.split_clauses(t)  # "hello, what are you doing, and tell me the time": parts, each answered; but
-    global _st  # "Hello, bro. How are you?" / "Thanks. Thanks." are small talk in every part (cost 500-700 tokens
-    try:  # each on 11-01): the last part's answer
+    # "hello, what are you doing, and tell me the time": parts, each answered; but "Hello, bro. How are you?" /
+    # "Thanks. Thanks." are small talk in every part (cost 500-700 tokens each on 11-01): the last part's answer.
+    # Only one-word parts ('Hello, bro.'): the whole text first ('bro.' alone isn't small talk: 11-03 an AI call)
+    clauses = planner.split_clauses(t)
+    parts = [p for p in clauses if len(p.split()) > 1]
+    global _st
+    try:
         if _st is None:
             rows = [(i, ex) for i, (exs, _) in enumerate(SMALL_TALK) for ex in exs]
             _st = ([i for i, _ in rows], semantic.embedder().embed([ex for _, ex in rows], query=True))
         idx, mat = _st
-        vecs = semantic.embedder().embed(parts if len(parts) > 1 else [t], query=True)
-        picks = []
-        for v in vecs:
-            sims = (mat @ v).tolist()
-            best = max(range(len(sims)), key=sims.__getitem__)
-            if sims[best] < config.SMALL_TALK_SIM:
-                return None
-            picks.append(idx[best])
+
+        def pick(texts: list[str]) -> int | None:
+            picks = []
+            for v in semantic.embedder().embed(texts, query=True):
+                sims = (mat @ v).tolist()
+                best = max(range(len(sims)), key=sims.__getitem__)
+                if sims[best] < config.SMALL_TALK_SIM:
+                    return None
+                picks.append(idx[best])
+            return picks[-1]
+
+        got = pick(parts) if len(parts) > 1 else pick([t])
+        if got is None and not parts and len(clauses) > 1:
+            got = pick(clauses)
     except Exception:  # noqa: BLE001 - the model failed (or a different model's cache): no shortcut, the AI answers
         return None
-    return SMALL_TALK[picks[-1]][1]
+    return None if got is None else SMALL_TALK[got][1]

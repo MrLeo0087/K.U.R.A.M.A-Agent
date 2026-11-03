@@ -3325,7 +3325,7 @@ def match(text: str) -> Intent | None:
         return Intent("choice", tool, registry_group(tool), args)
     if (played := player_intent(text)) is not None:  # 'pause' / 'continue' while KURAMA's music is on
         return played
-    it = agent_intent(text) or agent_coding_intent(text) or link_play_intent(text) or clean_intent(text) \
+    it = app_name_intent(text) or agent_intent(text) or agent_coding_intent(text) or link_play_intent(text) or clean_intent(text) \
         or shutdown_later_intent(text) or to_file_intent(text) or selection_intent(text) \
         or _code_not_file(_match(text)) or daily_intent(text)
     if it is not None and it.tool == "read_later" and semantic_ensure():  # "add a job for later: write a poem" is
@@ -3483,6 +3483,30 @@ def _shared(label: str) -> set[str]:
     return _SHARED[label]
 
 
+_ONE_TOOL = {"time_now": ("time", "get_time", "general", {}), "date_today": ("date", "get_date", "general", {}),
+             "battery": ("battery", "battery_status", "power", {}),
+             "git_status": ("git", "git_info", "git", {"action": "status"}),
+             "daily_summary": ("digest", "daily_digest", "usage", {"date": "today"})}
+_APP_NAME = re.compile(r"\b(?:when(?:ever)?|if)\s+i\s+say\s+(?:open\s+)?(?P<w>[\w .'-]{2,40}?)\s*,?\s+(?:then\s+)?"
+                       r"(?:you\s+(?:should|must|have\s+to)\s+|please\s+|just\s+)?(?:open|launch|start|use|run)\s+"
+                       r"(?:the\s+)?(?P<a>[\w .'-]{2,40}?)(?:\s*,?\s+(?:not|instead\s+of|rather\s+than)\b.*)?[\s.!]*$", I)
+
+
+def app_name_args(raw: str) -> dict | None:
+    """The two names of 'when I say <word>, open <app> (not <other>)'; None when either is missing (0c4641e3: the AI
+    promised to remember Brave and saved nothing; match() gates it by meaning like every pattern)."""
+    m = _APP_NAME.search(" ".join((raw or "").split()))
+    if not m:
+        return None
+    app = re.sub(r"\s+(?:app|application)$", "", m.group("a").strip(), flags=I)
+    return {"name": m.group("w").strip(), "app": app}
+
+
+def app_name_intent(text: str) -> Intent | None:
+    args = app_name_args(text) if re.search(r"\bi\s+say\b", text or "", I) else None
+    return Intent("appname", "app_name", "apps", args, known=args["app"]) if args else None
+
+
 def meaning_label(t: str) -> tuple[str, float] | None:
     """The closest config.MEANING_SHORTCUTS action and how close. Words no action knows (a name: 'whatsapp',
     'night melody song') become X, like in the examples, so a name never pulls the meaning away
@@ -3590,6 +3614,10 @@ def meaning_intent(text: str) -> Intent | None:
         return it if meaning_ok(t, it) else None
     if label.startswith("clean_"):
         it = Intent("clean", "cleanup", "system", {"action": label[6:]})
+        return it if meaning_ok(t, it) else None
+    if label in _ONE_TOOL:  # a one-tool question with nothing to fill in: the tool answers it
+        name, tool, group, args = _ONE_TOOL[label]
+        it = Intent(name, tool, group, dict(args))
         return it if meaning_ok(t, it) else None
     if label == "jobs_start":
         return Intent("jobs", "jobs", "jobs", {"action": "start"})

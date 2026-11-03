@@ -1285,6 +1285,18 @@ MEANING_SHORTCUTS: dict[str, tuple[str, ...]] = {
                    "begin the queued jobs", "work on your job list now"),
     "jobs_list": ("show my job list", "what jobs are waiting", "list the jobs you have", "what is in your job list",
                   "show the queued jobs", "which jobs are pending"),
+    # everyday one-tool questions the word patterns missed (11-03 traces: 'What is date today in Nepal?' 1.4k
+    # tokens, 'What is the status of my battery?' 3k, 'show git status now' 3.2k, 'show me the daily summary bro' 2.7k)
+    "time_now": ("what time is it", "what is the time now", "tell me the time", "what is the time in nepal right now",
+                 "time kati bhayo", "time kya hua hai", "kitne baje hain", "what's the time today", "current time please"),
+    "date_today": ("what is the date today", "what is today's date", "what is date today in nepal", "aaja kati gate",
+                   "aaj kya tarikh hai", "which day is it today", "tell me today's date"),
+    "battery": ("what is the status of my battery", "how much battery is left", "battery percentage", "check my battery",
+                "is my laptop charging", "how is my battery health", "how much charge do I have"),
+    "git_status": ("show git status", "show me the git status now", "git status of this project",
+                   "what changed in git", "any uncommitted changes in this repo"),
+    "daily_summary": ("show me the daily summary", "give me my daily digest", "summary of my day",
+                      "what did I do on my laptop today", "my daily report please"),
     # a short text message to the owner's Telegram (the words after 'send' / 'saying' are the message): 0 tokens
     "tg_message": ("send X to telegram", "send X to my telegram", "message me on telegram saying X",
                    "send a message to my telegram saying X", "text X to my phone", "send X on telegram",
@@ -1294,7 +1306,8 @@ MEANING_SHORTCUT_AREAS = {"save_link": "links", "list_links": "links", "read_lat
                           "open_vscode": "files", "jobs_start": "jobs", "jobs_list": "jobs",
                           "clean_ram": "system", "clean_kurama": "system", "clean_storage": "system", "show_desktop": "windows", "switch_tab": "windows",
                           "list_tabs": "windows", "close_tab": "windows", "close_all_tabs": "windows", "scroll_down": "windows", "scroll_up": "windows", "colab_setup": "watch", "new_folder": "files",
-                          "tg_message": "telegram"}  # the router offers it too
+                          "tg_message": "telegram", "time_now": "general", "date_today": "general",
+                          "battery": "power", "git_status": "git", "daily_summary": "usage"}  # the router offers it too
 MEANING_SHORTCUT_MIN = 0.82
 # actions that change everything on screen need more certainty ("show my screen" is not "go to the home screen": 0.86)
 MEANING_SHORTCUT_MIN_BY = {"show_desktop": 0.90}

@@ -124,3 +124,61 @@ def test_ctrl_alt_shortcut_still_never_talks():
     h, told, t, timers = _holder()
     h.press("ctrl_l"); h.press("alt_l"); t[0] = 0.5; timers[-1](); h.release("alt_l"); h.release("ctrl_l")
     assert told == []
+
+
+# ---- 'not only these three': every everyday one-tool question at 0 tokens (by meaning, real model) ----
+from jarvis.core import semantic, templates  # noqa: E402
+
+
+@pytest.fixture
+def model(monkeypatch):
+    from jarvis.core import lanes, meta
+    monkeypatch.setattr(config, "SEMANTIC_ROUTER", True)
+    templates._st = lanes._mat = meta._claim_mat = None
+    semantic._tables.clear()
+    if not semantic.ensure_ready(30):
+        pytest.skip("meaning model not available")
+    yield
+    templates._st = lanes._mat = meta._claim_mat = None
+    semantic._tables.clear()
+
+
+@pytest.mark.parametrize("said,tool", [
+    ("What is date today in Nepal?", "get_date"), ("tell me today's date", "get_date"),
+    ("what time is it now", "get_time"), ("what is the time now", "get_time"),
+    ("What is the status of my battery?", "battery_status"), ("how much battery do I have left", "battery_status"),
+    ("show git status now", "git_info"), ("show me the git status", "git_info"),
+    ("show me the daily summary bro", "daily_digest"), ("give me my daily digest", "daily_digest")])
+def test_everyday_questions_take_no_tokens(model, said, tool):
+    it = fastpath.match(said)
+    assert it is not None and it.tool == tool, said
+
+
+@pytest.mark.parametrize("said", ["what time does the match start", "what is the date of the next holiday",
+                                  "git commit everything", "what did I tell you yesterday",
+                                  "what did I say when I opened the browser"])
+def test_look_alikes_stay_with_their_own_tools(model, said):
+    it = fastpath.match(said)
+    assert it is None or it.tool not in ("get_date", "get_time", "git_info", "daily_digest", "app_name"), said
+
+
+@pytest.mark.parametrize("said,args", [
+    ("Okay, remember one thing, okay? When I say open browser, you should open Brave Browser, not Firefox.",
+     {"name": "browser", "app": "Brave Browser"}),
+    ("when I say editor open vs code", {"name": "editor", "app": "vs code"}),
+    ("If I say music app, open Spotify.", {"name": "music app", "app": "Spotify"})])
+def test_when_i_say_x_open_y_is_saved_at_once(model, said, args):
+    it = fastpath.match(said)
+    assert it is not None and it.tool == "app_name" and it.args == args
+
+
+@pytest.mark.parametrize("said", ["Hello, bro.", "kya hora hai ?", "hello k xa khabaar", "Thanks. Thanks."])
+def test_small_talk_with_one_word_parts(model, said):
+    assert templates.small_talk(said) is not None, said
+
+
+@pytest.mark.parametrize("said", ["When I say open browser, you should open Brave Browser, not Firefox.",
+                                  "if I say open editor, open vs code", "whenever I say music, launch Spotify"])
+def test_when_i_say_is_one_request_not_two_tasks(said):
+    from jarvis.core import planner
+    assert not planner.is_multi(said)

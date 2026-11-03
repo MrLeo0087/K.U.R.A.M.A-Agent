@@ -1036,3 +1036,12 @@ Phases (one at a time, owner tests after each):
       level, stereo). Alt: solo Alt was spoiled for 10 s by a non-modifier whose release had another name ('!' vs
       '1') -> only modifiers count; spoiled presses logged. Tests: test_fixes_1103.py (29); suite 1576;
       scorecard 71% / 100% / 98% (+7 cases). Live: play kesariya (0 tok, vol 100), Open Browser -> Brave.
+- [x] 2026-11-03 18:45 Owner: "not only these three, this kind of query should take 0 tokens". Replayed the last 5
+      days' AI requests through fastpath: the everyday one-tool questions missed by word patterns are now meaning
+      shortcuts (config.MEANING_SHORTCUTS time_now, date_today, battery, git_status, daily_summary; fastpath._ONE_TOOL):
+      'What is date today in Nepal?', 'What is the status of my battery?', 'show git status now', 'show me the daily
+      summary bro'. "When I say X, open Y" = app_name at 0 tokens (pattern + meaning gate; planner.is_multi no longer
+      splits its two 'open's). Small talk: 'Hello, bro.' was split into one-word parts and 'bro.' judged alone ->
+      the whole text first; + 'kya hora hai', 'hello k xa khabar'. Still the AI's (correctly): questions, garbled
+      speech, multi-step requests, 'Ovi, time kya hua hai?' (unknown word 'Ovi'). Tests: test_fixes_1103.py (53);
+      suite 1601; scorecard 73% / 100% / 98% (+7 cases). Live: battery, date, 'Hello, bro.', 'When I say...' 0 tokens.
