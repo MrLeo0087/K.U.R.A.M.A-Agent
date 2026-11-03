@@ -317,6 +317,11 @@ class TelegramBot(Worker):
             loc = msg["location"]
             live = bool(loc.get("live_period")) or bool((update.get("edited_message")))
             pt = locationlog.record_phone(loc["latitude"], loc["longitude"], int(loc.get("horizontal_accuracy") or 0), live)
+            from jarvis.core import geolocate
+            if not update.get("edited_message") and (pinned := geolocate.pin_from_phone(  # right after '/here home'
+                    loc["latitude"], loc["longitude"], int(loc.get("horizontal_accuracy") or 0))):
+                self.send("📍 " + pinned)
+                return
             if not update.get("edited_message"):  # reply only to the first share, not every live update
                 self.send("📍 Got your phone's location — I'll keep a trail while you share it. /history phone to see it."
                           if pt else "📍 Location received (same spot as before).")

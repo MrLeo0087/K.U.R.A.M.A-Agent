@@ -1018,3 +1018,9 @@ Phases (one at a time, owner tests after each):
       The last size you set is kept across restarts. /control: the lock screen needs the Ubuntu login password,
       not the RustDesk one (auth.log 13:58-13:59: 4 lock-screen failures); the reply says so. /offline: phrase
       commands classified by the pattern layer (the meaning gate hid /weather). Tests: test_voice_fixes (+1).
+- [x] 2026-11-03 Laptop location "fake / near but wrong": proven - beacondb knows none of the 5 access points around
+      the laptop and answers fallback 'ipf' (the internet provider's city: 28.05, 81.6167 ±25 km = Nepalgunj
+      centre), no fresh browser GPS fix. Fix: '/here <name>' saves the whole Wi-Fi surroundings (up to 12 APs) and
+      waits 10 min for the phone's location on Telegram: that GPS point becomes the pin (geolocate.pin_from_phone);
+      a pinned spot is found again by 2+ common APs (or its strongest one), even on another network; an IP-only
+      /where now says it is not the real spot and how to pin it. Tests: test_location_pin.py (3).

@@ -124,9 +124,22 @@ def _places() -> dict:
         return {}
 
 
-def _place_of(bssid: str) -> dict | None:
-    """The saved place for a BSSID as {label, lat?, lon?} (older saves were a bare label string)."""
-    v = _places().get(bssid)
+def _place_of(bssid: str, aps: list[dict] | None = None) -> dict | None:
+    """The saved place for this spot as {label, lat?, lon?}: the connected Wi-Fi, else any saved place whose Wi-Fi
+    surroundings (every access point seen when it was pinned) overlap what the laptop sees now (2+ in common, or
+    the one that was strongest there). Older saves were a bare label string."""
+    places = _places()
+    v = places.get(bssid)
+    if v is None and aps:
+        seen = {a["macAddress"] for a in aps}
+        best, hits = None, 0
+        for entry in places.values():
+            if not isinstance(entry, dict) or not entry.get("aps"):
+                continue
+            common = len(seen & set(entry["aps"]))
+            if common > hits and (common >= 2 or entry["aps"][0] in seen):
+                best, hits = entry, common
+        v = best
     if v is None:
         return None
     return {"label": v} if isinstance(v, str) else v
@@ -156,15 +169,38 @@ def label_here(label: str, lat: float | None = None, lon: float | None = None) -
     # only geocode a label that looks like a place (2+ words), never a generic "home"/"office" (which geocodes wrong)
     if lat is None and len(label.split()) >= 2 and (g := geocode(f"{label}, Nepal" if "nepal" not in label.lower() else label)):
         lat, lon = g
-    entry: dict = {"label": label}
-    if lat is not None and lon is not None:
+    entry: dict = {"label": label,  # every access point seen here, strongest first: the spot is found again by its
+                   "aps": [a["macAddress"] for a in sorted(cur["aps"], key=lambda a: -a["signalStrength"])][:12]}
+    if lat is not None and lon is not None:  # (Wi-Fi surroundings, even on another network or after a router swap)
         entry["lat"], entry["lon"] = round(float(lat), 6), round(float(lon), 6)
+    else:
+        store.kv_set(_PIN_WAIT, json.dumps({"label": label, "at": time.time()}))  # the phone's GPS pins it exactly
     places = _places()
     places[cur["bssid"]] = entry
     store.kv_set(_PLACES_KEY, json.dumps(places))
     _cache.clear()  # so /where reflects the new label right away
-    pin = f" (pinned to {entry['lat']}, {entry['lon']})" if "lat" in entry else ""
-    return f"Saved: when the laptop is on “{cur['ssid']}” I'll say it's at “{label}”{pin}."
+    if "lat" in entry:
+        return (f"Saved: when the laptop sees the Wi-Fi around here (“{cur['ssid']}” and {len(entry['aps']) - 1} "
+                f"more) I'll say it's at “{label}” ({entry['lat']}, {entry['lon']}).")
+    return (f"Saved “{label}” for the Wi-Fi around here. For the EXACT spot, send your phone's location now "
+            f"(📎 → Location → Send my current location) within 10 minutes: its GPS becomes the laptop's pin.")
+
+
+_PIN_WAIT = "geolocate_pin_wait"
+
+
+def pin_from_phone(lat: float, lon: float, accuracy: int = 0) -> str | None:
+    """A phone location right after '/here <name>': that GPS point becomes the pinned spot (the free Wi-Fi
+    database didn't know this area: /where said 'Nepalgunj ±25 km' from the internet provider). None if no pin waits."""
+    try:
+        wait = json.loads(store.kv_get(_PIN_WAIT, "") or "{}")
+    except ValueError:
+        wait = {}
+    if not wait or time.time() - float(wait.get("at", 0)) > 600:
+        return None
+    store.kv_set(_PIN_WAIT, "{}")
+    out = label_here(wait["label"], lat, lon)
+    return out + (f" Phone GPS accuracy ±{accuracy} m." if accuracy else "")
 
 
 def forget_here() -> str:
@@ -219,7 +255,7 @@ def locate(use_cache: bool = True) -> dict:
     bf = browser_fix()  # the real, dynamic one (updates as the laptop moves)
     if bf:
         return finish(bf["lat"], bf["lon"], bf["accuracy"] or 30, "gps")
-    known = _place_of(cur["bssid"])  # a Wi-Fi you pinned (e.g. home): trusted over beacondb's shaky Nepal data
+    known = _place_of(cur["bssid"], cur["aps"])  # a spot you pinned (e.g. home): trusted over beacondb's Nepal data
     if known and "lat" in known:
         return finish(known["lat"], known["lon"], 30, "known", place=known["label"], known=known["label"])
     geo = _geolocate(cur["aps"])  # Wi-Fi/IP positioning (the only dynamic option on an unpinned network, coarse in Nepal)
@@ -246,6 +282,10 @@ def where_text() -> str:
         via = {"gps": "GPS", "wi-fi": "Wi-Fi"}.get(loc["source"], "IP")
         lead = "Near" if loc["source"] == "gps" else "Around"
         lines.append(f"{lead} {around}{acc}, via {via}")
+        if loc["source"] == "ip":  # honest: this is the internet provider's area, not where the laptop is
+            lines.append("⚠️ Not the laptop's real spot: the Wi-Fi around it isn't in the free location database, so "
+                         "this is only your internet provider's city. For the exact spot: /here home, then share "
+                         "your phone's location once (that place is then found by its Wi-Fi).")
     if loc["ssid"]:
         lines.append(f"Wi-Fi: {loc['ssid']}")
     lines.append(f"Map: {loc['map']}")
