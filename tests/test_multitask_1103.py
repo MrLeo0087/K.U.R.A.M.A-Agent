@@ -134,3 +134,51 @@ def test_the_checklist_keeps_what_a_step_wrote():
                     {0: {"status": "ok", "answer": poem}, 1: {"status": "ok", "answer": "Saved the image: /x.png"},
                      2: {"status": "ok", "answer": "Sent to Telegram."}})
     assert poem in out and "✓ Send both" in out
+
+
+# ---- 11-04 00:11: 10 parts asked, the image became a text file, the poem was never sent, 2 parts vanished ----
+@pytest.mark.parametrize("text,kind", [("generate an image of a hill with a clear sky and grass", "quick"),
+                                       ("make a short video about my trip", "quick"),
+                                       ("draw a picture of a cat", "quick"),
+                                       ("write an essay about nepal", "long")])
+def test_making_a_picture_is_never_a_writing_job(text, kind):
+    assert planner._kind(text, "long") == kind
+
+
+def test_every_part_of_the_request_is_in_the_plan():
+    text = ("I want you to open YouTube, Facebook, Instagram, generate an image of a hill. Then open VS Code and "
+            "open the browser. Then turn on the Bluetooth of my laptop. Also send the status of my RAM in the telegram.")
+    given = [{"text": "open YouTube"}, {"text": "generate an image of a hill"}, {"text": "open VS Code"}]
+    texts = [t["text"] for t in planner.cover(text, given)]
+    assert "turn on the Bluetooth of my laptop" in texts and "send the status of my RAM in the telegram" in texts
+    assert "open the browser" in texts and texts.count("open VS Code") == 1
+
+
+def test_a_step_waits_for_every_job_it_needs():
+    from jarvis.core import taskgraph
+    tasks = [{"text": "generate an image of a hill"}, {"text": "write a poem about nepal", "kind": "long"},
+             {"text": "send image and poem to my telegram", "depends_on": [0, 1]}]
+    done = {0: {"idx": 0, "status": "waiting", "job": 7, "text": "img"},
+            1: {"idx": 1, "status": "waiting", "job": 8, "text": "poem"}}
+    final = taskgraph.settle(tasks, done)
+    assert final[2]["status"] == "after" and final[2]["jobs"] == [7, 8]
+
+
+def test_the_follow_up_waits_for_all_its_jobs(monkeypatch, tmp_path):
+    from jarvis.core import agent, store
+    rows = {7: {"status": "done", "output_path": str(tmp_path / "hill.png")},
+            8: {"status": "done", "output_path": str(tmp_path / "poem.md")}}
+    (tmp_path / "poem.md").write_text("Himalaya sings")
+    monkeypatch.setattr(store, "job_get", lambda j: rows[j])
+    seen = []
+    monkeypatch.setattr(agent.Agent, "_run_task", lambda self, text, mode, lang, prev, request="": seen.append(prev) or "sent")
+
+    class Ctx:
+        state, job = {}, type("J", (), {"title": "then: send", "cancel_event": None})()
+        def step(self, *a): pass
+        def check(self): pass
+        def checkpoint(self, **k): pass
+        def set_output(self, p): pass
+    monkeypatch.setattr("jarvis.core.writer.output_path", lambda title: tmp_path / "out.md")
+    agent.after_job(Ctx(), {"wait": [7, 8], "tasks": ["send image and poem to my telegram"]})
+    assert "hill.png" in seen[0] and "poem.md" in seen[0] and "Himalaya sings" in seen[0]

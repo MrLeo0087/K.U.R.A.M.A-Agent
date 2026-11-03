@@ -1096,7 +1096,7 @@ REMOTE_HELPER = "/usr/local/sbin/kurama-rustdesk"  # root-owned helper (scripts/
 TELEGRAM_PIN_WINDOW_S = float(os.getenv("TELEGRAM_PIN_WINDOW_S", "1800"))  # risky PIN is remembered this long (30 min)
 
 # --- Multitasking (P3b-2): planner, background jobs, rate limiter ---
-PLANNER_MAX_TASKS = 8
+PLANNER_MAX_TASKS = 15  # more are said back as not done (planner.Plan.dropped), never dropped in silence
 # While KURAMA's music plays, a short request that MEANS one of these controls the player (fastpath.player_intent)
 PLAYER_CONTROL_EXAMPLES = {
     "pause": ("pause", "pause music", "pause the song", "hold on stop for a second", "wait pause it"),
@@ -1127,7 +1127,7 @@ NOT_FILLER_EXAMPLES = ("tell me a joke", "what is the capital of nepal", "open y
                        "play some music", "send it to telegram", "what time is it", "how are you", "write a poem",
                        "work on my essay", "start the timer", "show my jobs")
 FILLER_MIN = 0.86  # a request this close in meaning to a learned plan reuses it (0 tokens)
-PLANNER_MAX_TOKENS = 300
+PLANNER_MAX_TOKENS = 1200  # gpt-oss thinks first: at 300 a 10-part plan came back with 6 parts (11-04)
 LONG_JOB_MIN_WORDS = 150  # writing requests at least this long run as background jobs
 WORDS_PER_LINE = 12  # "a 1000-line essay" ~ 12 words per line
 WRITER_DEFAULT_WORDS = 600  # essay/article/report without an explicit length

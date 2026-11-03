@@ -86,6 +86,7 @@ class TaskPlan(BaseModel):
 class Plan:
     tasks: list[dict] = field(default_factory=list)
     method: str = "single"  # single | llm | rules
+    dropped: list[str] = field(default_factory=list)  # parts over PLANNER_MAX_TASKS: the reply names them
 
 
 # --- heuristics ---
@@ -440,7 +441,14 @@ def one_tool(text: str) -> bool:
     return tools <= {whole.tool}
 
 
+_MEDIA_MAKE = re.compile(r"\b(?:image|images|picture|pictures|photo|photos|drawing|painting|illustration|wallpaper|"
+                         r"logo|video|reel|short|slideshow|audio|mp3|song|music|chart|graph|diagram)\b", re.I)
+
+
 def _kind(text: str, llm_kind: str = "quick") -> str:
+    if _MEDIA_MAKE.search(text) and not re.search(r"\b(?:essay|poem|story|report|article|code|script|letter)\b", text, re.I):
+        return "quick"  # its own tool makes it (and runs in the background itself): the WRITER wrote a text
+        #                 'description' of the picture into an .md file instead of making the image (11-04 00:11)
     if is_long_job(text):
         return "long"
     if llm_kind == "long" and (_GEN.search(text) or _NOUNS.search(text)):
@@ -482,7 +490,26 @@ def _rule_tasks(text: str) -> list[dict]:
             out.append(c)
         else:
             out[-1] = f"{out[-1]}, {c}"
-    return [{"text": t, "kind": _kind(t)} for t in out[: config.PLANNER_MAX_TASKS]]
+    return [{"text": t, "kind": _kind(t)} for t in out]  # (the cap and its note: plan())
+
+
+def _covers(task: str, part: str) -> bool:
+    words = {w for w in re.findall(r"[a-z0-9]{3,}", part.lower())} - _THING_STOP - {"want", "you", "the", "and", "my"}
+    if not words:
+        return True
+    have = {w for w in re.findall(r"[a-z0-9]{3,}", task.lower())}
+    return len(words & have) / len(words) >= 0.6
+
+
+def cover(text: str, tasks: list[dict]) -> list[dict]:
+    """Every part of the request is in the plan: a command part no task covers ('turn on the Bluetooth of my laptop',
+    'send the status of my RAM in the telegram' were left out of a 10-part plan, 11-04) is added as its own task."""
+    out = list(tasks)
+    for part in parts(text):
+        if is_command(part) and len(part.split()) >= 3 and not any(_covers(t["text"], part) for t in out):
+            out.append({"text": part.strip(" ."), "kind": _kind(part)})
+            log.info("planner left out %r: added", part)
+    return out
 
 
 def decompose(text: str) -> list[dict]:
@@ -497,7 +524,7 @@ def decompose(text: str) -> list[dict]:
             if t.depends_on:
                 d["depends_on"] = list(t.depends_on)
             tasks.append(d)
-    return tasks[: config.PLANNER_MAX_TASKS]
+    return tasks  # (the cap and its note: plan())
 
 
 def _shortcut_tasks(text: str) -> list[dict]:
@@ -530,7 +557,12 @@ def plan(text: str) -> Plan:
         tasks, method = [], "rules"
     if not tasks:
         tasks, method = _rule_tasks(text), "rules"
+    tasks = cover(text, tasks)
     tasks = add_dependencies(merge_tails(tasks), text)
     if len(tasks) == 1 and tasks[0]["kind"] == "quick":
         tasks = [{"text": text, "kind": "quick"}]  # really one request: keep the user's wording
+    if len(tasks) > config.PLANNER_MAX_TASKS:  # never dropped in silence ('turn on bluetooth' and 'send my RAM
+        dropped = [t["text"] for t in tasks[config.PLANNER_MAX_TASKS:]]  # status' vanished at 8 tasks, 11-04)
+        tasks = tasks[:config.PLANNER_MAX_TASKS]
+        return Plan(tasks, method, dropped)
     return Plan(tasks, method)

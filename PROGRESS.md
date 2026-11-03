@@ -1145,3 +1145,11 @@ Phases (one at a time, owner tests after each):
       during the call; it now lets go while a call page / call app is open and takes it back after. Mic: apps using
       KURAMA's echo-cancelled mic are moved to the real mic before it goes. Tests: test_multitask_1103.py (28) + 3
       device tests; tests no longer read the real battery (27% -> 21% failed 4 tests); suite 1731; scorecard 72/100/98.
+- [x] 2026-11-04 00:30 Trace 178bc121 (10-part request, 00:11): the image went to the WRITER (job #2 kind write: a
+      text 'description' in an .md, no picture) -> making a picture / video / audio / chart is never a writing job
+      (its own tool runs in the background); 'send image and poem' waited for the image job only and sent without
+      the poem -> a step waits for EVERY job it needs (taskgraph.settle 'jobs', after_job waits for a list); the
+      last 2 parts (Bluetooth, RAM status to Telegram) vanished: the planner's 300-token limit cut the plan (gpt-oss
+      thinks first) -> 1200, plus planner.cover adds back any command part the plan left out, the cap is 15 and
+      anything over it is named in the reply. End-to-end re-run (fake tools): all 10 parts done, image + poem sent
+      after the poem job. Tests +6; suite 1738; scorecard 73% / 100% / 98%.

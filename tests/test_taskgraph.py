@@ -114,7 +114,7 @@ def test_steps_after_a_background_job_become_a_follow_up(respond, monkeypatch):
     respond(lambda m, kw: AIMessage(content=m[-1].content) if isinstance(m[-1], ToolMessage) else tc("get_time", {}))
     bot = agent.Agent(confirm=lambda p: True)
     ans = bot.run("write an essay about Nepal, save it as essay.md, send it to telegram and tell me the time")
-    assert follow == [(4, ["save it as essay.md", "send it to telegram"])]
+    assert follow == [([4], ["save it as essay.md", "send it to telegram"])]  # the job(s) it waits for
     assert "as soon as job #4 is finished" in ans and "⏳ Write an essay about Nepal (job #4" in ans  # the checklist
     assert [s["status"] for s in bot.last["steps"]] == ["waiting", "after", "after", "ok"]
 

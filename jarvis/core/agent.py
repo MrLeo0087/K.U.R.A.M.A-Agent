@@ -198,7 +198,7 @@ class Agent:
         t0 = time.monotonic()
         p = planner.plan(state["user_text"])
         self.last["plan"] = {"method": p.method, "tasks": p.tasks,
-                             "ms": int((time.monotonic() - t0) * 1000)}
+                             "ms": int((time.monotonic() - t0) * 1000), **({"dropped": p.dropped} if p.dropped else {})}
         out: dict = {"tasks": p.tasks}
         if config.TASK_GRAPH and len(p.tasks) > 1:
             out["windows"] = taskgraph.window_ids()  # 'close X' later in the plan closes only what the plan opened
@@ -288,15 +288,16 @@ class Agent:
         tasks = state.get("tasks") or []
         lang = state.get("lang") or planner.detect_lang(state["user_text"])
         final = taskgraph.settle(tasks, {r["idx"]: r for r in state.get("done") or []})
-        follow: dict[int, list[int]] = {}
+        follow: dict[tuple, list[int]] = {}
         for i in sorted(final):
             if final[i]["status"] == "after" and final[i].get("job"):
-                follow.setdefault(final[i]["job"], []).append(i)
-        for job_id, idxs in follow.items():
+                follow.setdefault(tuple(final[i].get("jobs") or [final[i]["job"]]), []).append(i)
+        for job_ids, idxs in follow.items():
             try:
-                f = start_after_job(job_id, [tasks[i]["text"] for i in idxs], lang)
+                f = start_after_job(list(job_ids), [tasks[i]["text"] for i in idxs], lang)
                 for i in idxs:
-                    final[i]["answer"] = AFTER_JOB.format(text=tasks[i]["text"], job=job_id, follow=f.id)
+                    final[i]["answer"] = AFTER_JOB.format(text=tasks[i]["text"], job=" and #".join(map(str, job_ids)),
+                                                          follow=f.id)
             except Exception as e:  # noqa: BLE001
                 log.warning("follow-up job failed: %s", e)
                 for i in idxs:
@@ -312,12 +313,15 @@ class Agent:
                 r["status"] in ("ok", "waiting", "after") for r in final.values()):  # else only on the owner's 👍
             taskgraph.learn_plan(state["user_text"], planner.parts(state["user_text"]), tasks)  # (recipes.feedback)
         self.last.setdefault("route", router.Route([], "graph", False, 0))
+        dropped = (self.last.get("plan") or {}).get("dropped") or []
+        tail = (" Too many parts at once, so I didn't do: " + "; ".join(dropped) + ". Say them again after this.") \
+            if dropped else ""
         if len(final) >= 3 and state.get("mode", "text") == "text":  # a checklist reads better than glued tool output
-            return {"answer": checklist(tasks, final)}
+            return {"answer": checklist(tasks, final) + ("\n" + tail.strip() if tail else "")}
         said = fastpath.merge_opens([_sentence(final[i]["answer"]) for i in sorted(final)
                                      if final[i].get("answer") and not final[i].get("long")])
         started = [final[i]["answer"] for i in sorted(final) if final[i].get("long")]  # "Writing X (job #4)" last
-        return {"answer": " ".join(said + started).strip() or NO_ANSWER}
+        return {"answer": (" ".join(said + started).strip() + tail).strip() or NO_ANSWER}
 
     def _run_task(self, text: str, mode: str, lang: str | None, prev: str = "", request: str = "",
                   fast_first: bool | None = None, history: bool = True) -> str:
@@ -1308,35 +1312,43 @@ def stream(user_text: str, mode: str = "text", lang: str | None = None) -> Itera
 
 
 # --- a multi-step request whose earlier step started a background job: the rest waits for it (durable) ---
-def start_after_job(job_id: int, texts: list[str], lang: str | None = None):
-    """A long job (survives restarts) that waits for job_id to finish, then runs `texts` in order, the first one
-    seeing that job's output file. Returns the job."""
+def start_after_job(job_id: int | list[int], texts: list[str], lang: str | None = None):
+    """A long job (survives restarts) that waits for the job(s) to finish, then runs `texts` in order, the first one
+    seeing every job's output file ('send image and poem' needs the image job AND the poem job). Returns the job."""
     from jarvis.core import longjobs
-    title = "then: " + "; ".join(texts)[:60] + f" (after job #{job_id})"
-    return longjobs.submit(title, after_job, {"wait": int(job_id), "tasks": texts, "lang": lang or ""},
+    ids = [int(j) for j in (job_id if isinstance(job_id, (list, tuple)) else [job_id])]
+    title = "then: " + "; ".join(texts)[:60] + f" (after job #{', #'.join(map(str, ids))})"
+    return longjobs.submit(title, after_job, {"wait": ids, "tasks": texts, "lang": lang or ""},
                            kind="follow", max_tokens=config.AGENT_ASK_ABOVE_TOKENS, max_minutes=120)
 
 
 def after_job(ctx, params: dict) -> str | None:
     from jarvis.core import safety, store, writer
-    jid = int(params["wait"])
-    ctx.step(f"waiting for job #{jid}")
-    while True:
-        row = store.job_get(jid) or {}
-        if row.get("status") not in jobs.ACTIVE:
-            break
-        if ctx.job.cancel_event.wait(5):
+    ids = params["wait"] if isinstance(params["wait"], list) else [params["wait"]]
+    results = []
+    for jid in map(int, ids):
+        ctx.step(f"waiting for job #{jid}")
+        while True:
+            row = store.job_get(jid) or {}
+            if row.get("status") not in jobs.ACTIVE:
+                break
+            if ctx.job.cancel_event.wait(5):
+                ctx.check()
             ctx.check()
-        ctx.check()
-    if row.get("status") != "done" or not row.get("output_path"):
-        ctx.step(f"job #{jid} ended {row.get('status') or 'missing'}: nothing to do")
-        return None
-    path = str(row["output_path"])
-    try:
-        head = open(path, encoding="utf-8", errors="replace").read(PREV_RESULT_MAX)
-    except OSError:
-        head = ""
-    prev = f"Job #{jid} finished; its result is the file {path}. It begins: {head}"
+        if row.get("status") != "done" or not row.get("output_path"):
+            ctx.step(f"job #{jid} ended {row.get('status') or 'missing'}: nothing to do")
+            return None
+        results.append((jid, str(row["output_path"])))
+    parts_ = []
+    for jid, p in results:
+        try:
+            head = "" if p.lower().endswith((".png", ".jpg", ".jpeg", ".webp", ".mp4", ".mp3", ".wav")) else \
+                open(p, encoding="utf-8", errors="replace").read(PREV_RESULT_MAX // max(1, len(results)))
+        except OSError:
+            head = ""
+        parts_.append(f"Job #{jid} finished; its result is the file {p}." + (f" It begins: {head}" if head else ""))
+    path = " and ".join(p for _, p in results)
+    prev = " ".join(parts_)
     bot = Agent(confirm=safety.deny_all, summarize_async=False, use_planner=False, persist=False)
     answers = []
     for i, text in enumerate(params.get("tasks") or []):

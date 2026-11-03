@@ -122,14 +122,16 @@ def settle(tasks: list[dict], done: dict[int, dict]) -> dict[int, dict]:
         needs = [out[n] for n in t.get("depends_on", []) if n in out]
         bad = next((n for n in needs if n["status"] in ("failed", "skipped") and n["idx"] not in set(t.get("soft") or ())),
                    None)  # a soft link (order only) never skips it
-        wait = next((n for n in needs if n["status"] in ("waiting", "after") and n["idx"] not in set(t.get("soft") or ())),
-                    None)
+        waits = [n for n in needs if n["status"] in ("waiting", "after") and n["idx"] not in set(t.get("soft") or ())]
+        wait = waits[0] if waits else None
+        jobs_ = sorted({j for n in waits for j in (n.get("jobs") or [n.get("job")]) if j})  # EVERY job it needs:
+        # 'send image and poem' waited for the image job only and sent without the poem (11-04 00:11)
         if bad is not None:
             out[i] = {"idx": i, "text": t["text"], "status": "skipped",
                       "answer": SKIPPED.format(text=t["text"], need=bad["text"]), "things": []}
         elif wait is not None:
-            out[i] = {"idx": i, "text": t["text"], "status": "after", "job": wait.get("job"), "answer": "",
-                      "things": []}
+            out[i] = {"idx": i, "text": t["text"], "status": "after", "job": jobs_[0] if jobs_ else wait.get("job"),
+                      "jobs": jobs_, "answer": "", "things": []}
         else:  # never ready (should not happen): say so instead of dropping it
             out[i] = {"idx": i, "text": t["text"], "status": "failed", "things": [],
                       "answer": f"Sorry, I couldn't get to this part: {t['text']}."}
