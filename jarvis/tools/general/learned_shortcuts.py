@@ -10,7 +10,8 @@ from jarvis.core.registry import tool
 def _line(i: int, r: dict) -> str:
     what = f"kept answer ({len(r.get('answer') or '')} chars)" if r["kind"] == "answer" else \
         f"{r['tool']} {r['args']}" + (f" (slots: {', '.join(r['slots'])})" if r.get("slots") else "")
-    state = ("on (you taught it)" if r.get("src") == "taught" else "on") if r.get("on") else "waiting for your 👍"
+    state = ("on (you taught it)" if r.get("src") == "taught" else "on") if r.get("on") else \
+        f"off: {r.get('off') or 'not approved'}"
     return f"{i}. \"{r['text'][:70]}\" -> {what} · {state} · used {r.get('used', 0)}x"
 
 
@@ -25,8 +26,8 @@ def learned_shortcuts(action: Literal["list", "forget", "clear", "stats"] = "lis
     """
     rows = sorted(recipes.rows(), key=lambda r: (not r.get("on"), -r.get("used", 0)))
     st = recipes.stats()
-    head = (f"Learned: {st['on']} on ({st['answers']} kept answers), {st['waiting']} waiting for your 👍 (or "
-            f"'perfect, that's right'). Saved about {st['saved_today']:,} tokens today, {st['saved_week']:,} this week.")
+    head = (f"Learned: {st['on']} on ({st['answers']} kept answers)"
+            + (f", {st['waiting']} switched off (their tool failed)" if st["waiting"] else "") + f". Saved about {st['saved_today']:,} tokens today, {st['saved_week']:,} this week.")
     if action == "stats":
         return head
     if action == "clear":

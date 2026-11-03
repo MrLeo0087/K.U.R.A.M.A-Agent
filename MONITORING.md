@@ -50,6 +50,7 @@ answers to KURAMA's questions and the model per call since the memory + multitas
 | Learned shortcuts | `data/recipes.json` (`/learned_shortcuts list`) | 0-token shortcuts + kept answers the owner approved (👍 / praise) or taught (a correction), uses, tokens saved per day |
 | The owner's words | `data/my_words.json`, `data/app_names.json` | "when I say X, do Y" / "when I say X, open <app>", kept until changed |
 | Reply rules | `data/style.json` | "from now on keep answers short": added to every AI request, max 6 |
+| (all of the learning above) | **docs/LEARNING.md** | the full guide: what is learned, commands, limits, files, settings |
 | Long jobs | `data/jarvis.db`, tables `jobs`, `job_state`, `job_steps` | background jobs, checkpoints, step log |
 | Server / workers | `data/logs/server.log`, `data/logs/worker_*.log` | yes/no answers, errors |
 | Code that writes them | `jarvis/core/trace.py`, `stt.py`, `wake.py` (`wake_log`), `ptt.py` (`pttlog`) + `scripts/kurama_wallpaper.py`, `filemanager.py`, `jobqueue.py`, `longjobs.py` | |
