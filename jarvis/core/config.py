@@ -566,7 +566,14 @@ ROUTER_EXAMPLES: dict[str, tuple[str, ...]] = {
     "dev": ("run the test suite", "start a new python project", "check my python setup and venv",
             "run this command in the terminal", "execute ls -la in my home folder", "run a shell command",
             "what does this error mean", "fix this traceback", "why does my code crash with this exception",
-            "I fixed that error by", "check my dataset for problems before training", "is my data balanced"),
+            "I fixed that error by", "check my dataset for problems before training", "is my data balanced",
+            # writing code (11-03 after the reset: 'make a python script that renames my photos' went to the
+            # file organizer): the code tool writes it
+            "make a python script that renames my photos", "write a program that sorts a list", "build me a flask "
+            "app with login", "code a snake game in python", "write a bash script to back up my folder",
+            "write a script to scrape a website", "create a react app for notes", "make me a website with html and css",
+            "write code for a calculator", "program a discord bot in python", "generate a python function that "
+            "checks prime numbers"),
     "codequality": ("review my code changes", "scan the repo for leaked passwords", "check my dependencies"),
     "filesearch": ("where is that pdf I downloaded", "find my file named report", "what is inside this folder"),
     "files": ("create a folder", "move this file to documents", "delete this file", "rename the file"),
@@ -620,6 +627,12 @@ for _g, _ex in {
               "rename one of my saved links", "open a link I bookmarked earlier",
               "keep this youtube video link in my links under a name"),
     "daily": ("what is 12 times 8", "how much is 250 minus 75"),
+    # the to-do list had NO examples (it lived on learned wordings; after the 11-03 reset 'what is my todo list'
+    # went to the highlighted-text helper): every spelling people type
+    "todo": ("what is my todo list", "show my to-do list", "what's on my todo", "list my tasks", "what do I have to do",
+             "add buy milk to my todo list", "put call mom on my to do list", "mark the first task done",
+             "remove task 2 from my todos", "what tasks are due today", "clear my todo list",
+             "mero todo list dekhau", "aaj ke kaam baki hai"),
     "screen": ("read what's on my screen", "what does my screen say"),
     "image": ("make an audio of this text", "turn this paragraph into speech"),
 }.items():

@@ -293,3 +293,10 @@
 {"id": 293, "text": "Hello, bro.", "expect": "chat", "args": {}, "channel": "laptop"}
 {"id": 294, "text": "kya hora hai ?", "expect": "chat", "args": {}, "channel": "laptop"}
 {"id": 295, "text": "hello k xa khabaar", "expect": "chat", "args": {}, "channel": "laptop"}
+{"id": 296, "text": "what is my todo list", "expect": "todo.list", "args": {}, "channel": "laptop", "source": "after the 2026-11-03 reset (no learned data)"}
+{"id": 297, "text": "show my todo list", "expect": "todo.list", "args": {}, "channel": "laptop", "source": "after the 2026-11-03 reset (no learned data)"}
+{"id": 298, "text": "whats on my todo", "expect": "todo.list", "args": {}, "channel": "laptop", "source": "after the 2026-11-03 reset (no learned data)"}
+{"id": 299, "text": "make a python script that renames my photos", "expect": "route.areas", "groups": ["dev"], "args": {}, "channel": "laptop", "source": "after the 2026-11-03 reset (no learned data)"}
+{"id": 300, "text": "write a script to download images from a website", "expect": "route.areas", "groups": ["dev"], "args": {}, "channel": "laptop", "source": "after the 2026-11-03 reset (no learned data)"}
+{"id": 301, "text": "create a react todo app", "expect": "route.areas", "groups": ["dev"], "args": {}, "channel": "laptop", "source": "after the 2026-11-03 reset (no learned data)"}
+{"id": 302, "text": "write a c program to reverse a string", "expect": "route.areas", "groups": ["dev"], "args": {}, "channel": "laptop", "source": "after the 2026-11-03 reset (no learned data)"}

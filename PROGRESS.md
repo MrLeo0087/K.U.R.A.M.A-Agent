@@ -1121,3 +1121,13 @@ Phases (one at a time, owner tests after each):
       learned data: 73% -> 72% from one false correction; 72% is the code-only number); the laptop's own volume
       by name ("increase the laptop volume", "system volume 80") is 0-token even while KURAMA's music plays.
       docs/LEARNING.md sections 16-17 (examples). Tests +8; suite 1697; scorecard 72% / 100% / 98% (isolated).
+- [x] 2026-11-03 21:45 FRESH START (owner: "reset whole kurama ... reset all"). reset_all now also moves what was
+      learned (recipes, learned.json/.npy, learned_plans), the owner's words / app names / rules and the traces to
+      the backup (keep= options exist, not used); in-memory caches dropped. Run with KURAMA off: 6,044 records;
+      backups data/reset-backups/20261103-214142 (+ extra/: undo stores, old learned backups, guard clips, download
+      logs, timemachine snapshots) and ~/Documents/KURAMA-backup-20261103-214142 (sheets). Kept: password, .env,
+      settings, models, venvs, scorecard history. Found right after: the to-do area had NO meaning examples (it had
+      lived on learned wordings) -> 'what is my todo list' went to the highlighted-text helper; writing code had
+      few ('make a python script ...' -> the file organizer) -> examples for both (+7 scorecard cases; 'write a c
+      program ...' still misses, kept as an honest case). docs/LEARNING.md section 18: the owner's routine.
+      Suite 1698; scorecard 72% / 100% / 98% (isolated).

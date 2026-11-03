@@ -5,6 +5,8 @@ control it. Last updated 2026-11-03.
 
 ---
 
+> **New here?** Read section 1 (the idea), then **section 18: what to do every day / week to make KURAMA better**.
+
 ## 1. The idea in one minute
 
 - KURAMA spends **tokens** (Groq free-tier budget) only when it asks the online AI. Everything else runs on your
@@ -576,7 +578,105 @@ there's no echo filter. The cost: KURAMA can then hear its own voice and your mu
 
 ---
 
-## 18. Code map
+## 18. Your routine: how to make KURAMA better, faster
+
+KURAMA was reset to a fresh start on **2026-11-03** (backup: `data/reset-backups/20261103-214142` and
+`~/Documents/KURAMA-backup-20261103-214142`). From now on it learns **only from you**. The more clearly you tell it
+what was good and bad, the faster it improves.
+
+### Every day (no extra time, just while you use it)
+
+| When | Do this | Example |
+|---|---|---|
+| A reply is right | Press 👍, or say it | "perfect, that's exactly what I wanted" |
+| A reply is wrong | Press 👎, or say it, **and say what you wanted** | "no, play it in the music player" |
+| You use a word your own way | Teach it once | "when I say code, open VS Code" |
+| You want a phrase for a whole command | Teach it once | "when I say good night, lock the screen" |
+| You want KURAMA to talk differently | Give a rule once | "from now on keep your answers short" |
+
+Tips that make it learn faster:
+
+- **Say your common requests the same way.** After one 👍, "tell me the wikipedia summary of X" costs 0 tokens for
+  every X. A different wording each time needs its own 👍.
+- **Complain in words, not one word.** "no" alone counts as answering a question; "no, that's wrong" counts as a 👎.
+- **When you complain, say the right thing to do.** "No, play it in the music player" teaches the fix at once. Just
+  "wrong" only removes the bad answer.
+- **Don't 👍 a reply you didn't check.** A 👍 makes it permanent until you remove it.
+- **Don't expect 👍 to work on "this / that" requests** ("open this folder"). Those depend on the screen and are
+  never learned on purpose (section 6).
+
+### First week: teach your top requests
+
+Pick the 10–20 things you ask most often. Ask each one normally, and when the reply is right, press 👍 once.
+For example:
+
+```
+what is the weather in nepalgunj            → 👍
+play song <a song you like>                 → 👍   (then every "play song X" is instant)
+tell me the wikipedia summary of <topic>    → 👍
+set the brightness to 60 percent            → 👍
+what is my battery status                   → (already instant, no need)
+```
+
+Many common ones are already instant (time, date, battery, open app, music, volume, to-do list, weather). Only
+things that went to the AI need a 👍. You can tell from the chip under the reply: **tok 0** = already instant.
+
+### Every 2–3 days (10 minutes)
+
+1. **What went wrong:**
+   ```bash
+   cd /media/leo/Project1/New_project/KURAMA
+   venv/bin/python scripts/trace_report.py --days 3
+   ```
+   Read, in this order:
+   - **"Your feedback"**: every 👎 with your words. Each line is a real problem.
+   - **"Likely mistakes"**: requests you corrected without pressing 👎.
+   - **"Asked the AI most often"**: requests that cost tokens again and again. 👍 them the next time they're right,
+     or teach your words for them.
+2. **Check what was learned:** type `/learned_shortcuts list`. If something looks wrong:
+   `/learned_shortcuts forget N`.
+3. **Check the savings:** `/learned_shortcuts stats` (tokens saved today / this week). This number should grow.
+
+### Every week (30 minutes, with Claude Code)
+
+1. Open Claude Code in the KURAMA folder.
+2. Paste the prompt from **MONITORING.md → "Prompt to paste into a new Claude Code session"**. It reads the last
+   days, groups the problems by kind, proves the cause from the traces and suggests fixes.
+3. Pick the most important problem and let it fix that one (tests, scorecard, commit).
+4. Afterwards: `venv/bin/python scripts/trace_report.py --mark-fixed`, so the next report shows only new problems.
+
+This is how things like the to-do and coding misroutes get fixed: they're problems in the code, not something a
+👍 can teach.
+
+### Every month
+
+- **Look at the trend** in the report header: `Path: fastpath N%` (instant answers, should go **up**), `Tokens:
+  … /day` (should go **down**), the number of 👎 (should go **down**).
+- **Groq prompt cache** line in the report: if it stays at 0%, ask Claude Code to make the start of each AI request
+  identical (that's the next token saving).
+- **After 1–2 months:** if you no longer need the buttons, remove the 👍 / 👎 (section 14). Spoken feedback keeps
+  working.
+
+### Things to avoid
+
+| Don't | Why | Do instead |
+|---|---|---|
+| "Reset KURAMA" to fix one wrong thing | It wipes **everything** learned | `/learned_shortcuts forget N`, "forget the rule about …", or 👎 |
+| Teach yes / no / ok as your words | Refused: they answer KURAMA's questions | Use other words |
+| Leave a wrong reply without a word | Nothing is learned (by your choice), and the problem stays invisible | One 👎 is enough |
+
+### How you know it's working
+
+| Sign | Where |
+|---|---|
+| More replies with **tok 0** | The chip under each reply |
+| `Saved about N tokens today` grows | `/learned_shortcuts stats` |
+| Fewer 👎 in the report | `trace_report.py --days 7` → "Your feedback" |
+| The instant % goes up | Report header: `Path: fastpath N%` |
+
+---
+
+## 19. Code map
 
 | File | Does |
 |---|---|

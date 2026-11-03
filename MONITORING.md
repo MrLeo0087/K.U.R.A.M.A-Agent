@@ -423,3 +423,6 @@ message; the action itself is chosen by meaning), the reference nouns (`workmem.
   laptop speaker and KURAMA had written the laptop speaker as the system's remembered output). Watch: if sound
   is quieter with KURAMA, `pactl list short modules | grep echo` (sink_master=) and
   `pw-metadata 0 default.configured.audio.sink`.
+- 2026-11-03 (21:45): FRESH START - full reset (backups in data/reset-backups/20261103-214142). Traces start again
+  from here; learning starts empty and grows only from the owner's 👍 / 👎 / words. Routine: docs/LEARNING.md
+  section 18.
