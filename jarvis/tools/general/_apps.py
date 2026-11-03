@@ -1,8 +1,10 @@
 """Shared helpers for open/close/focus app tools (not a tool): a cached index of .desktop files,
-fuzzy matching of spoken app names, a detached launcher (gtk-launch, then gio) and wmctrl windows."""
+fuzzy matching of spoken app names, names the user taught ("browser" = Brave), a detached launcher (gtk-launch,
+then gio) and wmctrl windows."""
 from __future__ import annotations
 
 import difflib
+import json
 import os
 import re
 import shutil
@@ -11,6 +13,7 @@ import threading
 import time
 from pathlib import Path
 
+from jarvis.core import config
 from jarvis.tools.interactive import _proc
 
 DESKTOP_DIRS = [Path("/usr/share/applications"), Path.home() / ".local/share/applications",
@@ -31,10 +34,11 @@ for _spoken, _targets in {
     ("chrome", "google chrome"): ["google chrome", "chromium", "chrome"],
     ("calculator", "calc"): ["calculator"],
     ("text editor", "editor", "notepad", "gedit"): ["text editor", "gedit", "gnome text editor"],
-    ("browser", "web browser"): ["firefox", "web browser"],
+    ("browser", "web browser"): ["firefox", "web browser"],  # after the system's default browser (default_browser)
 }.items():
     for _s in _spoken:
         ALIASES[_s] = _targets
+BROWSER_WORDS = ("browser", "web browser", "internet")
 
 _index: list[dict] = []
 _index_ts = 0.0
@@ -138,14 +142,70 @@ def sound_key(word: str) -> str:
     return re.sub(r"(.)\1+", r"\1", w[0] + body)
 
 
+_default: dict = {"id": "", "at": 0.0}
+
+
+def default_browser() -> str:
+    """The system's default browser as a .desktop id ('brave-browser'), '' if unknown; cached for INDEX_TTL_S.
+    'open browser' opened Firefox (a fixed alias) although Brave is the default (trace 542f180a, 11-03)."""
+    if time.monotonic() - _default["at"] < INDEX_TTL_S:
+        return _default["id"]
+    found = ""
+    if exe := shutil.which("xdg-settings"):
+        try:
+            out = subprocess.run([exe, "get", "default-web-browser"], capture_output=True, text=True, timeout=3).stdout
+            found = out.strip().removesuffix(".desktop")
+        except (OSError, subprocess.SubprocessError):
+            pass
+    _default.update(id=found, at=time.monotonic())
+    return found
+
+
+def _names_path() -> Path:
+    return config.DATA_DIR / "app_names.json"
+
+
+def taught() -> dict[str, str]:
+    """Names the user gave apps: spoken name -> .desktop id ('browser' -> 'brave-browser')."""
+    try:
+        d = json.loads(_names_path().read_text(encoding="utf-8"))
+        return {str(k): str(v) for k, v in d.items()} if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def teach(name: str, app: str) -> str:
+    """'When I say <name>, open <app>': kept in data/app_names.json, used by every open / close / focus.
+    Empty app = forget the name."""
+    q = clean_query(name)
+    if not q:
+        return "error: say which name to use, e.g. 'browser'"
+    names = taught()
+    if not (app or "").strip():
+        if names.pop(q, None) is None:
+            return f"'{q}' wasn't a name I keep for an app."
+        _names_path().write_text(json.dumps(names, indent=1), encoding="utf-8")
+        return f"Forgot '{q}': it means what it meant before."
+    names.pop(q, None)  # the app itself must resolve without the old name for it
+    _names_path().write_text(json.dumps(names, indent=1), encoding="utf-8")
+    entry, score = find_app(app)
+    if entry is None or score < TOOL_MIN_SCORE:
+        return f"error: no installed app matches {app!r}"
+    names[q] = entry["id"]
+    _names_path().write_text(json.dumps(names, indent=1), encoding="utf-8")
+    return f"Got it: '{q}' now opens {entry['name']}."
+
+
 def find_app(name: str, apps: list[dict] | None = None) -> tuple[dict | None, int]:
-    """Best (entry, score 0..100) for a spoken app name; (None, 0) if nothing plausible."""
+    """Best (entry, score 0..100) for a spoken app name; (None, 0) if nothing plausible. A name the user taught
+    wins, then the default browser for 'browser', then the built-in aliases, then the name itself."""
     q = clean_query(name)
     if not q:
         return None, 0
     apps = index() if apps is None else apps
     best, best_score = None, 0
-    for rank, target in enumerate(ALIASES.get(q, []) + [q]):
+    first = [t for t in (taught().get(q), default_browser() if q in BROWSER_WORDS else "") if t]
+    for rank, target in enumerate(first + ALIASES.get(q, []) + [q]):
         for e in apps:
             s = _score(target, e) - rank  # earlier alias targets win ties
             if s > best_score or (s == best_score and best and len(e["name"]) < len(best["name"])):

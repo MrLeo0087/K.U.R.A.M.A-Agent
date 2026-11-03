@@ -41,19 +41,22 @@ TABLE = {
     "type": Act("app_control", lambda a: {"action": "type", "text": a.get("text"), "app": a.get("target")}),
     "click": Act("app_control", lambda a: {"action": "click", "text": a.get("text") or a.get("target")}),
     "install": Act("install_app", lambda a: {"action": a.get("how", "install"), "name": a.get("target")}),
+    "name": Act("app_name", lambda a: {"name": a.get("target"), "app": a.get("text", "")}),
 }
 
 
 @tool(group="core", safety="safe",
       description="Open an app, website or folder by name; close or force-kill an app; arrange a window "
-                  "(minimize/maximize/left/right/focus, or the home screen = desktop); switch to a browser tab by name or number (tab); press keys, type or click in the app in front; install an app.")
-def apps(action: Literal["open", "close", "kill", "window", "tab", "press", "type", "click", "install"], target: str = "",
+                  "(minimize/maximize/left/right/focus, or the home screen = desktop); switch to a browser tab by name or number (tab); press keys, type or click in the app in front; install an app; "
+                  "name (remember which app a word means: 'when I say browser, open Brave').")
+def apps(action: Literal["open", "close", "kill", "window", "tab", "press", "type", "click", "install", "name"], target: str = "",
          how: str = "", text: str = "") -> str:
     """Apps, websites, folders and windows.
 
     Args:
         action: open, close, kill (force), window, tab (switch to a browser tab: target = its name or number; no target = list the open tabs), press
-            (keys like 'ctrl+v', 'enter'), type, click, install.
+            (keys like 'ctrl+v', 'enter'), type, click, install, name (target = the word the user says, text = the
+            app it opens; empty text forgets the word).
         target: App / website / folder name ('brave', 'youtube', 'tara'), or several sites 'youtube, facebook'.
         how: open: the app to open it IN ('vscode' for a folder/file in VS Code); window: focus, minimize, maximize,
             left, right, restore, list, desktop (go to the home screen); install: install, remove, search, update.

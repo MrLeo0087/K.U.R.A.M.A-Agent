@@ -390,3 +390,11 @@ message; the action itself is chosen by meaning), the reference nouns (`workmem.
   ("send graph on telegram" sent the word); only the chart kind asked for; dictation reads the raw mic and logs
   "dictation ... audio, stt ..., waiting" lines in stt.log; hold-to-talk "stop dictation" works during dictation.
   Watch: hang.log "Timeout" (should be none), stt.log dictation lines (stt time / waiting > 0 = lag source).
+- 2026-11-03: owner session 17:57-18:07. "open browser" = the system default browser (xdg-settings), and a word the
+  owner names for an app is kept (apps action `name` -> data/app_names.json; "I'll remember that" with no tool is now
+  a claim -> retried). A song title alone ("play us mod se shuru kare") plays at 0 tokens (meaning-gated); the AI
+  keeps the title in the query. Music never spills to a background job under 12 s; it starts at 100 (mpv's cubic 60
+  was ~-13 dB) and keeps the user's last music volume; a song started while ducked gets the right volume once mpv
+  answers. Alt: only modifier keys spoil a solo Alt press; a spoiled press logs "alt ignored: a shortcut (...)" in
+  ptt.log. Watch: ptt.log "ignored" lines when Alt seems dead; whole-system volume drop was NOT reproduced (echo
+  canceller measured at the same level) - note the time if it happens again.

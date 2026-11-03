@@ -323,6 +323,8 @@ WORKSPACE_SKIP_TOOLS = ("read_webpage", "search_knowledge", "ask_knowledge", "re
 # A tool still running after this many seconds keeps going as a background job; the user can keep talking and
 # is told when it's done (0 = off)
 TOOL_BACKGROUND_AFTER_S = float(os.getenv("KURAMA_TOOL_BG_AFTER_S", "3"))
+TOOL_BACKGROUND_MIN_S = {"music": 12.0, "media": 12.0}  # finding a song takes 2-6 s: music never "goes to the
+# background" with a job number (11-03 f28ec8c6: 'Play some Hindi song' -> job #64 at 3.0 s)
 TOOL_BACKGROUND_MAX_S = 8.0  # a tool's own usual run time decides the wait (safety._wait_for), never longer than this
 TOOL_NO_BACKGROUND = ("start_job", "generate_image", "write_document", "jobs", "make_tool",
                       "focus_mode", "gesture_control", "power_off", "suspend_computer",
@@ -448,7 +450,8 @@ CLAIM_MIN, CLAIM_MARGIN = 0.65, 0.12
 CLAIM_EXAMPLES = ("I opened it for you", "done, I sent the message", "I created the file in your workspace",
                   "here is the image I made for you", "the volume is now at 80 percent", "I saved the link",
                   "playing the song now", "I made a new folder", "the folder has been deleted",
-                  "I set a reminder for 5 pm", "your plan is ready in the workspace", "I closed the app")
+                  "I set a reminder for 5 pm", "your plan is ready in the workspace", "I closed the app",
+                  "got it, I'll remember that", "okay, from now on I will open that one")  # 0c4641e3: promised, saved nothing
 NOT_CLAIM_EXAMPLES = ("the sky is blue because of light scattering", "hello, how can I help you today",
                       "I'm sorry you're feeling low", "here are some tips to be happy", "a good name would be shadow",
                       "I don't know what you mean", "could you say that again", "here is a quick explanation",
@@ -1213,7 +1216,8 @@ LOCATION_LOST_MAX_H = float(os.getenv("KURAMA_LOST_MAX_H", "6"))  # lost mode sw
 LOCATION_MIN_MOVE_M = 120.0  # a fix closer than this to the last one is treated as the same spot (no new point)
 LOCATION_KEEP_DAYS = 60.0  # older points are pruned, so the table stays tiny
 FOCUS_CLOSE: tuple[str, ...] = ()  # apps focus_mode closes at start, e.g. ("discord", "telegram")
-MUSIC_VOLUME = int(os.getenv("KURAMA_MUSIC_VOLUME", "60"))  # mpv start volume for 'play lofi music'
+MUSIC_VOLUME = int(os.getenv("KURAMA_MUSIC_VOLUME", "100"))  # mpv start volume until the user sets one (kept):
+# mpv's scale is cubic, 60 was ~-13 dB, far quieter than the same song in the browser (owner 11-03)
 PLAYLISTS: dict[str, str] = {}  # spoken name -> URL or local music folder ('save this playlist as X' adds more)
 
 # --- P9b --- reminders / scheduled commands, RAM-aware jobs, resume

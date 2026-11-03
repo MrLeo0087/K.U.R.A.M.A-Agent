@@ -46,7 +46,7 @@ def _rl_remove(text: str) -> tuple[str, dict]:
 
 
 @tool(group="core", safety="safe",
-      description="Memory: remember a fact, recall what you know about the user, forget a fact, past_chat (what we "
+      description="Memory: remember a fact (which app a word opens is the apps tool's name action), recall what you know about the user, forget a fact, past_chat (what we "
                   "talked about); the link store: save_link (save the open page's / highlighted link under a name: "
                   "url empty, KURAMA reads it), get_link, "
                   "open_link, list_links, delete_link, rename_link; read_later (save this page) / reading_list / "

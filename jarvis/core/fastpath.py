@@ -956,7 +956,16 @@ def music_intent(t: str) -> Intent | None:
         return mu("play", f"{m.group('q')} {m.group('a')}", shuffle)
     if m := re.fullmatch(lead + r"(?:listen\s+to|i\s+want\s+to\s+listen\s+to)\s+(?P<q>.+)", t, I):
         return mu("play", m.group("q").strip(" ."))
+    # 'play us mod se shuru kare' / 'play tu hai kaha': a song's title alone (11-03: the AI took 5-7 s and 5k tokens,
+    # once searched the web instead); the meaning gate still decides it is music, the browser / games keep theirs
+    if (m := re.fullmatch(lead + r"(?:play|bajau|bajaau)\s+(?P<q>[^\W\d][\w' -]{2,60}?)[\s.!]*", t, I)) \
+            and len(m.group("q").split()) <= 8 and not _NOT_A_SONG.search(m.group("q")):
+        return mu("play", m.group("q").strip())
     return None
+
+
+_NOT_A_SONG = re.compile(r"\b(?:it|this|that|these|those|video|videos|youtube|movie|film|tab|game|games|chess|cards|"
+                         r"next|previous|again|back|pause|music\s+folder|my|from|in\s+(?:the\s+)?browser)\b", I)
 
 
 def video_make_intent(t: str) -> Intent | None:

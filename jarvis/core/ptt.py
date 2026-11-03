@@ -60,6 +60,9 @@ def pttlog(line: str) -> None:
         pass
 
 
+_MODS = ("ctrl", "alt", "shift", "cmd")
+
+
 class Holder:
     """Key events -> down / up / cancel (pure logic, testable without a keyboard). combo: "ctrl+space" or one key.
     Down: the main key is pressed while every modifier is held. Up: a modifier is released, or the main key is
@@ -97,8 +100,8 @@ class Holder:
         self._dtap_press(n)
         if self.solo:
             self._solo_press(n)
-            if n != self.main:
-                self.others.setdefault(n, self.now())
+            if n != self.main and n in _MODS:  # only modifiers: a letter's release can name another key ('!' is
+                self.others.setdefault(n, self.now())  # pressed, '1' released) and then blocked Alt for 10 s (11-03)
             return
         if self.dismiss and n == self.dismiss[1] and self.dismiss[0] <= self.held and self.down_at is None:
             if n not in self.held:  # Super+X: close the caption / stop speaking (once per press, not on repeat)
@@ -163,6 +166,8 @@ class Holder:
                 now = self.now()  # a key "down" for over 10 s is a lost release, not a shortcut being typed
                 self.others = {k: at for k, at in self.others.items() if now - at < 10}
                 self.pressed_at, self.spoiled = now, bool(self.others)
+                if self.spoiled:
+                    pttlog(f"{self.main} ignored: a shortcut ({'+'.join(sorted(self.others))} is down)")
                 self.waiting = self.schedule(config.PTT_START_DELAY_S, self._solo_start)
             return
         if self.pressed_at is not None and not self.spoiled:  # Ctrl + another key = a shortcut

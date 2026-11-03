@@ -170,8 +170,21 @@ class Player:
         self.procs: list[subprocess.Popen] = []
         self.gen = 0  # bumps on every start/stop: an old watcher thread then does nothing
         self.lock = threading.RLock()
-        self.volume = config.MUSIC_VOLUME
+        self._volume: int | None = None  # the user's music volume, read from kv on first use (not at import)
         self.fetching: set[str] = set()
+
+    @property
+    def volume(self) -> int:
+        if self._volume is None:
+            try:
+                self._volume = int(store.kv_get(VOLUME_KEY) or config.MUSIC_VOLUME)
+            except (ValueError, TypeError):
+                self._volume = config.MUSIC_VOLUME
+        return self._volume
+
+    @volume.setter
+    def volume(self, v: int) -> None:
+        self._volume = int(v)
 
     def alive(self) -> bool:
         return bool(self.procs) and self.procs[-1].poll() is None
@@ -227,8 +240,19 @@ class Player:
         self.procs = procs
         if procs:
             threading.Thread(target=self._watch, args=(gen, procs[-1], time.time()), name="music-watch", daemon=True).start()
+            threading.Thread(target=self._settle_volume, args=(gen,), name="music-vol", daemon=True).start()
             self._prefetch()
         return bool(procs)
+
+    def _settle_volume(self, gen: int) -> None:
+        """Once this mpv answers, give it the volume of NOW: it may have started while ducked and the un-duck came
+        before its socket existed (that song then stayed at DUCK_VOLUME to the end)."""
+        for _ in range(VOLUME_SETTLE_TRIES):
+            if gen != self.gen:
+                return
+            if _send("set_property", "volume", min(DUCK_VOLUME, self.volume) if _duck["on"] else self.volume):
+                return
+            time.sleep(0.5)
 
     def _watch(self, gen: int, p: subprocess.Popen, started: float) -> None:
         """The song ended by itself -> the next one (not after next / stop: the generation changed).
@@ -529,6 +553,7 @@ def volume(step: int = 0, to: int | None = None) -> str | None:
     if new == PLAYER.volume and step:
         return f"The music is already at {'its loudest' if step > 0 else 'its quietest'} ({new}%)."
     PLAYER.volume = new
+    store.kv_set(VOLUME_KEY, str(new))  # the next song (and the next day) starts at it
     if not _duck["on"]:
         _send("set_property", "volume", new)
     return f"Music volume {new}%."
@@ -543,6 +568,8 @@ def now_playing() -> str | None:
     return f"{'Paused' if paused else 'Playing'}: {cur.get('title') or 'music'}" + (f" ({left} more after it)." if left else ".")
 
 
+VOLUME_KEY = "music_volume"
+VOLUME_SETTLE_TRIES = 60  # x 0.5 s: a streamed song's mpv can take ~10 s to open its socket
 DUCK_VOLUME = 25  # % while you speak to KURAMA or it answers, so it hears you over the music
 _duck = {"on": False, "timer": None}
 

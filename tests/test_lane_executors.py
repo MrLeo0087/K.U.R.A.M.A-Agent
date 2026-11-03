@@ -37,9 +37,9 @@ def test_a_tool_waits_for_its_own_usual_run_time(runs, want):
 def test_real_run_times_are_remembered_even_after_the_background():
     safety._waits.clear()
     for s in (5.1, 4.2, 6.0):
-        safety._ran("music", s)
-    assert json.loads(store.kv_get(safety._RUNS_KEY))["music"] == [5.1, 4.2, 6.0]
-    assert safety._wait_for("music") == pytest.approx(7.5)
+        safety._ran("live_search", s)
+    assert json.loads(store.kv_get(safety._RUNS_KEY))["live_search"] == [5.1, 4.2, 6.0]
+    assert safety._wait_for("live_search") == pytest.approx(7.5)
 
 
 @pytest.mark.parametrize("answer", ["Here is a cozy four-room house plan with a central balcony walkway in your workspace.",

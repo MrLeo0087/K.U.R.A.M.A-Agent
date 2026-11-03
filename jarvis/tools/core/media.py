@@ -32,6 +32,6 @@ def media(action: Literal["play", "pause", "resume", "next", "previous", "stop",
 
     Args:
         action: play, pause, resume, next, previous, stop, playing, youtube, gesture, download.
-        query: Song / artist / playlist / YouTube link to play, a video link to download, or on/off for gesture.
+        query: Song (its title words as said, not just its language) / artist / playlist / YouTube link to play, a video link to download, or on/off for gesture.
     """
     return run(TABLE, {"action": action, "query": query})

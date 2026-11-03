@@ -221,6 +221,7 @@ def _wait_for(name: str) -> float:
             wait = min(max(base, usual * 1.25), config.TOOL_BACKGROUND_MAX_S)
     except Exception as e:  # noqa: BLE001 - no history: the fixed wait
         log.debug("tool wait history failed: %s", e)
+    wait = max(wait, config.TOOL_BACKGROUND_MIN_S.get(name, 0.0))
     _waits[name] = (wait, time.time())
     return wait
 

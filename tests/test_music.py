@@ -43,7 +43,7 @@ def test_controls_through_ipc(monkeypatch, tmp_path):
     started = _fake_launch(monkeypatch)
     music.PLAYER.queue = [{"url": "u1", "id": "u1u1u1", "title": "Lofi Girl - beats", "duration": 100},
                           {"url": "u2", "id": "u2u2u2", "title": "Second", "duration": 100}]
-    music.PLAYER.i, music.PLAYER.procs = 0, [FakeProc()]
+    music.PLAYER.i, music.PLAYER.procs, music.PLAYER.volume = 0, [FakeProc()], 60
     assert music.running()
     assert music.pause() == "Paused the music." and mpv.state["pause"] is True
     assert music.now_playing() == "Paused: Lofi Girl - beats (1 more after it)."

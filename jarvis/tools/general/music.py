@@ -15,7 +15,8 @@ def music(action: Literal["play", "url", "playlist", "local", "save", "playlists
     """Music player.
 
     Args:
-        action: play (query = song/artist/mood), url (query = YouTube link; empty = the tab open in the browser),
+        action: play (query = the song's own title words exactly as the user said them, plus language / artist /
+            mood: 'us mod se shuru kare hindi song', never just 'hindi song' when a title was said), url (query = YouTube link; empty = the tab open in the browser),
             playlist (query = saved playlist name), local (query = folder, empty = ~/Music), save (query = name for
             the open/linked playlist), playlists (list them), delete (query = name), pause, resume, next, previous,
             volume_up / volume_down (query = step, default 15), volume_set (query = 0-130), status, stop.

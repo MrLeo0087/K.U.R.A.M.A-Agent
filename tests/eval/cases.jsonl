@@ -279,3 +279,10 @@
 {"id": 279, "text": "generate a random image and send to telegram", "expect": "image.generate", "args": {}, "channel": "laptop", "source": "traces 2026-11-01"}
 {"id": 280, "text": "generate iamge of futurestic computer and send it to telegram", "expect": "image.generate", "args": {}, "channel": "laptop", "source": "traces 2026-11-01"}
 {"id": 281, "text": "create a cute image", "expect": "image.generate", "args": {}, "channel": "laptop", "source": "traces 2026-11-01"}
+{"id": 282, "text": "play us mod se suru kare", "expect": "media.play", "args": {}, "channel": "laptop"}
+{"id": 283, "text": "Play tu hai kaha.", "expect": "media.play", "args": {}, "channel": "laptop"}
+{"id": 284, "text": "play kesariya", "expect": "media.play", "args": {}, "channel": "laptop"}
+{"id": 285, "text": "play song us mod se shurroo kare", "expect": "media.play", "args": {}, "channel": "laptop"}
+{"id": 286, "text": "Open Browser", "expect": "open.app", "args": {}, "channel": "laptop"}
+{"id": 287, "text": "open the browser", "expect": "open.app", "args": {}, "channel": "laptop"}
+{"id": 288, "text": "When I say open browser, open Brave Browser, not Firefox.", "expect": "open.app", "args": {}, "channel": "laptop"}

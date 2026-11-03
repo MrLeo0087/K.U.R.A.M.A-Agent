@@ -1024,3 +1024,15 @@ Phases (one at a time, owner tests after each):
       waits 10 min for the phone's location on Telegram: that GPS point becomes the pin (geolocate.pin_from_phone);
       a pinned spot is found again by 2+ common APs (or its strongest one), even on another network; an IP-only
       /where now says it is not the real spot and how to pin it. Tests: test_location_pin.py (3).
+- [x] 2026-11-03 18:30 Owner session fixes (traces 0c4641e3, 542f180a, 469274ae, f28ec8c6, 922c40f8, 16c5d720).
+      Browser: _apps aliased "browser" to Firefox while Brave is the system default, and "remember: browser = Brave"
+      ran no tool (memory not offered, claim check had no "I'll remember" example) -> find_app tries a taught name,
+      then the xdg default browser; new tool app_name (apps action `name`, data/app_names.json); claim examples.
+      Music: 'Play some Hindi song' spilled to job #64 at 3.0 s (only 2 run times known) -> TOOL_BACKGROUND_MIN_S
+      music/media 12 s; 'play <title>' had no shortcut (AI 5-7 s, once a web search) -> meaning-gated 'play <title>';
+      the AI dropped the title ('Hindi song') -> query docs; quiet music: MUSIC_VOLUME 60 on mpv's cubic scale ->
+      100 + the user's last music volume kept (kv music_volume); duck race: a song started ducked could stay at 25
+      -> _settle_volume. System-wide volume drop not reproduced (null-sink test: echo canceller passes the same
+      level, stereo). Alt: solo Alt was spoiled for 10 s by a non-modifier whose release had another name ('!' vs
+      '1') -> only modifiers count; spoiled presses logged. Tests: test_fixes_1103.py (29); suite 1576;
+      scorecard 71% / 100% / 98% (+7 cases). Live: play kesariya (0 tok, vol 100), Open Browser -> Brave.
