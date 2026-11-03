@@ -4,13 +4,16 @@ Two kinds of rows in data/recipes.json (vectors from the semantic router's model
 - tool: a request the AI solved with ONE safe tool (an area in config.RECIPE_GROUPS) that really did it. Words of
   the request that are also in an argument become a slot ('play song X' -> music(play, query='X hindi song')), so
   'play song kesariya' is the same shortcut with another song; with no slot, only a request with the same meaning
-  and no new content words matches. A candidate turns ON after a 👍, or after RECIPE_AUTO_CONFIRMS separate
-  requests went the same way with no correction after them. Only the decision is kept: the tool runs every time.
-- answer: a plain AI answer (no tool, nothing about today / now / news) that got a 👍, reused for a nearly
+  and no new content words matches. It is a silent candidate until the OWNER approves it: 👍, or praise in the
+  next message ("perfect, that's right"). Nothing is ever switched on by silence (owner 11-03: "if I do nothing,
+  do nothing"). Only the decision is kept: the tool runs every time.
+- taught: the owner's correction said what to do ("no, play it in the music player") and that worked: the FIRST
+  wording -> the tool the correction used, on at once (the owner said so).
+- answer: a plain AI answer (no tool, nothing about today / now / news) the owner approved, reused for a nearly
   identical question within ANSWER_CACHE_DAYS.
-👎 deletes what served the reply, vetoes the shortcut that answered it (learn: the router won't pick it for that
-meaning again) and goes to the top of the trace report. A correction ("no, I meant...") after a candidate deletes
-it. Each use adds the tokens the AI path had cost to the day's saving (stats()).
+👎, or a complaint in the next message, deletes what served the reply, vetoes the shortcut that answered it (learn:
+the router won't pick it for that meaning again) and goes to the top of the trace report. Each use adds the tokens
+the AI path had cost to the day's saving (stats()).
 Safety: never for a request that points at something on screen ('this', 'that file'), a path-like argument from
 the context, a tool that asks yes/no, or an area outside RECIPE_GROUPS (no reminders, money, messages, files,
 jobs). fastpath.match tries this after every pattern and meaning shortcut.
@@ -187,14 +190,15 @@ def _fill(r: dict, raw: list[str], low: list[str]) -> dict | None:
 
 
 # ------------------------------------------------------------------ learning from turns
-def _candidate(turn: dict) -> tuple[str, dict, str] | None:
-    """(tool, args, result) when the AI did this request with exactly one allowed, safe tool that really did it."""
+def _candidate(turn: dict, text: str | None = None) -> tuple[str, dict, str] | None:
+    """(tool, args, result) when the turn did the request with exactly one allowed, safe tool that really did it.
+    text: the wording to check (a correction's tools, learned for the request it corrected)."""
     from jarvis.core import registry
     from jarvis.core.learn import _really_did, standalone
-    text = turn.get("text") or ""
+    text = turn.get("text") or "" if text is None else text
     if not standalone(text) or _POINTS.search(text) or len(text) > 160:
         return None
-    special, general = [], 0
+    special, general = [], []
     for t in turn.get("tools") or []:
         name = t.get("name") or ""
         if name == "request_tools":
@@ -202,17 +206,21 @@ def _candidate(turn: dict) -> tuple[str, dict, str] | None:
         tool = registry.REGISTRY.get(name)
         if tool is None:
             return None
-        if registry.group_of(tool) == "core":
-            general += 1
-            continue
-        special.append((t, tool))
-    if len(special) != 1 or general > 1:
+        (general if registry.group_of(tool) == "core" else special).append((t, tool))
+    if not special and len(general) == 1:  # only the general tool was traced (its work went to a background job):
+        from jarvis.tools.core._hub import underlying  # the specialised tool it ran
+        g = general[0][0]
+        name, uargs = underlying(g["name"], g.get("args") or {})
+        if (tool := registry.REGISTRY.get(name)) is None or registry.group_of(tool) == "core":
+            return None
+        special = [({**g, "name": name, "args": uargs}, tool)]
+    if len(special) != 1 or len(general) > 1:
         return None
     t, tool = special[0]
     result = str(t.get("result") or "")
     if (not t.get("ok") or t.get("outcome") not in (None, "", "allowed") or t.get("safety") == "confirm"
             or registry.safety_of(tool) != "safe" or registry.group_of(tool) not in config.RECIPE_GROUPS
-            or not _really_did(result) or result.startswith(_BG)):
+            or not _really_did(result) or (result.startswith(_BG) and not _job_done(result))):
         return None
     args = t.get("args") if isinstance(t.get("args"), dict) else {}
     args = {k: v for k, v in args.items() if not str(k).startswith("_")}
@@ -221,6 +229,17 @@ def _candidate(turn: dict) -> tuple[str, dict, str] | None:
     except (TypeError, ValueError):
         return None
     return t["name"], args, result
+
+
+def _job_done(note: str) -> bool:
+    """'Still working after 3 s ... job #67': the tool finished in the background, and well (the owner then judged
+    the answer that job announced)."""
+    m = re.search(r"job #(\d+)", note)
+    if not m:
+        return False
+    from jarvis.core import store
+    rows = store._exec("SELECT status FROM jobs WHERE id = ?", (int(m.group(1)),))
+    return bool(rows) and rows[0]["status"] == "done"
 
 
 def observe(turn: dict) -> None:
@@ -261,19 +280,31 @@ def observe(turn: dict) -> None:
     log.info("learned shortcut candidate %r -> %s %s", turn["text"][:60], tool, args)
 
 
-def survived(trace_id: str) -> None:
-    """The next message was no correction: one more proof for the candidate made from that request."""
-    if not trace_id:
-        return
+def taught(prev: dict, fix: dict) -> bool:
+    """The owner corrected `prev` and the correction `fix` did it with one safe tool: prev's wording now means that
+    tool (with prev's words as slots), on at once: the owner told KURAMA what to do."""
+    if not config.RECIPES or not prev.get("text"):
+        return False
+    cand = _candidate(fix, text=prev["text"])
+    if cand is None:
+        return False
+    tool, args, _ = cand
+    raw, low = _tokens(prev["text"])
+    tmpl, slots = _slots(low, args, _fixed_keys(tool))
+    if slots and not _template_ok(tmpl):
+        tmpl, slots = [], {}
+    v = _embed(prev["text"])
     with _lock:
-        for r in _load():
-            if trace_id in r.get("traces", []) and trace_id not in r.get("ok", []):
-                r["ok"] = (r.get("ok", []) + [trace_id])[-10:]
-                if len(r["ok"]) >= config.RECIPE_AUTO_CONFIRMS and not r.get("on"):
-                    r["on"] = True
-                    log.info("learned shortcut on: %r -> %s", r["text"][:60], r["tool"])
-                _save()
-                return
+        rows = _load()
+        rows[:] = [r for r in rows if r.get("text", "").lower() != " ".join(prev["text"].split())[:200].lower()]
+        rows.append({"id": uuid.uuid4().hex[:8], "kind": "tool", "src": "taught",
+                     "text": " ".join(prev["text"].split())[:200], "vec": [round(float(x), 5) for x in v],
+                     "tool": tool, "args": args, "template": tmpl, "slots": slots, "on": True, "ok": [],
+                     "traces": [t for t in (prev.get("id"), fix.get("id")) if t], "ts": time.time(), "used": 0,
+                     "tokens": int(prev.get("tokens") or 0) + int(fix.get("tokens") or 0)})
+        _save()
+    log.info("taught by a correction: %r -> %s %s", prev["text"][:60], tool, args)
+    return True
 
 
 def dropped(trace_id: str) -> int:
@@ -378,8 +409,9 @@ def _cacheable(row: dict) -> bool:
             and len(_tokens(row.get("text") or "")[1]) >= 3)
 
 
-def feedback(trace_id: str, vote: int, note: str = "") -> dict:
-    """👍 (vote 1) or 👎 (vote -1) on one reply. Returns {ok, said}."""
+def feedback(trace_id: str, vote: int, note: str = "", veto: bool = True) -> dict:
+    """👍 (vote 1) or 👎 (vote -1) on one reply, by button or said in the next message (note = those words).
+    veto=False: the reply's tool was the right choice but failed (a bug, not a wrong shortcut). Returns {ok, said}."""
     from jarvis.core import learn, trace
     row = trace.get(trace_id)
     if row is None:
@@ -414,7 +446,7 @@ def feedback(trace_id: str, vote: int, note: str = "") -> dict:
         return {"ok": True, "said": "Thanks! I'll answer that the same way, without the AI next time." if turned_on
                 else "Thanks, noted."}
     gone = dropped(trace_id) + forget_matching(text)
-    if row.get("path") == "fastpath" and row.get("intent"):
+    if veto and row.get("path") == "fastpath" and row.get("intent"):
         learn.add(text, "", row["intent"], "thumbs_down")  # that shortcut is wrong for this meaning (meaning_ok)
     log.info("👎 %s %r (%d learned rows removed)", trace_id, text[:60], gone)
     return {"ok": True, "said": "Sorry. I won't answer it that way again. Tell me what you wanted (say it as a "

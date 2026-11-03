@@ -193,6 +193,9 @@ def teach(name: str, app: str) -> str:
         return f"error: no installed app matches {app!r}"
     names[q] = entry["id"]
     _names_path().write_text(json.dumps(names, indent=1), encoding="utf-8")
+    from jarvis.core import mywords
+    if q in mywords.all_words():  # one meaning per word: the newest wins
+        mywords.forget(q)
     return f"Got it: '{q}' now opens {entry['name']}."
 
 

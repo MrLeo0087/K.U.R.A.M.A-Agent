@@ -4,7 +4,7 @@ import time
 
 import pytest
 
-from jarvis.core import config, fastpath, learn, recipes, semantic, trace
+from jarvis.core import config, fastpath, learn, mywords, recipes, semantic, trace
 from jarvis.tools.general.learned_shortcuts import learned_shortcuts
 
 
@@ -44,37 +44,52 @@ SONG1 = [tool("music", {"action": "play", "query": "Us mod se shurroo kare Hindi
 SONG2 = [tool("music", {"action": "play", "query": "tum hi ho Hindi song"}, "Playing Tum Hi Ho")]
 
 
-def test_two_clean_runs_make_a_slot_shortcut(model):
-    recipes.observe(turn("play song us mod se shurroo kare", SONG1, "aaaaaa000001"))
-    assert recipes.find("play song kesariya") is None  # a candidate only
-    recipes.survived("aaaaaa000001")
-    assert recipes.find("play song kesariya") is None  # 1 of 2
-    recipes.observe(turn("play song tum hi ho", SONG2, "aaaaaa000002"))
-    recipes.survived("aaaaaa000002")
+def approve(tid, text, tools, path="ai", answer="ok"):
+    """The owner's 👍 on a reply that is in the traces."""
+    save_trace(tid, text, path=path, tools=tools, answer=answer)
+    return recipes.feedback(tid, 1)
+
+
+def said_next(prev_text, prev_tools, prev_id, words, words_tools=(), words_id="ffff00000999", prev_path="ai"):
+    """A reply, then the owner's next message: learning judges the reply by those words."""
+    save_trace(prev_id, prev_text, path=prev_path, tools=prev_tools)
+    learn._judge(turn(prev_text, prev_tools, prev_id, path=prev_path))
+    learn._judge(turn(words, list(words_tools), words_id))
+
+
+# ---- nothing without the owner ----
+def test_silence_never_turns_anything_on(model):
+    said_next("play song us mod se shurroo kare", SONG1, "aaaa00000001", "what is the weather in pokhara")
+    said_next("play song tum hi ho", SONG2, "aaaa00000002", "open youtube")
+    assert recipes.find("play song kesariya") is None and [r for r in recipes.rows() if r.get("on")] == []
+
+
+def test_thumbs_up_makes_a_slot_shortcut(model):
+    assert approve("aaaa00000003", "play song us mod se shurroo kare", SONG1)["said"].startswith("Thanks! I'll")
     it = recipes.match("Play song Kesariya")
-    assert it.tool == "music" and it.args == {"action": "play", "query": "Kesariya Hindi song"}
-    assert len(recipes.rows()) == 1 and recipes.stats()["saved_today"] == 1500
+    assert it.tool == "music" and it.args == {"action": "play", "query": "Kesariya Hindi song"}  # 'play' stays fixed
+    assert recipes.stats()["saved_today"] == 1500
     assert recipes.match("play the next video on youtube") is None  # another wording: not this template
 
 
-@pytest.mark.parametrize("said,args", [("set the brightness to 70 percent", {"level": 70}),
-                                       ("set the brightness to 5 percent", {"level": 5})])
-def test_number_slot(model, said, args):
-    t = [tool("brightness", {"action": "set", "level": 40}, "brightness 40%")]
-    recipes.observe(turn("set the brightness to 40 percent", t, "bbbbbb000001"))
-    recipes.survived("bbbbbb000001")
-    recipes.survived("bbbbbb000001")  # the same request twice is still ONE proof
-    assert recipes.find(said) is None
-    recipes.observe(turn("set the brightness to 55 percent", [tool("brightness", {"action": "set", "level": 55})],
-                         "bbbbbb000002"))
-    recipes.survived("bbbbbb000002")
-    assert recipes.match(said).args == {"action": "set", **args}
+@pytest.mark.parametrize("words", ["perfect, that's exactly what I wanted", "good job kurama", "well done, that is right",
+                                   "ramro garyau", "perfect, now open youtube", "excellent"])
+def test_praise_in_the_next_message_is_a_thumbs_up(model, words):
+    said_next("set the brightness to 40 percent", [tool("brightness", {"action": "set", "level": 40}, "brightness 40%")],
+              "bbbb00000001", words)
+    assert recipes.match("set the brightness to 70 percent").args == {"action": "set", "level": 70}
+    assert trace.feedback_rows()[0]["vote"] == 1
 
 
-def test_thumbs_up_turns_it_on_at_once_and_fixed_args_need_the_same_words(model):
-    t = [tool("battery_status", {}, "Battery 93%, discharging")]
-    save_trace("cccccc000001", "what is the status of my battery charge", tools=t)
-    assert recipes.feedback("cccccc000001", 1)["said"].startswith("Thanks! I'll answer")
+@pytest.mark.parametrize("words", ["thanks", "thank you", "ok", "okay", "next"])
+def test_politeness_is_not_praise(model, words):
+    said_next("set the brightness to 40 percent", [tool("brightness", {"action": "set", "level": 40})],
+              "bbbb00000002", words)
+    assert recipes.rows() == [] and trace.feedback_rows() == []
+
+
+def test_thumbs_up_fixed_args_need_the_same_words(model):
+    approve("cccc00000001", "what is the status of my battery charge", [tool("battery_status", {}, "Battery 93%")])
     assert recipes.match("What is the status of my battery charge?").tool == "battery_status"
     assert recipes.find("what is the status of my phone battery charge") is None  # a new word: maybe another thing
 
@@ -89,98 +104,123 @@ def test_thumbs_up_turns_it_on_at_once_and_fixed_args_need_the_same_words(model)
     ("play some calm music for studying", [tool("music", {"action": "play"},
                                                  "Still working after 3 s, so this keeps running in the background")]),
 ])
-def test_never_learned(model, text, tools):
-    recipes.observe(turn(text, tools, "dddddd000001"))
-    assert recipes.rows() == []
+def test_never_learned_even_with_a_thumbs_up(model, text, tools):
+    approve("dddd00000001", text, tools)
+    assert [r for r in recipes.rows() if r["kind"] == "tool"] == []
 
 
 def test_a_bare_slot_is_never_a_template(model):
-    recipes.observe(turn("kesariya song by arijit", [tool("music", {"action": "play", "query": "kesariya song by arijit"})],
-                         "eeeeee000001"))
-    r = recipes.rows()[0]
-    assert r["slots"] == {}  # the whole request = the argument: only the same request matches
+    approve("eeee00000001", "kesariya song by arijit", [tool("music", {"action": "play", "query": "kesariya song by arijit"})])
+    assert recipes.rows()[0]["slots"] == {}  # the whole request = the argument: only the same request matches
 
 
 def test_kept_answer_only_after_thumbs_up_and_never_for_live_questions(model):
-    save_trace("ffffff000001", "why is the sky blue in one line", answer="Air scatters blue sunlight the most.")
+    save_trace("ffff00000001", "why is the sky blue in one line", answer="Air scatters blue sunlight the most.")
     assert recipes.find("why is the sky blue in one line") is None
-    recipes.feedback("ffffff000001", 1)
+    recipes.feedback("ffff00000001", 1)
     it = recipes.match("Why is the sky blue, in one line?")
     assert it.name == "cached" and it.args["en"] == "Air scatters blue sunlight the most."
     assert recipes.find("why is the sky blue today in one line") is None
-    save_trace("ffffff000002", "what is the latest news in nepal", answer="Some news.")
-    recipes.feedback("ffffff000002", 1)
-    assert [r for r in recipes.rows() if r["kind"] == "answer"] and len(recipes.rows("answer")) == 1
+    approve("ffff00000002", "what is the latest news in nepal", [], answer="Some news.")
+    assert len(recipes.rows("answer")) == 1
 
 
+# ---- 👎 / complaints ----
 def test_thumbs_down_forgets_and_vetoes_the_shortcut(model):
-    t = [tool("battery_status", {}, "Battery 93%")]
-    save_trace("aabbcc000001", "what is the status of my battery charge", tools=t)
-    recipes.feedback("aabbcc000001", 1)
+    approve("aabbcc000001", "what is the status of my battery charge", [tool("battery_status", {}, "Battery 93%")])
     save_trace("aabbcc000002", "what is the status of my battery charge", path="fastpath", intent="learned",
                answer="Battery 93%")
     out = recipes.feedback("aabbcc000002", -1)
     assert out["ok"] and "won't answer it that way" in out["said"]
     assert recipes.find("what is the status of my battery charge") is None and recipes.rows() == []
     assert any(r["neg"] == "learned" for r in learn._load()[0])
-    rows = trace.feedback_rows()
-    assert [r["vote"] for r in rows] == [-1, 1]
+    assert [r["vote"] for r in trace.feedback_rows()] == [-1, 1]
 
 
-def test_a_correction_drops_the_candidate(model):
-    learn._judge(turn("play song us mod se shurroo kare", SONG1, "cdcdcd000001"))
-    assert len(recipes.rows()) == 1
-    learn._judge(turn("no, I meant something else", [], "cdcdcd000002", path="fastpath"))
-    assert recipes.rows() == []
+@pytest.mark.parametrize("words", ["no, I meant something else", "that's wrong", "galat"])
+def test_a_complaint_in_the_next_message_is_a_thumbs_down(model, words):
+    approve("abcd00000001", "what is the status of my battery charge", [tool("battery_status", {}, "Battery 93%")])
+    said_next("what is the status of my battery charge", [tool("battery_status", {}, "Battery 93%")], "abcd00000002",
+              words, prev_path="fastpath")  # served by the learned shortcut, then the complaint
+    assert recipes.find("what is the status of my battery charge") is None
+    assert trace.feedback_rows()[0]["vote"] == -1 and trace.feedback_rows()[0]["note"] == words
+
+
+@pytest.mark.parametrize("words", ["no, play it in the music player", "you should use the music player for this",
+                                   "wrong, play it in kurama's player not the browser"])
+def test_a_correction_that_says_what_to_do_teaches_it(model, words):
+    web = [tool("web_search", {"query": "us mod se shurroo kare"}, "Results: ...")]
+    fix = [tool("music", {"action": "play", "query": "us mod se shurroo kare"}, "Playing Us Mod Se")]
+    said_next("bajau us mod se shurroo kare", web, "abcd00000003", words, fix, "abcd00000004")
+    it = recipes.match("bajau tum hi ho")  # the FIRST wording, any song: the tool the correction used
+    assert it is not None and it.tool == "music" and it.args == {"action": "play", "query": "tum hi ho"}
+    assert recipes.rows()[0]["src"] == "taught"
+
+
+def test_a_complaint_after_a_failed_tool_is_not_a_veto(model):
+    save_trace("abcd00000005", "pause the video please", path="fastpath", intent="media",
+               tools=[tool("media_control", {"action": "pause"}, "error: no player found")])
+    learn._judge(turn("pause the video please", [tool("media_control", {"action": "pause"}, "error: no player")],
+                      "abcd00000005", path="fastpath"))
+    learn._judge(turn("that's wrong", [], "abcd00000006"))
+    assert not any(r["neg"] for r in learn._load()[0])  # the right shortcut that failed: a bug, not a wrong choice
+
+
+# ---- the owner's own words, kept forever ----
+@pytest.mark.parametrize("said,phrase,command", [
+    ("when I say good night, lock the screen", "good night", "lock the screen"),
+    ("Okay remember, whenever I say study time you should play lofi music", "study time", "play lofi music"),
+    ("if I say 'movie mode', turn off the lights and mute the sound", "movie mode",
+     "turn off the lights and mute the sound")])
+def test_my_words_for_whole_commands(model, monkeypatch, said, phrase, command):
+    monkeypatch.setattr(config, "FASTPATH", True)
+    it = fastpath.match(said)
+    assert it.tool == "app_name" and it.args == {"name": phrase, "command": command}
+    mywords.save(it.args["name"], it.args["command"])
+    assert mywords.expand(phrase.title() + ", Kurama!") == command and mywords.expand(f"{phrase} and more") != command
+    assert phrase in mywords.all_words()
+
+
+def test_one_meaning_per_word_and_forget(model, monkeypatch):
+    from jarvis.tools.general import _apps
+    monkeypatch.setattr(_apps, "index", lambda refresh=False: [
+        {"id": "code", "path": "", "name": "Visual Studio Code", "generic": "", "keywords": [], "wmclass": "", "exe": "code"}])
+    assert _apps.teach("code", "vs code").startswith("Got it")
+    mywords.save("code", "open my project folder")
+    assert "code" not in _apps.taught()  # the newest meaning wins
+    _apps.teach("code", "vs code")
+    assert "code" not in mywords.all_words()
+    assert mywords.forget("nothing here").startswith("'nothing here' wasn't")
 
 
 def test_unknown_trace_and_the_owner_tool(model):
     assert recipes.feedback("123456789abc", 1) == {"ok": False, "said": "I can't find that reply any more."}
     assert learned_shortcuts().startswith("Nothing learned yet")
-    recipes.observe(turn("play song us mod se shurroo kare", SONG1, "abab00000001"))
-    assert "waiting (0/2)" in learned_shortcuts("list")
+    approve("abab00000001", "play song us mod se shurroo kare", SONG1)
+    assert "· on ·" in learned_shortcuts("list")
     assert "Saved about 0 tokens today" in learned_shortcuts("stats")
     assert learned_shortcuts("forget", 1).startswith("Forgot") and recipes.rows() == []
 
 
 def test_fastpath_uses_learned_shortcuts_last(model, monkeypatch):
     monkeypatch.setattr(config, "FASTPATH", True)
-    t1 = [tool("music", {"action": "play", "query": "us mod se shurroo kare"}, "Playing Us Mod Se")]
-    t2 = [tool("music", {"action": "play", "query": "tum hi ho"}, "Playing Tum Hi Ho")]
-    recipes.observe(turn("start the tune us mod se shurroo kare", t1, "efef00000001"))
-    recipes.observe(turn("start the tune tum hi ho", t2, "efef00000002"))
-    recipes.survived("efef00000001")
-    recipes.survived("efef00000002")
+    approve("efef00000001", "start the tune us mod se shurroo kare",
+            [tool("music", {"action": "play", "query": "us mod se shurroo kare"}, "Playing Us Mod Se")])
     it = fastpath.match("start the tune kesariya")  # no built-in pattern knows this wording: the learned one
     assert it is not None and it.tool == "music" and it.args == {"action": "play", "query": "kesariya"}
     assert fastpath.match("what time is it").tool == "get_time"  # the built-in shortcuts still come first
 
 
-# ---- a bad reply with no complaint: the owner just asks again another way ----
-def test_re_asking_another_way_learns_nothing_from_the_first_reply(model):
-    learn._judge(turn("open the web browser for me", [tool("open_app", {"name": "web browser"}, "opened Firefox")],
-                      "rrrr00000001"))
-    assert len(recipes.rows()) == 1
-    learn._judge(turn("open the brave web browser for me", [tool("open_app", {"name": "brave"}, "opened Brave")],
-                      "rrrr00000002"))
-    assert all("rrrr00000001" not in r["traces"] for r in recipes.rows())  # Firefox one: gone, never confirmed
-
-
-def test_next_song_is_not_a_re_ask(model):
-    learn._judge(turn("play song us mod se shurroo kare", SONG1, "ssss00000001"))
-    learn._judge(turn("play song tum hi ho", SONG2, "ssss00000002"))
-    assert recipes.rows()[0]["ok"] == ["ssss00000001"]  # the first one counted as a clean run
-
-
-@pytest.mark.parametrize("then", ["no, I meant something else", "open the battery settings app instead"])
-def test_a_learned_shortcut_that_answered_wrongly_goes(model, then):
-    t = [tool("battery_status", {}, "Battery 93%")]
-    save_trace("abcd00000001", "what is the status of my battery charge", tools=t)
-    recipes.feedback("abcd00000001", 1)
-    assert recipes.find("what is the status of my battery charge") is not None
-    learn._judge(turn("what is the status of my battery charge", [tool("battery_status", {}, "Battery 93%")],
-                      "abcd00000002", path="fastpath"))  # served by the learned shortcut
-    other = [tool("open_app", {"name": "battery settings"}, "opened Settings")]
-    learn._judge(turn(then if then.startswith("no") else "show the status of my battery charge in settings", other,
-                      "abcd00000003"))
-    assert recipes.find("what is the status of my battery charge") is None
+def test_praise_after_a_lookup_that_finished_in_the_background(model):
+    """Live 11-03: the AI's general 'web' call went to job #67 (only its note in the trace); the owner praised the
+    answer that job announced -> the specialised tool behind it is learned, once the job is done."""
+    from jarvis.core import store
+    jid = store.job_insert("web: search", "tool", "")
+    note = f"Still working after 3 s, so this keeps running in the background as job #{jid}. Tell the user..."
+    tools = [tool("web", {"action": "wiki", "query": "Pokhara"}, note)]
+    approve("baba00000001", "tell me the wikipedia summary of pokhara", tools)
+    assert recipes.rows() == []  # the job hasn't finished: no proof it worked
+    store.job_update(jid, status="done")
+    approve("baba00000002", "tell me the wikipedia summary of pokhara", tools)
+    r = recipes.rows()[0]
+    assert r["tool"] != "web" and r["on"] and r["slots"]

@@ -34,7 +34,7 @@ from langchain_core.messages import (AIMessage, BaseMessage, HumanMessage, Syste
                                      ToolMessage)
 
 from jarvis.core import (config, fastpath, identity, selfknow, jobs, llm, meta, notify, planner, profile, registry, router, trace,
-                         modes, safety, store, taskgraph, workmem, workspace)
+                         modes, mywords, safety, store, taskgraph, workmem, workspace)
 
 log = logging.getLogger("jarvis.agent")
 
@@ -1035,6 +1035,7 @@ class Agent:
             trace.end(tr, answer, self.last, error)
 
     def _run(self, user_text: str, mode: str, lang: str | None) -> str:
+        user_text = mywords.expand(user_text)  # the owner's own words ('good night' = 'lock the screen')
         self._begin_turn(user_text)
         fast = self._fast(user_text, lang, mode)
         if fast is not None:
@@ -1074,6 +1075,7 @@ class Agent:
             trace.end(tr, "".join(parts), self.last, error or ("stopped early" if not parts else ""))
 
     def _stream(self, user_text: str, mode: str, lang: str | None) -> Iterator[str]:
+        user_text = mywords.expand(user_text)  # the owner's own words ('good night' = 'lock the screen')
         self._begin_turn(user_text)
         fast = self._fast(user_text, lang, mode)
         if fast is not None:

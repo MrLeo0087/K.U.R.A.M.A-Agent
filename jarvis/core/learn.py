@@ -37,6 +37,7 @@ CORRECTIONS = (
     "no no, play it in the music player", "I mean the other one", "that's not what I asked", "wrong file",
     "stop, not this", "no I wanted the video not the audio", "you misunderstood me", "it didn't work, do it again",
     "hoina, maile arkai bhaneko", "galat", "nahi, maine kuch aur kaha tha", "yo hoina",
+    "wrong, do it in the other app not this one", "not the browser, use the player", "you should have used the other tool",
 )
 
 
@@ -155,6 +156,40 @@ NOT_CORRECTIONS = (
 )
 _not_vecs: Any = None
 
+# The owner saying the reply was RIGHT (a spoken 👍). Plain "thanks" / "ok" are politeness, not a verdict.
+PRAISES = (
+    "good job", "well done", "perfect, that's exactly what I wanted", "that's right, you did it correctly",
+    "yes, that is correct", "great, that was the right thing to do", "nice work kurama", "exactly, keep doing it like this",
+    "you did really good", "awesome, that's the right answer", "correct, remember to do it this way",
+    "ramro garyau", "ekdam thik cha", "bahut badhiya", "sahi kiya", "shabash", "perfect", "excellent", "great job",
+    "that's perfect, thank you", "brilliant, exactly right",
+)
+NOT_PRAISES = (
+    "thanks", "thank you", "ok", "okay", "next", "good morning", "good night", "how are you", "open youtube",
+    "play a song", "what time is it", "good", "nice to meet you", "is that right?", "are you sure?",
+)
+_praise_vecs: Any = None
+_nopraise_vecs: Any = None
+
+
+def praise_score(text: str) -> float:
+    """How much the message (or its first part: 'perfect, now open youtube') says the reply before was right."""
+    global _praise_vecs, _nopraise_vecs
+    from jarvis.core import planner, semantic
+    t = " ".join((text or "").split())
+    if not t or len(t.split()) > 25:
+        return 0.0
+    if _praise_vecs is None:
+        _praise_vecs = semantic.embedder().embed(list(PRAISES), query=True)
+        _nopraise_vecs = semantic.embedder().embed(list(NOT_PRAISES), query=True)
+    best = 0.0
+    for part in {t, (planner.split_clauses(t) or [t])[0]}:
+        q = _embed(part)
+        p, n = float((_praise_vecs @ q).max()), float((_nopraise_vecs @ q).max())
+        if p > n + config.LEARN_CORRECTION_MARGIN:
+            best = max(best, p)
+    return best
+
 
 def correction_score(text: str) -> float:
     """How much the message is a CORRECTION ('no, I meant...', 'wrong file'): its closeness to the example
@@ -182,30 +217,6 @@ def _area(tools: list[dict], done: bool = False) -> tuple[str, str]:
     return "", ""
 
 
-def _first_tool(tools: list[dict]) -> tuple[str, str]:
-    """(name, args) of the first specialised tool that ran ('' when none)."""
-    from jarvis.core import registry
-    for t in tools or []:
-        tool = registry.REGISTRY.get(t.get("name") or "")
-        if tool is not None and registry.group_of(tool) not in ("core", ""):
-            return t["name"], json.dumps(t.get("args") or {}, sort_keys=True, default=str)
-    return "", ""
-
-
-def rephrased(prev: dict, turn: dict) -> bool:
-    """The owner asked the same thing again in other words and it went another way ('open browser' -> Firefox,
-    then 'open brave browser'): the first reply wasn't what they wanted, even without a complaint. A next request
-    of the same kind ('play song X' then 'play song Y') shares few content words, so it is not one."""
-    a, b = _first_tool(prev.get("tools") or []), _first_tool(turn.get("tools") or [])
-    if a == b:
-        return False
-    wa = {w for w in re.findall(r"[^\W\d_]{2,}", prev["text"].lower()) if w not in _REF}
-    wb = {w for w in re.findall(r"[^\W\d_]{2,}", turn["text"].lower()) if w not in _REF}
-    if not wa or not wb or len(wa & wb) / min(len(wa), len(wb)) < config.LEARN_REPHRASE_OVERLAP:
-        return False
-    return float(_embed(prev["text"]) @ _embed(turn["text"])) >= config.LEARN_REPHRASE_SIM
-
-
 def on_turn(turn: dict) -> None:
     """A turn finished (text, ts, path, intent, tools): judge the previous one now that this one shows how it went."""
     if not config.LEARN or not config.SEMANTIC_ROUTER:
@@ -214,15 +225,14 @@ def on_turn(turn: dict) -> None:
 
 
 def _judge(turn: dict) -> None:
+    """Learn ONLY from what the owner says about the reply before (owner 11-03: "if I do nothing, do nothing"):
+    a complaint = 👎 (and, when this turn did it right, its tool for that wording: taught), praise = 👍. Silence
+    teaches nothing (the old "it worked" learning only with LEARN_SILENT)."""
     global _prev
     prev, _prev = _prev, turn
-    from jarvis.core import recipes
-    try:  # this turn's decision may become a learned shortcut (recipes: switched on by 👍 or clean repeats)
-        recipes.observe(turn)
-    except Exception as e:  # noqa: BLE001 - learning must never break KURAMA
-        log.warning("shortcut learning failed: %s", e)
     if not prev or not prev.get("text"):
         return
+    from jarvis.core import recipes
     try:
         recent = turn["ts"] - prev["ts"] < config.LEARN_WINDOW_S
         corr = correction_score(turn["text"]) if recent else 0.0
@@ -231,22 +241,17 @@ def _judge(turn: dict) -> None:
             failed = any(re.match(r"\W*(?:error|i couldn'?t|i can'?t|sorry|i'm sorry)", str(t.get("result") or ""), re.I)
                          for t in prev["tools"])
             neg = "" if failed else prev.get("intent") or ""
-            area, tool = _area(turn["tools"])
-            recipes.dropped(prev.get("id") or "")  # what was learned from the corrected request goes
-            if prev.get("path") == "fastpath":
-                recipes.forget_matching(prev["text"])  # a learned shortcut answered it wrongly: it goes too
+            recipes.feedback(prev.get("id") or "", -1, turn["text"], veto=not failed)  # a spoken 👎
+            area, tool = _area(turn["tools"], done=True)
             if area:
                 add(prev["text"], area, neg, "correction", tool)
+                recipes.taught(prev, turn)  # "no, play it in the music player": that wording means that now
             elif prev.get("path") == "fastpath" and neg:
                 add(prev["text"], "", prev["intent"], "correction")
-        elif recent and rephrased(prev, turn):  # no complaint, but asked again another way: not good
-            recipes.dropped(prev.get("id") or "")
-            if prev.get("path") == "fastpath":
-                recipes.forget_matching(prev["text"])
-            log.info("re-asked: nothing learned from %r", prev["text"][:60])
-        elif prev.get("path") == "ai" and corr < config.LEARN_WORKED_MAX_CORR and standalone(prev["text"]) \
-                and (found := _area(prev["tools"], done=True))[0]:
+        elif recent and praise_score(turn["text"]) >= config.LEARN_PRAISE_SIM:
+            recipes.feedback(prev.get("id") or "", 1, turn["text"])  # a spoken 👍: "perfect, that's right"
+        elif config.LEARN_SILENT and prev.get("path") == "ai" and corr < config.LEARN_WORKED_MAX_CORR \
+                and standalone(prev["text"]) and (found := _area(prev["tools"], done=True))[0]:
             add(prev["text"], found[0], "", "worked", found[1])
-            recipes.survived(prev.get("id") or "")
     except Exception as e:  # noqa: BLE001 - learning must never break KURAMA
         log.warning("learning failed: %s", e)

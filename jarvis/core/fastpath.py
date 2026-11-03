@@ -3070,7 +3070,7 @@ def ocr_intent(t: str) -> Intent | None:
     return Intent("ocr", "read_text", "screen", {"source": "area"})  # the owner wants to drag a box first
 
 
-_NO_GATE = {"unlock", "error", "study", "say", "slash", "assist", "agent", "coding"}  # exact answers / commands, not guesses
+_NO_GATE = {"unlock", "error", "study", "say", "slash", "assist", "agent", "coding", "appname", "mywords"}  # exact answers / commands, not guesses
 
 
 def meaning_ok(text: str, it: Intent) -> bool:
@@ -3504,9 +3504,26 @@ def app_name_args(raw: str) -> dict | None:
     return {"name": m.group("w").strip(), "app": app}
 
 
+_SAY_MEANS = re.compile(r"\b(?:when(?:ever)?|if)\s+i\s+say\s+[\"']?(?P<w>[\w .'-]{2,40}?)[\"']?\s*,?\s+(?:then\s+)?"
+                        r"(?:you\s+(?:should|must|have\s+to|need\s+to)\s+|please\s+|just\s+|it\s+means\s+)?"
+                        r"(?P<cmd>(?:open|launch|start|run|play|lock|turn|show|set|close|search|switch|put|mute)\b"
+                        r"[^,]{1,120}?)(?:\s*,?\s+(?:not|instead\s+of|rather\s+than)\b.*)?[\s.!]*$", I)
+
+
 def app_name_intent(text: str) -> Intent | None:
-    args = app_name_args(text) if re.search(r"\bi\s+say\b", text or "", I) else None
-    return Intent("appname", "app_name", "apps", args, known=args["app"]) if args else None
+    """'when I say <word>, open <app>' -> the app's name (works inside any sentence: _apps.teach); 'when I say
+    <words>, <any command>' -> the owner's words for that whole command (mywords), both kept until changed."""
+    if not re.search(r"\bi\s+say\b", text or "", I):
+        return None
+    if (args := app_name_args(text)) is not None:
+        from jarvis.tools.general import _apps
+        entry, score = _apps.find_app(args["app"])
+        if entry is not None and score >= _apps.FASTPATH_MIN_SCORE and len(args["name"].split()) <= 3:
+            return Intent("appname", "app_name", "apps", args, known=args["app"])
+    if m := _SAY_MEANS.search(" ".join((text or "").split())):
+        return Intent("mywords", "app_name", "apps", {"name": m.group("w").strip(), "command": m.group("cmd").strip()},
+                      known=m.group("cmd"))
+    return None
 
 
 def meaning_label(t: str) -> tuple[str, float] | None:

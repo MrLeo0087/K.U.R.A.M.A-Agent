@@ -1066,3 +1066,18 @@ Phases (one at a time, owner tests after each):
       left that shortcut alive (only rows made from that request were dropped) -> recipes.forget_matching. A next
       request of the same kind ('play song X' -> 'play song Y') is not a re-ask. Tests: +4; suite 1622; scorecard
       73% / 100% / 98%.
+- [x] 2026-11-03 20:00 Owner: learning only from what I say, never from silence; complaints and praise in words count;
+      "when I say X, do Y" forever. Silence: the auto-switch-on after 2 clean runs is gone (no silent candidates at
+      all; a 👍 builds the shortcut from that reply's trace) and learn's silent "it worked" routing learning is behind
+      KURAMA_LEARN_SILENT (default off). Words: learn._judge treats a complaint in the next message as 👎
+      (recipes.feedback, note = the words; no veto when the tool had failed) and praise (learn.PRAISES by meaning,
+      not plain thanks / ok) as 👍; a correction whose own turn did it with one safe tool teaches the FIRST wording
+      that tool (recipes.taught, on at once). Own words: "when I say X, <command>" -> mywords (data/my_words.json,
+      whole request swapped in Agent.run/stream, never trimmed); an installed app stays an app name; one meaning per
+      word (newest wins); the app_name tool saves / forgets / lists both. Live run found: the AI's general 'web'
+      call had gone to a background job (only its note traced) -> the specialised tool behind it is learned once the
+      job is done; web lookups wait up to 8 s (no "searching in the background" for a 4 s lookup); praise is 0-token
+      small talk. learned_shortcuts moved to the usage area, my words to the app_name tool (areas stay <= 5 tools).
+      Tests: test_recipes.py (37), test_learn (+1); suite 1640; scorecard 73% / 100% / 98%. Live: chitwan 2,796
+      tokens -> "perfect, that's exactly what I wanted" (0) -> janakpur 0 tokens; "music time" -> lofi at 0 tokens
+      (test data removed after; browser = Brave kept).

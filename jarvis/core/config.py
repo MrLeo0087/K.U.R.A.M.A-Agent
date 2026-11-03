@@ -323,8 +323,9 @@ WORKSPACE_SKIP_TOOLS = ("read_webpage", "search_knowledge", "ask_knowledge", "re
 # A tool still running after this many seconds keeps going as a background job; the user can keep talking and
 # is told when it's done (0 = off)
 TOOL_BACKGROUND_AFTER_S = float(os.getenv("KURAMA_TOOL_BG_AFTER_S", "3"))
-TOOL_BACKGROUND_MIN_S = {"music": 12.0, "media": 12.0}  # finding a song takes 2-6 s: music never "goes to the
-# background" with a job number (11-03 f28ec8c6: 'Play some Hindi song' -> job #64 at 3.0 s)
+TOOL_BACKGROUND_MIN_S = {"music": 12.0, "media": 12.0, "web": 8.0, "web_search": 8.0, "wikipedia": 8.0}  # finding a song takes 2-6 s: music never "goes to the
+# background" with a job number (11-03 f28ec8c6: 'Play some Hindi song' -> job #64 at 3.0 s); a web lookup is 3-6 s
+# (11-03 6282db24: "Searching in the background" for a Wikipedia summary)
 TOOL_BACKGROUND_MAX_S = 8.0  # a tool's own usual run time decides the wait (safety._wait_for), never longer than this
 TOOL_NO_BACKGROUND = ("start_job", "generate_image", "write_document", "jobs", "make_tool",
                       "focus_mode", "gesture_control", "power_off", "suspend_computer",
@@ -502,17 +503,16 @@ LEARN_WINDOW_S = 120  # a correction counts within this long after the request i
 LEARN_CORRECTION_MARGIN = 0.05  # ...and not closer (by more than this) to a plain next request (learn.NOT_CORRECTIONS)
 LEARN_CORRECTION_SIM = 0.80  # similarity to an example correction ("no, I meant...") to count as one
 LEARN_WORKED_MAX_CORR = 0.65  # "it worked" is learned only if the next message is not even close to a correction
-LEARN_REPHRASE_SIM = 0.80  # the next request means nearly the same...
-LEARN_REPHRASE_OVERLAP = 0.70  # ...and shares most content words, but went another way: the reply before was NOT
-# good (the owner re-asked instead of complaining), so nothing is learned from it and a shortcut that gave it goes
+LEARN_PRAISE_SIM = 0.80  # "perfect, that's right" after a reply = a spoken 👍 (learn.praise_score)
+LEARN_SILENT = os.getenv("KURAMA_LEARN_SILENT", "0").lower() in ("1", "true", "yes", "on")  # owner 11-03: silence
+# teaches nothing; on = the old "an AI request that worked is learned for routing" without any word from the owner
 LEARN_VETO_SIM = 0.92  # a corrected wording this similar never runs that shortcut again
 LEARN_MAX = 3000  # learned wordings kept (newest)
 # Learned shortcuts + kept answers from 👍 / 👎 and uncorrected turns (jarvis/core/recipes.py, data/recipes.json):
-# an AI request done with ONE safe tool becomes a 0-token shortcut after a 👍 or RECIPE_AUTO_CONFIRMS clean runs.
+# an AI request done with ONE safe tool becomes a 0-token shortcut when the owner approves it (👍 / praise) or teaches it.
 RECIPES = os.getenv("KURAMA_RECIPES", "1").lower() not in ("0", "false", "no", "off")
 RECIPE_GROUPS = ("apps", "audio", "browser", "display", "desktop", "filesearch", "general", "git", "links", "media",
                  "power", "system", "usage", "weather", "web", "windows", "knowledge")  # reads, opening, controls only
-RECIPE_AUTO_CONFIRMS = 2  # separate requests that went the same way (no correction after) before it runs alone
 RECIPE_SIM = 0.92  # a shortcut with no slot: this close in meaning, and no new content word
 RECIPE_SLOT_SIM = 0.60  # a slot shortcut must fit its wording template ('play song X') and be at least this close
 RECIPE_MAX = 400

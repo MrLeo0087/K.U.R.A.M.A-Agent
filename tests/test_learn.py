@@ -51,8 +51,21 @@ def test_a_correction_teaches_the_area_and_stops_the_wrong_shortcut(monkeypatch,
     assert semantic.scores(t)[0][0] == rows[-1]["group"]
 
 
+def test_silence_teaches_nothing_by_default(monkeypatch, tmp_path):
+    """Owner 11-03: 'if I do nothing, do nothing' - a working AI request is NOT learned without a word from them."""
+    _fake(monkeypatch, tmp_path)
+    monkeypatch.setattr(learn, "correction_score", lambda text: 0.0)
+    monkeypatch.setattr(learn, "praise_score", lambda text: 0.0)
+    now = time.time()
+    learn._judge({"text": "which process eats my ram", "ts": now, "path": "ai", "intent": "",
+                  "tools": [{"name": "find_files", "ok": True, "result": "3 files"}]})
+    learn._judge({"text": "open youtube", "ts": now + 20, "path": "fastpath", "intent": "open", "tools": []})
+    assert learn._load()[0] == []
+
+
 def test_a_working_ai_request_is_learned_and_old_turns_are_not_corrections(monkeypatch, tmp_path):
     _fake(monkeypatch, tmp_path)
+    monkeypatch.setattr(config, "LEARN_SILENT", True)  # the old silent learning, opt-in only
     monkeypatch.setattr(learn, "correction_score", lambda text: 1.0)
     now = time.time()
     learn._judge({"text": "which process eats my ram", "ts": now, "path": "ai", "intent": "top_processes",
@@ -66,6 +79,8 @@ def test_only_real_successes_of_self_contained_wordings_are_learned(monkeypatch,
     """The AI's own picks were learned from 'remove it', 'food', 'yes' and from refused / question-back results,
     and then beat every other area forever (they match themselves at 1.0)."""
     _fake(monkeypatch, tmp_path)
+    monkeypatch.setattr(config, "LEARN_SILENT", True)  # the old silent learning, opt-in only
+    monkeypatch.setattr(learn, "praise_score", lambda text: 0.0)
     monkeypatch.setattr(learn, "correction_score", lambda text: 0.7 if text.startswith("hmm") else 0.0)
     now = time.time()
     turns = [  # (request, tool result) -> none of these may be learned

@@ -56,6 +56,10 @@ def test_unknown_app_is_not_saved(apps_env):
 def test_apps_tool_name_action():
     assert resolve(apps_tool.TABLE, {"action": "name", "target": "browser", "text": "brave"}) == \
         ("app_name", {"name": "browser", "app": "brave"})
+    assert resolve(apps_tool.TABLE, {"action": "name", "target": "good night", "text": "lock the screen"}) == \
+        ("app_name", {"name": "good night", "command": "lock the screen"})
+    assert resolve(apps_tool.TABLE, {"action": "name", "target": "good night"}) == \
+        ("app_name", {"name": "good night", "action": "forget"})
 
 
 @pytest.mark.parametrize("said,query", [("play us mod se suru kare", "us mod se suru kare"),
@@ -165,11 +169,15 @@ def test_look_alikes_stay_with_their_own_tools(model, said):
 @pytest.mark.parametrize("said,args", [
     ("Okay, remember one thing, okay? When I say open browser, you should open Brave Browser, not Firefox.",
      {"name": "browser", "app": "Brave Browser"}),
-    ("when I say editor open vs code", {"name": "editor", "app": "vs code"}),
-    ("If I say music app, open Spotify.", {"name": "music app", "app": "Spotify"})])
+    ("when I say editor open vs code", {"name": "editor", "app": "vs code"})])
 def test_when_i_say_x_open_y_is_saved_at_once(model, said, args):
     it = fastpath.match(said)
     assert it is not None and it.tool == "app_name" and it.args == args
+
+
+def test_an_app_that_isnt_installed_is_kept_as_the_owners_words(model):
+    it = fastpath.match("If I say music app, open Spotify.")  # no Spotify here: the words mean the whole command
+    assert it.tool == "app_name" and it.args == {"name": "music app", "command": "open Spotify"}
 
 
 @pytest.mark.parametrize("said", ["Hello, bro.", "kya hora hai ?", "hello k xa khabaar", "Thanks. Thanks."])
