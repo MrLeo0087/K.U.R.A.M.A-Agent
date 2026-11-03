@@ -280,14 +280,40 @@ def observe(turn: dict) -> None:
     log.info("learned shortcut candidate %r -> %s %s", turn["text"][:60], tool, args)
 
 
+def _related(text: str, tool: str, args: dict) -> bool:
+    """The fix is about the request it corrects: its arguments share a content word with it (the song, the city),
+    or its tool's area is one of the request's two closest areas by meaning."""
+    from jarvis.core import registry, semantic
+    vals = " ".join(str(v) for v in args.values() if isinstance(v, (str, int, float)) and not isinstance(v, bool))
+    if _content(_tokens(text)[1]) & _content(_tokens(vals)[1]):
+        return True
+    t = registry.REGISTRY.get(tool)
+    top = [g for g, _ in semantic.scores(text) if g != semantic.CHAT][:2] if semantic.ready() else []
+    return t is not None and registry.group_of(t) in top
+
+
+def is_fix(prev_text: str, fix: dict) -> bool:
+    """The correction's own tool call is about the request it corrects (not a new task said after the complaint)."""
+    from jarvis.core import registry
+    from jarvis.tools.core._hub import underlying
+    for t in fix.get("tools") or []:
+        x = registry.REGISTRY.get(t.get("name") or "")
+        if x is None or t.get("name") == "request_tools":
+            continue
+        name, args = (t["name"], t.get("args") or {}) if registry.group_of(x) != "core" else \
+            underlying(t["name"], t.get("args") or {})
+        return _related(prev_text, name, args if isinstance(args, dict) else {})
+    return False
+
+
 def taught(prev: dict, fix: dict) -> bool:
     """The owner corrected `prev` and the correction `fix` did it with one safe tool: prev's wording now means that
     tool (with prev's words as slots), on at once: the owner told KURAMA what to do."""
     if not config.RECIPES or not prev.get("text"):
         return False
     cand = _candidate(fix, text=prev["text"])
-    if cand is None:
-        return False
+    if cand is None or not _related(prev["text"], cand[0], cand[1]):
+        return False  # 'that's wrong, anyway open youtube': a new task after the complaint, not the fix of it
     tool, args, _ = cand
     raw, low = _tokens(prev["text"])
     tmpl, slots = _slots(low, args, _fixed_keys(tool))
@@ -370,22 +396,38 @@ def match(text: str):
     if got is None:
         return None
     r, args, _ = got
-    with _lock:
-        r["used"] = r.get("used", 0) + 1
-        r["last"] = time.time()
-        day = time.strftime("%Y-%m-%d")
-        saved = r.setdefault("saved", {})
-        saved[day] = saved.get(day, 0) + int(r.get("tokens") or 0)
-        for old in sorted(saved)[:-14]:  # two weeks of daily numbers
-            saved.pop(old)
-        _save()
     if r["kind"] == "answer":
+        ran(r["id"], True)
         a = r["answer"]
         return fastpath.Intent("cached", "_say", "self", {"en": a, "hi": a, "ne": a})
     kind = config.DIRECT_REPLY_TOOLS.get(r["tool"])
     name = kind if isinstance(kind, str) and kind not in ("said", "audio") else "learned"
     label = str(args.get("target") or args.get("name") or "")
-    return fastpath.Intent(name, r["tool"], registry.group_of(registry.REGISTRY.get(r["tool"])), args, label)
+    return fastpath.Intent(name, r["tool"], registry.group_of(registry.REGISTRY.get(r["tool"])),
+                           {**args, "_recipe": r["id"]}, label)  # fastpath.try_answer reports back through ran()
+
+
+def ran(rid: str, good: bool) -> bool:
+    """A learned row just answered: count it (uses, tokens saved today) or, when its tool failed, count the failure;
+    RECIPE_MAX_FAILS in a row switches it off (a tool changed or broke: the AI does it again). Returns good."""
+    with _lock:
+        r = next((x for x in _load() if x["id"] == rid), None)
+        if r is None:
+            return good
+        if good:
+            r["used"], r["last"], r["fails"] = r.get("used", 0) + 1, time.time(), 0
+            day = time.strftime("%Y-%m-%d")
+            saved = r.setdefault("saved", {})
+            saved[day] = saved.get(day, 0) + int(r.get("tokens") or 0)
+            for old in sorted(saved)[:-14]:  # two weeks of daily numbers
+                saved.pop(old)
+        else:
+            r["fails"] = r.get("fails", 0) + 1
+            if r["fails"] >= config.RECIPE_MAX_FAILS:
+                r["on"], r["off"] = False, f"its tool failed {r['fails']} times in a row"
+                log.warning("learned shortcut off (failed %d times): %r", r["fails"], r["text"][:60])
+        _save()
+    return good
 
 
 def forget_matching(text: str) -> int:
@@ -425,6 +467,22 @@ def feedback(trace_id: str, vote: int, note: str = "", veto: bool = True) -> dic
             for r in _load():
                 if trace_id in r.get("traces", []):
                     r["on"], turned_on = True, turned_on + 1
+            if row.get("path") == "multi":  # the split of the request is kept (0-token plan next time)...
+                try:
+                    from jarvis.core import planner, taskgraph
+                    plan = json.loads(row.get("plan") or "{}")
+                    if plan.get("method") == "llm":
+                        taskgraph.learn_plan(text, planner.parts(text), plan.get("tasks") or [])
+                        turned_on += 1
+                except Exception as e:  # noqa: BLE001
+                    log.debug("plan not kept: %s", e)
+            if row.get("path") == "multi":  # ...and each step that clearly did its task
+                for step in _multi_steps(row):
+                    if _candidate(step) is not None:
+                        observe(step)
+                for r in _load():
+                    if trace_id in r.get("traces", []):
+                        r["on"], turned_on = True, turned_on + 1
             if not turned_on and row.get("path") == "ai":
                 cand = _candidate({"text": text, "tools": tools})
                 if cand is not None:  # not seen as a candidate yet (learning was off, a restart): learn it now
@@ -451,6 +509,47 @@ def feedback(trace_id: str, vote: int, note: str = "", veto: bool = True) -> dic
     log.info("👎 %s %r (%d learned rows removed)", trace_id, text[:60], gone)
     return {"ok": True, "said": "Sorry. I won't answer it that way again. Tell me what you wanted (say it as a "
                                 "correction: 'no, I meant ...') and I'll learn the right way."}
+
+
+def late_complaint(text: str, skip: tuple[str, ...] = ()) -> str | None:
+    """A complaint long after the reply ('yesterday you opened Firefox when I said open browser'): the one recent
+    reply it clearly talks about (closest by meaning, by a margin) gets the 👎. None when it isn't clear."""
+    from jarvis.core import semantic, trace
+    rows = [r for r in trace.recent(config.LEARN_LATE_DAYS, 300) if r["id"] not in skip and r.get("text")]
+    if not rows or not semantic.ready():
+        return None
+    import numpy as np
+    mat = semantic.embedder().embed([f"{r['text']} {(r.get('answer') or '')[:120]}" for r in rows], query=True)
+    sims = np.asarray(mat) @ _embed(text)
+    order = np.argsort(-sims)
+    best = float(sims[order[0]])
+    second = float(sims[order[1]]) if len(order) > 1 else 0.0
+    if best < config.LEARN_LATE_SIM or best - second < config.LEARN_LATE_MARGIN:
+        return None
+    tid = rows[int(order[0])]["id"]
+    feedback(tid, -1, text)
+    log.info("late complaint %r -> 👎 on %s %r", text[:60], tid, rows[int(order[0])]["text"][:60])
+    return tid
+
+
+def _multi_steps(row: dict) -> list[dict]:
+    """A 👍 on a multi-step reply: each step (a task of the plan) with the one safe tool that clearly did it (its
+    arguments share words with that task only), as turns to learn one by one."""
+    from jarvis.core import registry
+    try:
+        tasks = [t.get("text") or "" for t in (json.loads(row.get("plan") or "{}").get("tasks") or [])]
+    except ValueError:
+        return []
+    tools = [t for t in json.loads(row.get("tools") or "[]")
+             if (x := registry.REGISTRY.get(t.get("name") or "")) is not None and registry.group_of(x) != "core"]
+    out = []
+    for t in tools:
+        vals = _content(_tokens(" ".join(str(v) for v in (t.get("args") or {}).values()))[1])
+        hits = [(len(vals & _content(_tokens(task)[1])), task) for task in tasks]
+        hits.sort(reverse=True)
+        if hits and hits[0][0] and (len(hits) == 1 or hits[0][0] > hits[1][0]):
+            out.append({"text": hits[0][1], "tools": [t], "path": "ai", "id": row["id"], "tokens": 0})
+    return out
 
 
 # ------------------------------------------------------------------ for the owner

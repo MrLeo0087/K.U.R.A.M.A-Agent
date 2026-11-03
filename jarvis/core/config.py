@@ -503,6 +503,11 @@ LEARN_WINDOW_S = 120  # a correction counts within this long after the request i
 LEARN_CORRECTION_MARGIN = 0.05  # ...and not closer (by more than this) to a plain next request (learn.NOT_CORRECTIONS)
 LEARN_CORRECTION_SIM = 0.80  # similarity to an example correction ("no, I meant...") to count as one
 LEARN_WORKED_MAX_CORR = 0.65  # "it worked" is learned only if the next message is not even close to a correction
+LEARN_LATE_DAYS = 3  # a complaint after the 2 min window looks for the reply it talks about this far back...
+LEARN_LATE_SIM = 0.72  # ...it must be this close in meaning to one of them...
+LEARN_LATE_MARGIN = 0.05  # ...and clearly closer than to the next one, else nothing happens
+FEEDBACK_MIN_LOGPROB = -0.60  # spoken praise / complaint counts only when speech recognition was this sure
+# (garbled lines like 'Okay, go on.' -0.89, 'Maximal Zabolom' -0.68 came out of noise; real speech is ~-0.1..-0.5)
 LEARN_PRAISE_SIM = 0.80  # "perfect, that's right" after a reply = a spoken 👍 (learn.praise_score)
 LEARN_SILENT = os.getenv("KURAMA_LEARN_SILENT", "0").lower() in ("1", "true", "yes", "on")  # owner 11-03: silence
 # teaches nothing; on = the old "an AI request that worked is learned for routing" without any word from the owner
@@ -516,6 +521,18 @@ RECIPE_GROUPS = ("apps", "audio", "browser", "display", "desktop", "filesearch",
 RECIPE_SIM = 0.92  # a shortcut with no slot: this close in meaning, and no new content word
 RECIPE_SLOT_SIM = 0.60  # a slot shortcut must fit its wording template ('play song X') and be at least this close
 RECIPE_MAX = 400
+STYLE_MAX = 6  # the owner's standing reply rules (style.py), kept until changed...
+STYLE_MAX_CHARS = 320  # ...added to every AI reply within this (~80 tokens)
+STYLE_RULE_MAX_CHARS = 120
+STYLE_MIN = 0.80  # closeness to a style example to save it as a rule
+STYLE_EXAMPLES = ("from now on keep your answers short", "always reply to me in nepali", "never ask me the same thing twice",
+                  "always call me boss", "don't use emojis in your replies", "from now on speak simply, no big words",
+                  "always give me the answer first and the details after", "never say sorry so much",
+                  "always answer in one line unless I ask for more")
+NOT_STYLE_EXAMPLES = ("always open youtube at 9 am", "remind me every day at 7", "never mind", "from now on I am busy",
+                      "always lock the screen when I leave", "never download videos in 4k", "play lofi always",
+                      "from now on I live in pokhara", "always be here for me", "never stop the music")
+RECIPE_MAX_FAILS = 2  # a learned shortcut whose tool failed this many times in a row is switched off
 ANSWER_CACHE = os.getenv("KURAMA_ANSWER_CACHE", "1").lower() not in ("0", "false", "no", "off")
 ANSWER_CACHE_SIM = 0.95  # a 👍 answer is reused only for a nearly identical question
 ANSWER_CACHE_DAYS = 30

@@ -49,6 +49,7 @@ answers to KURAMA's questions and the model per call since the memory + multitas
 | **👍 / 👎** | `data/traces.db`, table `feedback` (trace_id, vote, note) | the owner's verdict on each reply: 👎 rows are the first thing to read |
 | Learned shortcuts | `data/recipes.json` (`/learned_shortcuts list`) | 0-token shortcuts + kept answers the owner approved (👍 / praise) or taught (a correction), uses, tokens saved per day |
 | The owner's words | `data/my_words.json`, `data/app_names.json` | "when I say X, do Y" / "when I say X, open <app>", kept until changed |
+| Reply rules | `data/style.json` | "from now on keep answers short": added to every AI request, max 6 |
 | Long jobs | `data/jarvis.db`, tables `jobs`, `job_state`, `job_steps` | background jobs, checkpoints, step log |
 | Server / workers | `data/logs/server.log`, `data/logs/worker_*.log` | yes/no answers, errors |
 | Code that writes them | `jarvis/core/trace.py`, `stt.py`, `wake.py` (`wake_log`), `ptt.py` (`pttlog`) + `scripts/kurama_wallpaper.py`, `filemanager.py`, `jobqueue.py`, `longjobs.py` | |
@@ -413,3 +414,7 @@ message; the action itself is chosen by meaning), the reference nouns (`workmem.
   feedback row; a spoken one keeps the words as its note), a correction that says what to do (taught). Silence
   teaches nothing. "When I say X, <command>" is kept forever (my_words.json). Watch: feedback notes ("wanted: ...")
   and `/learned_shortcuts list` for anything taught wrongly.
+- 2026-11-03 (late): learning gaps closed: per-channel judging, a new task after a complaint is not taught, failing
+  learned shortcuts switch off (shown in /learned_shortcuts), late complaints find their reply, misheard speech is
+  never feedback, reply rules reach every AI reply (on the request itself), 👍 on multi-step replies keeps the plan
+  and each clear step. Watch: /learned_shortcuts for "off: its tool failed", feedback notes on late complaints.

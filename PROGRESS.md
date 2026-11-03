@@ -1081,3 +1081,19 @@ Phases (one at a time, owner tests after each):
       Tests: test_recipes.py (37), test_learn (+1); suite 1640; scorecard 73% / 100% / 98%. Live: chitwan 2,796
       tokens -> "perfect, that's exactly what I wanted" (0) -> janakpur 0 tokens; "music time" -> lofi at 0 tokens
       (test data removed after; browser = Brave kept).
+- [x] 2026-11-03 21:00 The 7 learning gaps (owner: "fix all gap"). (1) Channels: learn keeps the last reply PER
+      channel (a Telegram 'galat' never judges the laptop's reply). (2) A complaint + a new task ('that's wrong,
+      anyway open youtube'): recipes.is_fix (the fix's arguments share the request's words, or its area is one of
+      the request's 2 closest) is checked BEFORE anything is learned (it used to add the request to the new task's
+      area first, which then made the check pass); complaints are judged per part (learn.complaint_score).
+      (3) A learned shortcut whose tool fails: the AI does it that time (fastpath -> recipes.ran), off after
+      RECIPE_MAX_FAILS (2) in a row, shown in /learned_shortcuts. (4) Late complaints (4+ words, after 2 min):
+      matched to the one reply of the last 3 days it clearly talks about (0.72, margin 0.05), else nothing.
+      (5) Spoken feedback counts only when speech recognition was sure (stt.heard_well: lp >= -0.60, a language we
+      speak; noise like 'Okay, go on.' was -0.89). (6) Reply rules (style.py, data/style.json, max 6): "from now
+      on / always / never ..." about replies, by meaning, 0 tokens; ride on the request itself (in the system
+      prompt both gpt-oss models ignored them, live); "forget the rule about X" 0 tokens (it went to memory's fact
+      forget, which asks yes/no); a forgotten rule is named as stopped for 10 min (the chat's old replies kept
+      it going). (7) Multi-step: 👍 keeps the plan's split (taskgraph.learn_plan, no longer silent) and each step
+      whose tool clearly did its task. Tests: test_learning_gaps.py (27); suite 1665; scorecard 73% / 100% / 98%.
+      Live: "call me boss" -> "...orbits a planet, boss." -> forget (0 tokens) -> next replies without it.

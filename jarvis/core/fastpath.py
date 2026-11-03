@@ -3070,7 +3070,7 @@ def ocr_intent(t: str) -> Intent | None:
     return Intent("ocr", "read_text", "screen", {"source": "area"})  # the owner wants to drag a box first
 
 
-_NO_GATE = {"unlock", "error", "study", "say", "slash", "assist", "agent", "coding", "appname", "mywords"}  # exact answers / commands, not guesses
+_NO_GATE = {"unlock", "error", "study", "say", "slash", "assist", "agent", "coding", "appname", "mywords", "stylerule"}  # exact answers / commands, not guesses
 
 
 def meaning_ok(text: str, it: Intent) -> bool:
@@ -3325,7 +3325,7 @@ def match(text: str) -> Intent | None:
         return Intent("choice", tool, registry_group(tool), args)
     if (played := player_intent(text)) is not None:  # 'pause' / 'continue' while KURAMA's music is on
         return played
-    it = app_name_intent(text) or agent_intent(text) or agent_coding_intent(text) or link_play_intent(text) or clean_intent(text) \
+    it = app_name_intent(text) or style_intent(text) or agent_intent(text) or agent_coding_intent(text) or link_play_intent(text) or clean_intent(text) \
         or shutdown_later_intent(text) or to_file_intent(text) or selection_intent(text) \
         or _code_not_file(_match(text)) or daily_intent(text)
     if it is not None and it.tool == "read_later" and semantic_ensure():  # "add a job for later: write a poem" is
@@ -3508,6 +3508,30 @@ _SAY_MEANS = re.compile(r"\b(?:when(?:ever)?|if)\s+i\s+say\s+[\"']?(?P<w>[\w .'-
                         r"(?:you\s+(?:should|must|have\s+to|need\s+to)\s+|please\s+|just\s+|it\s+means\s+)?"
                         r"(?P<cmd>(?:open|launch|start|run|play|lock|turn|show|set|close|search|switch|put|mute)\b"
                         r"[^,]{1,120}?)(?:\s*,?\s+(?:not|instead\s+of|rather\s+than)\b.*)?[\s.!]*$", I)
+
+
+_STYLE_LEAD = re.compile(r"^\W*(?:(?:ok(?:ay)?|hey|so|and|also|listen|remember)[\s,]+)*(?:\w+[\s,]+)?"
+                         r"(?:from\s+now\s+on|starting\s+now|going\s+forward|always|never|don'?t\s+ever|every\s+time\s+you)\b", I)
+
+
+_FORGET_RULE = re.compile(r"^\W*(?:(?:ok(?:ay)?|please|kurama)[\s,]+)*(?:forget|remove|delete|drop|cancel|clear)\s+"
+                          r"(?:the\s+|my\s+|that\s+|your\s+)?(?:(?P<all>all\s+(?:the\s+|my\s+)?rules)|(?:style\s+)?rule"
+                          r"(?:\s+(?:about|for|of|that\s+says|to))?\s*(?P<w>.*?))[\s.!]*$", I)
+
+
+def style_intent(text: str) -> Intent | None:
+    """'From now on keep your answers short' / 'always call me boss' / 'never use emojis': a standing rule for how
+    KURAMA replies (style.py, in every AI reply), by meaning - 'always open youtube at 9' is a schedule, not one."""
+    if m := _FORGET_RULE.match(text or ""):  # 'forget the rule about calling me boss' (it went to memory's fact
+        what = "all" if m.group("all") else (m.group("w") or "").strip()  # forget, which asks yes/no: live 11-03)
+        return Intent("stylerule", "app_name", "apps", {"action": "forget_rule", "command": what}) if what else None
+    if not _STYLE_LEAD.search(text or "") or len(text) > 200 or not semantic_ensure():
+        return None
+    from jarvis.core import semantic
+    best = semantic.best_of(text, "style_rule", {"style": config.STYLE_EXAMPLES, "other": config.NOT_STYLE_EXAMPLES})
+    if not best or best[0] != "style" or best[1] < config.STYLE_MIN:
+        return None
+    return Intent("stylerule", "app_name", "apps", {"action": "rule", "command": text})
 
 
 def app_name_intent(text: str) -> Intent | None:
@@ -4163,6 +4187,10 @@ def try_answer(text: str, lang: str | None = None, confirm=None, mode: str = "te
             from jarvis.core import workspace
             output = workspace.strip_note(output)  # "[The full result ... is shown in the workspace]" is for the AI
             intent.args.setdefault("_published", shelf[-1])
+    if rid := intent.args.get("_recipe"):  # a learned shortcut: it worked, or the AI does it this time (and after
+        from jarvis.core import recipes  # RECIPE_MAX_FAILS failures in a row it is switched off)
+        if not recipes.ran(rid, ok and not (output or "").lstrip().lower().startswith("error")):
+            return None
     if intent.name in ("time", "weather") and "couldn't find a place" in (output or ""):
         return None  # unknown place: let the LLM path try (it can fix spelling)
     if m := re.match(r"Still working after \d+ s, so this keeps running in the background as job #(\d+)", output or ""):

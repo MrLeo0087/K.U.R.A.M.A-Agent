@@ -292,6 +292,8 @@ def _gate(best: Transcript, auto: Transcript) -> Transcript:
         best.text = ""
     _trail(best, auto, heard)
     if best.text:
+        _heard.update(text=" ".join(best.text.split()).lower(), at=time.time(), lp=best.logprob,
+                      lang=(auto.raw_lang or "").strip().lower())
         _unsure.update(text=" ".join(best.text.split()).lower(), at=time.time(), unsure=bool(
             auto.raw_lang.strip().lower() not in LANG_MAP and best.logprob is not None
             and best.logprob < config.STT_EN_MIN_LOGPROB))
@@ -299,6 +301,17 @@ def _gate(best: Transcript, auto: Transcript) -> Transcript:
 
 
 _unsure: dict = {"text": "", "at": 0.0, "unsure": False}
+_heard: dict = {"text": "", "at": 0.0, "lp": None, "lang": ""}
+
+
+def heard_well(text: str, within_s: float = 180.0) -> bool:
+    """Was this the last recognition, and a sure one (confidence >= FEEDBACK_MIN_LOGPROB, a language we speak)?
+    Spoken praise / complaints only count then: noise once came out as 'Okay, go on.' (lp -0.89). A text that
+    isn't the last recognition (typed) is True."""
+    if " ".join((text or "").split()).lower() != _heard["text"] or time.time() - _heard["at"] > within_s:
+        return True
+    lp = _heard["lp"]
+    return (lp is None or lp >= config.FEEDBACK_MIN_LOGPROB) and (not _heard["lang"] or _heard["lang"] in LANG_MAP)
 
 
 def unsure(text: str, within_s: float = 120.0) -> bool:

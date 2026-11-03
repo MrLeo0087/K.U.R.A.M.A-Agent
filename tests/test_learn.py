@@ -43,7 +43,7 @@ def test_a_correction_teaches_the_area_and_stops_the_wrong_shortcut(monkeypatch,
     learn._judge({"text": t, "ts": now, "path": "fastpath", "intent": "vdl",
                   "tools": [{"name": "video_download", "ok": True}]})
     learn._judge({"text": "i mean play it in the music player", "ts": now + 20, "path": "ai", "intent": "music",
-                  "tools": [{"name": "music", "ok": True}]})
+                  "tools": [{"name": "music", "ok": True, "args": {"action": "play", "query": "this video"}}]})
     rows = learn._load()[0]
     assert rows[-1]["text"] == t and rows[-1]["neg"] == "vdl" and rows[-1]["group"]
     assert not fastpath.meaning_ok(t, it)  # never downloads for this wording again

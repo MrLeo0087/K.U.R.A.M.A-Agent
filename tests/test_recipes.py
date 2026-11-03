@@ -44,6 +44,11 @@ SONG1 = [tool("music", {"action": "play", "query": "Us mod se shurroo kare Hindi
 SONG2 = [tool("music", {"action": "play", "query": "tum hi ho Hindi song"}, "Playing Tum Hi Ho")]
 
 
+def plain(args):
+    """A learned shortcut's arguments without its internal '_recipe' marker."""
+    return {k: v for k, v in args.items() if k != "_recipe"}
+
+
 def approve(tid, text, tools, path="ai", answer="ok"):
     """The owner's 👍 on a reply that is in the traces."""
     save_trace(tid, text, path=path, tools=tools, answer=answer)
@@ -67,7 +72,8 @@ def test_silence_never_turns_anything_on(model):
 def test_thumbs_up_makes_a_slot_shortcut(model):
     assert approve("aaaa00000003", "play song us mod se shurroo kare", SONG1)["said"].startswith("Thanks! I'll")
     it = recipes.match("Play song Kesariya")
-    assert it.tool == "music" and it.args == {"action": "play", "query": "Kesariya Hindi song"}  # 'play' stays fixed
+    assert it.tool == "music" and plain(it.args) == {"action": "play", "query": "Kesariya Hindi song"}  # 'play' stays fixed
+    recipes.ran(it.args["_recipe"], True)  # what fastpath.try_answer reports after the tool worked
     assert recipes.stats()["saved_today"] == 1500
     assert recipes.match("play the next video on youtube") is None  # another wording: not this template
 
@@ -77,7 +83,7 @@ def test_thumbs_up_makes_a_slot_shortcut(model):
 def test_praise_in_the_next_message_is_a_thumbs_up(model, words):
     said_next("set the brightness to 40 percent", [tool("brightness", {"action": "set", "level": 40}, "brightness 40%")],
               "bbbb00000001", words)
-    assert recipes.match("set the brightness to 70 percent").args == {"action": "set", "level": 70}
+    assert plain(recipes.match("set the brightness to 70 percent").args) == {"action": "set", "level": 70}
     assert trace.feedback_rows()[0]["vote"] == 1
 
 
@@ -153,7 +159,7 @@ def test_a_correction_that_says_what_to_do_teaches_it(model, words):
     fix = [tool("music", {"action": "play", "query": "us mod se shurroo kare"}, "Playing Us Mod Se")]
     said_next("bajau us mod se shurroo kare", web, "abcd00000003", words, fix, "abcd00000004")
     it = recipes.match("bajau tum hi ho")  # the FIRST wording, any song: the tool the correction used
-    assert it is not None and it.tool == "music" and it.args == {"action": "play", "query": "tum hi ho"}
+    assert it is not None and it.tool == "music" and plain(it.args) == {"action": "play", "query": "tum hi ho"}
     assert recipes.rows()[0]["src"] == "taught"
 
 
@@ -207,7 +213,7 @@ def test_fastpath_uses_learned_shortcuts_last(model, monkeypatch):
     approve("efef00000001", "start the tune us mod se shurroo kare",
             [tool("music", {"action": "play", "query": "us mod se shurroo kare"}, "Playing Us Mod Se")])
     it = fastpath.match("start the tune kesariya")  # no built-in pattern knows this wording: the learned one
-    assert it is not None and it.tool == "music" and it.args == {"action": "play", "query": "kesariya"}
+    assert it is not None and it.tool == "music" and plain(it.args) == {"action": "play", "query": "kesariya"}
     assert fastpath.match("what time is it").tool == "get_time"  # the built-in shortcuts still come first
 
 

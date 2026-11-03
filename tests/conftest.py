@@ -78,6 +78,8 @@ def tmp_store(tmp_path, monkeypatch):
     coderun._last_error.clear()
     from jarvis.core import recipes
     recipes.reset_cache()  # learned shortcuts are read again from this test's own data folder
+    from jarvis.core import style
+    style._dropped.clear()  # a rule forgotten in one test is not "just dropped" in the next
     from jarvis.core import music
     monkeypatch.setattr(music, "launch", lambda cmds, pipe=False, env=None: [])  # never start a real player (no sound from tests)
     monkeypatch.setattr(music, "_cache_dir", lambda: tmp_path)

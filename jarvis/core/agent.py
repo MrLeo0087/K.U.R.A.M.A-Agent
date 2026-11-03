@@ -34,7 +34,7 @@ from langchain_core.messages import (AIMessage, BaseMessage, HumanMessage, Syste
                                      ToolMessage)
 
 from jarvis.core import (config, fastpath, identity, selfknow, jobs, llm, meta, notify, planner, profile, registry, router, trace,
-                         modes, mywords, safety, store, taskgraph, workmem, workspace)
+                         modes, mywords, safety, store, style, taskgraph, workmem, workspace)
 
 log = logging.getLogger("jarvis.agent")
 
@@ -306,9 +306,9 @@ class Agent:
             if self.last.get("replanned"):
                 self.last["plan"]["replanned"] = self.last["replanned"]
         self.last.setdefault("jobs", []).extend(r["job"] for r in final.values() if r.get("long") and r.get("job"))
-        if (self.last.get("plan") or {}).get("method") == "llm" and all(r["status"] in ("ok", "waiting", "after")
-                                                                         for r in final.values()):
-            taskgraph.learn_plan(state["user_text"], planner.parts(state["user_text"]), tasks)
+        if config.LEARN_SILENT and (self.last.get("plan") or {}).get("method") == "llm" and all(
+                r["status"] in ("ok", "waiting", "after") for r in final.values()):  # else only on the owner's 👍
+            taskgraph.learn_plan(state["user_text"], planner.parts(state["user_text"]), tasks)  # (recipes.feedback)
         said = fastpath.merge_opens([_sentence(final[i]["answer"]) for i in sorted(final)
                                      if final[i].get("answer") and not final[i].get("long")])
         self.last.setdefault("route", router.Route([], "graph", False, 0))
@@ -771,6 +771,9 @@ class Agent:
                 system += " " + ctx
         except Exception as e:  # noqa: BLE001
             log.warning("context line failed: %s", e)
+        if rules := style.line():  # the owner's standing reply rules ("call me boss") ride on THIS message (not kept
+            # in the history): in the system prompt the models ignored them (live 11-03, twice, gpt-oss-20b and 120b)
+            return [SystemMessage(content=system), *recent, HumanMessage(content=f"{user_text}\n\n({rules})")]
         return [SystemMessage(content=system), *recent, HumanMessage(content=user_text)]
 
     # --- sessions + profile (P7) ---

@@ -56,6 +56,8 @@ TABLE = {
     "click": Act("app_control", lambda a: {"action": "click", "text": a.get("text") or a.get("target")}),
     "install": Act("install_app", lambda a: {"action": a.get("how", "install"), "name": a.get("target")}),
     "name": lambda a: _name(a),
+    "rule": Act("app_name", lambda a: {"action": "rule", "command": a.get("text") or a.get("target")}),
+    "forget_rule": Act("app_name", lambda a: {"action": "forget_rule", "command": a.get("text") or a.get("target")}),
 }
 
 
@@ -63,8 +65,8 @@ TABLE = {
       description="Open an app, website or folder by name; close or force-kill an app; arrange a window "
                   "(minimize/maximize/left/right/focus, or the home screen = desktop); switch to a browser tab by name or number (tab); press keys, type or click in the app in front; install an app; "
                   "name (remember what the user's words mean, forever: 'when I say browser, open Brave', 'when I say good night, "
-                  "lock the screen').")
-def apps(action: Literal["open", "close", "kill", "window", "tab", "press", "type", "click", "install", "name"], target: str = "",
+                  "lock the screen'); rule (a standing rule for every reply: 'from now on keep answers short'), forget_rule.")
+def apps(action: Literal["open", "close", "kill", "window", "tab", "press", "type", "click", "install", "name", "rule", "forget_rule"], target: str = "",
          how: str = "", text: str = "") -> str:
     """Apps, websites, folders and windows.
 

@@ -29,7 +29,7 @@ log = logging.getLogger("jarvis.learn")
 _lock = threading.Lock()
 _rows: list[dict] | None = None
 _vecs: Any = None
-_prev: dict | None = None  # the last finished turn, judged when the next one ends
+_prev: dict | None = None  # channel -> its last finished turn, judged when the next one on that channel ends
 _corr_vecs: Any = None
 
 CORRECTIONS = (
@@ -38,6 +38,7 @@ CORRECTIONS = (
     "stop, not this", "no I wanted the video not the audio", "you misunderstood me", "it didn't work, do it again",
     "hoina, maile arkai bhaneko", "galat", "nahi, maine kuch aur kaha tha", "yo hoina",
     "wrong, do it in the other app not this one", "not the browser, use the player", "you should have used the other tool",
+    "yesterday you did the wrong thing when I asked you", "earlier you opened the wrong app, that was not right",
 )
 
 
@@ -206,6 +207,16 @@ def correction_score(text: str) -> float:
     return corr if corr > plain - config.LEARN_CORRECTION_MARGIN else 0.0  # 'no I meant play the song' ties
 
 
+def complaint_score(text: str) -> float:
+    """correction_score of the whole message or of one of its parts ('that's wrong, anyway open youtube';
+    'earlier you opened firefox when I said open browser, that was wrong'); one-word parts never count alone (a
+    bare 'no' answers KURAMA's question)."""
+    from jarvis.core import planner
+    t = " ".join((text or "").split())
+    parts = {p for p in planner.split_clauses(t) if len(p.split()) >= 2} if len(t.split()) <= 30 else set()
+    return max([correction_score(t)] + [correction_score(p) for p in parts - {t}])
+
+
 def _area(tools: list[dict], done: bool = False) -> tuple[str, str]:
     """(area, tool) of the first specialised tool that ran fine (done: and really did the thing)."""
     from jarvis.core import registry
@@ -227,30 +238,39 @@ def on_turn(turn: dict) -> None:
 def _judge(turn: dict) -> None:
     """Learn ONLY from what the owner says about the reply before (owner 11-03: "if I do nothing, do nothing"):
     a complaint = 👎 (and, when this turn did it right, its tool for that wording: taught), praise = 👍. Silence
-    teaches nothing (the old "it worked" learning only with LEARN_SILENT)."""
+    teaches nothing (the old "it worked" learning only with LEARN_SILENT). Each channel judges its own replies (a
+    Telegram 'galat' is never about the laptop's last reply), and spoken words count only when they were heard
+    clearly (stt.heard_well). A complaint after the window finds the reply it talks about (recipes.late_complaint)."""
     global _prev
-    prev, _prev = _prev, turn
-    if not prev or not prev.get("text"):
-        return
-    from jarvis.core import recipes
+    if not isinstance(_prev, dict):
+        _prev = {}
+    ch = turn.get("channel") or ""
+    prev, _prev[ch] = _prev.get(ch), turn
+    from jarvis.core import recipes, stt
     try:
-        recent = turn["ts"] - prev["ts"] < config.LEARN_WINDOW_S
-        corr = correction_score(turn["text"]) if recent else 0.0
-        if corr >= config.LEARN_CORRECTION_SIM:
+        clear = turn.get("mode") not in ("voice", "talk") or stt.heard_well(turn["text"])
+        recent = bool(prev and prev.get("text")) and turn["ts"] - prev["ts"] < config.LEARN_WINDOW_S
+        corr = complaint_score(turn["text"]) if clear else 0.0
+        if corr >= config.LEARN_CORRECTION_SIM and not recent and len(turn["text"].split()) >= 4:
+            recipes.late_complaint(turn["text"], skip=(turn.get("id") or "",))  # it must say WHAT was wrong
+            return
+        if not prev or not prev.get("text"):
+            return
+        if recent and corr >= config.LEARN_CORRECTION_SIM:
             # the right action that FAILED ("I couldn't find...") is a bug to fix, not a wrong choice to unlearn
             failed = any(re.match(r"\W*(?:error|i couldn'?t|i can'?t|sorry|i'm sorry)", str(t.get("result") or ""), re.I)
                          for t in prev["tools"])
             neg = "" if failed else prev.get("intent") or ""
             recipes.feedback(prev.get("id") or "", -1, turn["text"], veto=not failed)  # a spoken 👎
             area, tool = _area(turn["tools"], done=True)
-            if area:
-                add(prev["text"], area, neg, "correction", tool)
+            if area and recipes.is_fix(prev["text"], turn):  # checked BEFORE learning anything: 'that's wrong,
+                add(prev["text"], area, neg, "correction", tool)  # anyway open youtube' is a new task, not the fix
                 recipes.taught(prev, turn)  # "no, play it in the music player": that wording means that now
             elif prev.get("path") == "fastpath" and neg:
                 add(prev["text"], "", prev["intent"], "correction")
-        elif recent and praise_score(turn["text"]) >= config.LEARN_PRAISE_SIM:
+        elif recent and clear and praise_score(turn["text"]) >= config.LEARN_PRAISE_SIM:
             recipes.feedback(prev.get("id") or "", 1, turn["text"])  # a spoken 👍: "perfect, that's right"
-        elif config.LEARN_SILENT and prev.get("path") == "ai" and corr < config.LEARN_WORKED_MAX_CORR \
+        elif config.LEARN_SILENT and prev.get("path") == "ai" and (corr if recent else 0.0) < config.LEARN_WORKED_MAX_CORR \
                 and standalone(prev["text"]) and (found := _area(prev["tools"], done=True))[0]:
             add(prev["text"], found[0], "", "worked", found[1])
     except Exception as e:  # noqa: BLE001 - learning must never break KURAMA

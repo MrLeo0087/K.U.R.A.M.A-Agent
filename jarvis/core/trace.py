@@ -95,6 +95,14 @@ def get(trace_id: str) -> dict | None:
         return dict(zip([d[0] for d in cur.description], row)) if row else None
 
 
+def recent(days: float, limit: int = 300) -> list[dict]:
+    """The latest requests (id, ts, text, path, answer), newest first."""
+    with _lock:
+        cur = _db().execute("SELECT id, ts, text, path, answer FROM traces WHERE ts >= ? AND path IN ('fastpath', 'ai', "
+                            "'multi') ORDER BY ts DESC LIMIT ?", (time.time() - days * 86400, limit))
+        return [dict(zip(("id", "ts", "text", "path", "answer"), r)) for r in cur.fetchall()]
+
+
 def set_feedback(trace_id: str, vote: int, note: str = "") -> None:
     with _lock:
         _db().execute("INSERT OR REPLACE INTO feedback VALUES (?,?,?,?)", (trace_id, time.time(), int(vote), note[:500]))
@@ -208,7 +216,7 @@ def end(tr: dict | None, answer: str = "", last: dict | None = None, error: str 
         if not error:
             from jarvis.core import learn
             learn.on_turn({"text": row[5], "ts": tr["ts"], "path": path, "intent": row[7], "tools": tools,
-                           "id": tr["id"], "tokens": tin + tout})
+                           "id": tr["id"], "tokens": tin + tout, "channel": tr["channel"] or "", "mode": tr["mode"] or ""})
     except Exception as e:
         log.warning("trace write failed: %s", e)
 
