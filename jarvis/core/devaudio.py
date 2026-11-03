@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import shutil
 import subprocess
 import threading
@@ -112,12 +113,73 @@ def _load(sink: str, source: str) -> None:
            "sink_properties=device.description='Speakers (through KURAMA)'")
 
 
-def cancel_on(sink: str | None = None) -> None:
-    """Load (or re-aim at `sink`) the canceller and make it the default speaker + mic."""
+def _configured(kind: str) -> str | None:
+    """The output / input the system remembers as chosen (WirePlumber's default.configured.audio.sink|source; it
+    survives reboots and decides what a newly connected speaker does). None if unknown."""
+    if not shutil.which("pw-metadata"):
+        return None
+    try:
+        out = subprocess.run(["pw-metadata", "0", f"default.configured.audio.{kind}"], capture_output=True, text=True,
+                             timeout=3).stdout
+        m = re.search(r"value:'(\{.*?\})'", out)
+        return json.loads(m.group(1)).get("name") if m else None
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+
+
+def _set_configured(kind: str, name: str) -> None:
+    """Put the remembered choice back exactly (even when that speaker is off right now: when it connects again the
+    system picks it, as if KURAMA had never been there)."""
+    if shutil.which("pw-metadata"):
+        subprocess.run(["pw-metadata", "0", f"default.configured.audio.{kind}", json.dumps({"name": name}),
+                        "Spa:String:JSON"], capture_output=True, timeout=3)
+
+
+def _descriptions() -> dict[str, str]:
+    """sink name -> its description ('U-2500BT', '... HDMI / DisplayPort 1 Output')."""
+    out, name = {}, ""
+    for ln in _pactl("list", "sinks").splitlines():
+        ln = ln.strip()
+        if ln.startswith("Name:"):
+            name = ln[5:].strip()
+        elif ln.startswith("Description:") and name:
+            out[name] = ln[12:].strip()
+    return out
+
+
+def _rank(name: str, desc: str = "") -> int:
+    """Which output the owner most likely listens on: Bluetooth 3 > USB 2 > the laptop's speaker 1 > HDMI 0."""
+    n, d = name.lower(), desc.lower()
+    if n.startswith("bluez_"):
+        return 3
+    if "usb" in n or "usb" in d:
+        return 2
+    return 0 if "hdmi" in n or "hdmi" in d or "displayport" in d else 1
+
+
+def _best(saved: dict) -> str | None:
+    """The real speaker to send sound to when the system's own choice can't be read (our canceller is the default):
+    the one the owner picked (saved explicit), else a connected Bluetooth / USB speaker before the laptop's own
+    (11-03: the canceller sent everything to the laptop speaker while the U-2500BT Bluetooth speaker was on, so
+    with KURAMA the sound was quiet and without it loud), then the one used before."""
+    real = [x for x in _names("sinks") if _real(x)]
+    if not real:
+        return None
+    if saved.get("explicit") and saved.get("sink") in real:
+        return saved["sink"]
+    desc = _descriptions()
+    return max(real, key=lambda x: (_rank(x, desc.get(x, "")), x == saved.get("sink"), real.index(x)))
+
+
+def cancel_on(sink: str | None = None, explicit: bool = False) -> None:
+    """Load (or re-aim at `sink`) the canceller and make it the default speaker + mic. explicit: the owner chose
+    that speaker in Settings (it then wins over a Bluetooth one)."""
     with _lock:
         saved = _load_saved()
         cur_sink, cur_src = _pactl("get-default-sink").strip(), _pactl("get-default-source").strip()
-        sink = sink or (cur_sink if _real(cur_sink) else saved.get("sink"))
+        if not sink and _real(cur_sink):
+            sink, explicit = cur_sink, True  # the system's own choice right now: respected
+        sink = sink or _best(saved)
         source = cur_src if _real(cur_src) else saved.get("source")
         sinks, sources = _names("sinks"), _names("sources")
         if sink not in sinks:
@@ -126,13 +188,19 @@ def cancel_on(sink: str | None = None) -> None:
             source = next((s for s in sources if _real(s)), None)
         if not sink or not source:
             raise RuntimeError("no speaker or mic found")
-        if _ours() and (saved.get("sink"), saved.get("source")) == (sink, source):
+        first = not _ours()
+        if first:  # the owner's remembered choice, before ours replaces it (put back by cancel_off)
+            for kind, key in (("sink", "configured_sink"), ("source", "configured_source")):
+                if (c := _configured(kind)) and not c.startswith("kurama_ec"):
+                    saved[key] = c
+        if not first and (saved.get("sink"), saved.get("source")) == (sink, source):
             pass  # already aimed right
         else:
             for mid in _ours():
                 _pactl("unload-module", mid)
             _load(sink, source)
-        _save({"sink": sink, "source": source})
+        _save({**{k: v for k, v in saved.items() if k.startswith("configured_")},
+               "sink": sink, "source": source, "explicit": bool(explicit)})
         for _ in range(20):  # the new nodes take a moment to appear
             if EC_SINK in _names("sinks") and EC_SOURCE in _names("sources"):
                 break
@@ -143,16 +211,25 @@ def cancel_on(sink: str | None = None) -> None:
 
 
 def cancel_off() -> None:
-    """Remove the canceller and give the real speaker/mic back."""
+    """Remove the canceller and give the real speaker/mic back. Nothing of ours loaded: the defaults are NOT touched
+    (startup used to set the speaker saved long ago as the default, over the Bluetooth speaker in use)."""
     with _lock:
+        mods = _ours()
+        if not mods:
+            return
         saved = _load_saved()
-        for mid in _ours():
+        for mid in mods:
             _pactl("unload-module", mid)
         sinks, sources = _names("sinks"), _names("sources")
-        if saved.get("sink") in sinks:
-            _pactl("set-default-sink", saved["sink"])
-        if saved.get("source") in sources:
+        if saved.get("configured_sink"):  # exactly what the system remembered before KURAMA
+            _set_configured("sink", saved["configured_sink"])
+        elif (target := _best(saved)) in sinks:
+            _pactl("set-default-sink", target)
+        if saved.get("configured_source"):
+            _set_configured("source", saved["configured_source"])
+        elif saved.get("source") in sources:
             _pactl("set-default-source", saved["source"])
+        _save({k: v for k, v in saved.items() if not k.startswith("configured_")})  # used once
 
 
 _users: set[str] = set()  # pages recording the mic right now (voice / talk mode)
@@ -211,23 +288,23 @@ def set_hear(on: bool) -> dict:
     return apply()
 
 
-def _follow() -> None:
-    """A speaker came or went: aim the canceller at the newest real one (headphones, Bluetooth, HDMI)."""
+def _follow(added: str | None = None) -> None:
+    """A speaker came or went: a new Bluetooth / USB speaker gets the sound at once; the one in use gone -> the best
+    one left."""
     if hear() or not cancelling():
         return
     saved, sinks = _load_saved(), _names("sinks")
-    real = [s for s in sinks if _real(s)]
+    real = [x for x in sinks if _real(x)]
     if not real:
         return
-    newest = real[-1]  # pactl lists sinks in creation order: the last one is what was just plugged in
-    want = newest if newest != saved.get("sink") and _new.get("sink") == newest else (
-        saved.get("sink") if saved.get("sink") in real else newest)
-    if want != saved.get("sink") or EC_SINK not in sinks:
-        log.info("device sound: speaker is now %s", want)
-        cancel_on(want)
-
-
-_new: dict = {}
+    if added and added in real and _rank(added, _descriptions().get(added, "")) >= 2 and added != saved.get("sink"):
+        want = added
+    elif saved.get("sink") not in real or EC_SINK not in sinks:
+        want = _best(saved)
+    else:
+        return
+    log.info("device sound: speaker is now %s", want)
+    cancel_on(want)
 
 
 def watch() -> None:
@@ -247,18 +324,19 @@ def watch() -> None:
                         try:
                             cur = _pactl("get-default-sink").strip()
                             if _real(cur) and not hear() and cancelling():
-                                cancel_on(cur)
+                                cancel_on(cur, explicit=True)
                         except Exception as e:
                             log.warning("device sound: %s", e)
                         continue
                     if " on sink #" not in line or ("'new'" not in line and "'remove'" not in line):
                         continue
+                    added = None
                     if "'new'" in line:
                         time.sleep(1.0)  # let it settle (Bluetooth profiles switch twice)
-                        names = _names("sinks")
-                        _new["sink"] = names[-1] if names else None
+                        real = [x for x in _names("sinks") if _real(x)]
+                        added = real[-1] if real else None  # pactl lists sinks in creation order
                     try:
-                        _follow()
+                        _follow(added)
                     except Exception as e:
                         log.warning("device sound: could not follow the speaker: %s", e)
                 p.wait()

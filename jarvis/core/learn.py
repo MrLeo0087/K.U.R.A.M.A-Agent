@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
+import queue
 import re
 import threading
 import time
@@ -89,6 +90,27 @@ def add(text: str, group: str = "", neg_intent: str = "", source: str = "", tool
         except OSError as e:
             log.warning("could not save what was learned: %s", e)
     log.info("learned %r -> %s%s", text[:80], group or "-", f" (not {neg_intent})" if neg_intent else "")
+
+
+def unlearn(text: str, source: str) -> int:
+    """Drop what was learned from this exact wording by one source (a 👍 later followed by 👎 on the same reply)."""
+    import numpy as np
+    text = " ".join((text or "").split())[:300].lower()
+    with _lock:
+        rows, vecs = _load()
+        keep = [i for i, r in enumerate(rows) if not (r["text"].lower() == text and r.get("src") == source)]
+        if len(keep) == len(rows):
+            return 0
+        rows2 = [rows[i] for i in keep]
+        vecs2 = vecs[keep] if len(keep) else np.zeros((0, vecs.shape[1] if vecs.ndim == 2 else 0), np.float32)
+        globals().update(_rows=rows2, _vecs=vecs2)
+        jp, vp = _paths()
+        try:
+            jp.write_text(json.dumps(rows2, ensure_ascii=False))
+            np.save(vp, vecs2.astype(np.float16))
+        except OSError as e:
+            log.warning("could not save what was learned: %s", e)
+        return len(rows) - len(keep)
 
 
 def group_scores(q: Any) -> dict[str, float]:
@@ -168,6 +190,7 @@ PRAISES = (
 NOT_PRAISES = (
     "thanks", "thank you", "ok", "okay", "next", "good morning", "good night", "how are you", "open youtube",
     "play a song", "what time is it", "good", "nice to meet you", "is that right?", "are you sure?",
+    "yes", "yeah", "yes please", "sure", "yes do it", "ok go ahead", "haan", "ho",  # answers to KURAMA's question
 )
 _praise_vecs: Any = None
 _nopraise_vecs: Any = None
@@ -228,11 +251,27 @@ def _area(tools: list[dict], done: bool = False) -> tuple[str, str]:
     return "", ""
 
 
+_queue: "queue.Queue[dict]" = queue.Queue()
+_worker: threading.Thread | None = None
+
+
+def _work() -> None:
+    while True:
+        _judge(_queue.get())
+
+
 def on_turn(turn: dict) -> None:
-    """A turn finished (text, ts, path, intent, tools): judge the previous one now that this one shows how it went."""
+    """A turn finished (text, ts, path, intent, tools): judge the previous one now that this one shows how it went.
+    ONE worker judges the turns in the order they ended (a thread each could judge a quick 'perfect' before the
+    reply it was about, and praise the reply before that one)."""
+    global _worker
     if not config.LEARN or not config.SEMANTIC_ROUTER:
         return
-    threading.Thread(target=_judge, args=(turn,), daemon=True, name="learn").start()
+    with _lock:
+        if _worker is None or not _worker.is_alive():
+            _worker = threading.Thread(target=_work, daemon=True, name="learn")
+            _worker.start()
+    _queue.put(turn)
 
 
 def _judge(turn: dict) -> None:
@@ -248,9 +287,12 @@ def _judge(turn: dict) -> None:
     prev, _prev[ch] = _prev.get(ch), turn
     from jarvis.core import recipes, stt
     try:
+        from jarvis.core import fastpath
         clear = turn.get("mode") not in ("voice", "talk") or stt.heard_well(turn["text"])
+        answer = fastpath._bare_yes_no(turn["text"])  # 'no' / 'no thanks' answer KURAMA's question ('do you want
+        #   more?'): a bare 'no' scored 0.84 as a complaint and would have 👎'd the question (praise stays praise)
         recent = bool(prev and prev.get("text")) and turn["ts"] - prev["ts"] < config.LEARN_WINDOW_S
-        corr = complaint_score(turn["text"]) if clear else 0.0
+        corr = complaint_score(turn["text"]) if clear and not answer else 0.0
         if corr >= config.LEARN_CORRECTION_SIM and not recent and len(turn["text"].split()) >= 4:
             recipes.late_complaint(turn["text"], skip=(turn.get("id") or "",))  # it must say WHAT was wrong
             return

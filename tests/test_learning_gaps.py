@@ -91,10 +91,8 @@ def test_a_late_complaint_that_matches_nothing_clearly_does_nothing(model):
 @pytest.mark.parametrize("lp,lang,counts", [(-0.89, "french", False), (-0.30, "korean", False),
                                             (-0.30, "english", True), (-0.55, "nepali", True)])
 def test_spoken_praise_counts_only_when_heard_clearly(model, monkeypatch, lp, lang, counts):
-    monkeypatch.setitem(stt._heard, "text", "perfect, that's exactly what i wanted")
-    monkeypatch.setitem(stt._heard, "at", time.time())
-    monkeypatch.setitem(stt._heard, "lp", lp)
-    monkeypatch.setitem(stt._heard, "lang", lang)
+    monkeypatch.setitem(stt._heard, "perfect, that's exactly what i wanted", (time.time(), lp, lang))
+    monkeypatch.setitem(stt._heard, "some room talk the wake listener heard", (time.time(), -1.2, "korean"))
     save_trace("5aaa00000001", "what is the status of my battery charge", tools=BATTERY)
     judge("what is the status of my battery charge", BATTERY, "5aaa00000001")
     judge("Perfect, that's exactly what I wanted", [], "5aaa00000002", mode="voice")
@@ -185,3 +183,55 @@ def test_rules_ride_on_the_request_itself():
     style.forget("boss")
     last = str(ag._messages("what is a comet", "text", "en")[-1].content)
     assert "No longer follow: always call me boss" in last  # the chat's old replies still did it: say it stopped
+
+
+
+# ---- bugs found in the review (11-03 night) ----
+@pytest.mark.parametrize("answer", ["no", "No.", "nope", "no, not now", "yes", "no thanks"])
+def test_a_bare_answer_to_kuramas_question_is_not_feedback(model, answer):
+    save_trace("8aaa00000001", "write me a poem about rain", tools=[], answer="Here it is... Do you want more?")
+    judge("write me a poem about rain", [], "8aaa00000001")
+    judge(answer, [], "8aaa00000002")
+    assert trace.feedback_rows() == []
+
+
+def test_learning_judges_turns_in_the_order_they_ended(model, monkeypatch):
+    seen = []
+    monkeypatch.setattr(learn, "_judge", lambda t: (time.sleep(0.05 if t["id"].endswith("1") else 0), seen.append(t["id"])))
+    monkeypatch.setattr(learn, "_worker", None)
+    for i in (1, 2, 3):
+        learn.on_turn({**turn(f"request {i}", [], f"9aaa0000000{i}")})
+    for _ in range(100):
+        if len(seen) == 3:
+            break
+        time.sleep(0.02)
+    assert seen == ["9aaa00000001", "9aaa00000002", "9aaa00000003"]
+
+
+def test_a_late_complaint_never_blocks_the_built_in_shortcut(model):
+    old = time.time() - 3600
+    save_trace("aaab00000001", "open browser", path="fastpath", answer="Sure, opening Firefox.", intent="open")
+    trace._db().execute("UPDATE traces SET ts = ? WHERE id = ?", (old, "aaab00000001"))
+    judge("earlier you opened firefox when I said open browser, that was wrong", [], "aaab00000002")
+    assert trace.feedback_rows()[0]["trace_id"] == "aaab00000001"
+    assert not any(r["neg"] for r in learn._load()[0])  # what it did then may be fixed: "open browser" stays 0-token
+
+
+def test_thumbs_down_after_thumbs_up_undoes_it(model):
+    approve("aaac00000001", "what is the status of my battery charge", BATTERY)
+    assert any(r.get("src") == "thumbs_up" for r in learn._load()[0])
+    recipes.feedback("aaac00000001", -1)
+    assert not any(r.get("src") == "thumbs_up" for r in learn._load()[0]) and recipes.rows() == []
+
+
+def test_an_answer_approved_twice_is_kept_once(model):
+    save_trace("aaad00000001", "why is the sky blue in one line", answer="Air scatters blue light.")
+    recipes.feedback("aaad00000001", 1)
+    recipes.feedback("aaad00000001", 1)  # the button, then 'perfect, thanks'
+    assert len(recipes.rows("answer")) == 1
+
+
+@pytest.mark.parametrize("word", ["yes", "no", "ok", "hoina", "stop"])
+def test_answers_can_never_be_your_words(word):
+    from jarvis.core import mywords
+    assert mywords.save(word, "open youtube").startswith("error") and mywords.expand(word) == word

@@ -492,6 +492,8 @@ def feedback(trace_id: str, vote: int, note: str = "", veto: bool = True) -> dic
                             r["on"], turned_on = True, turned_on + 1
                 elif _cacheable(row) and config.ANSWER_CACHE:
                     v = _embed(text)
+                    key = " ".join(text.split())[:200].lower()  # approved twice (button + praise): kept once
+                    _load()[:] = [r for r in _load() if not (r["kind"] == "answer" and r["text"].lower() == key)]
                     _load().append({"id": uuid.uuid4().hex[:8], "kind": "answer", "text": " ".join(text.split())[:200],
                                     "vec": [round(float(x), 5) for x in v], "answer": row["answer"], "on": True,
                                     "traces": [trace_id], "ts": time.time(), "used": 0,
@@ -504,6 +506,7 @@ def feedback(trace_id: str, vote: int, note: str = "", veto: bool = True) -> dic
         return {"ok": True, "said": "Thanks! I'll answer that the same way, without the AI next time." if turned_on
                 else "Thanks, noted."}
     gone = dropped(trace_id) + forget_matching(text)
+    learn.unlearn(text, "thumbs_up")  # a 👍 on the same reply before (changed your mind)
     if veto and row.get("path") == "fastpath" and row.get("intent"):
         learn.add(text, "", row["intent"], "thumbs_down")  # that shortcut is wrong for this meaning (meaning_ok)
     log.info("👎 %s %r (%d learned rows removed)", trace_id, text[:60], gone)
@@ -527,7 +530,7 @@ def late_complaint(text: str, skip: tuple[str, ...] = ()) -> str | None:
     if best < config.LEARN_LATE_SIM or best - second < config.LEARN_LATE_MARGIN:
         return None
     tid = rows[int(order[0])]["id"]
-    feedback(tid, -1, text)
+    feedback(tid, -1, text, veto=False)  # no block on the built-in shortcut: what it did then may be fixed by now
     log.info("late complaint %r -> 👎 on %s %r", text[:60], tid, rows[int(order[0])]["text"][:60])
     return tid
 

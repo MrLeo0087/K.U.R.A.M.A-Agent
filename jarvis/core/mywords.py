@@ -12,6 +12,8 @@ import threading
 from jarvis.core import config
 
 _lock = threading.Lock()
+_ANSWERS = {"yes", "no", "ok", "okay", "yeah", "yep", "nope", "sure", "stop", "cancel", "next", "back", "done",
+            "thanks", "thank you", "haan", "ha", "ho", "hoina", "na", "nahi", "huncha", "hunna", "thik cha"}
 
 
 def _path():
@@ -47,6 +49,8 @@ def save(phrase: str, command: str) -> str:
         return "error: say the words and what they should do, e.g. 'when I say good night, lock the screen'"
     if key(cmd) == k:
         return "error: the words and the command are the same"
+    if k in _ANSWERS:  # 'yes' / 'no' answer KURAMA's questions: as a phrase it would swallow every answer
+        return f"error: '{k}' is how you answer my questions, so it can't stand for a command. Pick other words."
     with _lock:
         d = all_words()
         old = d.get(k)

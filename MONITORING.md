@@ -419,3 +419,7 @@ message; the action itself is chosen by meaning), the reference nouns (`workmem.
   learned shortcuts switch off (shown in /learned_shortcuts), late complaints find their reply, misheard speech is
   never feedback, reply rules reach every AI reply (on the request itself), 👍 on multi-step replies keeps the plan
   and each clear step. Watch: /learned_shortcuts for "off: its tool failed", feedback notes on late complaints.
+- 2026-11-03 (21:40): sound through Bluetooth stays on Bluetooth with KURAMA (the echo canceller had sent it to the
+  laptop speaker and KURAMA had written the laptop speaker as the system's remembered output). Watch: if sound
+  is quieter with KURAMA, `pactl list short modules | grep echo` (sink_master=) and
+  `pw-metadata 0 default.configured.audio.sink`.

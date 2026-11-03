@@ -1097,3 +1097,17 @@ Phases (one at a time, owner tests after each):
       it going). (7) Multi-step: 👍 keeps the plan's split (taskgraph.learn_plan, no longer silent) and each step
       whose tool clearly did its task. Tests: test_learning_gaps.py (27); suite 1665; scorecard 73% / 100% / 98%.
       Live: "call me boss" -> "...orbits a planet, boss." -> forget (0 tokens) -> next replies without it.
+- [x] 2026-11-03 21:40 Review bugs (owner: "does it have some bug ... fix other bug that you find"). Learning: a bare
+      'no' / 'no thanks' (an answer to KURAMA's question) scored 0.84 as a complaint -> answers are never complaints,
+      plain yes-answers are not praise; one learning worker judges turns in order (a thread each could put a quick
+      'perfect' on the wrong reply); stt keeps each recent recognition's own confidence (the wake listener's room
+      transcripts overwrote it); a late complaint never blocks a built-in shortcut (it may be fixed since); 👎 after
+      👍 undoes the 👍's routing row; an answer approved twice is kept once; yes / no / ok / stop... can't be the
+      owner's words. Sound (owner: "when I remove KURAMA the laptop sound is louder"): proven live - the U-2500BT
+      Bluetooth speaker was on, but KURAMA's echo canceller sent everything to the laptop speaker
+      (sink_master=...sofhdadsp__sink), and the system's remembered output (WirePlumber default.configured) was the
+      laptop speaker, written by KURAMA: cancel_off at startup set the speaker saved long ago as default even with
+      no canceller loaded. Fix: cancel_off touches nothing unless ours is loaded and then restores the remembered
+      choice exactly (pw-metadata); the canceller aims at the system's choice, else Bluetooth > USB > laptop > HDMI;
+      a Bluetooth / USB speaker connecting while KURAMA listens gets the sound. One-time repair: the remembered
+      output set back to the U-2500BT (streams moved). Tests: +6 learning, +6 sound; suite 1686.

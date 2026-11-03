@@ -83,12 +83,10 @@ def test_canceller_follows_new_headphones(pactl):
     devaudio._users.add("test")  # a page records: the canceller runs only meanwhile
     devaudio.set_hear(False)
     pactl.sinks.append(BT)  # Bluetooth headphones connect
-    devaudio._new["sink"] = BT
-    devaudio._follow()
+    devaudio._follow(BT)
     assert f"sink_master={BT}" in next(iter(pactl.mods.values())) and pactl.default["sink"] == devaudio.EC_SINK
-    devaudio._new["sink"] = devaudio.EC_SINK  # our own reload's events change nothing
-    n = len(pactl.calls)
-    devaudio._follow()
+    n = len(pactl.calls)  # our own reload's events change nothing
+    devaudio._follow(None)
     assert not [c for c in pactl.calls[n:] if c[0] == "load-module"]
 
 
