@@ -40,7 +40,8 @@ def test_known_wifi_names_the_spot(no_net, tmp_path, monkeypatch):
     monkeypatch.setattr(geolocate, "_geolocate", lambda aps: {"lat": 28.05, "lon": 81.6167, "accuracy": 25000, "source": "ip"})
     monkeypatch.setattr(geolocate, "place_name", lambda lat, lon, acc=0: "Nepalgunj-10")
     assert "Home" in geolocate.label_here("Home")
-    assert json.loads(store.kv_get(geolocate._PLACES_KEY))["58:56:C2:7E:A7:0C"] == {"label": "Home"}
+    saved = json.loads(store.kv_get(geolocate._PLACES_KEY))["58:56:C2:7E:A7:0C"]
+    assert saved["label"] == "Home" and "58:56:C2:7E:A7:0C" in saved["aps"]  # + the Wi-Fi surroundings (11-03)
     assert "At: Home" in geolocate.where_text()
     geolocate.forget_here()
     assert "At: Home" not in geolocate.where_text()
