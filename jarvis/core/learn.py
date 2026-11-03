@@ -182,6 +182,30 @@ def _area(tools: list[dict], done: bool = False) -> tuple[str, str]:
     return "", ""
 
 
+def _first_tool(tools: list[dict]) -> tuple[str, str]:
+    """(name, args) of the first specialised tool that ran ('' when none)."""
+    from jarvis.core import registry
+    for t in tools or []:
+        tool = registry.REGISTRY.get(t.get("name") or "")
+        if tool is not None and registry.group_of(tool) not in ("core", ""):
+            return t["name"], json.dumps(t.get("args") or {}, sort_keys=True, default=str)
+    return "", ""
+
+
+def rephrased(prev: dict, turn: dict) -> bool:
+    """The owner asked the same thing again in other words and it went another way ('open browser' -> Firefox,
+    then 'open brave browser'): the first reply wasn't what they wanted, even without a complaint. A next request
+    of the same kind ('play song X' then 'play song Y') shares few content words, so it is not one."""
+    a, b = _first_tool(prev.get("tools") or []), _first_tool(turn.get("tools") or [])
+    if a == b:
+        return False
+    wa = {w for w in re.findall(r"[^\W\d_]{2,}", prev["text"].lower()) if w not in _REF}
+    wb = {w for w in re.findall(r"[^\W\d_]{2,}", turn["text"].lower()) if w not in _REF}
+    if not wa or not wb or len(wa & wb) / min(len(wa), len(wb)) < config.LEARN_REPHRASE_OVERLAP:
+        return False
+    return float(_embed(prev["text"]) @ _embed(turn["text"])) >= config.LEARN_REPHRASE_SIM
+
+
 def on_turn(turn: dict) -> None:
     """A turn finished (text, ts, path, intent, tools): judge the previous one now that this one shows how it went."""
     if not config.LEARN or not config.SEMANTIC_ROUTER:
@@ -209,10 +233,17 @@ def _judge(turn: dict) -> None:
             neg = "" if failed else prev.get("intent") or ""
             area, tool = _area(turn["tools"])
             recipes.dropped(prev.get("id") or "")  # what was learned from the corrected request goes
+            if prev.get("path") == "fastpath":
+                recipes.forget_matching(prev["text"])  # a learned shortcut answered it wrongly: it goes too
             if area:
                 add(prev["text"], area, neg, "correction", tool)
             elif prev.get("path") == "fastpath" and neg:
                 add(prev["text"], "", prev["intent"], "correction")
+        elif recent and rephrased(prev, turn):  # no complaint, but asked again another way: not good
+            recipes.dropped(prev.get("id") or "")
+            if prev.get("path") == "fastpath":
+                recipes.forget_matching(prev["text"])
+            log.info("re-asked: nothing learned from %r", prev["text"][:60])
         elif prev.get("path") == "ai" and corr < config.LEARN_WORKED_MAX_CORR and standalone(prev["text"]) \
                 and (found := _area(prev["tools"], done=True))[0]:
             add(prev["text"], found[0], "", "worked", found[1])

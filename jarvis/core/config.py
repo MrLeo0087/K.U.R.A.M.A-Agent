@@ -502,6 +502,9 @@ LEARN_WINDOW_S = 120  # a correction counts within this long after the request i
 LEARN_CORRECTION_MARGIN = 0.05  # ...and not closer (by more than this) to a plain next request (learn.NOT_CORRECTIONS)
 LEARN_CORRECTION_SIM = 0.80  # similarity to an example correction ("no, I meant...") to count as one
 LEARN_WORKED_MAX_CORR = 0.65  # "it worked" is learned only if the next message is not even close to a correction
+LEARN_REPHRASE_SIM = 0.80  # the next request means nearly the same...
+LEARN_REPHRASE_OVERLAP = 0.70  # ...and shares most content words, but went another way: the reply before was NOT
+# good (the owner re-asked instead of complaining), so nothing is learned from it and a shortcut that gave it goes
 LEARN_VETO_SIM = 0.92  # a corrected wording this similar never runs that shortcut again
 LEARN_MAX = 3000  # learned wordings kept (newest)
 # Learned shortcuts + kept answers from 👍 / 👎 and uncorrected turns (jarvis/core/recipes.py, data/recipes.json):

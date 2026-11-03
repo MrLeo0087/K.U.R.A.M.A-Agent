@@ -1059,3 +1059,10 @@ Phases (one at a time, owner tests after each):
       from usage input_token_details.cache_read). Tests: test_recipes.py (17, real model); suite 1618; scorecard
       73% / 100% / 98%. Live: wikipedia summary of Mount Everest 3,113 tokens -> 👍 -> "...of kathmandu" 0 tokens
       (test row removed after). Telegram has no buttons yet (next step if wanted).
+- [x] 2026-11-03 19:50 Silence is not always "good": a bad reply the owner doesn't complain about but re-asks another
+      way ('open browser' -> Firefox, then 'open brave browser') counted as a clean run -> learn.rephrased (same
+      meaning >= 0.80, >= 70% shared content words, another tool or other arguments): nothing learned from the first,
+      and a learned shortcut that gave it is removed. Also: a correction after a reply SERVED by a learned shortcut
+      left that shortcut alive (only rows made from that request were dropped) -> recipes.forget_matching. A next
+      request of the same kind ('play song X' -> 'play song Y') is not a re-ask. Tests: +4; suite 1622; scorecard
+      73% / 100% / 98%.

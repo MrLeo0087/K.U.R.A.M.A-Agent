@@ -357,6 +357,18 @@ def match(text: str):
     return fastpath.Intent(name, r["tool"], registry.group_of(registry.REGISTRY.get(r["tool"])), args, label)
 
 
+def forget_matching(text: str) -> int:
+    """The learned row that would answer this request (it answered it wrongly): gone. 0 when none fits."""
+    if (hit := find(text)) is None:
+        return 0
+    with _lock:
+        rows = _load()
+        rows[:] = [r for r in rows if r["id"] != hit[0]["id"]]
+        _save()
+    log.info("learned shortcut removed after a bad answer: %r", hit[0]["text"][:60])
+    return 1
+
+
 # ------------------------------------------------------------------ 👍 / 👎
 def _cacheable(row: dict) -> bool:
     tools = [t for t in json.loads(row.get("tools") or "[]") if t.get("name") not in ("request_tools", "_say")]
@@ -401,13 +413,7 @@ def feedback(trace_id: str, vote: int, note: str = "") -> dict:
             learn.add(text, area, "", "thumbs_up", tool)
         return {"ok": True, "said": "Thanks! I'll answer that the same way, without the AI next time." if turned_on
                 else "Thanks, noted."}
-    gone = dropped(trace_id)
-    if (hit := find(text)) is not None:  # what would answer it again (it may have come from another request)
-        with _lock:
-            rows = _load()
-            rows[:] = [r for r in rows if r["id"] != hit[0]["id"]]
-            _save()
-        gone += 1
+    gone = dropped(trace_id) + forget_matching(text)
     if row.get("path") == "fastpath" and row.get("intent"):
         learn.add(text, "", row["intent"], "thumbs_down")  # that shortcut is wrong for this meaning (meaning_ok)
     log.info("👎 %s %r (%d learned rows removed)", trace_id, text[:60], gone)

@@ -154,3 +154,33 @@ def test_fastpath_uses_learned_shortcuts_last(model, monkeypatch):
     it = fastpath.match("start the tune kesariya")  # no built-in pattern knows this wording: the learned one
     assert it is not None and it.tool == "music" and it.args == {"action": "play", "query": "kesariya"}
     assert fastpath.match("what time is it").tool == "get_time"  # the built-in shortcuts still come first
+
+
+# ---- a bad reply with no complaint: the owner just asks again another way ----
+def test_re_asking_another_way_learns_nothing_from_the_first_reply(model):
+    learn._judge(turn("open the web browser for me", [tool("open_app", {"name": "web browser"}, "opened Firefox")],
+                      "rrrr00000001"))
+    assert len(recipes.rows()) == 1
+    learn._judge(turn("open the brave web browser for me", [tool("open_app", {"name": "brave"}, "opened Brave")],
+                      "rrrr00000002"))
+    assert all("rrrr00000001" not in r["traces"] for r in recipes.rows())  # Firefox one: gone, never confirmed
+
+
+def test_next_song_is_not_a_re_ask(model):
+    learn._judge(turn("play song us mod se shurroo kare", SONG1, "ssss00000001"))
+    learn._judge(turn("play song tum hi ho", SONG2, "ssss00000002"))
+    assert recipes.rows()[0]["ok"] == ["ssss00000001"]  # the first one counted as a clean run
+
+
+@pytest.mark.parametrize("then", ["no, I meant something else", "open the battery settings app instead"])
+def test_a_learned_shortcut_that_answered_wrongly_goes(model, then):
+    t = [tool("battery_status", {}, "Battery 93%")]
+    save_trace("abcd00000001", "what is the status of my battery charge", tools=t)
+    recipes.feedback("abcd00000001", 1)
+    assert recipes.find("what is the status of my battery charge") is not None
+    learn._judge(turn("what is the status of my battery charge", [tool("battery_status", {}, "Battery 93%")],
+                      "abcd00000002", path="fastpath"))  # served by the learned shortcut
+    other = [tool("open_app", {"name": "battery settings"}, "opened Settings")]
+    learn._judge(turn(then if then.startswith("no") else "show the status of my battery charge in settings", other,
+                      "abcd00000003"))
+    assert recipes.find("what is the status of my battery charge") is None
