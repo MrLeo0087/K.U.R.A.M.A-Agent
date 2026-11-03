@@ -170,3 +170,34 @@ def test_the_chat_size_is_never_saved_from_the_shrunk_invisible_panel():
     saver = src[src.index("def on_configure"):src.index("def drop_panel")]
     assert 'getattr(self, "shrunk", False)' in saver and "PANEL_MIN_W" in saver
     assert "def saved_size" in src and "self.saved_size()" in src
+
+
+def test_gesture_control_lets_go_of_the_camera_during_a_call():
+    """11-03: a Facebook call couldn't get the camera while hand-gesture control held it."""
+    import importlib.util
+    import numpy as np
+    spec = importlib.util.spec_from_file_location("gesture_runner", config.ROOT / "scripts" / "gesture_runner.py")
+    gr = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gr)
+    opened, call, t = [], [False], [0.0]
+
+    class Cam:
+        def __init__(self, *a):
+            opened.append("open")
+        def set(self, *a):
+            return True
+        def read(self):
+            return True, np.ones((4, 6, 3), np.uint8)
+        def release(self):
+            opened.append("release")
+    Shared = gr.shared_capture(Cam, is_call=lambda: call[0], now=lambda: t[0], sleep=lambda s: None)
+    cap = Shared(0)
+    cap.set(3, 1280)
+    assert cap.read()[1].sum() > 0
+    call[0], t[0] = True, 2.0
+    ok, frame = cap.read()
+    assert ok and frame.sum() == 0 and opened == ["open", "release"]  # the call has the camera; gestures pause
+    call[0], t[0] = False, 4.0
+    assert cap.read()[1].sum() > 0 and opened == ["open", "release", "open"]  # back after the call
+    assert gr.CALL_URL.search("https://www.facebook.com/groupcall/ROOM:/?call_id=2170452144&has_video=true")
+    assert gr.CALL_URL.search("https://meet.google.com/abc-defg-hij") and not gr.CALL_URL.search("https://www.facebook.com/")

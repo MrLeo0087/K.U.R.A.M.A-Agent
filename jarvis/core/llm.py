@@ -24,7 +24,7 @@ from uuid import UUID
 
 import groq
 from langchain_core.callbacks import BaseCallbackHandler
-from langchain_core.messages import AIMessage, BaseMessage, convert_to_messages
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage, convert_to_messages
 from langchain_groq import ChatGroq
 
 from jarvis.core import budget, config, ratelimit, store
@@ -414,6 +414,26 @@ def to_messages(messages: Sequence[Any]) -> list[BaseMessage]:
 
 
 # --- public API ---
+def tool_history_as_text(msgs: list[BaseMessage]) -> list[BaseMessage]:
+    """A text-only call (no tools offered) whose history holds tool calls: gpt-oss then calls a tool anyway and Groq
+    answers 400 "Tool choice is none, but model called a tool" (every final round of a multi-step request fell back
+    to the next model, 11-03). The calls and results become plain notes the model reads but can't continue."""
+    if not any(isinstance(m, ToolMessage) or getattr(m, "tool_calls", None) for m in msgs):
+        return msgs
+    out: list[BaseMessage] = []
+    for m in msgs:
+        if isinstance(m, ToolMessage):
+            out.append(HumanMessage(content=f"[the {m.name or 'tool'} tool returned: {str(m.content)[:1500]}]"))
+        elif isinstance(m, AIMessage) and m.tool_calls:
+            said = _content_text(m.content).strip()
+            done = "; ".join(f"{tc['name']}({json.dumps(tc.get('args') or {}, ensure_ascii=False)[:200]})"
+                             for tc in m.tool_calls)
+            out.append(AIMessage(content=(said + " " if said else "") + f"[I called: {done}]"))
+        else:
+            out.append(m)
+    return out
+
+
 def chat(messages: Sequence[Any], tier: str = "fast", stream: bool = False, tools: Sequence | None = None,
          purpose: str = "", max_tokens: int | None = None, temperature: float | None = None,
          priority: str | None = None, **extra: Any) -> Reply | Iterator[str]:
@@ -424,6 +444,8 @@ def chat(messages: Sequence[Any], tier: str = "fast", stream: bool = False, tool
     if tier == "voice":
         extra.setdefault("timeout", config.VOICE_TIMEOUT_S)
     msgs = to_messages(messages)
+    if not tools:
+        msgs = tool_history_as_text(msgs)
     rate = (priority or ratelimit.current_priority(), _estimate_prompt(msgs),
             max_tokens or config.LLM_MAX_TOKENS)
     if stream:

@@ -276,7 +276,7 @@ def test_independent_and_chain_mix_runs_concurrently(respond, monkeypatch):
     t0 = time.monotonic()
     ans = agent.Agent().run("x")
     dt = time.monotonic() - t0
-    assert ans == "Done slow_a. Done slow_b. Done slow_a."
+    assert ans == "All done.\n✓ Do a\n✓ Do b\n✓ Then do a again with it"  # 3+ steps: one line each
     assert dt < 1.1, f"independent task did not run alongside the chain ({dt:.2f}s)"  # 2 sequential + 1 parallel
     for name in ("slow_a", "slow_b"):
         registry.REGISTRY.tools.pop(name, None)

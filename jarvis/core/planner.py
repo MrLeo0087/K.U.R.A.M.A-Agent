@@ -131,16 +131,18 @@ _SCAFFOLD = re.compile(r"(?<![\w])(?:create|make|start|scaffold|set\s*up|init(?:
                        r"(?:project|app\s+skeleton|boilerplate|template)(?![\w])", re.I)
 
 
+_LATER_CUE = re.compile(r"\b(?:later|tomorrow|tonight|job\s*list|jobs?\s+list|your\s+jobs|(?:a|this|that|as\s+a|the)\s+job\b|"
+                        r"add\s+(?:a\s+|this\s+|these\s+)?jobs?|queue|don'?t\s+(?:start|do\s+it|begin)|not\s+now|"
+                        r"when\s+i\s+say\s+(?:go|start)|wait\s+for\s+my|keep\s+(?:it|this)\s+for)\b", re.I)
+
+
 def queue_meant(text: str) -> bool:
-    """The request MAY mean 'add this to KURAMA's job list for later' (local model, 0 tokens): True unless it is
-    clearly 'do it now' (now-examples closer than the later-examples by QUEUE_NOW_MARGIN). Measured 2026-10-31: every
-    'later' wording scored > -0.03, clear 'do it now' < -0.04; in between the AI decides. False if it can't judge."""
-    from jarvis.core import semantic
-    if not semantic.ensure_ready():  # never guess this by a pattern: the model loads now (~2 s, once)
-        return False
-    later = semantic.best_of(text, "q_later", {"later": config.QUEUE_EXAMPLES["later"]})
-    now = semantic.best_of(text, "q_now", {"now": config.QUEUE_EXAMPLES["now"]})
-    return bool(later and now and later[1] - now[1] >= -config.QUEUE_NOW_MARGIN)
+    """The request MAY mean 'add this to KURAMA's job list for later' (then the AI, with the jobs tool, decides add vs
+    do). Only when the words ask for later at all ('for later', 'job list', 'queue', "don't start", 'tomorrow'):
+    by meaning alone 'open youtube and send hello to telegram' scored 'maybe later' (-0.015 vs the -0.04 line), so
+    nearly every multi-task request went to the AI as ONE task and only its first part was done (11-03: 1 of 5).
+    Held-out check 11-03: later -0.145..0.058 and now -0.245..-0.01 overlap, so the words decide whether to ask."""
+    return bool(_LATER_CUE.search(text or ""))
 
 
 def is_long_job(text: str) -> bool:
@@ -219,7 +221,9 @@ RESULT_TAIL = re.compile(
     r"(?:मुझे\s+)?बताओ|मलाई\s+भन\S*|नतिजा\s+देखाउ\S*)\s*[.!?।]*$", re.I)
 # Refers back to an earlier task's result -> depends on the previous task (P7c).
 _REF = re.compile(
-    r"(?<![\w'])(?:it|its|that|them|those|this|these|then|after\s+that|afterwards|the\s+(?:folder|file|directory|poem|"
+    r"(?<![\w'])(?:it|its|that(?=\s*(?:$|[.,!?;]|(?:to|on|in|into|for|with|as|from|and|too|also|again|please|now|"
+    r"here|there|folder|file|image|photo|picture|video|link|page|note|text|code|script|song|list|one)\b))|them|those|"
+    r"this|these|then|after\s+that|afterwards|the\s+(?:folder|file|directory|poem|"
     r"text|results?|output|note|story|essay|code|script|song|list|summary|answer|message|page|image|photo|"
     r"document|project|repo))(?![\w'])|त्यो|त्यसलाई|त्यसमा|यसलाई|यसमा|उसे|इसे|उसमें|इसमें|फिर|त्यसपछि", re.I)
 
@@ -276,7 +280,9 @@ def merge_tails(tasks: list[dict]) -> list[dict]:
 
 
 # 'it' that points at nothing ('what time is it', 'is it raining'): not a reference to the task before
-_DUMMY_IT = re.compile(r"\b(?:what\s+time\s+is\s+it|is\s+it\s+(?:going\s+to\s+)?(?:rain\w*|cold|hot|sunny|late|snow\w*))\b", re.I)
+_DUMMY_IT = re.compile(r"\b(?:what\s+time\s+is\s+it|is\s+it\s+(?:going\s+to\s+)?(?:rain\w*|cold|hot|sunny|late|snow\w*)|"
+                       r"(?:when|once|after|as\s+soon\s+as)\s+it(?:'s|\s+is)?\s+(?:finish\w*|done|over|ends?|ended|rings?|"
+                       r"goes\s+off|complete[sd]?|ready))\b", re.I)  # 'set a timer and when it finishes...': its own end
 
 
 def refers_back(text: str) -> bool:
@@ -306,6 +312,20 @@ def _items_of(text: str, tasks: list[dict]) -> list[int | None]:
     return out
 
 
+_THING_STOP = frozenset("""send open make create write show tell give find search take play save start stop please
+about with from into this that them then also some what when your mine have will would could should there their
+telegram generate research download upload list check turn read delete remove copy move rename close install build
+draw explain summarize summarise translate convert simple short long small large big best more most every each
+detail detailed quick latest new good""".split())  # verbs / sizes: 'generate image' and 'generate code' share no thing
+
+
+def _shares_thing(a: str, b: str) -> bool:
+    """Both steps talk about the same thing ('take a screenshot' / 'save the screenshot in the trip folder')."""
+    wa = {w.rstrip("s") for w in re.findall(r"[a-z][a-z.]{3,}", a.lower())} - _THING_STOP
+    wb = {w.rstrip("s") for w in re.findall(r"[a-z][a-z.]{3,}", b.lower())} - _THING_STOP
+    return bool(wa & wb)
+
+
 def add_dependencies(tasks: list[dict], text: str = "") -> list[dict]:
     """Simple rule on top of the model's depends_on: a task that refers back depends on the previous one. When the
     user NUMBERED the tasks ("1. image 2. essay 3. code"), a dependency the model invents across items is dropped
@@ -313,14 +333,28 @@ def add_dependencies(tasks: list[dict], text: str = "") -> list[dict]:
     items = _items_of(text, tasks)
     for i, t in enumerate(tasks):
         deps = {d for d in t.get("depends_on", []) if isinstance(d, int) and 0 <= d < i}
-        if i and refers_back(t["text"]):
+        back = refers_back(t["text"]) or is_result_tail(t["text"]) or is_when_tail(t["text"])
+        if i and back and not deps:
             deps.add(i - 1)
+        if deps:  # a step that needs something also waits for every earlier step making a thing it names
+            deps |= {d for d in range(i) if _shares_thing(t["text"], tasks[d]["text"])}  # ('the trip folder')
+        # HARD = really uses that step's result (points back, or names what it made: 'generate an image' -> 'send the
+        # image'); the other links only keep the order. A failed step skips only the steps that hard-need it: the
+        # model chained 'tell me the weather in Pokhara' after 'save the screenshot' and one failure skipped the
+        # weather (11-03).
+        hard = deps if back else {d for d in deps if _shares_thing(t["text"], tasks[d]["text"])}
         if items[i] is not None:  # numbered: only within the same item ("save it" in item 2 is item 2's own essay)
             deps = {d for d in deps if items[d] is None or items[d] == items[i]}
         if deps:
             t["depends_on"] = sorted(deps)
+            soft = sorted(deps - hard)
+            if soft:
+                t["soft"] = soft  # waits for these, but runs even if they fail
+            else:
+                t.pop("soft", None)
         else:
             t.pop("depends_on", None)
+            t.pop("soft", None)
     return tasks
 
 
@@ -391,8 +425,16 @@ def one_tool(text: str) -> bool:
         whole = fastpath.match(text)
         if whole is None:
             return False
-        tools = {i.tool for i in (fastpath.match(c) for c in split_clauses(text))
-                 if i is not None and not i.tool.startswith("_")}  # 'Okay,' / 'thanks' are not tasks
+        tools = set()
+        for c in split_clauses(text):
+            i = fastpath.match(c)
+            if i is None:
+                if is_command(c) and len(c.split()) >= 2 and not re.match(r"\s*(?:i|we|you|it|this|that)\b", c, re.I):
+                    return False  # a real task no shortcut knows ('write a poem about rain', 'make an image for it'):
+                continue  # the whole sentence's shortcut would drop it (11-03: 'send both to telegram' sent "both");
+                #           'I will read this link later' says something about the other part, it isn't a task
+            if not i.tool.startswith("_"):  # 'Okay,' / 'thanks' are not tasks
+                tools.add(i.tool)
     except Exception:  # noqa: BLE001 - never break a turn on the check
         return False
     return tools <= {whole.tool}
@@ -475,10 +517,11 @@ def plan(text: str) -> Plan:
     if not is_multi(text):
         return Plan([{"text": text, "kind": "long" if is_long_job(text) else "quick"}], "single")
     if quick := _shortcut_tasks(text):  # every part is a 0-token shortcut on its own: no planner call
-        return Plan(add_dependencies(quick, text), "rules")
+        return Plan(add_dependencies(merge_tails(quick), text), "rules")  # 'set a timer ... and when it finishes
+        #   send me break time on telegram' is ONE timer that messages the phone (it was split: never sent, 11-03)
     from jarvis.core import taskgraph
     if config.TASK_GRAPH and (seen := taskgraph.learned_plan(text, parts(text))):  # planned (and worked) before
-        return Plan(add_dependencies(seen, text), "learned")
+        return Plan(add_dependencies(merge_tails(seen), text), "learned")
     try:
         tasks = drop_filler(decompose(text))
         method = "llm"

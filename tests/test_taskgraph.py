@@ -115,7 +115,7 @@ def test_steps_after_a_background_job_become_a_follow_up(respond, monkeypatch):
     bot = agent.Agent(confirm=lambda p: True)
     ans = bot.run("write an essay about Nepal, save it as essay.md, send it to telegram and tell me the time")
     assert follow == [(4, ["save it as essay.md", "send it to telegram"])]
-    assert "as soon as job #4 is finished" in ans and ans.rstrip().endswith("(job #4).")
+    assert "as soon as job #4 is finished" in ans and "⏳ Write an essay about Nepal (job #4" in ans  # the checklist
     assert [s["status"] for s in bot.last["steps"]] == ["waiting", "after", "after", "ok"]
 
 
@@ -134,7 +134,7 @@ def test_independent_steps_of_a_wave_run_together(respond, monkeypatch):
     ans = agent.Agent().run("a and b then c")
     assert spans["a"][0] < spans["b"][1] and spans["b"][0] < spans["a"][1]  # a and b overlapped
     assert spans["c"][0] >= max(spans["a"][1], spans["b"][1])  # c waited for both
-    assert ans == "did a. did b. did c."
+    assert ans == "All done.\n✓ A\n✓ B\n✓ C"  # 3+ steps: one line each
 
 
 def test_filler_and_learned_plans(monkeypatch, tmp_path):

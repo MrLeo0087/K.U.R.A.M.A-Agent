@@ -79,6 +79,7 @@ def apps(action: Literal["open", "close", "kill", "window", "tab", "press", "typ
             left, right, restore, list, desktop (go to the home screen); install: install, remove, search, update.
         text: What to type, the keys to press, or what to click.
     """
-    if action == "open" and re.search(r",|\band\b", target or "") and all(len(p.split()) <= 3 for p in re.split(r",|\band\b", target)):
-        return "\n".join(run(TABLE, {"action": "open", "target": p.strip()}) for p in re.split(r",|\band\b", target) if p.strip())
+    sep = r",|\s+and\s+|^and\s+"  # ' and ' with spaces only: a search link holds '+and+' ('rock and roll')
+    if action == "open" and re.search(sep, target or "") and all(len(p.split()) <= 3 for p in re.split(sep, target)):
+        return "\n".join(run(TABLE, {"action": "open", "target": p.strip()}) for p in re.split(sep, target) if p.strip())
     return run(TABLE, {"action": action, "target": target, "how": how, "text": text})

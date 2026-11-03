@@ -7,10 +7,18 @@ from typing import Literal
 from jarvis.core.registry import tool
 from jarvis.tools.core._hub import Act, run
 
+def _find(a: dict) -> dict:
+    """find: text = name / folder / content, or biggest / newest ('the biggest files in downloads': query '*')."""
+    how = (a.get("text") or "any").strip().lower()
+    order = how if how in ("biggest", "newest") else "name"
+    return {"query": a.get("query") or ("*" if order != "name" else a.get("path")),
+            "path": a.get("path") if (a.get("query") or order != "name") else "",
+            "kind": "name" if order != "name" else how, "order": order}
+
+
 TABLE = {
     "list": Act("list_folder", lambda a: {"path": a.get("path") or a.get("query") or "~", "pattern": a.get("text", "")}),
-    "find": Act("find_files", lambda a: {"query": a.get("query") or a.get("path"), "path": a.get("path") if a.get("query") else "",
-                                         "kind": a.get("text", "any")}),
+    "find": Act("find_files", lambda a: _find(a)),
     "read": Act("read_text", lambda a: {"source": "file", "path": a.get("path")}),
     "write": Act("write_file", lambda a: {"path": a.get("path"), "content": a.get("text", "")}),
     "mkdir": Act("make_folder", lambda a: {"path": a.get("path")}),
@@ -40,6 +48,7 @@ def files(action: Literal["list", "find", "read", "write", "mkdir", "rename", "m
         path: The file or folder; loose names work ('downloads', 'project1 then tara').
         query: For find: the file name or part of it ('main.py', 'naruto'), searched on all disks.
         to: Destination folder (move/copy), the new name (rename), the app (open) or format (convert: pdf, md...).
-        text: write: the content; find: name/folder/content; organize: organize/apply/undo; lock: lock/unlock.
+        text: write: the content; find: name/folder/content, or biggest / newest (sorted by size / date, query
+            empty = every file); organize: organize/apply/undo; lock: lock/unlock.
     """
     return run(TABLE, {"action": action, "path": path, "query": query, "to": to, "text": text})

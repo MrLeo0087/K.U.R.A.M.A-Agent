@@ -14,8 +14,8 @@ FLAGS = {"gnome-screenshot": {"full": [], "window": ["-w"], "area": ["-a"]},
          "scrot": {"full": [], "window": ["-u"], "area": ["-s"]}}
 
 
-def new_path() -> Path:
-    d = Path(config.SCREENSHOT_DIR).expanduser()
+def new_path(folder: str = "") -> Path:
+    d = Path(folder or config.SCREENSHOT_DIR).expanduser()
     d.mkdir(parents=True, exist_ok=True)
     p = d / f"jarvis-{datetime.now():%Y%m%d-%H%M%S}.png"
     n = 1
@@ -25,19 +25,27 @@ def new_path() -> Path:
     return p
 
 
-@tool(group="screen", safety="safe", description="Take a screenshot (full screen, active window, or a selected area); returns the file path.")
-def screenshot(mode: Literal["full", "window", "area"] = "full") -> str:
+@tool(group="screen", safety="safe", description="Take a screenshot (full screen, active window, or a selected area), "
+      "optionally saved into a given folder; returns the file path.")
+def screenshot(mode: Literal["full", "window", "area"] = "full", folder: str = "") -> str:
     """Take a screenshot.
 
     Args:
         mode: full (whole screen), window (active window) or area (user drags a rectangle).
+        folder: Where to save it when the user says so ('save it in the trip folder'); empty = ~/Pictures/Screenshots.
     """
     if mode not in ("full", "window", "area"):
         return f"error: unknown mode {mode!r}"
+    if folder:  # 'take a screenshot and save it in that folder' had no way to say where (11-03): it claimed it did
+        from jarvis.core.paths import smart_path
+        found = smart_path(folder, want="dir")
+        if found is None:
+            return f"error: I couldn't find the folder {folder!r}"
+        folder = str(found)
     tools = [t for t in config.SCREENSHOT_TOOLS if _sys.which(t)]
     if not tools:
         return "error: no screenshot tool found: sudo apt install gnome-screenshot (or scrot)"
-    path = new_path()
+    path = new_path(folder)
     timeout = 60 if mode == "area" else 15  # area waits for the user's selection
     errors = []
     for t in tools:

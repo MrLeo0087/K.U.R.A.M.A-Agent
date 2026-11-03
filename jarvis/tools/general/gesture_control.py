@@ -39,7 +39,8 @@ def start() -> str:
                          stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
     PID_FILE.write_text(str(p.pid))
     return ("Hand gesture control is on. Show your left hand to the camera to control volume, play/pause, "
-            "full screen and YouTube. Press Q in its window or tell me to stop it.")
+            "full screen and YouTube. During a video call it lets go of the camera by itself (and takes it back after). "
+            "Press Q in its window or tell me to stop it.")
 
 
 def stop() -> str:

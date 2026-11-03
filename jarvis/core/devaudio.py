@@ -244,6 +244,34 @@ def cancel_on(sink: str | None = None, explicit: bool = False) -> None:
             _take_volume(sink)  # 71% while KURAMA listened, and the volume keys stopped at ours' 100%, 11-03)
 
 
+def _index_of(kind: str, name: str) -> str | None:
+    for ln in _pactl("list", "short", kind).splitlines():
+        parts = ln.split("\t")
+        if len(parts) > 1 and parts[1] == name:
+            return parts[0]
+    return None
+
+
+def _move_streams_off(saved: dict) -> None:
+    """Every app still recording from our mic or playing to our speaker (a Facebook / Meet call started while
+    KURAMA listened) is moved to the real mic / speaker BEFORE ours goes, so it never loses its device mid-call."""
+    try:
+        sources, sinks = _names("sources"), _names("sinks")
+        mic = saved.get("source") if saved.get("source") in sources else next((x for x in sources if _real(x)), None)
+        spk = _best(saved)
+        for kind, ours, to, move in (("source-outputs", EC_SOURCE, mic, "move-source-output"),
+                                     ("sink-inputs", EC_SINK, spk, "move-sink-input")):
+            idx = _index_of("sources" if kind == "source-outputs" else "sinks", ours)
+            if not idx or not to:
+                continue
+            for ln in _pactl("list", "short", kind).splitlines():
+                parts = ln.split("\t")
+                if len(parts) > 1 and parts[1] == idx:
+                    _pactl(move, parts[0], to)
+    except Exception as e:  # noqa: BLE001 - never block the unload
+        log.warning("device sound: could not move streams off the canceller: %s", e)
+
+
 def cancel_off() -> None:
     """Remove the canceller and give the real speaker/mic back. Nothing of ours loaded: the defaults are NOT touched
     (startup used to set the speaker saved long ago as the default, over the Bluetooth speaker in use)."""
@@ -253,6 +281,7 @@ def cancel_off() -> None:
             return
         saved = _load_saved()
         _give_volume(saved.get("sink"))  # the speaker gets the volume the owner set while KURAMA listened
+        _move_streams_off(saved)  # a call using our mic / speaker keeps going on the real ones
         for mid in mods:
             _pactl("unload-module", mid)
         sinks, sources = _names("sinks"), _names("sources")

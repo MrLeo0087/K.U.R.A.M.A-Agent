@@ -39,7 +39,7 @@ TABLE = {
     "dnd": Act("do_not_disturb", lambda a: {"action": onoff(a.get("value"))}),
     "wallpaper": Act("set_wallpaper", lambda a: {"mode": "set", "image": a["value"]} if a.get("value") not in (None, "next", "random", "current")
                      else {"mode": a.get("value", "next")}),
-    "screenshot": Act("screenshot", lambda a: {"mode": a.get("value", "full")}),
+    "screenshot": Act("screenshot", lambda a: _shot(a.get("value", ""))),
     "screen_off": Act("laptop_toggle", lambda a: {"setting": "screen", "state": "off"}),
     "battery": Act("battery_status"),
     "health": Act("laptop_doctor", lambda a: {"action": "check"}),
@@ -59,6 +59,15 @@ TABLE = {
 }
 
 
+def _shot(value: str) -> dict:
+    """'full' / 'window' / 'area', or a folder to save it in ('Downloads/trip'), or 'window in Downloads/trip'."""
+    v = (value or "").strip()
+    m = re.fullmatch(r"(full|window|area)(?:\s+(?:in|into|to)\s+(?P<f>.+))?", v, re.I)
+    if m:
+        return {"mode": m.group(1).lower(), **({"folder": m.group("f").strip()} if m.group("f") else {})}
+    return {"mode": "full", "folder": v} if v else {"mode": "full"}
+
+
 @tool(group="core", safety="safe",
       description="Laptop settings and health: volume, brightness, wifi, bluetooth, airplane, power mode, night light, "
                   "theme, do-not-disturb, wallpaper, screenshot, screen off, battery, health (RAM/CPU/top apps), free RAM (clean / optimize RAM: top RAM+CPU apps), "
@@ -75,6 +84,6 @@ def laptop(action: Literal["volume", "brightness", "wifi", "bluetooth", "airplan
         action: What to change or check.
         value: volume/brightness: up, down, +10, 40, mute, get; wifi/bluetooth/airplane/night_light/dnd: on, off,
             status; power_mode: saver, balanced, performance; theme: light, dark; wallpaper: next, random or an image
-            path; screenshot: full, window, area; internet: check, speed, fix_dns; clean_disk: scan, clean; focus: minutes.
+            path; screenshot: full, window, area, or the folder to save it in ('Downloads/trip'); internet: check, speed, fix_dns; clean_disk: scan, clean; focus: minutes.
     """
     return run(TABLE, {"action": action, "value": value})

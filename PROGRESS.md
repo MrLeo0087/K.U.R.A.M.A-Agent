@@ -1131,3 +1131,17 @@ Phases (one at a time, owner tests after each):
       few ('make a python script ...' -> the file organizer) -> examples for both (+7 scorecard cases; 'write a c
       program ...' still misses, kept as an honest case). docs/LEARNING.md section 18: the owner's routine.
       Suite 1698; scorecard 72% / 100% / 98% (isolated).
+- [x] 2026-11-04 00:00 Multi-step + camera/mic + replies (owner: "only one task does", "can't use camera and
+      microphone in a Facebook call", "the reply are weird"). Multi-step, from 10 different requests run end to end
+      (real planner + AI, fake tools): a "for later?" check by meaning sent almost every multi-step request to the AI
+      as ONE task (now only when the words ask for later); "task complete ... command.md file" was taken as
+      'complete the code in the file'; one_tool ignored parts no shortcut knows ('send both to telegram' sent "both");
+      'that' as a joining word was a back-pointer; a failed step skipped unrelated ones (links are now soft unless a
+      step points back or names what the other made); 'when it finishes' merged into its timer in every plan (and
+      'saying X' is the phone message); text-only calls with tool history got Groq 400s (now plain notes); search X
+      on YouTube and Google = one search per site; folders 'on the desktop'; screenshot into a folder; biggest /
+      newest files. Replies: 3+ steps = a checklist (done / working / failed + why, written content kept); action logs
+      read naturally ('Done — KURAMA is minimized.'). Camera: proven - gesture control (on at 22:24 and 22:25) held it
+      during the call; it now lets go while a call page / call app is open and takes it back after. Mic: apps using
+      KURAMA's echo-cancelled mic are moved to the real mic before it goes. Tests: test_multitask_1103.py (28) + 3
+      device tests; tests no longer read the real battery (27% -> 21% failed 4 tests); suite 1731; scorecard 72/100/98.

@@ -309,7 +309,9 @@ _FINDFILE = re.compile(
     r"(?:laptop|computer|pc|system|machine|disks?|drives?|storage|everywhere|anywhere))?\s*[.!?]*$", re.I)
 # things that are NOT a file search even though they start with find/search/where
 _NOT_FINDFILE = re.compile(r"^(?:my\s+)?(?:phone|mobile|iphone|android|laptop|computer|pc|it|this|that)$"
-                           r"|\b(?:news|weather|time|price|who|what\s+is|meaning|define|online|internet|web|song|video\s+of)\b", re.I)
+                           r"|\b(?:news|weather|time|price|who|what\s+is|meaning|define|online|internet|web|song|video\s+of)\b"
+                           # a size / age, not a name ('the biggest files in downloads': the AI sorts, find_files order)
+                           r"|\b(?:biggest|largest|smallest|heaviest|huge|newest|oldest|latest|most\s+recent|recently)\b", re.I)
 
 
 _FIND_SEND = re.compile(r"^(?P<find>.+?)\s+(?:and|then)\s+(?:also\s+)?(?:send|share|forward)\s+(?:it|this|that|them)?\s*"
@@ -400,6 +402,19 @@ def search_intent(t: str) -> Intent | None:
         return None
     from urllib.parse import quote_plus
 
+    # 'carry minati on youtube and google': the same words searched on EACH site (it searched Google for the whole
+    # 'carry minati on youtube and google', 11-03)
+    sites = r"(?:google|youtube|you\s*tube|wikipedia|wiki)"
+    if mm := re.fullmatch(rf"(?P<q>.+?)\s+(?:on|in|at)\s+(?:both\s+)?(?P<e>{sites}(?:\s*(?:,|and|&|or)\s*{sites})+)", q, I):
+        engs = []
+        for e in re.findall(sites, mm.group("e"), I):
+            e = "wikipedia" if e.lower() == "wiki" else re.sub(r"\s+", "", e.lower())
+            if e not in engs:
+                engs.append(e)
+        q2 = mm.group("q").strip(" ,")
+        urls = ", ".join(SEARCH_URLS[e].format(q=quote_plus(q2)) for e in engs)
+        names = ", ".join(SEARCH_NAMES[e] for e in engs[:-1]) + " and " + SEARCH_NAMES[engs[-1]]
+        return Intent("search", "apps", "browser", {"action": "open", "target": urls}, f"{names}|{q2}")
     url = SEARCH_URLS[eng].format(q=quote_plus(q))
     return Intent("search", "open_url", "browser", {"target": url}, f"{SEARCH_NAMES[eng]}|{q}")
 
@@ -3180,13 +3195,17 @@ def to_file_intent(text: str) -> Intent | None:
         from jarvis.tools.general.code_to_file import latest_code
         if context.editor_open() and latest_code().strip():  # the code KURAMA just wrote -> the open file (asks yes)
             return Intent("tofile", "code_to_file", "clipboard", {"request": ""})
-    if re.search(r"\b(?:complete|finish)\b", t, I) and re.search(r"\b[\w-]+\.(?:py|js|ts)\b|\b(?:code|function|file|"
-                                                                  r"class|method)\b", t, I) and len(t) < 300:
+    from jarvis.core.planner import split_clauses
+    parts = split_clauses(t)
+    if len(parts) <= 2 and any(re.search(r"^\W*(?:please\s+|can\s+you\s+|now\s+)?(?:complete|finish)\b", c, I)
+                               and re.search(r"\b[\w-]+\.(?:py|js|ts)\b|\b(?:code|function|file|class|method)\b", c, I)
+                               for c in parts) and len(t) < 300:  # 'complete this function' - never 'send a message
+        # that the task is complete ... search for command.md file' inside a 7-part request (11-03: it took all 7)
         from jarvis.core import context
         if not context.snapshot()["selection"] and context.editor_open():  # selected code: assist completes that
             return Intent("tofile", "code_to_file", "clipboard", {"request": t})
     bare = _VSCODE_NAME.sub(" ", t)  # the 'code' in 'VS Code' is the app's name, not a request for code
-    from jarvis.core.planner import split_clauses  # the ask and 'into the file' must be in ONE part: 'create a folder
+    # the ask and 'into the file' must be in ONE part: 'create a folder
     one = any(_CODE_ASK.search(_VSCODE_NAME.sub(" ", c)) and _INTO_FILE.search(c)  # X and OPEN it in vs code' is two
               for c in split_clauses(t))  # tasks, not code: the part saying 'into the file' must ask to write (11-01)
     if not (one and _CODE_ASK.search(bare) and _CODE_WORD.search(bare) and _INTO_FILE.search(t)):
@@ -3287,7 +3306,7 @@ def tg_message_text(raw: str) -> str | None:
     return msg
 
 
-_IN_PLACE = re.compile(r"\b(?:in|inside|into|under|at)\s+(?:the\s+|my\s+)?(?P<loc>[\w.-]+(?:\s+[\w.-]+){0,3}?)"
+_IN_PLACE = re.compile(r"\b(?:in|inside|into|under|at|on)\s+(?:the\s+|my\s+)?(?P<loc>[\w.-]+(?:\s+[\w.-]+){0,3}?)"
                        r"(?:\s+(?:folder|directory|dir))?(?=\s*(?:$|[,.!]|\b(?:and|then|named|name|called|with)\b))", I)
 
 
@@ -3593,7 +3612,9 @@ def meaning_intent(text: str) -> Intent | None:
         from jarvis.core import focus
         from jarvis.core.paths import smart_path
         here, said = None, raw
-        for m in _IN_PLACE.finditer(raw):  # "in download folder", "inside my documents": a REAL folder named
+        places = (m for st in re.finditer(r"\b(?:in|inside|into|under|at|on)\s", raw, I)  # every 'in / on ...' on its
+                  if (m := _IN_PLACE.match(raw, st.start())))  # own: 'called on hold in downloads' (overlapping)
+        for m in places:  # "in download folder", "inside my documents": a REAL folder named
             loc = m.group("loc").strip()
             if not focus.is_anaphora(loc) and (p := smart_path(loc, want="dir")) is not None:
                 here, said = p, raw[:m.start()] + " " + raw[m.end():]
@@ -4003,6 +4024,29 @@ def _say(key: str, lang: str, x: str) -> str:
     return (random.choice(v) if isinstance(v, tuple) else v).format(x=x)  # a few wordings: less robotic
 
 
+_ACTION_LOG = re.compile(r"^(?P<v>minimized|maximized|restored|closed|focused|snapped|opened|moved|copied|renamed|"
+                         r"locked|muted|unmuted|paused|resumed|stopped)\s+(?P<x>.{1,80}?)(?P<rest>\s+to\s+the\s+(?:left|right)\s+half)?[.!]?$",
+                         re.I)
+_NATURAL = {"minimized": "{x} is minimized", "maximized": "{x} is maximized", "restored": "{x} is back on screen",
+            "focused": "{x} is in front now", "opened": "{x} is open", "paused": "{x} is paused",
+            "muted": "{x} is muted", "unmuted": "{x} is unmuted", "locked": "{x} is locked"}
+
+
+def natural(text: str, lang: str = "en") -> str:
+    """A tool's short action log ('minimized KURAMA', 'snapped VS Code to the left half') as a sentence a person
+    would say ('Done — KURAMA is minimized.'). Anything else is returned as it is (owner 11-03: "the reply are weird
+    ... it have to give a real kind of reply")."""
+    t = (text or "").strip()
+    m = _ACTION_LOG.match(t) if lang == "en" and "\n" not in t else None
+    if not m:
+        return t
+    v, x, rest = m.group("v").lower(), m.group("x").strip(), (m.group("rest") or "").strip()
+    if v == "snapped" and rest:
+        return f"Done — {x} is on the {rest.split()[-2]} half."
+    said = _NATURAL.get(v, f"I {v} {{x}}").format(x=x)
+    return f"Done — {said}."
+
+
 def render(intent: Intent, ok: bool, output: str, lang: str) -> str:
     if intent.name in ("say", "cached"):
         return intent.args.get(lang) or intent.args["en"]
@@ -4083,7 +4127,7 @@ def render(intent: Intent, ok: bool, output: str, lang: str) -> str:
         return f"Yes, I can help with {intent.label}. These of my tools fit: {', '.join(lines[:4])}. Shall I start?"
     if intent.name == "listdir":
         return _render_listdir(intent, out)
-    return out  # weather / recall / digest / tokens / session: the tool output is already text
+    return natural(out, lang) if ok else out  # weather / recall / digest...: the tool output is already text
 
 
 def _render_listdir(intent: Intent, out: str) -> str:
@@ -4388,7 +4432,11 @@ def _control_intent(t: str) -> Intent | None:
     t2 = _PHONE_TAIL.sub("", t)  # "set a timer for 40 seconds and when it's done message me on Telegram"
     for rx in _TIMER:
         if (m := rx.match(t2)) and (args := _amount(m)):
-            return Intent("control", "set_timer", "clock", {**args, "phone": True} if t2 != t else args)
+            if t2 == t:
+                return Intent("control", "set_timer", "clock", args)
+            said = re.search(r"\b(?:saying|that\s+says|which\s+says|with\s+the\s+(?:text|words?))\s+[\"']?(?P<x>.+?)[\"'.!]*$",
+                             t[len(t2):], I)  # 'send me a telegram message saying break time': the message it sends
+            return Intent("control", "set_timer", "clock", {**args, "phone": True, **({"label": said.group("x")} if said else {})})
     if m := _ALARM.match(t):
         w = (m.group("w") or m.group("w2") or m.group("w3")).strip(" .")
         return Intent("control", "set_alarm", "clock", {"when": w if not t.lower().startswith("wake me up in") else f"in {w}"})

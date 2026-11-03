@@ -59,6 +59,7 @@ class FakePactl:
     def __init__(self, sinks, default):
         self.sinks, self.default, self.loaded, self.calls = list(sinks), default, None, []
         self.vol, self.mute = {}, {}
+        self.recording = {}  # source-output id -> the source index / name it records from
 
     def __call__(self, *args, timeout=5):
         self.calls.append(args)
@@ -67,6 +68,12 @@ class FakePactl:
             return "".join(f"{i}\t{n}\tPipeWire\n" for i, n in enumerate(self.sinks + ([devaudio.EC_SINK] if self.loaded else [])))
         if a[:2] == ("list", "short") and a[2] == "sources":
             return f"1\t{MIC}\n" + (f"2\t{devaudio.EC_SOURCE}\n" if self.loaded else "")
+        if a[:2] == ("list", "short") and a[2] == "source-outputs":
+            return "".join(f"{i}\t{src}\tp\n" for i, src in self.recording.items())
+        if a[:2] == ("list", "short") and a[2] == "sink-inputs":
+            return ""
+        if a[0] == "move-source-output":
+            self.recording[a[1]] = a[2]
         if a[:2] == ("list", "short") and a[2] == "modules":
             return f"7\tmodule-echo-cancel\tsink_name={devaudio.EC_SINK} sink_master={self.loaded}\n" if self.loaded else ""
         if a == ("list", "sinks"):
@@ -182,3 +189,13 @@ def test_re_aiming_gives_the_old_speaker_its_volume_back(pa):
     fake.vol[BT] = 40
     devaudio._follow(BT)
     assert fake.vol[SPK] == 70 and fake.vol[devaudio.EC_SINK] == 40 and fake.vol[BT] == 100
+
+
+
+def test_a_call_using_kuramas_mic_keeps_going_when_the_filter_goes(pa):
+    """A Facebook call started while KURAMA listened records from KURAMA's mic: it is moved to the real mic first."""
+    fake = pa([SPK], SPK)
+    devaudio.cancel_on()
+    fake.recording["77"] = "2"  # the call's stream on our mic (index 2 = kurama_ec_source)
+    devaudio.cancel_off()
+    assert fake.recording["77"] == MIC and fake.loaded is None

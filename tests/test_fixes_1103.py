@@ -1,6 +1,7 @@
 """11-03 owner session: 'open browser' opened Firefox (Brave is the default, and the owner said so); a song's title
 alone went to the AI / web search; music started quiet and could stay ducked; Alt sometimes did nothing."""
 import json
+import re
 
 import pytest
 
@@ -206,3 +207,25 @@ def test_the_laptops_own_volume_even_while_kuramas_music_plays(monkeypatch, said
 def test_plain_volume_is_the_musics_while_it_plays(monkeypatch):
     monkeypatch.setattr(music, "running", lambda: True)
     assert fastpath._match("increase the volume").tool == "music"
+
+
+@pytest.mark.parametrize("said,sites,q", [
+    ("search for carry minati on youtube and google", ["youtube.com/results?search_query=carry+minati",
+                                                       "google.com/search?q=carry+minati"], "carry minati"),
+    ("Search for Kari Minati in YouTube and Google.", ["youtube.com", "google.com"], "Kari Minati"),
+    ("search rock and roll on google and youtube", ["google.com/search?q=rock+and+roll",
+                                                    "youtube.com/results?search_query=rock+and+roll"], "rock and roll")])
+def test_one_search_on_each_site(said, sites, q):
+    from jarvis.tools.core import apps as apps_tool
+    it = fastpath._match(said)
+    urls = re.split(r",|\s+and\s+", it.args["target"])
+    assert it.tool == "apps" and len(urls) == len(sites) and all(s in u for s, u in zip(sites, urls))
+    opened = []
+    import jarvis.tools.core.apps as A
+    orig = A.run
+    A.run = lambda table, a: opened.append(a["target"]) or "ok"
+    try:
+        apps_tool.apps("open", it.args["target"])
+    finally:
+        A.run = orig
+    assert len(opened) == len(sites) and all(s in o for s, o in zip(sites, opened))

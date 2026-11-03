@@ -120,8 +120,10 @@ def settle(tasks: list[dict], done: dict[int, dict]) -> dict[int, dict]:
         if i in out:
             continue
         needs = [out[n] for n in t.get("depends_on", []) if n in out]
-        bad = next((n for n in needs if n["status"] in ("failed", "skipped")), None)
-        wait = next((n for n in needs if n["status"] in ("waiting", "after")), None)
+        bad = next((n for n in needs if n["status"] in ("failed", "skipped") and n["idx"] not in set(t.get("soft") or ())),
+                   None)  # a soft link (order only) never skips it
+        wait = next((n for n in needs if n["status"] in ("waiting", "after") and n["idx"] not in set(t.get("soft") or ())),
+                    None)
         if bad is not None:
             out[i] = {"idx": i, "text": t["text"], "status": "skipped",
                       "answer": SKIPPED.format(text=t["text"], need=bad["text"]), "things": []}

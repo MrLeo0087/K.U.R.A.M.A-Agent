@@ -1,6 +1,8 @@
 """find_files: find files by name (fdfind) or by content (rg) under a folder, compactly (safe)."""
 from __future__ import annotations
 
+import time
+
 import shutil
 from typing import Literal
 
@@ -95,17 +97,59 @@ def _clean(line: str) -> str:
     return line if len(line) <= LINE_CHARS else line[: LINE_CHARS - 3] + "..."
 
 
-@tool(group="filesearch", safety="safe", description="Find files or folders by name, or text inside files, anywhere on this laptop (home + all disks).")
+def _size(n: float) -> str:
+    for unit in ("B", "KB", "MB", "GB"):
+        if n < 1024 or unit == "GB":
+            return f"{n:.0f} {unit}" if unit in ("B", "KB") else f"{n:.1f} {unit}"
+        n /= 1024
+    return f"{n:.1f} GB"
+
+
+def _ranked(query: str, path: str, limit: int, order: str) -> str:
+    """The biggest / newest files under a folder ('find the biggest files in my downloads' searched for a file
+    NAMED 'biggest files', 11-03)."""
+    import fnmatch
+    import os
+    base = _proc.resolve_dir(path) if (path or "").strip() else os.path.expanduser("~")
+    pat = query if any(c in query for c in "*?[") else f"*{query}*"
+    rows, seen, t0 = [], 0, time.monotonic()
+    for root, dirs, files in os.walk(base):
+        dirs[:] = [d for d in dirs if not d.startswith(".") and d not in ("node_modules", "__pycache__", "venv", ".venv")]
+        for f in files:
+            if f.startswith(".") or not fnmatch.fnmatch(f.lower(), pat.lower()):
+                continue
+            fp = os.path.join(root, f)
+            try:
+                st = os.stat(fp)
+            except OSError:
+                continue
+            rows.append((st.st_size if order == "biggest" else st.st_mtime, st.st_size, fp))
+            seen += 1
+        if time.monotonic() - t0 > TIMEOUT:
+            break
+    if not rows:
+        return f"No files like {query!r} under {base}."
+    rows.sort(reverse=True)
+    what = "biggest" if order == "biggest" else "newest"
+    lines = [f"{i}. {_clean(fp)} ({_size(sz)})" for i, (_, sz, fp) in enumerate(rows[:limit], 1)]
+    return "\n".join([f"The {what} {min(limit, len(rows))} of {seen} files under {base}:", *lines])
+
+
+@tool(group="filesearch", safety="safe", description="Find files or folders by name, or text inside files, anywhere on this laptop (home + all disks); or the biggest / newest files in a folder.")
 def find_files(query: str, path: str = "", kind: Literal["any", "name", "folder", "content"] = "any",
-               limit: int = 20) -> str:
+               limit: int = 20, order: Literal["name", "biggest", "newest"] = "name") -> str:
     """Search files or folders. Without a path it searches the whole laptop: home and every mounted disk.
 
     Args:
         query: File/folder name, part of it or a glob (*.py) for name/folder; text to look for when kind=content.
+            '*' = every file (with order: 'the biggest files in downloads').
         path: Folder to search; loose names work ("project1 then tara"). Empty = whole laptop.
         kind: any (files AND folders, the default), name (files), folder, or content (text inside files).
         limit: Max results (max 50).
+        order: name (default); biggest = largest files first, with sizes; newest = most recently changed first.
     """
+    if order in ("biggest", "newest") and kind != "content":
+        return _ranked(query or "*", path, max(1, min(int(limit or 10), 50)), order)
     query = (query or "").strip()
     if not query:
         return "error: give something to search for"

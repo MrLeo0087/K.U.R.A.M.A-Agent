@@ -240,7 +240,9 @@ class Agent:
         sends = []
         for i, t in enumerate(tasks):
             needs = [n for n in t.get("depends_on", []) if 0 <= n < len(tasks)]
-            if i in done or not all(n in done and done[n]["status"] == "ok" for n in needs):
+            soft = set(t.get("soft") or ())  # order only: runs once they ended, whatever their result
+            if i in done or not all(n in done and (done[n]["status"] == "ok" or (n in soft and done[n]["status"] in (
+                    "failed", "skipped", "waiting", "after"))) for n in needs):
                 continue
             sends.append(Send("step", {**base, "step": {**t, "idx": i}, "inputs": [done[n] for n in needs]}))
         return sends or "finish"
@@ -309,9 +311,11 @@ class Agent:
         if config.LEARN_SILENT and (self.last.get("plan") or {}).get("method") == "llm" and all(
                 r["status"] in ("ok", "waiting", "after") for r in final.values()):  # else only on the owner's 👍
             taskgraph.learn_plan(state["user_text"], planner.parts(state["user_text"]), tasks)  # (recipes.feedback)
+        self.last.setdefault("route", router.Route([], "graph", False, 0))
+        if len(final) >= 3 and state.get("mode", "text") == "text":  # a checklist reads better than glued tool output
+            return {"answer": checklist(tasks, final)}
         said = fastpath.merge_opens([_sentence(final[i]["answer"]) for i in sorted(final)
                                      if final[i].get("answer") and not final[i].get("long")])
-        self.last.setdefault("route", router.Route([], "graph", False, 0))
         started = [final[i]["answer"] for i in sorted(final) if final[i].get("long")]  # "Writing X (job #4)" last
         return {"answer": " ".join(said + started).strip() or NO_ANSWER}
 
@@ -711,8 +715,8 @@ class Agent:
             if str(args.get("action") or "") in config.DIRECT_REPLY_STEPS.get(tool_name, ()):
                 return ""  # a step of something bigger ('switch to Brave' before 'open a new tab'): the AI goes on
             intent = config.DIRECT_REPLY_TOOLS[tool_name]
-            if intent == "said":  # the tool's own sentence
-                said.append(text[:1].upper() + text[1:])
+            if intent == "said":  # the tool's own sentence, said the way a person would ('Done — KURAMA is minimized.')
+                said.append(fastpath.natural(text[:1].upper() + text[1:], lang))
                 continue
             if intent == "audio":  # one tool, three kinds of reply
                 intent = "mic" if args.get("target") == "mic" else (
@@ -1196,6 +1200,43 @@ def _about_context(text: str) -> bool:
         return True
     sc = dict(semantic.scores(text))
     return bool(sc) and sc.get("clipboard", 0.0) >= max(sc.values()) - config.CONTEXT_TOOL_MARGIN
+
+
+_RESULT_LIKE = re.compile(r"\d|:\s*\S|°|%")  # a step's answer worth showing (weather, time, a file found)
+_BORING = re.compile(r"^(?:sure,?\s+|ok(?:ay)?,?\s+)?(?:opening|opened|done|sent|saved|created|playing)\b", re.I)
+
+
+def checklist(tasks: list[dict], final: dict) -> str:
+    """'All 4 done.' + one line per task in the owner's own words: ✓ done (with its result when it has one), ⏳ still
+    working (a job), ✗ failed / skipped (and why). The steps' raw tool sentences glued together read like a log
+    ("Found 1: /home/... Sent the file to Telegram."), 11-03."""
+    n, ok, waiting, lines = len(final), 0, 0, []
+    for i in sorted(final):
+        r, task = final[i], tasks[i]["text"].strip().rstrip(".")
+        task = task[:1].upper() + task[1:]
+        ans = " ".join(str(r.get("answer") or "").split())
+        first = re.split(r"(?<=[.!?])\s+", ans, maxsplit=1)[0] if ans else ""
+        if r["status"] == "ok":
+            ok += 1
+            if ans and not _BORING.match(ans) and len(ans) > 140:  # something it WROTE (a poem, a summary): shown
+                lines.append(f"✓ {task}:\n{ans}")
+            else:
+                detail = ans if ans and not _BORING.match(ans) and (_RESULT_LIKE.search(ans) or len(ans) > 40) else ""
+                lines.append(f"✓ {task}" + (f" — {detail}" if detail else ""))
+        elif r["status"] in ("waiting", "after"):
+            waiting += 1
+            job = r.get("job")
+            if r["status"] == "after" and ans:  # "I'll ... as soon as job #4 is finished (follow-up job #5)"
+                lines.append(f"⏳ {task} — {ans}")
+            else:
+                lines.append(f"⏳ {task}" + (f" (job #{job}, I'll tell you when it's done)" if job else ""))
+        else:
+            why = first if first else "it didn't work"
+            lines.append(f"✗ {task} — {why}")
+    failed = n - ok - waiting
+    head = ("All done." if ok == n else f"{ok} of {n} done" + (f", {waiting} still working" if waiting else "")
+            + (f", {failed} didn't work" if failed else "") + ".")
+    return head + "\n" + "\n".join(lines)
 
 
 def _sentence(text: str) -> str:
