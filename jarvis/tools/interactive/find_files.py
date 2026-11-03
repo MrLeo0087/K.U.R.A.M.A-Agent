@@ -182,7 +182,8 @@ def find_files(query: str, path: str = "", kind: Literal["any", "name", "folder"
             from jarvis.core import focus
             focus.set_path(found[0])
         head = f"{len(found)}{'+' if len(found) == limit else ''} {what} named like {query!r}{fuzzy}{partial}:"
-        return "\n".join([head, *(_clean(f) for f in found)])
+        return "\n".join([head, *(f"{i}. {_clean(f)}" for i, f in enumerate(found, 1))])  # numbered: 'open 4'
+        # ('open that 4 number folder' after a search re-searched and opened another one, 11-04)
     argv = content_argv(query, limit)
     out, partial = "", ""
     for b in bases:

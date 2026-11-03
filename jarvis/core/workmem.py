@@ -297,8 +297,9 @@ def choose(text: str) -> tuple[str, dict] | None:
         return None
     from jarvis.core import links
     opts = c["options"]
-    pos = links.position(re.sub(r"\b(?:send|open|use|take|pick|choose|select|it|copy|file|folder|please)\b", " ",
-                                t, flags=re.I))
+    pos = links.position(re.sub(r"\b(?:send|open|oprn|opne|use|take|pick|choose|select|it|copy|file|folder|please|"
+                                r"number|no|num|go|to|now|that|this|the|one|in|vs\s*code|file\s*manager)\b", " ",
+                                t, flags=re.I))  # '4 number folder' / 'go to 5 number folder' (11-04)
     pick = None
     if pos is not None and (1 <= pos <= len(opts) or pos == -1):
         pick = opts[pos - 1] if pos > 0 else opts[-1]

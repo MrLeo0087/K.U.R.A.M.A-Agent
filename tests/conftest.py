@@ -80,6 +80,7 @@ def tmp_store(tmp_path, monkeypatch):
     recipes.reset_cache()  # learned shortcuts are read again from this test's own data folder
     from jarvis.core import style
     style._dropped.clear()  # a rule forgotten in one test is not "just dropped" in the next
+    monkeypatch.setattr(config, "APP_VERIFY", False)  # never look at the real screen's windows (test_multitask_1103 on)
     import psutil
     monkeypatch.setattr(psutil, "sensors_battery", lambda: None)  # never the real battery (a test sets its own):
     # at 21% every training watch raised "Battery low" in tests (11-03)

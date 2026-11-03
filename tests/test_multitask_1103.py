@@ -1,5 +1,7 @@
 """11-03 night: 'open browser and send ... and generate an image ... and search for command.md and send it' did only
 the first part. Each class found while running 10 different multi-step requests end to end."""
+import re
+
 import pytest
 
 from jarvis.core import fastpath, planner
@@ -182,3 +184,66 @@ def test_the_follow_up_waits_for_all_its_jobs(monkeypatch, tmp_path):
     monkeypatch.setattr("jarvis.core.writer.output_path", lambda title: tmp_path / "out.md")
     agent.after_job(Ctx(), {"wait": [7, 8], "tasks": ["send image and poem to my telegram"]})
     assert "hill.png" in seen[0] and "poem.md" in seen[0] and "Himalaya sings" in seen[0]
+
+
+# ---- 11-04 01:00 session: opening apps / folders, numbered picks, new apps from one sentence ----
+def test_open_app_brings_a_hidden_window_to_the_front_and_learns_what_works(monkeypatch):
+    from jarvis.core import config, store
+    monkeypatch.setattr(config, "APP_VERIFY", True)
+    from jarvis.tools.general import _apps
+    e = {"id": "com.microsoft.VSCode", "path": "/x.desktop", "name": "Visual Studio Code", "wmclass": "com.microsoft.VSCode",
+         "exe": "code"}
+    acted = []
+    monkeypatch.setattr(_apps, "wmctrl", lambda args: acted.append(args))
+    monkeypatch.setattr(_apps, "list_windows", lambda: [{"id": "0x1", "wmclass": "code.Code", "title": "x"}])
+    assert _apps.open_verified(e) == (True, "front") and acted == [["-i", "-a", "0x1"]]
+    wins = []  # not running: the first way shows no window, the second does -> remembered for next time
+    monkeypatch.setattr(_apps, "list_windows", lambda: list(wins))
+    tried = []
+
+    def launch(m, entry):
+        tried.append(m)
+        if m == "gio":
+            wins.append({"id": "0x2", "wmclass": "code.Code", "title": "x"})
+        return True
+    monkeypatch.setattr(_apps, "_launch_by", launch)
+    t = [0.0]
+    monkeypatch.setattr(_apps.time, "monotonic", lambda: t.__setitem__(0, t[0] + 1) or t[0])
+    assert _apps.open_verified(e, wait_s=3, sleep=lambda s: None) == (True, "gio")
+    assert tried == ["gtk", "gio"] and store.kv_get("app_launch:com.microsoft.VSCode") == "gio"
+    tried.clear(); wins.clear()
+    _apps.open_verified(e, wait_s=3, sleep=lambda s: None)
+    assert tried[0] == "gio"  # the way that worked is tried first
+
+
+def test_filemanager_one_word_and_folders_open_in_the_file_manager():
+    from jarvis.tools.core import files
+    from jarvis.tools.core._hub import resolve
+    from jarvis.tools.general import _apps
+    assert "files" in _apps.ALIASES["filemanager"]
+    assert resolve(files.TABLE, {"action": "open", "path": "/tmp"}) == ("open_path", {"path": "/tmp", "app": "files"})
+
+
+@pytest.mark.parametrize("said", ["i want you to create simple calculator app in this fodler", "build a flask todo app",
+                                  "make a snake game in python", "create a react todo app"])
+def test_a_new_app_from_one_sentence_goes_to_the_project_builder(said):
+    it = fastpath.new_project_intent(said)
+    assert it.tool == "coding" and it.args["action"] == "project"
+
+
+@pytest.mark.parametrize("said", ["create a new folder called test in downloads", "open the app", "make an image of a cat",
+                                  "make a diagram of this project", "set up the environment for a python project"])
+def test_not_a_new_app(said):
+    assert fastpath.new_project_intent(said) is None
+
+
+def test_no_duplicate_steps_when_the_planner_rewords():
+    t = "now create a .py file in here and write a simple calculator code in there thne run it"
+    tasks = [{"text": "create a .py file in this environment"}, {"text": "write a simple calculator code in the file"},
+             {"text": "run the calculator script"}]
+    assert len(planner.cover(t, tasks)) == 3
+
+
+def test_numbered_search_results_and_n_number_picks():
+    from jarvis.core import links
+    assert links.position(re.sub(r"\b(?:open|number|go|to|that|folder)\b", " ", "go to 5 number folder")) == 5

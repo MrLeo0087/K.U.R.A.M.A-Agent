@@ -493,12 +493,16 @@ def _rule_tasks(text: str) -> list[dict]:
     return [{"text": t, "kind": _kind(t)} for t in out]  # (the cap and its note: plan())
 
 
+_FILLER_WORDS = frozenset("""want you the and my now here there then thne than just also please again want need can
+could would okay its""".split())  # 'now create a .py file in here' = the plan's 'create a .py file' (11-04 duplicates)
+
+
 def _covers(task: str, part: str) -> bool:
-    words = {w for w in re.findall(r"[a-z0-9]{3,}", part.lower())} - _THING_STOP - {"want", "you", "the", "and", "my"}
+    words = {w for w in re.findall(r"[a-z0-9]{3,}", part.lower())} - _THING_STOP - _FILLER_WORDS
     if not words:
         return True
     have = {w for w in re.findall(r"[a-z0-9]{3,}", task.lower())}
-    return len(words & have) / len(words) >= 0.6
+    return len(words & have) / len(words) >= 0.5
 
 
 def cover(text: str, tasks: list[dict]) -> list[dict]:

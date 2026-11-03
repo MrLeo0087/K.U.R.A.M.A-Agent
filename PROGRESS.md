@@ -1153,3 +1153,16 @@ Phases (one at a time, owner tests after each):
       thinks first) -> 1200, plus planner.cover adds back any command part the plan left out, the cap is 15 and
       anything over it is named in the reply. End-to-end re-run (fake tools): all 10 parts done, image + poem sent
       after the poem job. Tests +6; suite 1738; scorecard 73% / 100% / 98%.
+- [x] 2026-11-04 01:20 Traces 00:47-01:00 (owner: "open in vs code / file manager doesn't work, can't even make a
+      folder or file in code mode, it should try a different way next time"). open_app said "opened" while VS Code
+      stayed hidden behind Brave (it was already running) -> _apps.open_verified: an open window is brought to the
+      front; else launch and CHECK a window appears, next way when not (gtk-launch, gio, the program), the way that
+      worked is tried first next time (kv app_launch:<id>), an honest error when none works. 'filemanager' (one
+      word) matched no app -> alias. Folders opened in VS Code by default -> file manager unless VS Code is asked.
+      'open 4 number folder' after a search re-searched -> find_files results are numbered (a choice) and 'N number'
+      picks. 'then open that folder in vs code' opened the folder from before -> make_folder sets it as 'that folder'.
+      'create simple calculator app in this fodler' became a writing job (.md) -> the project builder (plan + code
+      files + .venv, opened in VS Code) for 'create / build / make a ... app / project / game / bot / website',
+      coding mode on or off; 'this fodler' = this folder. 'when I say just open ...' had been saved as words for
+      'just' (removed; such words refused). Duplicate steps when the planner reworded (cover ignores filler words).
+      Tests +12; suite 1751.

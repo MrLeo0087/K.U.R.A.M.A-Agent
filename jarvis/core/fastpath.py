@@ -3087,7 +3087,8 @@ def ocr_intent(t: str) -> Intent | None:
     return Intent("ocr", "read_text", "screen", {"source": "area"})  # the owner wants to drag a box first
 
 
-_NO_GATE = {"unlock", "error", "study", "say", "slash", "assist", "agent", "coding", "appname", "mywords", "stylerule"}  # exact answers / commands, not guesses
+_NO_GATE = {"unlock", "error", "study", "say", "slash", "assist", "agent", "coding", "appname", "mywords", "stylerule",
+            "newproject"}  # exact answers / commands, not guesses
 
 
 def meaning_ok(text: str, it: Intent) -> bool:
@@ -3346,7 +3347,7 @@ def match(text: str) -> Intent | None:
         return Intent("choice", tool, registry_group(tool), args)
     if (played := player_intent(text)) is not None:  # 'pause' / 'continue' while KURAMA's music is on
         return played
-    it = app_name_intent(text) or style_intent(text) or agent_intent(text) or agent_coding_intent(text) or link_play_intent(text) or clean_intent(text) \
+    it = app_name_intent(text) or style_intent(text) or new_project_intent(text) or agent_intent(text) or agent_coding_intent(text) or link_play_intent(text) or clean_intent(text) \
         or shutdown_later_intent(text) or to_file_intent(text) or selection_intent(text) \
         or _code_not_file(_match(text)) or daily_intent(text)
     if it is not None and it.tool == "read_later" and semantic_ensure():  # "add a job for later: write a poem" is
@@ -3553,6 +3554,27 @@ def style_intent(text: str) -> Intent | None:
     if not best or best[0] != "style" or best[1] < config.STYLE_MIN:
         return None
     return Intent("stylerule", "app_name", "apps", {"action": "rule", "command": text})
+
+
+_NEW_PROJECT = re.compile(r"^\W*(?:(?:ok(?:ay)?|please|now|i\s+want\s+(?:you\s+)?to|can\s+you|could\s+you)[\s,]+)*"
+                          r"(?:create|build|make|develop|code|write|generate|set\s*up|start)\s+(?:me\s+)?(?:a\s+|an\s+|the\s+)?"
+                          r"(?:new\s+|simple\s+|small\s+|basic\s+|full\s+|complete\s+)*[\w+#.\s-]{0,40}?"
+                          r"\b(?:app|application|project|program|website|web\s*app|game|bot|api|cli|tool)\b", I)
+
+
+def new_project_intent(text: str) -> Intent | None:
+    """'create simple calculator app in this folder' / 'build a flask todo app' / 'make a snake game in python': the
+    project builder (plan + code files + .venv, opened in VS Code), with or without coding mode on. It went to the
+    writer as an essay-like job (an .md, no files) when coding mode was off (11-04)."""
+    t = " ".join((text or "").split())
+    if len(t) > 220 or not _NEW_PROJECT.match(t) or re.search(r"\b(?:folder|directory)\s+(?:called|named)\b", t, I):
+        return None
+    if re.search(r"\b(?:diagram|chart|graph|image|picture|video|report|summary|readme|plan|presentation|ppt|slides?|doc|"
+                 r"docs|documentation|essay|notes?|environment|venv|virtualenv|backup|list|review)\b", t, I):
+        return None  # 'make a diagram of this project', 'set up the environment for a python project': not a new app
+    if re.search(r"\b(?:open|close|launch|install|uninstall|update)\s+(?:the\s+)?app\b", t, I):
+        return None  # an app on the laptop, not a new program
+    return Intent("newproject", "coding", "coding_agent", {"action": "project", "request": t})
 
 
 def app_name_intent(text: str) -> Intent | None:

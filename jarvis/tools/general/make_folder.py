@@ -24,4 +24,9 @@ def make_folder(path: str) -> str:
         return f"error: couldn't create {p}: {e.strerror or e}"
     from jarvis.core import focus
     focus.set_path(str(p))  # follow-ups ('open it', 'send it') refer to it
+    try:  # the new folder is "that folder / here" for the next request or step ('then open that folder in vs code'
+        from jarvis.core import focus  # opened the folder from before, 11-04)
+        focus.set_path(str(p))
+    except Exception:  # noqa: BLE001
+        pass
     return f"Created folder {p}"

@@ -29,7 +29,8 @@ ALIASES: dict[str, list[str]] = {}
 for _spoken, _targets in {
     ("vs code", "vscode", "visual studio", "visual studio code", "code editor", "vs", "bs code", "code"): ["visual studio code", "vscode", "code"],
     ("settings", "system settings", "control center", "control panel", "setting"): ["settings"],
-    ("files", "file manager", "file explorer", "explorer", "nautilus", "my files"): ["files", "nautilus"],
+    ("files", "file manager", "filemanager", "file-manager", "file explorer", "fileexplorer", "explorer", "nautilus",
+     "my files", "file app"): ["files", "nautilus"],
     ("terminal", "console", "command line", "shell", "command prompt"): ["terminal", "console", "ptyxis"],
     ("chrome", "google chrome"): ["google chrome", "chromium", "chrome"],
     ("calculator", "calc"): ["calculator"],
@@ -214,6 +215,78 @@ def find_app(name: str, apps: list[dict] | None = None) -> tuple[dict | None, in
             if s > best_score or (s == best_score and best and len(e["name"]) < len(best["name"])):
                 best, best_score = e, s
     return (best, max(best_score, 0)) if best_score > 0 else (None, 0)
+
+
+def windows_of(entry: dict, windows: list[dict] | None = None) -> list[dict]:
+    """The app's open windows (by window class: 'code.Code' is VS Code)."""
+    terms = {t for t in (compact(entry["name"]), compact(entry["id"].rsplit(".", 1)[-1]), compact(entry["wmclass"]),
+                         compact(entry["exe"])) if len(t) >= 3}
+    try:
+        windows = list_windows() if windows is None else windows
+    except Exception:  # noqa: BLE001 - no wmctrl: can't check
+        return []
+    return [w for w in windows if any(t in compact(w["wmclass"]) for t in terms)]
+
+
+METHODS = ("gtk", "gio", "exe")
+
+
+def _launch_by(method: str, entry: dict) -> bool:
+    if method == "gtk" and (gtk := shutil.which("gtk-launch")):
+        p = subprocess.Popen([gtk, entry["id"]], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL, start_new_session=True)
+        try:
+            return p.wait(timeout=3) == 0
+        except subprocess.TimeoutExpired:
+            return True
+    if method == "gio" and (gio := shutil.which("gio")):
+        subprocess.Popen([gio, "launch", entry["path"]], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, start_new_session=True)
+        return True
+    if method == "exe" and entry.get("exe") and (exe := shutil.which(entry["exe"])):
+        subprocess.Popen([exe], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         start_new_session=True)
+        return True
+    return False
+
+
+def open_verified(entry: dict, wait_s: float = 8.0, sleep=time.sleep) -> tuple[bool, str]:
+    """Open an app so the owner SEES it: an open window is brought to the front; else launch it and check a window
+    appears, trying the next way when one doesn't (gtk-launch, gio, the program itself). The way that worked is
+    tried first next time. (11-04: 'open vs code' said "opened" while VS Code stayed hidden behind Brave.)"""
+    from jarvis.core import store
+    if not config.APP_VERIFY:  # tests: no real screen to look at
+        launch(entry)
+        return True, "gtk"
+    have = windows_of(entry)
+    if have:
+        try:
+            wmctrl(["-i", "-a", have[-1]["id"]])  # raises and un-minimizes it
+            return True, "front"
+        except Exception:  # noqa: BLE001
+            pass
+    key = f"app_launch:{entry['id']}"
+    best = store.kv_get(key) or ""
+    order = [best] + [m for m in METHODS if m != best] if best in METHODS else list(METHODS)
+    before = {w["id"] for w in have}
+    tried = []
+    for m in order:
+        if not _launch_by(m, entry):
+            continue
+        tried.append(m)
+        t0 = time.monotonic()
+        while time.monotonic() - t0 < wait_s:
+            sleep(0.4)
+            new = [w for w in windows_of(entry) if w["id"] not in before]
+            if new:
+                try:
+                    wmctrl(["-i", "-a", new[-1]["id"]])
+                except Exception:  # noqa: BLE001
+                    pass
+                if m != best:
+                    store.kv_set(key, m)  # this way works for this app: first next time
+                return True, m
+    return False, ", ".join(tried) or "no launcher found"
 
 
 def launch(entry: dict) -> str:

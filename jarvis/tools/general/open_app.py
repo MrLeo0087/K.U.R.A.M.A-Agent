@@ -19,5 +19,10 @@ def open_app(name: str) -> str:
         return f"opened {url}"
     if entry is None or score < _apps.TOOL_MIN_SCORE:
         return f"error: no installed app matches {name!r}"
-    _apps.launch(entry)
+    ok, how = _apps.open_verified(entry)
+    if not ok:
+        return (f"error: {entry['name']} didn't open: no window appeared (tried {how}). It may still be starting, or "
+                f"be broken: try it from the app menu")
+    if how == "front":
+        return f"{entry['name']} was already open: brought it to the front"
     return f"opened {entry['name']}"

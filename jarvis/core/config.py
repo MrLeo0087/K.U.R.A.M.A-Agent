@@ -1096,6 +1096,7 @@ REMOTE_HELPER = "/usr/local/sbin/kurama-rustdesk"  # root-owned helper (scripts/
 TELEGRAM_PIN_WINDOW_S = float(os.getenv("TELEGRAM_PIN_WINDOW_S", "1800"))  # risky PIN is remembered this long (30 min)
 
 # --- Multitasking (P3b-2): planner, background jobs, rate limiter ---
+APP_VERIFY = True  # open_app checks a window really appeared (else tries another way, remembers what works)
 PLANNER_MAX_TASKS = 15  # more are said back as not done (planner.Plan.dropped), never dropped in silence
 # While KURAMA's music plays, a short request that MEANS one of these controls the player (fastpath.player_intent)
 PLAYER_CONTROL_EXAMPLES = {

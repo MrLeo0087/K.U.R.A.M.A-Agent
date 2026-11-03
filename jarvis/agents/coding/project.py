@@ -20,8 +20,8 @@ _SYS = ("You write small, effective, runnable code for a new project. Write ONLY
         "minutes). " + blocks.FORMAT_RULE + " If the code needs more pip packages than {reqs}, add a last line "
         "'EXTRA: pkg1 pkg2'.")
 _SAFE_RUN = re.compile(r"(?:python3?|uvicorn|flask|streamlit|pytest)(?:\s+[\w./:=@,-]+)*")
-_HERE = re.compile(r"\b(?:here|in\s+this\s+(?:project|folder|workspace)|in\s+the\s+open\s+(?:project|folder)|"
-                   r"in\s+vs\s*code|this\s+folder)\b", re.I)
+_HERE = re.compile(r"\b(?:here|in\s+this\s+(?:project|fold?er|fodler|foldr|workspace|directory)|"
+                   r"in\s+the\s+open\s+(?:project|folder)|in\s+vs\s*code|this\s+(?:fold?er|fodler|foldr))\b", re.I)
 
 
 def _slug(text: str) -> str:

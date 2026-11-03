@@ -24,7 +24,8 @@ TABLE = {
     "mkdir": Act("make_folder", lambda a: {"path": a.get("path")}),
     "move": Act("move_path", lambda a: {"source": a.get("path"), "destination": a.get("to")}),
     "rename": Act("move_path", lambda a: {"source": a.get("path"), "destination": a.get("to"), "rename": True}),
-    "open": Act("open_path", lambda a: {"path": a.get("path"), "app": a.get("to") or "vscode"}),
+    "open": Act("open_path", lambda a: {"path": a.get("path"), "app": a.get("to") or "files"}),  # VS Code only
+    # when asked ('open X in vs code'): owner 11-04 "if I say just open, open in file manager"
     "copy": Act("copy_path", lambda a: {"source": a.get("path"), "destination": a.get("to")}),
     "delete": Act("delete_to_trash", lambda a: {"path": a.get("path")}),
     "organize": Act("organize_files", lambda a: {"action": a.get("text", "organize"), "folder": a.get("path", "~/Downloads")}),
@@ -43,8 +44,8 @@ def files(action: Literal["list", "find", "read", "write", "mkdir", "rename", "m
     """Files and folders.
 
     Args:
-        action: list, find, read, write, mkdir, rename (to = the new name), move, copy, delete, open (in VS Code by
-            default; to = 'files' for the file manager, 'default' for its own app), organize, convert, lock.
+        action: list, find, read, write, mkdir, rename (to = the new name), move, copy, delete, open (in the file manager by
+            default; to = 'vscode' ONLY when the user says VS Code / code editor, 'default' for its own app), organize, convert, lock.
         path: The file or folder; loose names work ('downloads', 'project1 then tara').
         query: For find: the file name or part of it ('main.py', 'naruto'), searched on all disks.
         to: Destination folder (move/copy), the new name (rename), the app (open) or format (convert: pdf, md...).
