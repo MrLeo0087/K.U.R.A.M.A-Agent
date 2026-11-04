@@ -4420,7 +4420,9 @@ _AWAKE_ASK = re.compile(r"\b(?:(?:what(?:'s|\s+is)|show|tell\s+me|check)\s+(?:th
 
 def switch_intent(t: str) -> Intent | None:
     """"turn off bluetooth", "bluetooth off bro", "disable wifi", and the follow-up "turn it off" (0 tokens)."""
-    if _AWAKE_ASK.search(t):  # 'what is status of my AOD' (0 tokens)
+    asking = re.match(r"^\W*(?:does|do|is|are|was|has|have|can\s+you\s+(?:check|tell)|check|tell\s+me\s+(?:if|whether))\b", t, I) \
+        or t.rstrip().endswith("?")  # 'Does my laptop always on display on?' turned it ON (11-04): a question only reads
+    if re.search(_AOD, t, I) and asking or _AWAKE_ASK.search(t):  # 'what is status of my AOD' (0 tokens)
         return Intent("control", "laptop_toggle", "system", {"setting": "stay_awake", "state": "status"})
     if _AWAKE_OFF.search(t):
         return Intent("control", "laptop_toggle", "system", {"setting": "stay_awake", "state": "off"})

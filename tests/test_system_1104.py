@@ -160,7 +160,9 @@ def test_caffeine_is_switched_by_the_key_it_listens_to(monkeypatch, tmp_path):
 @pytest.mark.parametrize("said,state", [("turn on AOD", "on"), ("turn on always on display", "on"), ("enable always on", "on"),
                                         ("turn off AOD", "off"), ("AOD off", "off"), ("disable caffeine", "off"),
                                         ("turn off coffin", "off"), ("what is status of my AOD", "status"),
-                                        ("is AOD on?", "status"), ("AOD status", "status")])
+                                        ("is AOD on?", "status"), ("AOD status", "status"),
+                                        ("Does my laptop always on display on ?", "status"), ("is caffeine running?", "status"),
+                                        ("can you turn on AOD?", "on")])
 def test_aod_is_instant(said, state):
     it = fastpath._match(said)
     assert it.tool == "laptop_toggle" and it.args == {"setting": "stay_awake", "state": state}
