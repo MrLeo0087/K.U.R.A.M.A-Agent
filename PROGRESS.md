@@ -1191,3 +1191,9 @@ Phases (one at a time, owner tests after each):
       and opens the surest one. Caffeine: 'turn off always on display' wrote 'user-enabled' (only the login restore
       value) and said "off" while the cup stayed on -> 'cli-toggle' (the switch the extension acts on), checked after
       writing, honest error when it didn't change. Tests +6; suite 1789.
+- [x] 2026-11-04 Telegram (traces 17:32-17:33): 'Type ...' sent the text TO Telegram (the meaning gate judged the words
+      being typed, which were about Telegram) -> the typed words are the intent's `known` part; 'send me screenshot'
+      went to the AI (screenshot, then a send that went to the background: minutes) -> plain words run the instant
+      /screen; '/screen', '/photo', '/where', '/control', '/clip', '/type', '/run' and every risky '/<tool>' never asked
+      for the PIN (a word boundary can't come before '/') -> risky by what the command does (telesec._risky_command:
+      phone commands + tools that show / send / drive the laptop or ask yes/no). Tests +18; suite 1818.

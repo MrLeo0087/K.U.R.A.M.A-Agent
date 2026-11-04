@@ -93,6 +93,10 @@ NATURAL = tuple((re.compile(_W + rx + r"(?:\s+(?:please|now))?\s*[.!?]*\s*$", re
     (r"(?:what(?:'s|\s+is)\s+(?:the\s+)?)?guard(?:\s+status)?|is\s+(?:the\s+)?guard\s+on", "/guard"),
     (r"(?:start|turn\s+on|enable)\s+(?:the\s+)?(?:lost\s+mode|tracking(?:\s+(?:my|the)\s+laptop)?)|lost\s+mode(?:\s+on)?|"
      r"my\s+laptop\s+(?:is\s+)?(?:lost|stolen)", "/track on"),
+    (r"(?:send|give|show|take|get)(?:\s+me)?\s+(?:a\s+|the\s+|my\s+)?(?:laptop(?:'s)?\s+)?(?:screenshot|screen\s*shot|screen)"
+     r"(?:\s+(?:of|from)\s+(?:my\s+|the\s+)?(?:laptop|screen|computer|pc))?(?:\s+(?:and\s+)?send\s+(?:it|me))?|"
+     r"(?:what(?:'s|\s+is)\s+)?on\s+my\s+(?:laptop\s+)?screen", "/screen"),  # the same instant /screen (the AI
+    # took a screenshot, then sent it as a 2nd step that went to the background: minutes, 11-04)
     (r"(?:stop|end|cancel|abort)\s+(?:the\s+|this\s+|that\s+|current\s+)?(?:task|job|everything)|abort", "/stop"),
     (r"(?:clear|reset|delete)\s+(?:this\s+|the\s+|our\s+)?(?:chat|conversation)(?:\s+history)?", "/clearchat"),
 ))

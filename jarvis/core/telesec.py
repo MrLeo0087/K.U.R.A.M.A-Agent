@@ -90,7 +90,30 @@ def is_risky(text: str) -> bool:
     from jarvis.core.remotedesk import STOP_RE
     if STOP_RE.match(t):  # turning remote desktop OFF is a safety action, never gated
         return False
+    if cmd.startswith("/") and _risky_command(cmd[1:]):
+        return True
     return bool(_RISKY.search(t))
+
+
+# the phone commands that show / reach / drive the laptop (a word boundary can't come before '/': '/screen', '/photo',
+# '/where', '/control', '/clip'... were never asked for the PIN, 11-04)
+_RISKY_CMDS = {"screen", "camera", "photo", "video", "vid", "rec", "record", "where", "locate", "find", "here", "track",
+               "history", "guard", "control", "rustdesk", "clip", "sendfile", "send", "file", "files", "shutdown",
+               "restart", "reboot", "sleep", "suspend", "logout", "run", "shell", "cmd", "type", "click", "press",
+               "kill", "install", "delete", "trash", "lock_folder"}
+# tools a '/<tool>' command runs that show, send or change the laptop
+_RISKY_TOOLS = {"screenshot", "read_text", "scan_qr", "app_control", "dictate", "send_file_telegram", "find_and_send",
+                "send_last_result", "remote_desktop", "location_history", "laptop_guard", "find_my_phone", "clipboard",
+                "clipboard_history", "write_clipboard", "run_command", "run_python", "write_file", "move_path", "copy_path",
+                "code_to_file", "folder_lock", "download_file", "backup", "share_wifi", "wifi_share", "gesture_control"}
+
+
+def _risky_command(name: str) -> bool:
+    if name in _RISKY_CMDS:
+        return True
+    from jarvis.core import registry
+    t = registry.REGISTRY.get(name)
+    return t is not None and (name in _RISKY_TOOLS or registry.safety_of(t) != "safe")
 
 
 def gate(text: str) -> str | None:

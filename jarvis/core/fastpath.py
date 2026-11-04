@@ -2433,8 +2433,9 @@ def _ui_intent(t: str) -> Intent | None:
         return Intent("ui", "app_control", "windows", {"action": "shortcut", "text": name, "app": sc["app"]})
     if p := ui.parse_press(t):
         return Intent("ui", "app_control", "windows", {"action": "press", "text": p["keys"], "app": p["app"]})
-    if p := ui.parse_type(t):
-        return Intent("ui", "app_control", "windows", {"action": "type", "text": p["text"], "app": p["app"]})
+    if p := ui.parse_type(t):  # known = the words to type: the meaning gate judges 'type X', not what X says
+        return Intent("ui", "app_control", "windows", {"action": "type", "text": p["text"], "app": p["app"]},
+                      known=p["text"])  # (11-04: typing a sentence about Telegram was sent TO Telegram)
     if p := ui.parse_click(t):
         return Intent("ui", "app_control", "windows", {"action": "click", "text": p["name"], "app": p["app"]})
     return None

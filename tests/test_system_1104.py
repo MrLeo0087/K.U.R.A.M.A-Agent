@@ -166,3 +166,24 @@ def test_caffeine_is_switched_by_the_key_it_listens_to(monkeypatch, tmp_path):
 def test_aod_is_instant(said, state):
     it = fastpath._match(said)
     assert it.tool == "laptop_toggle" and it.args == {"setting": "stay_awake", "state": state}
+
+
+@pytest.mark.parametrize("cmd,risky", [("/screen", True), ("/photo", True), ("/where", True), ("/control", True),
+                                       ("/clip", True), ("/type hello", True), ("/power_off", True), ("/screenshot", True),
+                                       ("/weather", False), ("/time", False), ("/help", False), ("/list", False)])
+def test_every_risky_slash_command_asks_the_pin(cmd, risky):
+    """'/screen' never asked: a word boundary can't come before '/' (11-04)."""
+    from jarvis.core import telesec
+    assert telesec.is_risky(cmd) is risky
+
+
+@pytest.mark.parametrize("said", ["send me screenshot", "send me a screenshot of my laptop", "take a screenshot and send it"])
+def test_plain_words_for_the_instant_screen(said):
+    from jarvis.workers.telegram_bot import natural_command
+    assert natural_command(said) == "/screen"
+
+
+def test_typing_a_sentence_about_telegram_types_it():
+    t = "Type 'when i say send me screenshot from telegram it take 2-3 min'"
+    it = fastpath._match(t)
+    assert it.tool == "app_control" and it.args["action"] == "type" and it.known
