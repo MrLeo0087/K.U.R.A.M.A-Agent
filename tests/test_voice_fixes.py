@@ -201,3 +201,15 @@ def test_gesture_control_lets_go_of_the_camera_during_a_call():
     assert cap.read()[1].sum() > 0 and opened == ["open", "release", "open"]  # back after the call
     assert gr.CALL_URL.search("https://www.facebook.com/groupcall/ROOM:/?call_id=2170452144&has_video=true")
     assert gr.CALL_URL.search("https://meet.google.com/abc-defg-hij") and not gr.CALL_URL.search("https://www.facebook.com/")
+
+
+def test_mini_window_startup_and_size_regressions():
+    """11-05: (1) the chat page loaded before the server listened -> its error page counted as ready -> Alt did
+    nothing after a start; (2) the 1 x 1 hold-to-talk window grew back to the minimum and that was saved as the
+    owner's chat size ("squished" after every Alt)."""
+    from pathlib import Path
+    src = (Path(__file__).resolve().parent.parent / "scripts" / "kurama_wallpaper.py").read_text()
+    assert 'v.connect("load-failed", self._panel_load_failed)' in src
+    assert "if self.page_ready or self.panel_failed:" in src  # an error page is never ready
+    assert "if (w, h) == (PANEL_MIN_W, PANEL_MIN_H):" in src  # a clamped size is not the owner's size
+    assert src.count("self.hold_size()") >= 3 and "time.monotonic() < getattr(self, \"size_hold_until\"" in src

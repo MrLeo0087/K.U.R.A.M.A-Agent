@@ -1237,3 +1237,11 @@ Phases (one at a time, owner tests after each):
   the three generated plug-ins pass their tests and the contract tests, then removed them.
 - tests/test_plugin_contracts.py: every tool / source / agent keeps its contract; isolation; scaffold; recall fallback.
 - LEARN.md 8.3 + new 8.4 (the plug-in architecture), folder map, core files, 2.4, 23; ADR 0011.
+
+## 2026-11-05: mini window: Alt right after start-up, chat size squished after Alt
+- Start-up: the hidden chat page could load before the server listened; its error page counted as "ready" after
+  6 s, so Alt did nothing (no caption, no recording). The panel now retries a failed load every 1.5 s and an
+  error page is never ready.
+- Size: the 1 x 1 hold-to-talk window grew back clamped to the 300 x 260 minimum and that was saved as the owner's
+  size (data/mini.json had 300 x 260). KURAMA's own resizes are no longer saved for 3 s, the size is asked for
+  again if the window manager clamps it, and an exact-minimum saved size falls back to the default 400 x 600.

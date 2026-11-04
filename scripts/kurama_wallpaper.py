@@ -718,6 +718,8 @@ class WakeBridge:
 
 
 PAGE_READY_FALLBACK_MS = 6000
+PANEL_RETRY_MS = 1500  # the chat page failed to load (server still starting): load it again this soon
+PANEL_SIZE_HOLD_S = 3.0  # after KURAMA itself resized the chat window, its size is not "your size" for this long
 
 
 def pttlog(line: str) -> None:
@@ -1112,8 +1114,9 @@ class Mini:
         v.set_background_color(Gdk.RGBA(0, 0, 0, 0) if visual is not None else Gdk.RGBA(0.11, 0.11, 0.12, 1))
         v.connect("permission-request", self.wp.on_permission)
         v.connect("decide-policy", self.wp.on_policy)
-        self.page_ready, self.on_ready = False, []
+        self.page_ready, self.on_ready, self.panel_failed = False, [], False
         v.connect("load-changed", self._page_loaded)
+        v.connect("load-failed", self._panel_load_failed)
         v.connect("web-process-terminated", self._panel_crashed)
         u = urlsplit(self.wp.url)
         self.panel_url = f"{u.scheme}://{u.netloc}/?mini=1" + ("" if visual is not None else "&opaque=1")
@@ -1139,7 +1142,7 @@ class Mini:
         return False
 
     def _mark_ready(self) -> bool:
-        if self.page_ready:
+        if self.page_ready or self.panel_failed:  # an error page is never "ready"
             return False
         self.page_ready = True
         pttlog(f"panel page ready (shown={bool(self.panel and self.panel.get_visible())})")
@@ -1148,8 +1151,21 @@ class Mini:
             fn()
         return False
 
+    def _panel_load_failed(self, view, _event, uri, error) -> bool:
+        """The chat page could not load (at start-up the server is often not listening yet): try again soon. Before
+        (11-05), the error page counted as "ready" after PAGE_READY_FALLBACK_MS, so the first Alt holds after a start
+        did nothing at all: no listening caption, no recording."""
+        self.panel_failed = True
+        self.page_ready = False
+        pttlog(f"panel page failed to load ({getattr(error, 'message', error)}); retrying")
+        GLib.timeout_add(PANEL_RETRY_MS, lambda: (self.view is view and view.load_uri(self.panel_url), False)[1])
+        return False
+
     def _page_loaded(self, view, event) -> None:
-        if event != WebKit2.LoadEvent.FINISHED or self.page_ready:
+        if event == WebKit2.LoadEvent.STARTED:
+            self.panel_failed = False
+            return
+        if event != WebKit2.LoadEvent.FINISHED or self.page_ready or self.panel_failed:
             return
         # the page says "ready" itself once its script ran and drew (the load event came first: an empty glass box
         # and a dead Alt key right after start-up, 11-04); this is only the fallback for a page that never says it
@@ -1272,7 +1288,13 @@ class Mini:
         """The chat size you last set (kept across restarts); a missing or broken one (1 x 1 saved by the shrunk
         invisible panel, 11-02) is the default size."""
         w, h = int(self.wp.state.get("panel_w") or 0), int(self.wp.state.get("panel_h") or 0)
+        if (w, h) == (PANEL_MIN_W, PANEL_MIN_H):  # exactly the minimum = the window manager clamping a 1 x 1 window
+            return PANEL_W, PANEL_H  # that grew back (11-05: the chat "squished" after every Alt hold), not yours
         return (w, h) if w >= PANEL_MIN_W and h >= PANEL_MIN_H else (PANEL_W, PANEL_H)
+
+    def hold_size(self) -> None:
+        """KURAMA is resizing the window itself: the next few configure events are not the owner's size."""
+        self.size_hold_until = time.monotonic() + PANEL_SIZE_HOLD_S
 
     def shrink_ghost(self) -> None:
         """An invisible (ghost) panel still got Blur my Shell's glass: the owner saw an empty frosted box beside the
@@ -1281,6 +1303,7 @@ class Mini:
         if self.panel is None or getattr(self, "shrunk", False):
             return
         self.shrunk = True
+        self.hold_size()
         self.panel.set_size_request(1, 1)
         self.panel.resize(1, 1)
 
@@ -1288,11 +1311,22 @@ class Mini:
         if self.panel is None or not getattr(self, "shrunk", False):
             return
         self.shrunk = False
+        self.hold_size()
         wa = workarea()
         self.panel.set_size_request(PANEL_MIN_W, PANEL_MIN_H)
         sw, sh = self.saved_size()
-        self.panel.resize(min(sw, wa.width - 40), min(sh, wa.height - 40))
+        want = (min(sw, wa.width - 40), min(sh, wa.height - 40))
+        self.panel.resize(*want)
         self.place_panel()
+
+        def again():  # the window manager may clamp a mapped 1 x 1 window to the minimum: ask for your size again
+            if self.panel is not None and not getattr(self, "shrunk", False) and self.panel.get_size() != want:
+                self.hold_size()
+                self.panel.resize(*want)
+                self.place_panel()
+            return False
+        GLib.timeout_add(250, again)
+        GLib.timeout_add(900, again)
 
     def unghost(self, hide_caption: bool = True) -> None:
         if not self.ghost or self.panel is None:
@@ -1407,6 +1441,8 @@ class Mini:
 
         def save():
             self.size_timer = 0
+            if time.monotonic() < getattr(self, "size_hold_until", 0.0):  # KURAMA's own resize, not yours
+                return False
             if self.panel is not None and self.panel.get_visible() and not self.ghost and \
                     not getattr(self, "shrunk", False):  # the 1 x 1 invisible panel is never "your size"
                 w, h = self.panel.get_size()
