@@ -300,3 +300,6 @@
 {"id": 300, "text": "write a script to download images from a website", "expect": "route.areas", "groups": ["dev"], "args": {}, "channel": "laptop", "source": "after the 2026-11-03 reset (no learned data)"}
 {"id": 301, "text": "create a react todo app", "expect": "route.areas", "groups": ["dev"], "args": {}, "channel": "laptop", "source": "after the 2026-11-03 reset (no learned data)"}
 {"id": 302, "text": "write a c program to reverse a string", "expect": "route.areas", "groups": ["dev"], "args": {}, "channel": "laptop", "source": "after the 2026-11-03 reset (no learned data)"}
+{"id": 303, "text": "turn on AOD", "expect": "laptop.toggle", "args": {}, "channel": "laptop"}
+{"id": 304, "text": "turn off always on display", "expect": "laptop.toggle", "args": {}, "channel": "laptop"}
+{"id": 305, "text": "what is status of my AOD", "expect": "laptop.toggle", "args": {}, "channel": "laptop"}

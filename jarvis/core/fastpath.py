@@ -4408,15 +4408,20 @@ _SW_FOLLOW = re.compile(r"^(?:(?:turn|switch|put)\s+)?(?:it|this|that|them)?\s*(
 SWITCH_TTL_S = 600  # "turn it off" refers to the device switched in the last 10 minutes
 
 
-_AWAKE_ON = re.compile(r"\b(?:(?:turn|switch|put)\s+on\s+(?:the\s+)?always[\s-]*on\s+display|always[\s-]*on\s+display\s+on|"
-                       r"keep\s+(?:the\s+|my\s+)?(?:screen|display|laptop)\s+(?:on|awake)|stay\s+awake|don'?t\s+(?:let\s+)?"
-                       r"(?:the\s+|my\s+)?(?:screen|display|laptop)\s+(?:sleep|turn\s+off|go\s+off))\b", I)
-_AWAKE_OFF = re.compile(r"\b(?:(?:turn|switch)\s+off\s+(?:the\s+)?always[\s-]*on\s+display|always[\s-]*on\s+display\s+off|"
-                        r"let\s+(?:the\s+|my\s+)?(?:screen|display|laptop)\s+sleep)\b", I)
+_AOD = r"(?:(?:the\s+|my\s+)?(?:always[\s-]*on(?:\s+display)?|aod|a\.o\.d\.?|caffeine|coffin|coffee\s+mode))"  # 'coffin' = STT
+_AWAKE_ON = re.compile(r"\b(?:(?:turn|switch|put|set)\s+on\s+" + _AOD + r"|(?:enable|start|activate)\s+" + _AOD + r"|" + _AOD
+                       + r"\s+on|keep\s+(?:the\s+|my\s+)?(?:screen|display|laptop)\s+(?:on|awake)|stay\s+awake|don'?t\s+"
+                       r"(?:let\s+)?(?:the\s+|my\s+)?(?:screen|display|laptop)\s+(?:sleep|turn\s+off|go\s+off))\b", I)
+_AWAKE_OFF = re.compile(r"\b(?:(?:turn|switch|set)\s+off\s+" + _AOD + r"|(?:disable|stop|deactivate)\s+" + _AOD + r"|" + _AOD
+                        + r"\s+off|let\s+(?:the\s+|my\s+)?(?:screen|display|laptop)\s+sleep)\b", I)
+_AWAKE_ASK = re.compile(r"\b(?:(?:what(?:'s|\s+is)|show|tell\s+me|check)\s+(?:the\s+)?(?:status\s+of\s+)?" + _AOD
+                        + r"(?:\s+status)?|is\s+" + _AOD + r"\s+(?:on|off|enabled|running)|" + _AOD + r"\s+status)\b", I)
 
 
 def switch_intent(t: str) -> Intent | None:
     """"turn off bluetooth", "bluetooth off bro", "disable wifi", and the follow-up "turn it off" (0 tokens)."""
+    if _AWAKE_ASK.search(t):  # 'what is status of my AOD' (0 tokens)
+        return Intent("control", "laptop_toggle", "system", {"setting": "stay_awake", "state": "status"})
     if _AWAKE_OFF.search(t):
         return Intent("control", "laptop_toggle", "system", {"setting": "stay_awake", "state": "off"})
     if _AWAKE_ON.search(t):  # 'turn on always on display' turned the screen OFF (11-04)

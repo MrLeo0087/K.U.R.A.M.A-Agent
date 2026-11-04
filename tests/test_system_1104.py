@@ -155,3 +155,12 @@ def test_caffeine_is_switched_by_the_key_it_listens_to(monkeypatch, tmp_path):
     assert state["cli-toggle"] == "false" and not any("user-enabled" in c for c in cmds)
     monkeypatch.setattr(L._sys, "run", lambda argv, **kw: "true")  # the extension didn't follow: say so
     assert L.laptop_toggle("stay_awake", "off").startswith("error")
+
+
+@pytest.mark.parametrize("said,state", [("turn on AOD", "on"), ("turn on always on display", "on"), ("enable always on", "on"),
+                                        ("turn off AOD", "off"), ("AOD off", "off"), ("disable caffeine", "off"),
+                                        ("turn off coffin", "off"), ("what is status of my AOD", "status"),
+                                        ("is AOD on?", "status"), ("AOD status", "status")])
+def test_aod_is_instant(said, state):
+    it = fastpath._match(said)
+    assert it.tool == "laptop_toggle" and it.args == {"setting": "stay_awake", "state": state}
