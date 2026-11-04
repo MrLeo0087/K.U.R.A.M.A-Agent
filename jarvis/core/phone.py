@@ -180,7 +180,7 @@ def resend_last() -> str:
     return out
 
 
-def small_jpeg(png: Path, width: int = 1600) -> Path:
+def small_jpeg(png: Path, width: int = 1280) -> Path:  # Telegram shows photos at <= 1280 px anyway
     """A phone-sized JPEG next to the PNG (a few times smaller: uploads and opens much faster); the PNG on failure."""
     try:
         from PIL import Image
@@ -189,7 +189,7 @@ def small_jpeg(png: Path, width: int = 1600) -> Path:
             im = im.convert("RGB")
             if im.width > width:
                 im = im.resize((width, round(im.height * width / im.width)))
-            im.save(out, "JPEG", quality=80, optimize=True)
+            im.save(out, "JPEG", quality=72, optimize=True)  # ~half the bytes of q80 @1600: a slow uplink
         return out
     except Exception as e:  # noqa: BLE001 - Pillow missing or a bad file: send the PNG
         log.warning("screenshot jpeg failed: %s", e)

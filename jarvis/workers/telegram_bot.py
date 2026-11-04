@@ -376,7 +376,38 @@ class TelegramBot(Worker):
             self._pending_risky = text  # the next PIN runs it
             self.send(gated)
             return
+        if self._upload_in_background(text):
+            return
+        t0 = time.monotonic()
         self.send(self.reply_with_typing(text, msg.get("reply_to_message"), watch=watch))
+        self.log.info("answered %r in %.1f s", text[:40], time.monotonic() - t0)
+
+    # commands that upload something: they run beside the chat, so a slow uplink never stops the bot reading the
+    # next message (11-04: "/screen takes 1-2 min"; a message was picked up 60 s late behind one)
+    _UPLOADS = {"/screen": "upload_photo", "/camera": "upload_photo", "/photo": "upload_photo",
+                "/video": "upload_video", "/vid": "upload_video", "/rec": "upload_video", "/record": "upload_video"}
+
+    def _upload_in_background(self, text: str) -> bool:
+        cmd = (natural_command(text) if not text.startswith("/") else text) or ""
+        action = self._UPLOADS.get(cmd.split()[0].split("@")[0].lower() if cmd else "")
+        if not action:
+            return False
+        try:  # at once: the phone shows "sending photo…" while it uploads
+            notify.telegram_call("sendChatAction", {"chat_id": config.TELEGRAM_CHAT_ID, "action": action})
+        except Exception:  # noqa: BLE001
+            pass
+
+        def run() -> None:
+            t0 = time.monotonic()
+            try:
+                out = self._answer(cmd)
+            except Exception as e:  # noqa: BLE001
+                out = f"Sorry, that failed: {type(e).__name__}: {str(e)[:200]}"
+            if out and not out.startswith(("Sent to your Telegram", "Sent the")):
+                self.send(out)
+            self.log.info("%s done in %.1f s", cmd, time.monotonic() - t0)
+        threading.Thread(target=run, name="tg-upload", daemon=True).start()
+        return True
 
     @staticmethod
     def quoted(reply: dict | None) -> str:
