@@ -1,0 +1,23 @@
+# Every push / pull request: lint gate, then the full test suite (no network, no real AI calls: tests use fakes).
+name: ci
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: System libraries (PortAudio for sounddevice, fd + ripgrep for file search, xdotool)
+        run: sudo apt-get update && sudo apt-get install -y libportaudio2 fd-find ripgrep xdotool
+      - run: pip install -r requirements.txt
+      - name: Lint gate
+        run: ruff check jarvis tests scripts
+      - name: Tests
+        run: python -m pytest

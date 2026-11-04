@@ -96,7 +96,7 @@ TYPO_FIXES: dict[str, str] = {
     "traning": "training", "trainig": "training", "usuage": "usage", "useage": "usage", "staus": "status",
     "statsu": "status", "thsi": "this", "niw": "now", "insdie": "inside", "insde": "inside", "plz": "please",
     "pls": "please", "wht": "what", "whta": "what", "teh": "the", "laptop.doctor": "laptop doctor",
-    "scrrenshot": "screenshot", "screnshot": "screenshot", "brigthness": "brightness", "volumn": "volume",
+    "scrrenshot": "screenshot", "screnshot": "screenshot", "brigthness": "brightness",
     "telgram": "telegram", "telegarm": "telegram", "downlaod": "download", "donwload": "download",
     "foler": "folder", "fodler": "folder", "folde": "folder", "summarise": "summarize",
 }

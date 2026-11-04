@@ -183,7 +183,7 @@ def fire(row: dict) -> list[str]:
             if not n:
                 return []  # finished meanwhile: say nothing
             what = "You haven't read this yet" if k == "read" else "You haven't finished this yet"
-            return notify.notify(f"⏳ Not done yet", f"{title}\n{link + chr(10) if link else ''}{what} (it was due "
+            return notify.notify("⏳ Not done yet", f"{title}\n{link + chr(10) if link else ''}{what} (it was due "
                                  f"{_hm(row['next_run'] - config.TASK_OVERDUE_S)}). Say 'done {n}' when it's finished.",
                                  level="info", source="scheduler")
         sound.play("reminder", 2)

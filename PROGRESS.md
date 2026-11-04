@@ -1197,3 +1197,11 @@ Phases (one at a time, owner tests after each):
       /screen; '/screen', '/photo', '/where', '/control', '/clip', '/type', '/run' and every risky '/<tool>' never asked
       for the PIN (a word boundary can't come before '/') -> risky by what the command does (telesec._risky_command:
       phone commands + tools that show / send / drive the laptop or ask yes/no). Tests +18; suite 1818.
+
+## 2026-11-05: LEARN.md refresh + engineering baseline
+- LEARN.md: 2.4 "what changed since 11-01"; 16 rewritten as the full technology list (what, where, what to learn);
+  21 is a 12-week, 1–2 h/day plan; 23 is "industry level: where KURAMA stands" with the ordered debt list.
+- Added pyproject.toml (ruff gate E9/F63/F7/F82/F5/F601, pytest, coverage config), Makefile, .pre-commit-config.yaml
+  (ruff, private keys, large files, never .env), .github/workflows/ci.yml (lint + tests). Fixed the 4 gate findings
+  (duplicate "volumn" key, 3 empty f-strings) and a dead test helper. codetidy keeps ruff's default checks.
+- Next (section 23.2): split fastpath.py by area, typed tool results, mypy on core, coverage floor, /metrics.

@@ -1,0 +1,31 @@
+# One place for the project's metadata and tool settings (the Python packaging standard, PEP 518/621).
+# Dependencies stay pinned in requirements.txt (the app is deployed from it); this file configures the tools.
+[project]
+name = "kurama"
+version = "2.0.0"
+description = "KURAMA: a personal voice + chat assistant for one Ubuntu laptop (LangGraph agent, Groq, local meaning model)"
+requires-python = ">=3.11"
+readme = "README.md"
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+extend-exclude = ["venv", "data", "browser_ext", "vscode_ext", "packaging"]
+
+[tool.ruff.lint]
+# The gate every commit and CI must pass: syntax errors, undefined names, bad comparisons, f-string slips.
+# Wider style rules (B, UP, SIM...) are reported by `make lint-all`, cleaned file by file, then moved up here.
+select = ["E9", "F63", "F7", "F82", "F5", "F601"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q -p no:cacheprovider"
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.coverage.run]
+source = ["jarvis"]
+omit = ["jarvis/__main__.py", "*/__pycache__/*"]
+
+[tool.coverage.report]
+skip_covered = true
+show_missing = false

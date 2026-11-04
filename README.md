@@ -13,6 +13,12 @@ Heavy AI runs on the Groq free tier; everything local stays small (≈ 80 MB idl
   ```
 - A free **Groq API key** (https://console.groq.com). Optional: a Telegram bot for phone control.
 
+## Developer commands
+`make help` lists them: `make test` (full suite, offline), `make lint` (the commit gate), `make eval` (routing
+scorecard), `make check` (all three, what CI runs), `make restart`, `make report` (recent failures), `make rss`.
+Hooks: `venv/bin/pip install pre-commit && venv/bin/pre-commit install`. How it all works and how to learn it:
+[LEARN.md](LEARN.md).
+
 ## Setup
 ```bash
 cd KURAMA

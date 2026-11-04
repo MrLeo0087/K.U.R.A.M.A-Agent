@@ -34,7 +34,7 @@ def test_a_command_without_its_text_says_how(fast, text):
 def test_the_list_has_every_tool_and_marks_the_online_ones():
     txt = slash.help_text()
     assert "/poem" in txt and "/battery_status" in txt and "/make_folder" in txt
-    assert f"/web_search{slash.NET_MARK}" in txt or f"/search" in txt
+    assert f"/web_search{slash.NET_MARK}" in txt or "/search" in txt
     off = slash.help_text(only_offline=True)
     assert "/make_folder" in off and "/web_search" not in off and "/poem" not in off
 

@@ -57,9 +57,6 @@ def run(path, n=3):
 '''
 
 
-def _docs(*items):
-    return lambda msgs, schema, **k: schema(items=[ad.Doc(name=n, docstring=d, signature_with_hints=s)
-                                                   for n, d, s in items])
 
 
 def test_notebook_to_script(tmp_path, monkeypatch):

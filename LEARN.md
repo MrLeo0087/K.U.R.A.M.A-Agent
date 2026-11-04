@@ -14,7 +14,8 @@ This guide is for you, the owner. You have used KURAMA every day; this is the ma
 Read it in order the first time. Sections 2, 3, 4 and 5 are the most important: they are the skeleton every other
 file hangs on. Later sections are reference: come back to them when you need them.
 
-> Names and line counts below are from 2026-11-01 (after the memory + multitasking rebuild). Files grow; if a name
+> Updated 2026-11-05 (learning from feedback, tool reach, Telegram, hold-to-talk, engineering tooling; see 2.4 for
+> what changed). Names and line counts are from that day. Files grow; if a name
 > moved, `grep -n "def name" -r jarvis` finds it. Never trust a doc over the code: the code is the truth, this guide
 > is the map.
 
@@ -37,14 +38,14 @@ file hangs on. Later sections are reference: come back to them when you need the
 13. [Privacy and safety](#13-privacy-and-safety)
 14. [Voice, wake word, hold-to-talk, the desktop window](#14-voice-and-the-desktop)
 15. [Background work: workers, jobs, the job list](#15-background-work)
-16. [Technologies, and why each one was chosen](#16-technologies-and-why)
+16. [Technologies: what each one is, where it is used, what to learn](#16-technologies-what-each-one-is-where-kurama-uses-it-what-to-learn)
 17. [Who depends on whom (the dependency map)](#17-the-dependency-map)
 18. ["I want to change X": which file, which setting](#18-i-want-to-change-x)
 19. [Debugging: your toolkit, step by step](#19-debugging)
 20. [Monitoring and improving it yourself (the routine)](#20-monitoring-and-improving-it-yourself)
-21. [How to learn it: top-down, bottom-up, and exercises](#21-how-to-learn-it)
+21. [How to learn it: a 12-week, day-by-day plan (1–2 h a day)](#21-how-to-learn-it-a-day-by-day-plan-12-hours-a-day)
 22. [Lessons for any big project](#22-lessons-for-any-big-project)
-23. [Honest weak spots (technical debt)](#23-honest-weak-spots)
+23. [Industry level: where KURAMA stands, and what is left](#23-industry-level-where-kurama-stands-and-what-is-left)
 24. [Glossary](#24-glossary)
 
 ---
@@ -132,8 +133,9 @@ ambient) and hands it to `jarvis/api/turns.py` `Engine.run_turn()`, which:
   still works.
 - Facts you state about yourself are captured with plain code (`profile.capture_and_save`).
 
-**Step 4: path ① (shortcut, 0 tokens).** `_fast()` → `jarvis/core/fastpath.py` `try_answer()` → `match()`, which
-tries in order:
+**Step 4: path ① (shortcut, 0 tokens).** First the text is cleaned: `spelling.fix()` (common slips) and
+`mywords.expand()` (your own phrases). Then `_fast()` → `jarvis/core/fastpath.py` `try_answer()` → `match()`, which
+tries in order (learned shortcuts and kept answers from `recipes.py` come right after it):
 1. **A choice** (`workmem.choose()`): KURAMA just listed numbered files ("I found 3 copies: 1. … 2. …") and you
    answered "2" / "the second one" / "the one in Redmi" → the same tool runs again on that file.
 2. Agent switches, slash commands (`/clear ram`, `/weather pokhara`; `slash.py`), cleaning, "selection first"
@@ -187,8 +189,9 @@ sentence by sentence (`frontend/voice.js` → `POST /api/v1/tts` → edge-tts).
   the database (`store.py`). A choice that wasn't answered is dropped.
 - `trace.py` writes one row to `data/traces.db`: text, path, route, tools, plan + step results, models, tokens,
   answer, time. This is your evidence (sections 19–20).
-- `learn.py` judges the **previous** turn: if your message corrected it ("no, I meant..."), the earlier wording is
-  learned as belonging to the right area.
+- `learn.py` judges the **previous** turn, but only from what *you* did: a correction ("no, I meant..."), a
+  complaint or praise (judged by meaning), or a 👍/👎. Silence teaches nothing. `recipes.py` turns a confirmed
+  request into a 0-token shortcut. All of it is explained with examples in `docs/LEARNING.md`.
 
 ### 2.3 The same request from other doors
 
@@ -199,6 +202,26 @@ sentence by sentence (`frontend/voice.js` → `POST /api/v1/tts` → edge-tts).
 | **Hold Alt** | `core/ptt.py` (key hook in the server) → the desktop window (`scripts/kurama_wallpaper.py`) shows the panel → the page records → same as voice. |
 | **Telegram** | `workers/telegram_bot.py` polls Telegram → the same `Agent` with `channel="telegram"` → replies through the Bot API. Same working memory: "send that image" on Telegram finds the image made on the laptop. |
 | **Terminal** | `python -m jarvis` → `jarvis/cli.py` → `Agent.run()`. Handy for debugging without the UI. |
+
+### 2.4 What changed since 11-01 (read this if you learned the old version)
+
+| Area | Before | Now (11-05) | Files |
+|---|---|---|---|
+| Before anything | the raw text went in | `spelling.fix()` (common slips: "opne", "remain me") then `mywords.expand()` ("when I say good night, lock the screen") | `spelling.py`, `mywords.py` |
+| Shortcuts | regex + meaning gate | + **learned shortcuts with slots** and **kept answers** (a 👍 answer reused for a near-identical question, 0 tokens) | `recipes.py` |
+| Which tools the AI gets | a hand-made area → tool map | `registry.reach()` reads each general tool's TABLE to know what it can run; ≤ 3 tools; an unreachable specialised tool only when it matches by meaning ≥ 0.6 | `registry.py` |
+| AI calls | ~2,700 tokens median | ~800–1,100; a tool's own sentence is often the reply (direct reply) | `agent.py`, `config.DIRECT_REPLY_*` |
+| Learning | also learned from silence | **only from you**: 👍/👎, spoken praise or complaints, corrections, "when I say…", reply-style rules. A plain 👎 = "bad reply", with optional tool suggestions in plain words | `learn.py`, `recipes.py`, `style.py`, `docs/LEARNING.md` |
+| Multitasking | some links missed | `add_dependencies` adds hard and *soft* (order-only) links, `merge_tails` joins "when it finishes…", `cover()` adds back parts the plan missed, follow-up jobs can wait for several jobs | `planner.py`, `agent.py` |
+| Picking from a list | re-ran the tool with the pick | a pick from **search results** acts on that result: "open 2 in vs code", "send the third one" | `workmem.choose()`, `act_on()` |
+| File search | files + folders + KURAMA's own outputs | "X folder" → folders only; folders inside another match and KURAMA's `data/` are dropped | `find_files.py` `_tops`, `_junk` |
+| Apps | one launch try | `open_verified`: raise an existing window, else launch and check a window appears, try gtk → gio → exe, remember the way that worked | `_apps.py` |
+| Music | low volume, no seek | volume 100 kept, seek (skip/back/jump), a music card with controls | `music.py`, `frontend/app.js` |
+| Sound | two volumes multiplied | one volume while the echo canceller runs; the canceller restores your default device | `devaudio.py` |
+| Telegram | uploads blocked the bot; slash commands had no PIN | uploads run beside the chat with an "uploading" status, fresh connection per upload, photos ≤ ~150 KB, a time limit; risky slash commands ask the PIN | `telegram_bot.py`, `notify.py`, `send_file_telegram.py`, `telesec.py` |
+| Hold-to-talk | first holds after start recorded silence | no system echo canceller for hold-to-talk; the panel opens only after the page says "ready"; the ring spins at key-down | `voice.js`, `app.js`, `kurama_wallpaper.py` |
+| Speed test | 10 MB once (0.3 s) | ~15 s: ping, download, upload | `netdoctor.speed()` |
+| Engineering | — | `pyproject.toml`, `Makefile`, lint gate, pre-commit, GitHub CI | section 23 |
 
 ---
 
@@ -708,22 +731,82 @@ them by hand, so your data is never locked away.
 
 ---
 
-## 16. Technologies and why
+## 16. Technologies: what each one is, where KURAMA uses it, what to learn
 
-| Technology | Used for | Why this one (and what was rejected) |
-|---|---|---|
-| **Groq** (gpt-oss-20b, gpt-oss-120b, qwen3.8-27b, Whisper) | the AI, speech-to-text | Free tier, very fast. Rejected: local LLMs (no GPU, 8 GB RAM), paid APIs. |
-| **Gemini** (2.5-flash, flash-lite; optional key) | fallback when Groq is used up | Free tier, good tool calls. Before qwen. `langchain-google-genai` (no torch). |
-| **LangChain** (`ChatGroq`, `ChatGoogleGenerativeAI`, tool schemas) | one interface for messages and tools | Readable; the provider is swappable in `llm.model_for()`. |
-| **LangGraph** | the agent as a graph; parallel steps with `Send`; the schedule → step loop | Explicit, testable states; a cycle (schedule ⇄ step) runs a whole task graph. Rejected: a hand-written loop; multi-agent frameworks (too many tokens). |
-| **fastembed + ONNX Runtime** (`bge-small-en-v1.5`) | meaning: routing, shortcuts, filler, learned plans, search | ~250 MB, CPU only, no PyTorch. |
-| **SQLite** (FTS5, WAL) | every database | No server, crash-safe, built-in search. |
-| **FastAPI + uvicorn + SSE** | the API | Streaming replies; docs at `/docs`. |
-| **Plain HTML/JS** | the UI | No build step, loads instantly. |
-| **GTK3 + WebKit2** | the wallpaper/panel window | A real desktop window behind other windows. |
-| **edge-tts** · **webrtcvad** | voices · speech detection | Free and natural · tiny, no torch. |
-| **pynput, xdotool, wmctrl, pactl, brightnessctl** | controlling the laptop on X11 | Standard tools, each checked with `which`. |
-| **psutil · openpyxl · yt-dlp · pytest** | system info · Excel · downloads · tests | Standard, cheap. |
+This is the list of everything you must know to understand KURAMA fully. If you can explain every row in your own
+words and point at the file that uses it, you know the stack that real AI-product teams use.
+
+**Levels:** ★ = learn it well (you need it daily), ◆ = understand the idea and read the KURAMA code, ○ = know what it
+is and when you'd reach for it.
+
+### 16.1 Language and core Python
+
+| Technology | Level | Where in KURAMA | What to learn |
+|---|---|---|---|
+| **Python 3.12** | ★ | everything in `jarvis/` | functions, classes, dataclasses, type hints (`str \| None`), f-strings, comprehensions, `pathlib`, `re`, `json`, exceptions, context managers (`with`), decorators |
+| **Decorators + registries** | ★ | `registry.py` `@tool(...)` | how a decorator records a function in a dict at import time; why "one tool = one file" works |
+| **Threads, locks, events, queues** | ★ | `jobs.py` (thread pool), `workers/`, `learn.py` (one worker queue), `telegram_bot.py` (uploads beside the chat) | `threading.Thread/Lock/Event`, `queue.Queue`, `concurrent.futures`, race conditions, "never block the voice loop" |
+| **asyncio** | ◆ | FastAPI routes, `run_in_threadpool`, edge-tts | event loop, `async/await`, why blocking code goes to a thread pool |
+| **subprocess** | ★ | every laptop tool (`xdotool`, `pactl`, `fd`, `rg`), `tools/interactive/_proc.py` | `run` vs `Popen`, timeouts, never `shell=True` with user text, an allowlist |
+| **Regex** | ★ | `fastpath.py`, `spelling.py`, `planner.py` | groups, named groups, lookahead, `re.I`, why regex is used only as a *candidate* and meaning decides |
+| **Lazy imports + memory** | ◆ | `memory.py`, `semantic.py`, `send_file_telegram._small_photo` | import inside the function, unload when idle, measure RSS (`make rss`) |
+
+### 16.2 AI and LLM engineering
+
+| Technology | Level | Where | What to learn |
+|---|---|---|---|
+| **LLM APIs (chat completions, tool calling)** | ★ | `llm.py` | messages (system/user/assistant/tool), temperature, max tokens, JSON schema for tools, streaming tokens |
+| **Groq** (gpt-oss-20b/120b, qwen, Whisper) | ★ | `llm.py`, `stt.py` | rate limits (tokens/min, requests/day), 429 + `Retry-After`, model tiers |
+| **Gemini** (free fallback) | ○ | `llm.model_for()` | a second provider behind the same interface |
+| **LangChain core** | ★ | `ChatGroq`, `@tool` schemas, `HumanMessage/AIMessage/ToolMessage` | Runnables, `bind_tools`, `invoke` vs `stream`, tool-call objects |
+| **LangGraph** | ★ | `agent.py` `_build()` | `StateGraph`, nodes, edges, conditional edges, cycles (`llm ⇄ tools`), parallel fan-out with `Send`, state reducers |
+| **Prompt engineering** | ★ | `agent.SYSTEM_PROMPT` (< 250 tokens), `_messages()` | short system prompt, give facts not prose, few tools, history trimming, rolling summary |
+| **Agent patterns** | ★ | `planner.py`, `taskgraph.py` | ReAct loop, plan-and-execute, task DAG with `depends_on`, re-planning a failed step, "claimed but didn't do" checks (`meta.needs_tool`) |
+| **Token economics** | ★ | section 11, `budget.py`, `ratelimit.py` | counting tokens, cutting them, caching, routing cheap → expensive |
+| **Embeddings** (fastembed, `bge-small-en-v1.5`, ONNX Runtime) | ★ | `semantic.py`, `memory.py`, `recipes.py` | a sentence → 384 numbers; cosine similarity; thresholds and margins |
+| **Semantic routing** | ★ | `router.py`, `semantic.scores()`, `fastpath.meaning_ok()` | pick tools by meaning, not keywords; learned examples; a gate that vetoes wrong shortcuts |
+| **RAG (retrieval-augmented generation)** | ★ | `memory.py` | chunking, BM25 (FTS5) + vectors, **reciprocal rank fusion**, incremental indexing, citations |
+| **Speech: STT, TTS, VAD, wake word** | ◆ | `stt.py` (Whisper), `tts.py` (edge-tts), `audio.py` (webrtcvad), `wake.py` | sample rate, PCM/WAV, voice activity detection, sentence-by-sentence TTS while the LLM streams, barge-in |
+| **Evaluation** | ★ | `tests/eval/harness.py`, `tests/eval/cases.jsonl` | a fixed test set, scorecard metrics (instant %, right %, router %), never "it felt better" |
+| **Learning from feedback** | ◆ | `learn.py`, `recipes.py`, `style.py`, `mywords.py` (read `docs/LEARNING.md`) | explicit feedback only (👍/👎, corrections), answer cache keyed by meaning, safe "unlearn" |
+
+### 16.3 Backend, data and caching
+
+| Technology | Level | Where | What to learn |
+|---|---|---|---|
+| **HTTP + REST** | ★ | `jarvis/api/` | methods, status codes, JSON bodies, headers, auth token |
+| **FastAPI + Pydantic + uvicorn** | ★ | `api/app.py`, `api/routes/*.py` | routers, request models with validation, dependencies, OpenAPI docs at `/docs`, `run_in_threadpool` |
+| **Server-Sent Events (SSE)** | ◆ | `/api/v1/chat`, `api/turns.py` | one-way streaming of events (`delta`, `tool`, `confirm`, `done`) |
+| **SQLite** | ★ | `store.py` (`jarvis.db`), `trace.py` (`traces.db`), `memory.py` | SQL (SELECT/JOIN/GROUP BY/indexes), transactions, **WAL mode**, schema migrations (`store._migrate`), why one file beats a server for one user |
+| **FTS5** | ◆ | `messages_fts`, `chunks_fts` | full-text search, BM25 ranking |
+| **Caching** | ★ | weather/web (`WEATHER_CACHE_S`, `WEB_CACHE_S`), meaning vectors (`semantic_router.npz`), answer cache (`ANSWER_CACHE`, 👍 answers reused by meaning ≥ 0.95), `ASK_CACHE` | TTL caches, cache keys, invalidation ("cleared whenever the index changes"), semantic caching |
+| **Rate limiting + backoff** | ★ | `ratelimit.py` (per-model token buckets), `llm._plan_retry`, `_cool` | token bucket, exponential backoff, circuit-breaker-style cooldown |
+| **Background jobs** | ★ | `jobs.py`, `longjobs.py`, `jobqueue.py` | job states, persistence, resume after restart, "yield to interactive work" |
+| **httpx** | ◆ | `notify.py`, `netdoctor.py` | clients, timeouts (connect/read/write), connection pools, streaming, multipart upload |
+| **Telegram Bot API** | ◆ | `workers/telegram_bot.py`, `telesec.py` | long polling (`getUpdates`), sendPhoto/sendDocument, a PIN gate for risky commands |
+
+### 16.4 Frontend and desktop
+
+| Technology | Level | Where | What to learn |
+|---|---|---|---|
+| **HTML/CSS/JavaScript (ES modules)** | ★ | `frontend/` (`app.js`, `api.js`, `voice.js`) | DOM, events, `fetch`, `async/await`, modules, CSS variables, flex/grid |
+| **Web Audio + MediaStream** | ◆ | `voice.js` `Mic`, `Recorder`, `Player` | `getUserMedia`, AudioContext, AudioWorklet, recording WAV in the browser |
+| **GTK3 + WebKit2 (PyGObject)** | ○ | `scripts/kurama_wallpaper.py` | a native window hosting a web page, messages page ⇄ host (`hostSay`) |
+| **Linux desktop (X11)** | ◆ | `xdotool`, `wmctrl`, `pactl`/PipeWire, `gsettings`, `brightnessctl`, AT-SPI | how the desktop is controlled from code; PipeWire modules (`devaudio.py`) |
+| **systemd / autostart / signals** | ○ | `scripts/kurama-power.sh`, `ptt.py` (`SIGUSR2`) | processes, PIDs, signals, autostart |
+
+### 16.5 Engineering practice (what makes it "industry level")
+
+| Practice | Level | Where | What to learn |
+|---|---|---|---|
+| **Git** | ★ | the whole repo | small commits with clear messages, branches, `git log -p`, `git bisect` to find which commit broke something |
+| **pytest** | ★ | `tests/` (~1,820 tests), `tests/conftest.py` | fixtures, `monkeypatch`, `tmp_path`, parametrize, mocking every network call |
+| **Lint gate + pre-commit** | ◆ | `pyproject.toml`, `.pre-commit-config.yaml`, `make lint` | static checks that block commits; secrets never committed |
+| **CI** | ◆ | `.github/workflows/ci.yml` | every push runs lint + tests on a clean machine |
+| **Observability** | ★ | `trace.py` (one row per request), `store` logs of LLM/tool calls, `scripts/trace_report.py`, `MONITORING.md` | tracing, metrics, logs; debugging from evidence |
+| **Safety by design** | ★ | `safety.py`, `telesec.py`, `_secrets.py` | one gate for every action, least privilege, confirm destructive actions, secrets never in prompts |
+| **Configuration** | ★ | `config.py` + `.env` | one source of truth; secrets from the environment (12-factor) |
+| **Resource budgets** | ◆ | `resource_guard` worker, CLAUDE.md budgets | idle RSS < 600 MB, lazy load, idle unload |
 
 ---
 
@@ -917,29 +1000,149 @@ You don't need anyone to keep KURAMA healthy. Here is the routine. MONITORING.md
 
 ---
 
-## 21. How to learn it
+## 21. How to learn it: a day-by-day plan (1–2 hours a day)
 
-### 21.1 Top-down (recommended first)
+**12 weeks, about 1.5 hours a day.** Each day has one thing to *read* and one thing to *do*. If a day takes longer,
+move on anyway and come back at the weekend. Day 7 of every week is for review: re-explain the week out loud, as if
+teaching someone, and write what you still don't get in a `NOTES.md` of your own.
 
-| Day | Read | Goal |
+**Rule for every day:** keep KURAMA running, open the files beside this guide, and predict before you check ("this
+sentence will go to the fast path, tool X"), then check with the snippets in 19.2.
+
+### Week 1: Python as KURAMA uses it
+| Day | Read / learn | Do |
 |---|---|---|
-| 1 | Sections 1–5 of this guide; `CLAUDE.md`. | Know the shape. |
-| 2 | `api/routes/chat.py`, `api/turns.py` `run_turn()`. | See a request arrive. |
-| 3 | `agent.py`: `stream()`, `_begin_turn()`, `_fast()`, `_build()`, `_route_node()`, `_llm_node()`, `_tools_node()`. | The brain's main loop. |
-| 4 | `fastpath.py`: `match()`, `meaning_ok()`, `meaning_intent()`, `try_answer()`, then ONE area (`links_intent()`). | The 0-token path. |
-| 5 | `router.py` `route()`, `semantic.py` `scores()` / `best_of()`. | How meaning picks areas. |
-| 6 | `registry.py`, `safety.py` (`execute`), `tools/core/_hub.py`, `tools/core/memory.py`. | How tools are found and run. |
-| 7 | `workmem.py` (whole file), `focus.refer()`, `agent._open_question()`, `did_line()`, `_messages()`. | Short-term memory. |
-| 8 | `planner.plan()`, `taskgraph.py`, `agent._after_schedule()`, `_step_node()`, `_finish_node()`. | The task graph. |
-| 9 | `llm.py` `chat()`, `_chain()`, `_on_error()`, `model_for()`; `trace.py`; `scripts/trace_report.py`. | The models and the evidence. |
-| 10 | One feature end to end: `tools/general/saved_links.py` → `core/links.py` → its tests. | A full vertical slice. |
+| 1 | Sections 1–2 of this guide. `CLAUDE.md`. | Draw the life of one request on paper from memory. |
+| 2 | Python: functions, dataclasses, type hints, `pathlib`. Read `core/paths.py`. | Write a function that lists the 5 biggest files in a folder (with a test). |
+| 3 | Decorators. Read `core/registry.py` `tool()`. | Write your own `@register` decorator that fills a dict. |
+| 4 | Regex. Read `core/spelling.py` (small) and one area of `fastpath.py` (`findfile_intent`). | Add a typo fix to `spelling.py` + test. |
+| 5 | Exceptions + context managers. Read `core/safety.py` `execute()`. | Trace a tool call through the gate with a print. |
+| 6 | `subprocess`. Read `tools/interactive/_proc.py`. | Write a tool helper that runs `uptime` with a timeout. |
+| 7 | Review. | Explain the safety gate out loud. |
 
-Keep a running KURAMA and the snippets of 19.2 handy: predict what each sentence will do, then check.
+### Week 2: concurrency and the laptop
+| Day | Read / learn | Do |
+|---|---|---|
+| 8 | Threads, locks, events. Read `core/jobs.py` (the manager). | Start a fake job that sleeps 10 s; watch it in the UI. |
+| 9 | Queues. Read `learn.py` (the single worker queue). | Write a producer/consumer with `queue.Queue`. |
+| 10 | `asyncio` basics; why FastAPI uses a thread pool. | Write an async function that fetches two URLs at once with httpx. |
+| 11 | Workers. Read `workers/base.py` and `workers/resource_guard.py`. | Exercise 11 in 21.3: a worker logging battery every 10 min. |
+| 12 | X11 tools: `xdotool`, `wmctrl`, `pactl`. Read `tools/general/_apps.py` `open_verified`. | Use each CLI by hand in a terminal. |
+| 13 | Memory budgets. Read the lazy-load notes in `memory.py`'s docstring. | Run `make rss` before and after a search; explain the difference. |
+| 14 | Review. | — |
 
-### 21.2 Bottom-up (second)
+### Week 3: HTTP, FastAPI, streaming
+| Day | Read / learn | Do |
+|---|---|---|
+| 15 | HTTP: methods, status codes, headers, JSON. | Use `curl` against `http://127.0.0.1:8000/api/v1/health`. |
+| 16 | FastAPI + Pydantic tutorial (official docs, first chapters). Read `api/app.py`. | Open `/docs` and call 3 endpoints from the page. |
+| 17 | Read `api/routes/chat.py` and `api/turns.py` `run_turn()`. | Add a tiny endpoint `GET /api/v1/ping` + test. |
+| 18 | Server-Sent Events. | Stream a chat reply with `curl -N` and read the events. |
+| 19 | httpx: timeouts, pools, multipart. Read `core/notify.py` `telegram_call`, `_upload`. | Explain why uploads use a fresh connection (11-04 bug). |
+| 20 | Telegram Bot API. Read `workers/telegram_bot.py` (`poll`, `_answer`, `_upload_in_background`). | Add a slash command `/uptime`. |
+| 21 | Review. | — |
 
-`config.py` (skim) → `sheets.py` → `links.py` → `saved_links.py` → `registry.py` → `safety.py` → `workmem.py` →
-`_hub.py` → `semantic.py` → `router.py` → `fastpath.py` (one area) → `planner.py` → `taskgraph.py` → `agent.py`.
+### Week 4: SQL, SQLite, caching
+| Day | Read / learn | Do |
+|---|---|---|
+| 22 | SQL basics: SELECT, WHERE, GROUP BY, JOIN, indexes (SQLBolt or similar). | Open `data/traces.db` with Python's `sqlite3`; count requests per path. |
+| 23 | Transactions and WAL. Read `core/store.py` `init()` and `_migrate()`. | Add a column in a migration on a copy of the DB. |
+| 24 | FTS5 and BM25. | Search `messages_fts` for a word you said yesterday. |
+| 25 | Caching: TTL, keys, invalidation. Find `WEATHER_CACHE_S`, `WEB_CACHE_S` users. | Write a `@ttl_cache(seconds)` decorator + test. |
+| 26 | Semantic answer cache. Read `recipes.py` (kept answers) + `docs/LEARNING.md` §1–6. | Ask a question, 👍 it, ask it again: check the trace says 0 tokens. |
+| 27 | Rate limits. Read `core/ratelimit.py`. | Explain a token bucket with numbers on paper. |
+| 28 | Review. | — |
+
+### Week 5: LLMs and LangChain
+| Day | Read / learn | Do |
+|---|---|---|
+| 29 | How chat LLMs work: tokens, context, temperature, tool calling (Groq docs). | Call Groq directly with `ChatGroq` in a 10-line script. |
+| 30 | LangChain messages and tools. Read `registry.py` schemas. | Bind one tool to `ChatGroq`; print the tool call it returns. |
+| 31 | Read `core/llm.py` `chat()`, `_chain()`, `_on_error()`. | Explain what happens on a 429 with and without `Retry-After`. |
+| 32 | Prompt design. Read `agent.SYSTEM_PROMPT` and `_messages()`. | Count the tokens of one real prompt from a trace. |
+| 33 | Token economics. Section 11. | Find the most expensive request this week in `make report`. |
+| 34 | Model tiers and fallbacks. `config.TIER_CHAIN`. | Predict which model answers a voice chat; check the trace. |
+| 35 | Review. | — |
+
+### Week 6: LangGraph and agents
+| Day | Read / learn | Do |
+|---|---|---|
+| 36 | LangGraph quickstart (official docs): StateGraph, nodes, edges. | Build a 3-node toy graph. |
+| 37 | Conditional edges and cycles. Read `agent._build()`. | Add a cycle to your toy graph (a tool loop). |
+| 38 | Parallel fan-out with `Send`. Read section 4 of this guide. | Make your toy graph run 3 steps in parallel. |
+| 39 | Read `agent._route_node`, `_llm_node`, `_tools_node`. | Follow one AI request in a trace, step by step. |
+| 40 | Planning. Read `planner.plan()`, `add_dependencies`, `merge_tails`. | Exercise 4 in 21.3 (predict 5 plans). |
+| 41 | Task graph. Read `taskgraph.py`, `agent._step_node`, `_finish_node`. | Run a 3-part request with one dependency; read its plan in the trace. |
+| 42 | Review. | — |
+
+### Week 7: embeddings, routing, RAG
+| Day | Read / learn | Do |
+|---|---|---|
+| 43 | Embeddings and cosine similarity (any good intro). | Embed 5 sentences with fastembed; print the similarity matrix. |
+| 44 | Read `semantic.py` `scores()`, `best_of()`. | Predict the area of 10 sentences; check (19.2 snippet). |
+| 45 | Read `router.py` and `registry.schemas_for()`, `reach()`. | Exercise 2 in 21.3. |
+| 46 | The meaning gate. Read `fastpath.match()`, `meaning_ok()`. | Find a sentence the gate vetoes; explain why. |
+| 47 | RAG. Read `memory.py` docstring, `search()`, the RRF function. | Index a folder of your notes; search it. |
+| 48 | Evaluation. Read `tests/eval/harness.py`. | Run `make eval`; add 3 cases of your own. |
+| 49 | Review. | — |
+
+### Week 8: KURAMA's own systems
+| Day | Read / learn | Do |
+|---|---|---|
+| 50 | Working memory. Section 3; `workmem.py`. | Exercise 3 in 21.3. |
+| 51 | Choices. `workmem.choose()`, `act_on()`. | Find something, then "open 2 in vs code"; read the trace. |
+| 52 | Learning. `docs/LEARNING.md` §7–19; `learn.py` `_judge`. | Teach "when I say X, do Y"; then forget it. |
+| 53 | Recipes. `recipes.py` `observe`, `feedback`. | 👎 a reply and read what was stored. |
+| 54 | Safety. Section 13; `telesec.py`. | Explain which Telegram commands ask for the PIN and why. |
+| 55 | Background jobs end to end: `generate_image.py` → `jobs.then_send` → `send_output`. | Make an image and send it; find each step in the logs. |
+| 56 | Review. | — |
+
+### Week 9: voice and audio
+| Day | Read / learn | Do |
+|---|---|---|
+| 57 | Digital audio: sample rate, PCM, WAV. Read `audio.py` top. | Record 3 s with `sounddevice`; save a WAV. |
+| 58 | VAD. Read `audio.Endpointer`. | Print speech/non-speech per frame for your recording. |
+| 59 | STT. Read `stt.py` (Whisper, `heard_well`). | Transcribe your WAV via the API route. |
+| 60 | TTS. Read `tts.py` and how sentences are spoken while the LLM streams. | Speak a sentence with edge-tts in 5 lines. |
+| 61 | Hold-to-talk path: `ptt.py` → `kurama_wallpaper.py` `ptt()` → `app.js` `kuramaPTT`. | Hold Alt and follow `data/logs/ptt.log` line by line. |
+| 62 | PipeWire + echo cancel. Read `devaudio.py`. | `pactl list short sinks/sources` and explain each line. |
+| 63 | Review. | — |
+
+### Week 10: frontend
+| Day | Read / learn | Do |
+|---|---|---|
+| 64 | Modern JS: modules, `fetch`, `async/await`, DOM events (MDN). | Read `frontend/api.js` whole. |
+| 65 | Read `app.js` `sendChat()` and how SSE events draw a bubble. | Add a small UI change (a timestamp on messages). |
+| 66 | Web Audio. Read `voice.js` `Mic`, `Recorder`. | Explain the `system: false` change of 11-04. |
+| 67 | CSS: variables, flex, grid. Read `styles.css` top. | Change the theme colour in one place. |
+| 68 | The music card and workspace in `app.js`. | Add a "+10 s" button to the music card. |
+| 69 | The desktop host: `kurama_wallpaper.py` `on_page`, `show_panel`, `_mark_ready`. | Explain why the panel now waits for the page's "ready". |
+| 70 | Review. | — |
+
+### Week 11: testing, debugging, observability
+| Day | Read / learn | Do |
+|---|---|---|
+| 71 | pytest: fixtures, monkeypatch, tmp_path, parametrize. Read `tests/conftest.py`. | Write a parametrized test for `spelling.fix`. |
+| 72 | Mocking network. Read a Telegram test. | Test your `/uptime` command with a fake. |
+| 73 | Traces. Section 19.3; `trace.py`. | `make report`; pick one failure and find its cause. |
+| 74 | Debugging method (19.1). | Exercise 10 in 21.3: fix a real bug with a test that fails first. |
+| 75 | Git deeper: `log -p`, `blame`, `bisect`. | Use `git log -S "act_on"` to find when choices changed. |
+| 76 | Lint gate, pre-commit, CI: `pyproject.toml`, `.pre-commit-config.yaml`, `.github/workflows/ci.yml`. | Install pre-commit; make a commit pass the hooks. |
+| 77 | Review. | — |
+
+### Week 12: industry level, by doing it
+| Day | Read / learn | Do |
+|---|---|---|
+| 78 | Section 23. | Pick debt item 2 (typed tool results) for one tool; design the Pydantic model. |
+| 79 | Pydantic models in depth. | Make that one tool return the typed result + test. |
+| 80 | Type checking: mypy basics. | Run mypy on `core/workmem.py`; fix 5 findings. |
+| 81 | Coverage. | `pytest --cov=jarvis.core`; find the least-covered core file. |
+| 82 | Metrics: Prometheus text format. | Sketch a `/metrics` endpoint with request count and latency. |
+| 83 | ADRs. | Write `docs/adr/0001-sqlite.md`: context, decision, consequences. |
+| 84 | Final review. | Explain KURAMA end to end in 15 minutes, without notes. |
+
+**After week 12** you can explain, change and debug every part. Then keep the routine of section 20 (15 minutes
+every 2–3 days) and work through section 23.2 one item at a time.
 
 ### 21.3 Practice exercises (in order; each with a test you write)
 
@@ -987,14 +1190,59 @@ Keep a running KURAMA and the snippets of 19.2 handy: predict what each sentence
 
 ---
 
-## 23. Honest weak spots
+## 23. Industry level: where KURAMA stands, and what is left
 
-- **`fastpath.py` is 4,200 lines of patterns.** It grew before routing by meaning. New shortcuts should use
-  `MEANING_SHORTCUTS`; a future refactor could split it by area.
-- **`config.py` is 1,280 lines**, mixing settings with long example lists. Examples could move to their own file.
-- **`frontend/app.js` is 2,900 lines** in one file.
-- **Working memory reads paths from tool sentences.** A tool whose result doesn't contain the full path isn't
-  remembered. The structured fix is tools returning their outputs as data.
+"Industry level" does **not** mean using the biggest tools. It means choosing the right tool for the load,
+measuring the result, testing the code, and being able to change any part safely. For **one user on an 8 GB laptop**,
+a big company would choose most of what KURAMA already uses (SQLite, not Postgres; an in-process cache, not Redis;
+one process, not Kubernetes). Learn the server-scale version too, so you know why it is *not* used here:
+
+| Concern | KURAMA (right for one laptop) | Server-scale equivalent (learn the idea) |
+|---|---|---|
+| Database | SQLite in WAL mode, migrations in `store._migrate` | PostgreSQL + Alembic migrations |
+| Search / retrieval | FTS5 BM25 + vectors fused with RRF (`memory.py`) | Elasticsearch/OpenSearch + pgvector/Qdrant, same hybrid idea |
+| Cache | TTL caches in memory/SQLite, semantic answer cache | Redis with TTLs; semantic cache (e.g. GPTCache) |
+| Jobs | thread pool + SQLite job table, resume after restart | Celery/RQ/Arq with Redis, or a durable workflow engine (Temporal) |
+| Rate limits | per-model token bucket + cooldown | API gateway limits, circuit breakers |
+| Agent | LangGraph graph with a task DAG | the same (LangGraph is used in production) + LangSmith tracing |
+| Observability | `traces.db`, per-call logs, trace report | OpenTelemetry traces + Prometheus metrics + Grafana dashboards |
+| API | FastAPI + Pydantic + SSE | the same, behind nginx, with auth |
+| Quality gates | pytest + scorecard + lint gate + CI | the same, plus coverage thresholds and type checking |
+| Deploy | a power script on one laptop | Docker images, CI/CD, staging → production |
+
+### 23.1 Already at industry level
+
+- A real **agent architecture**: routing by meaning → planning → a task graph with dependencies → one safety gate → tracing.
+- **Hybrid RAG** (BM25 + vectors + rank fusion) with incremental indexing and lazy, unloadable embeddings.
+- **Cost engineering**: two of every three requests cost 0 tokens; model fallback chains; rate limiting; caches.
+- **Observability**: every request is a trace with route, tools, tokens and latency; a report finds the failures.
+- **Tests**: ~1,820 offline tests plus an evaluation scorecard; mocked network.
+- **Safety**: confirm levels, a PIN for risky remote commands, secrets kept out of prompts and git.
+- **Tooling** (added 11-05): `pyproject.toml`, `Makefile` (`make help`), a lint gate, pre-commit hooks, GitHub CI.
+
+### 23.2 Not yet at industry level (the honest debt, in the order to fix it)
+
+1. **Giant files.** `fastpath.py` is ~4,600 lines, `config.py` ~1,430, `frontend/app.js` ~3,000. Industry code
+   splits by area: `fastpath/` as a package (one module per area), example lists out of `config.py` into data files,
+   `app.js` into modules (chat, voice, music card, workspace).
+2. **Tools return sentences, not data.** Working memory reads paths out of text (`workmem.paths_in`). Industry
+   tools return a typed result (`{"ok": true, "paths": [...], "text": "..."}`, a Pydantic model) and the sentence is
+   made from it.
+3. **No type checking.** Add `mypy` (or pyright) on `jarvis/core` first, then make it a CI gate.
+4. **Lint gate is narrow.** `make lint-all` lists ~1,200 style findings. Clean one folder at a time and widen the
+   `select` list in `pyproject.toml`.
+5. **No coverage number.** `pip install pytest-cov`, `pytest --cov`, then set a floor in CI.
+6. **Metrics are in SQLite only.** A `/metrics` endpoint (Prometheus format) for latency, tokens and errors would let
+   any dashboard read them.
+7. **Frontend has no build step and no types.** Fine today; at the next big UI change move to TypeScript + Vite
+   (still no framework needed), with a few Playwright tests for the chat and the mini window.
+8. **Decision records.** Write a one-page ADR in `docs/adr/` for each big choice (why SQLite, why LangGraph, why
+   meaning routing). Many of the "why" notes already exist as code comments.
+
+Each item is one phase of work: do it, measure, test, commit, and update this list.
+
+### 23.3 Smaller known weak spots
+
 - **Reference words.** "it / that image / the essay" are matched with small noun lists (`workmem._NOUNS`,
   `focus.is_anaphora`). They only pick *which* remembered thing, never the action, but they can miss a new noun.
 - **Dependency detection** in a rules plan uses reference words (`planner._REF`); the AI plan uses `depends_on`. A

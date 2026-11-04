@@ -19,6 +19,10 @@ from pathlib import Path
 from jarvis.core import config
 
 
+# ruff's default checks always, whatever a project's narrower gate says (KURAMA's pyproject.toml gate is small)
+_RULES = ("--extend-select", "E4,E7,E9,F")
+
+
 def _ruff() -> str | None:
     venv = Path(sys.executable).with_name("ruff")
     return str(venv) if venv.is_file() else shutil.which("ruff")
@@ -100,12 +104,12 @@ def check_file(f: Path, fix: bool = False) -> str:
         return "ruff isn't installed: venv/bin/pip install ruff"
     before = f.read_text(errors="replace")
     if fix:
-        r = subprocess.run([ruff, "check", "--fix", "--quiet", "--exit-zero", str(f)], capture_output=True, text=True,
+        r = subprocess.run([ruff, "check", "--fix", "--quiet", "--exit-zero", *_RULES, str(f)], capture_output=True, text=True,
                            timeout=60)
         after = f.read_text(errors="replace")
         if after != before:
             _backup(f, before)
-    args = [ruff, "check", "--output-format", "concise", "--no-cache", "--exit-zero", str(f)]
+    args = [ruff, "check", "--output-format", "concise", "--no-cache", "--exit-zero", *_RULES, str(f)]
     out = subprocess.run(args, capture_output=True, text=True, timeout=60).stdout
     probs = []
     for ln in out.splitlines():

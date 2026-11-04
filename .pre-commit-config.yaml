@@ -1,0 +1,22 @@
+# `venv/bin/pip install pre-commit && venv/bin/pre-commit install` once; then every `git commit` runs these.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.1
+    hooks:
+      - id: ruff            # the gate in pyproject.toml
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: detect-private-key
+      - id: check-added-large-files
+        args: ["--maxkb=1024"]
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: check-toml
+  - repo: local
+    hooks:
+      - id: no-env-file     # secrets live in .env only and never reach git
+        name: never commit .env
+        entry: .env files must not be committed
+        language: fail
+        files: (^|/)\.env$

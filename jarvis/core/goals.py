@@ -741,7 +741,7 @@ def _make_report(ctx, g: dict) -> str:
                             tier="smart", purpose=ctx.purpose("report-summary"), max_tokens=500,
                             priority="background")).strip()
     days = len({x["date"] for x in logs})
-    head = [f"# {g['name']}: report", "", f"| | |", "|---|---|", f"| Started | {g['start']} |",
+    head = [f"# {g['name']}: report", "", "| | |", "|---|---|", f"| Started | {g['start']} |",
             f"| Ends | {g['end'] or '-'} |", f"| Report made | {today.isoformat()} |", f"| Days with notes | {days} |"]
     if g["repo"]:
         head.append(f"| Commits | {len(cm)} |")
