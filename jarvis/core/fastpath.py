@@ -2021,9 +2021,14 @@ def codenav_intent(t: str) -> Intent | None:
             or re.fullmatch(lead + r"(?:where\s+is\s+the\s+(?:code|definition)\s+of|what\s+is\s+the\s+(?:real|actual)\s+code\s+of)\s+"
                             + sel + r"(?:\s+" + _NAV_OBJ + r")?[\s.!?]*", t, I):
         return Intent("codenav", "code_nav", "codequality", {"action": "find", "name": ""})
-    if m := re.fullmatch(lead + r"(?:" + verb + r"\s+(?:me\s+)?(?:the\s+)?(?:real\s+|actual\s+)?(?:code\s+of\s+|definition\s+of\s+)?"
-                         r"(?:the\s+)?(?:function|method|class|def)\s+|where\s+is\s+(?:the\s+)?(?:function|method|class)\s+)"
-                         r"(?P<n>[A-Za-z_][\w.]*)(?:\(\))?(?:\s+(?:defined|function|method|class))?[\s.!?]*", t, I):
+    where = r"(?:\s+(?:in|inside|from)\s+(?:here|this\s+(?:project|file|folder|repo|code(?:\s*base)?)|my\s+(?:code|project|repo)|"\
+            r"the\s+(?:project|code(?:\s*base)?|repo)))?"  # 'find a function rate_limit in here' went to the FILE search
+    if m := re.fullmatch(lead + r"(?:" + verb + r"\s+(?:me\s+)?(?:the\s+|a\s+|an\s+)?(?:real\s+|actual\s+)?(?:code\s+of\s+|definition\s+of\s+)?"
+                         r"(?:the\s+|a\s+|an\s+)?(?:function|method|class|def)\s+(?:called\s+|named\s+)?|where\s+is\s+(?:the\s+)?"
+                         r"(?:function|method|class)\s+)(?P<n>[A-Za-z_][\w.]*)(?:\(\))?(?:\s+(?:defined|function|method|class))?"
+                         + where + r"[\s.!?]*", t, I) \
+            or (m := re.fullmatch(lead + verb + r"\s+(?:the\s+)?(?P<n>[A-Za-z_][\w.]*(?:_[\w.]*|[a-z][A-Z][\w.]*))(?:\(\))?\s+"
+                                  r"(?:function|method|class)" + where + r"[\s.!?]*", t)):  # 'find rate_limit function'
         return Intent("codenav", "code_nav", "codequality", {"action": "find", "name": m.group("n")})
     return None
 

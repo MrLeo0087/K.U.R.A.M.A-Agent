@@ -117,3 +117,41 @@ def test_the_laptop_tool_reaches_the_whole_guard():
     from jarvis.tools.core import laptop
     from jarvis.tools.core._hub import resolve
     assert resolve(laptop.TABLE, {"action": "guard", "value": "off"}) == ("laptop_guard", {"action": "off"})
+
+
+@pytest.mark.parametrize("said,name", [("find a function rate_limit in here", "rate_limit"),
+                                       ("find rate_limit function", "rate_limit"),
+                                       ("find the class RateLimiter in this project", "RateLimiter")])
+def test_find_a_function_or_class_by_name(said, name):
+    it = fastpath._match(said)
+    assert it.tool == "code_nav" and it.args == {"action": "find", "name": name}
+
+
+def test_the_closest_real_name_when_the_exact_one_is_missing(tmp_path):
+    from jarvis.core import codenav
+    (tmp_path / "limits.py").write_text("class RateLimiter:\n    pass\n\ndef load_state():\n    return 1\n")
+    r = codenav.find("rate_limit", tmp_path, None)
+    assert r["name"] == "RateLimiter" and r["line"] == 1
+    assert codenav.find("load_sate", tmp_path, None)["name"] == "load_state"
+    assert "error" in codenav.find("nothingatallxyz", tmp_path, None)
+
+
+def test_caffeine_is_switched_by_the_key_it_listens_to(monkeypatch, tmp_path):
+    """11-04: 'turn off always on display' wrote 'user-enabled' (only the login restore value), said "Caffeine is
+    off", and the cup stayed on. The extension acts on 'cli-toggle'; KURAMA checks the switch took."""
+    from jarvis.tools.general import laptop_toggle as L
+    (tmp_path / "gschemas.compiled").write_text("x")
+    monkeypatch.setattr(L, "_CAFFEINE", tmp_path)
+    monkeypatch.setattr(L.time, "sleep", lambda s: None)
+    state, cmds = {"cli-toggle": "true"}, []
+
+    def run(argv, **kw):
+        cmds.append(argv)
+        if argv[3] == "set":
+            state[argv[5]] = argv[6]
+        return state.get(argv[5], "false")
+    monkeypatch.setattr(L._sys, "run", run)
+    assert L.laptop_toggle("stay_awake", "off").startswith("Okay: Caffeine is off")
+    assert state["cli-toggle"] == "false" and not any("user-enabled" in c for c in cmds)
+    monkeypatch.setattr(L._sys, "run", lambda argv, **kw: "true")  # the extension didn't follow: say so
+    assert L.laptop_toggle("stay_awake", "off").startswith("error")

@@ -1185,3 +1185,9 @@ Phases (one at a time, owner tests after each):
       (title, time, progress bar to tap, prev / back 10 / pause / forward 30 / next, volume, stop). 👎 = just "bad
       reply"; an optional "what should I have done?" with 3 actions in plain words (by meaning) or own text.
       Tests: test_system_1104.py (33); suite 1784; scorecard 73% / 100% / 98%.
+- [x] 2026-11-04 18:10 Find a function / class: 'find a function rate_limit in here' went to the FILE search, and a name
+      that doesn't exist only said "couldn't find" -> the code-find shortcut takes 'a / the function X (in here / this
+      project)', 'find X function'; codenav.similar suggests the closest real names (rate_limit ~ RateLimiter, typos)
+      and opens the surest one. Caffeine: 'turn off always on display' wrote 'user-enabled' (only the login restore
+      value) and said "off" while the cup stayed on -> 'cli-toggle' (the switch the extension acts on), checked after
+      writing, honest error when it didn't change. Tests +6; suite 1789.

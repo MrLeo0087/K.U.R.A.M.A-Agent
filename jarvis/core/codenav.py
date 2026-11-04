@@ -236,8 +236,57 @@ def find(selection: str, root: Path | None, here: Path | None) -> dict:
         if info and "error" not in info:
             return {"error": f"{name} comes from {module}, but it's built in C, so there's no Python code to open."
                              + (f" It takes {short}{info['sig']}." if info.get("sig") else "")}
+    if root and (near := similar(short, root)):  # no 'rate_limit', but the class RateLimiter exists (11-04: it just
+        best = near[0]  # said "couldn't find"): the closest real names, the surest one opened like a hit
+        if best["score"] >= 0.88:
+            return {"name": best["name"], "file": best["file"], "line": best["line"],
+                    "code": block(best["file"], best["line"]), "others": [], "where": f"closest to '{short}'"}
+        return {"error": f"There's no {short} in {root.name}. Closest: " + "; ".join(
+            f"{n['name']} ({n['kind']}, {_rel(n['file'], root)}:{n['line']})" for n in near[:3]) + ". Say 'find <name>'."}
     return {"error": f"I couldn't find where {short} is defined"
                      + (f" in {root.name}" if root else "") + ". Is it from a library that isn't imported in this file?"}
+
+
+def _key(name: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", name.lower())
+
+
+def similar(name: str, root: Path, limit: int = 5) -> list[dict]:
+    """The project's functions / classes whose names are closest to `name` (spelling, case and underscores aside:
+    rate_limit ~ RateLimiter): [{name, kind, file, line, score}]."""
+    import difflib
+    rg = shutil.which("rg")
+    if not rg or not name or not root.is_dir():
+        return []
+    cmd = [rg, "-n", "--no-heading", "--color", "never", "--max-filesize", "2M", "-g", "*.py", "-g", "*.js", "-g", "*.ts"]
+    for d in SKIP:
+        cmd += ["-g", f"!{d}/"]
+    cmd += ["-e", r"^\s*(?:async\s+)?(?:def|class|function)\s+[A-Za-z_]\w*", "--", str(root)]
+    try:
+        out = subprocess.run(cmd, capture_output=True, text=True, timeout=10).stdout
+    except (OSError, subprocess.SubprocessError):
+        return []
+    want, found = _key(name), []
+    for ln in out.splitlines()[:20000]:
+        f, _, rest = ln.partition(":")
+        num, _, text = rest.partition(":")
+        m = re.search(r"(def|class|function)\s+([A-Za-z_]\w*)", text)
+        if not m or not num.isdigit():
+            continue
+        k = _key(m.group(2))
+        score = difflib.SequenceMatcher(None, want, k).ratio()
+        if want and (want in k or k in want) and min(len(k), len(want)) >= 4:
+            score = max(score, 0.8 + 0.2 * min(len(k), len(want)) / max(len(k), len(want)))
+        if score >= 0.72:
+            found.append({"name": m.group(2), "kind": "class" if m.group(1) == "class" else "function",
+                          "file": Path(f), "line": int(num), "score": round(score, 3)})
+    found.sort(key=lambda x: -x["score"])
+    out_, seen = [], set()
+    for x in found:
+        if (x["name"], str(x["file"])) not in seen:
+            seen.add((x["name"], str(x["file"])))
+            out_.append(x)
+    return out_[:limit]
 
 
 def go(selection: str, root: Path | None, here: Path | None, open_it: bool = True) -> str:

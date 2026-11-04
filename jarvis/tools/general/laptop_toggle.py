@@ -42,10 +42,14 @@ def _caffeine(on: bool | None = None) -> bool | None:
     for d in (_CAFFEINE, Path("/usr/share/gnome-shell/extensions/caffeine@patapon.info/schemas")):
         if (d / "gschemas.compiled").exists():
             base = ["gsettings", "--schemadir", str(d)]
+            # 'cli-toggle' is the switch the extension acts on (it keeps it equal to its state); 'user-enabled' is only
+            # what it restores at login: writing that said "Caffeine is off" while the cup stayed on (11-04)
             if on is None:
-                return _sys.run(base + ["get", "org.gnome.shell.extensions.caffeine", "user-enabled"]).strip() == "true"
-            _sys.run(base + ["set", "org.gnome.shell.extensions.caffeine", "user-enabled", "true" if on else "false"])
-            return on
+                return _sys.run(base + ["get", "org.gnome.shell.extensions.caffeine", "cli-toggle"]).strip() == "true"
+            _sys.run(base + ["set", "org.gnome.shell.extensions.caffeine", "cli-toggle", "true" if on else "false"])
+            time.sleep(0.6)  # the extension flips its state, then writes the key back: check it took
+            now = _sys.run(base + ["get", "org.gnome.shell.extensions.caffeine", "cli-toggle"]).strip() == "true"
+            return now
     return None
 
 
@@ -56,8 +60,11 @@ def _awake(state: str) -> str:
     if caf is not None:
         if state in ("status", ""):
             return "Caffeine is on: the screen stays on." if caf else "Caffeine is off: the screen sleeps as usual."
-        _caffeine(state == "on")
-        return ("Okay: Caffeine is on, the screen stays on and the laptop won't sleep by itself." if state == "on"
+        want = state == "on"
+        if _caffeine(want) != want:
+            return ("error: I asked Caffeine to turn " + ("on" if want else "off") + " but it didn't change. Is the "
+                    "Caffeine extension enabled in Extensions?")
+        return ("Okay: Caffeine is on, the screen stays on and the laptop won't sleep by itself." if want
                 else "Okay: Caffeine is off, the screen sleeps as usual.")
     if state in ("status", ""):
         return "The screen stays on." if store.kv_get("stay_awake_saved") else "The screen turns off and sleeps as usual."
