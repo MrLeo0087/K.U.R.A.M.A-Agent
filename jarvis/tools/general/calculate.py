@@ -24,6 +24,15 @@ _UNITS = {"km": ("len", 1000), "m": ("len", 1), "cm": ("len", 0.01), "mm": ("len
           "h": ("time", 3600), "hour": ("time", 3600), "hours": ("time", 3600), "min": ("time", 60),
           "minutes": ("time", 60), "s": ("time", 1), "sec": ("time", 1), "seconds": ("time", 1),
           "day": ("time", 86400), "days": ("time", 86400)}
+_UNIT_NAMES = {  # long / plural / other spellings -> the key above ('10000 km in meter' failed, 11-04)
+    "meter": "m", "meters": "m", "metre": "m", "metres": "m", "kilometer": "km", "kilometers": "km", "kilometre": "km",
+    "kilometres": "km", "kms": "km", "centimeter": "cm", "centimeters": "cm", "centimetre": "cm", "millimeter": "mm",
+    "millimeters": "mm", "foot": "ft", "kilogram": "kg", "kilograms": "kg", "kilo": "kg", "kilos": "kg", "kgs": "kg",
+    "gram": "g", "grams": "g", "gm": "g", "ounce": "oz", "ounces": "oz", "liters": "l", "litres": "l",
+    "milliliter": "ml", "milliliters": "ml", "gallons": "gallon", "gigabyte": "gb", "gigabytes": "gb",
+    "megabyte": "mb", "megabytes": "mb", "kilobyte": "kb", "kilobytes": "kb", "terabyte": "tb", "terabytes": "tb",
+    "hr": "h", "hrs": "h", "mins": "min", "minute": "min", "second": "s", "secs": "s", "week": "wk", "weeks": "wk"}
+_UNITS["wk"] = ("time", 7 * 86400)
 
 
 def _eval(node):
@@ -51,6 +60,9 @@ def _fmt(x: float) -> str:
 
 def _convert(text: str) -> str | None:
     t = text.lower().strip()
+    t = re.sub(r"^(?:what\s+is|what'?s|how\s+(?:many|much)|convert|change|tell\s+me)\s+", "", t)
+    t = re.sub(r"\b([a-z]+)\b", lambda m: _UNIT_NAMES.get(m.group(1), m.group(1)), t.replace(",", ""))
+    t = re.sub(r"^(\S+\s+\S+)\s+(?:are\s+there\s+)?in\s+(?:a\s+|one\s+)?", r"\1 in ", t)
     if m := re.match(r"^(-?[\d.]+)\s*°?\s*(c|f|celsius|fahrenheit)\s+(?:to|in)\s+°?\s*(c|f|celsius|fahrenheit)$", t):
         v, a, b = float(m.group(1)), m.group(2)[0], m.group(3)[0]
         r = v * 9 / 5 + 32 if (a, b) == ("c", "f") else (v - 32) * 5 / 9 if (a, b) == ("f", "c") else v

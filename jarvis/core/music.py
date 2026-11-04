@@ -568,6 +568,63 @@ def now_playing() -> str | None:
     return f"{'Paused' if paused else 'Playing'}: {cur.get('title') or 'music'}" + (f" ({left} more after it)." if left else ".")
 
 
+def state() -> dict | None:
+    """What the music card shows: title, position, length, paused, volume, previous / next available. None = nothing
+    plays (the card hides)."""
+    cur = PLAYER.current()
+    if not cur or not running():
+        return None
+    pos = _send("get_property", "time-pos", want=True)
+    dur = _send("get_property", "duration", want=True) or cur.get("duration") or 0
+    return {"title": cur.get("title") or "music", "pos": float(pos or 0), "duration": float(dur or 0),
+            "paused": bool(_send("get_property", "pause", want=True)), "volume": PLAYER.volume,
+            "has_next": PLAYER.i + 1 < len(PLAYER.queue), "has_prev": PLAYER.i > 0,
+            "index": PLAYER.i + 1, "count": len(PLAYER.queue)}
+
+
+def parse_time(spec: str) -> tuple[float, bool] | None:
+    """'+30' / '30 seconds' (forward), '-10' / 'back 10 seconds', '1:30' / '2 minutes' / '90' as a position.
+    Returns (seconds, relative) or None."""
+    t = (spec or "").strip().lower()
+    rel = t.startswith(("+", "-")) or bool(re.match(r"(?:skip|forward|ahead|back|rewind|behind)\b", t))
+    back = t.startswith("-") or bool(re.match(r"(?:back|rewind|behind)\b", t))
+    t = re.sub(r"^[+-]|^(?:skip|forward|ahead|back|rewind|behind)\s*(?:by\s+)?", "", t).strip()
+    if m := re.fullmatch(r"(\d{1,2}):(\d{2})(?::(\d{2}))?", t):
+        a, b, c = int(m.group(1)), int(m.group(2)), m.group(3)
+        secs = a * 3600 + b * 60 + int(c) if c else a * 60 + b
+    else:
+        total, found = 0.0, False
+        for n, u in re.findall(r"(\d+(?:\.\d+)?)\s*(hours?|hrs?|h|minutes?|mins?|m|seconds?|secs?|s)?\b", t):
+            found = True
+            unit = (u or "s")[0]
+            total += float(n) * {"h": 3600, "m": 60, "s": 1}[unit]
+        if not found:
+            return None
+        secs = total
+    return (-secs if back else secs), rel
+
+
+def seek(spec: str) -> str | None:
+    """Jump in the song playing: forward / back by some time, or to a time ('skip 30 seconds', 'go to 1:30')."""
+    if not running():
+        return None
+    got = parse_time(spec)
+    if got is None:
+        return "Say how far, e.g. 'skip 30 seconds', 'back 10 seconds' or 'go to 1:30'."
+    secs, rel = got
+    _send("seek", secs, "relative" if rel else "absolute")
+    pos = _send("get_property", "time-pos", want=True)
+    at = f" (now at {int(pos) // 60}:{int(pos) % 60:02d})" if isinstance(pos, (int, float)) else ""
+    if rel:
+        return f"{'Back' if secs < 0 else 'Forward'} {_dur(abs(secs))}{at}."
+    return f"Playing from {int(secs) // 60}:{int(secs) % 60:02d}."
+
+
+def _dur(secs: float) -> str:
+    m, s_ = divmod(int(secs), 60)
+    return f"{m} min {s_} s" if m and s_ else f"{m} min" if m else f"{s_} seconds"
+
+
 VOLUME_KEY = "music_volume"
 VOLUME_SETTLE_TRIES = 60  # x 0.5 s: a streamed song's mpv can take ~10 s to open its socket
 DUCK_VOLUME = 25  # % while you speak to KURAMA or it answers, so it hears you over the music

@@ -1,6 +1,7 @@
 """find_files: find files by name (fdfind) or by content (rg) under a folder, compactly (safe)."""
 from __future__ import annotations
 
+import re
 import time
 
 import shutil
@@ -154,7 +155,17 @@ def find_files(query: str, path: str = "", kind: Literal["any", "name", "folder"
     if not query:
         return "error: give something to search for"
     from jarvis.core.paths import all_disks
-    bases = [_proc.resolve_dir(path)] if (path or "").strip() else all_disks()
+    if (path or "").strip() and re.search(r",|\s+and\s+|\s*&\s*", path):  # 'in project1 and new_project folder':
+        parts = [p.strip() for p in re.split(r",|\s+and\s+|\s*&\s*", re.sub(r"\s+folders?$", "", path.strip())) if p.strip()]
+        bases = []  # each folder searched (it tried ONE folder named 'project1 and new_project', 11-04)
+        for p in parts:
+            try:
+                bases.append(_proc.resolve_dir(p))
+            except Exception:  # noqa: BLE001 - one that doesn't exist: the others still
+                continue
+        bases = list(dict.fromkeys(bases)) or all_disks()
+    else:
+        bases = [_proc.resolve_dir(path)] if (path or "").strip() else all_disks()
     base = bases[0] if len(bases) == 1 else " and ".join(str(b) for b in bases)
     limit = max(1, min(int(limit or 20), 50))
     if not (path or "").strip():

@@ -423,6 +423,22 @@
     <div id="sheet-body" class="sheet-body"></div>
   </dialog>
 
+  <div id="mu-card" class="mu-card" hidden aria-label="Music">
+    <div class="mu-row"><span class="mu-note" aria-hidden="true">♪</span><span id="mu-title" class="mu-title ell"></span><span id="mu-time" class="mu-time"></span></div>
+    <div id="mu-bar" class="gbar mu-bar" title="Tap to jump"><i id="mu-fill"></i></div>
+    <div class="mu-btns">
+      <button type="button" data-mu="previous" title="Previous" aria-label="Previous">⏮</button>
+      <button type="button" data-mu="back" title="Back 10 s" aria-label="Back 10 seconds">↺10</button>
+      <button type="button" id="mu-play" data-mu="pause" title="Pause" aria-label="Pause">⏸</button>
+      <button type="button" data-mu="fwd" title="Forward 30 s" aria-label="Forward 30 seconds">30↻</button>
+      <button type="button" data-mu="next" title="Next" aria-label="Next">⏭</button>
+      <span class="grow"></span>
+      <button type="button" data-mu="volume_down" title="Quieter" aria-label="Volume down">🔉</button>
+      <span id="mu-vol" class="mu-time"></span>
+      <button type="button" data-mu="volume_up" title="Louder" aria-label="Volume up">🔊</button>
+      <button type="button" data-mu="stop" title="Stop" aria-label="Stop">⏹</button>
+    </div>
+  </div>
   <div id="dl-tray" class="dl-tray" hidden aria-label="Downloads">
     <div class="dl-head"><button id="dl-min" class="dl-sum" type="button" title="Minimize / show the downloads">⇣ <span id="dl-sum"></span><i class="dl-chev">▾</i></button>
       <span class="dl-tabs" role="tablist"><button type="button" data-dlt="run" class="on">Running</button><button type="button" data-dlt="lib">Library</button></span></div>

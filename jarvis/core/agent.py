@@ -34,7 +34,7 @@ from langchain_core.messages import (AIMessage, BaseMessage, HumanMessage, Syste
                                      ToolMessage)
 
 from jarvis.core import (config, fastpath, identity, selfknow, jobs, llm, meta, notify, planner, profile, registry, router, trace,
-                         modes, mywords, safety, store, style, taskgraph, workmem, workspace)
+                         modes, mywords, safety, spelling, store, style, taskgraph, workmem, workspace)
 
 log = logging.getLogger("jarvis.agent")
 
@@ -269,7 +269,10 @@ class Agent:
         for attempt in range(2):  # the step, then (failed) one corrected step from a re-plan
             with workmem.collect() as got, taskgraph.plan_windows(state.get("windows")):
                 answer = self._run_task(text, mode, lang, taskgraph.inputs_text(inputs), request=request,
-                                        fast_first=all(r.get("things") for r in inputs), history=False)
+                                        fast_first=all(r.get("things") for r in inputs),
+                                        history=False if inputs else "last")
+                # (the last exchange, ~100 tokens: 'give me number .. send number in telegram' asked "which number?"
+                # twice with no chat at all, 11-04)
             status = taskgraph.judge(answer, got, (*HONEST, TASK_FAILED.split("{")[0], NO_ANSWER))
             if status != "failed" or attempt or not config.TASK_REPLAN:
                 break
@@ -324,7 +327,7 @@ class Agent:
         return {"answer": (" ".join(said + started).strip() + tail).strip() or NO_ANSWER}
 
     def _run_task(self, text: str, mode: str, lang: str | None, prev: str = "", request: str = "",
-                  fast_first: bool | None = None, history: bool = True) -> str:
+                  fast_first: bool | None = None, history: bool | str = True) -> str:
         """One quick task through the route->llm->tools subgraph (prev: earlier step's result). A task-graph step:
         fast_first = try the shortcut even with inputs (they made things it can point at); history=False."""
         if (not prev) if fast_first is None else fast_first:
@@ -565,6 +568,10 @@ class Agent:
             # the tools it already had come too: it answered "All links have been cleared" with the link tool in
             # hand (trace f8ac97af102e) - a retry with only request_tools cost an extra round to get them back
             retry_tools: list[Any] = [t for t in state.get("tools") or [] if meta.tool_name(t) != meta.NAME]
+            have = {meta.tool_name(t) for t in retry_tools}
+            retry_tools += [t for t in registry.REGISTRY.by_meaning(state["user_text"]) if t.name not in have]
+            have = {meta.tool_name(t) for t in retry_tools}  # + the best tool itself, every action of it
+            retry_tools += [t for t in registry.REGISTRY.by_meaning(state["user_text"], k=1, raw=True) if t.name not in have]
             retry_tools.append(meta.schema())
             hint = meta.HINT if not state.get("tools") else meta.DO_IT_HINT + " " + meta.HINT
             if router.looks_like_command(state["user_text"]):  # a real task with no tool: offer the toolsmith
@@ -733,16 +740,16 @@ class Agent:
         return " ".join(fastpath.merge_opens(said)).strip()
 
     # --- history ---
-    def _messages(self, user_text: str, mode: str, lang: str | None, history: bool = True) -> list[BaseMessage]:
+    def _messages(self, user_text: str, mode: str, lang: str | None, history: bool | str = True) -> list[BaseMessage]:
         system = SYSTEM_PROMPT.replace("{name}", identity.name())
         if getattr(self, "channel", "") != "telegram":
             system += SCREEN_SUFFIX
         if mode == "voice":
             system += VOICE_SUFFIX.format(lang=LANG_NAMES.get(lang or "en", "English"))
         with self._lock:
-            if self.summary and history:  # a task-graph step gets its inputs, not the chat
+            if self.summary and history is True:  # a task-graph step gets its inputs + the last exchange, not the chat
                 system += SUMMARY_SUFFIX.format(summary=self.summary)
-            recent = self.history[-2 * config.HISTORY_TURNS:] if history else []
+            recent = self.history[-2:] if history == "last" else self.history[-2 * config.HISTORY_TURNS:] if history else []
         old_ai = [i for i, m in enumerate(recent) if isinstance(m, AIMessage)][:-config.DID_TURNS]
         recent = [AIMessage(content=_DID.sub("", str(m.content))) if i in old_ai else m for i, m in enumerate(recent)]
         # (what the tools did is kept for the last DID_TURNS replies only: older ones cost tokens on every request)
@@ -1046,7 +1053,8 @@ class Agent:
             trace.end(tr, answer, self.last, error)
 
     def _run(self, user_text: str, mode: str, lang: str | None) -> str:
-        user_text = mywords.expand(user_text)  # the owner's own words ('good night' = 'lock the screen')
+        user_text = mywords.expand(spelling.fix(user_text))  # slips fixed ('remain me' -> remind me), then the
+        #                                                       owner's own words ('good night' = 'lock the screen')
         self._begin_turn(user_text)
         fast = self._fast(user_text, lang, mode)
         if fast is not None:
@@ -1086,7 +1094,8 @@ class Agent:
             trace.end(tr, "".join(parts), self.last, error or ("stopped early" if not parts else ""))
 
     def _stream(self, user_text: str, mode: str, lang: str | None) -> Iterator[str]:
-        user_text = mywords.expand(user_text)  # the owner's own words ('good night' = 'lock the screen')
+        user_text = mywords.expand(spelling.fix(user_text))  # slips fixed ('remain me' -> remind me), then the
+        #                                                       owner's own words ('good night' = 'lock the screen')
         self._begin_turn(user_text)
         fast = self._fast(user_text, lang, mode)
         if fast is not None:

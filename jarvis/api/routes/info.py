@@ -538,6 +538,29 @@ class Duck(BaseModel):
     on: bool
 
 
+@router.get("/music/state", summary="The song playing (title, position, length, paused, volume) for the music card")
+async def music_state():
+    from jarvis.core import music
+    return {"playing": await run_in_threadpool(music.state)}
+
+
+class MusicControl(BaseModel):
+    action: str  # pause | resume | next | previous | stop | volume_up | volume_down | seek
+    value: str = ""
+
+
+@router.post("/music/control", summary="The music card's buttons")
+async def music_control(body: MusicControl):
+    from jarvis.core import music
+    acts = {"pause": music.pause, "resume": music.resume, "next": music.next_track, "previous": music.prev_track,
+            "stop": music.stop, "volume_up": lambda: music.volume(10), "volume_down": lambda: music.volume(-10),
+            "seek": lambda: music.seek(body.value)}
+    if body.action not in acts:
+        return {"ok": False, "error": "unknown action"}
+    said = await run_in_threadpool(acts[body.action])
+    return {"ok": True, "said": said or "", "playing": await run_in_threadpool(music.state)}
+
+
 @router.post("/music/duck", summary="Lower KURAMA's music while it listens or speaks (back up with on=false)")
 async def music_duck(body: Duck):
     from jarvis.core import music

@@ -1166,3 +1166,22 @@ Phases (one at a time, owner tests after each):
       coding mode on or off; 'this fodler' = this folder. 'when I say just open ...' had been saved as words for
       'just' (removed; such words refused). Duplicate steps when the planner reworded (cover ignores filler words).
       Tests +12; suite 1751.
+- [x] 2026-11-04 17:30 Whole-system pass from the 16:00 traces + the owner's 30 👎 (owner: "fix the system as a whole,
+      fewer tokens"). Tools: which general tool serves an area is now READ from the action tables (registry.reach /
+      _serving): 18 tools were reachable by none (share_wifi, disk_cleaner, backup, ...) and 'tracker' went to
+      `create`, which can't record an expense; hidden tools are offered when the request means them; the "I can't"
+      retry adds the best tools by meaning over all ~140 tools + the best tool itself (a general tool may expose
+      only part: info had only the guard's 'where'). Tokens: in a mix of areas only each area's main tool goes
+      (230-400 tokens each), and ~40 tools whose own sentence is the answer skip the second AI call (median AI
+      request ~2,700 -> ~800-1,100 tokens; 9 of 12 failed requests now 0 tokens). Shortcuts check their arguments:
+      filler is never a Telegram message, a folder to lock must exist ('lock laptop fast' = the screen), a tab
+      only if open, 'type hello here', internet speed = speed test, units ('10000 km in meter'), biggest / newest
+      files, search in several folders, guard on/off, contact list, the real morning brief to Telegram. Spelling
+      slips fixed first (remain me, remainder, budjet, alram, expensive, opne, fodler...). Kept answers never for
+      the owner's own data ('what is in my reminder' served a stale one). Budget takes number + category from the
+      text. Multi-step steps get the last exchange when they have no inputs. Always-on display = Caffeine (the
+      owner's extension), else GNOME settings; never the screen OFF. Music: seek ('skip 30 seconds', 'go back 10',
+      'jump to 2:00', 'start from 1 minute'), next/previous song, and a music card in the workspace while playing
+      (title, time, progress bar to tap, prev / back 10 / pause / forward 30 / next, volume, stop). 👎 = just "bad
+      reply"; an optional "what should I have done?" with 3 actions in plain words (by meaning) or own text.
+      Tests: test_system_1104.py (33); suite 1784; scorecard 73% / 100% / 98%.

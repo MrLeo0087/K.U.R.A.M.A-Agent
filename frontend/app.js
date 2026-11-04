@@ -523,7 +523,7 @@ function rateButtons(trace) {
       try {
         const r = await api.feedback(trace, vote);
         toast(r.said || "Thanks.");
-        if (vote < 0) { input.value = "No, I meant "; autosize(); input.focus(); } // the correction teaches the right way
+        if (vote < 0) box.closest(".body")?.append(betterPanel(trace, r)); // optional: say / pick what was right
       } catch (e) {
         box.querySelectorAll("button").forEach((x) => (x.disabled = false));
         b.classList.remove("picked");
@@ -533,6 +533,33 @@ function rateButtons(trace) {
     box.append(b);
   }
   return box;
+}
+
+// after a 👎: nothing to type unless you want. "What should I have done?" with up to 3 actions in plain words (by
+// meaning, never tool names) and a free line; either sends the request again as a correction, which teaches it
+function betterPanel(trace, r) {
+  const p = el("div", "better");
+  p.append(el("div", "s", "What should I have done? (optional)"));
+  const row = el("div", "better-row");
+  const redo = (how) => {
+    p.remove();
+    const text = /^no\b/i.test(how) ? how : "No, " + how;
+    input.value = text; autosize(); $("composer").requestSubmit();
+  };
+  for (const s of r.suggest || []) {
+    const b = el("button", "chip better-chip", esc(s.label));
+    b.type = "button"; b.title = "Do it this way";
+    b.onclick = () => redo(`use the ${s.label.replace(/…$/, "")} for this: ${r.request || ""}`.trim());
+    row.append(b);
+  }
+  const own = el("input", "better-own");
+  own.placeholder = "or say what you wanted…";
+  own.onkeydown = (e) => { if (e.key === "Enter" && own.value.trim()) redo(own.value.trim()); };
+  const skip = el("button", "chip", "Skip");
+  skip.type = "button"; skip.onclick = () => p.remove();
+  row.append(own, skip);
+  p.append(row);
+  return p;
 }
 
 async function answerConfirm(id, yes, via = "") { // via: who answered (logged by the server)
@@ -641,6 +668,7 @@ async function sendChat(text, { voice = false, lang = null, speak = false, ambie
           setTimeout(loadToday, 600); // a reminder / alarm / timer may have changed
           setTimeout(loadOutputs, 800); // a tool may have just saved a file (long results go to the workspace)
           setTimeout(loadDownloads, 1200); // a download may have just started: show its bar
+          setTimeout(loadMusic, 1500); // music may have just started / stopped: show / hide its card
           setTimeout(loadWall, 1500);
           if (/\bname\b/i.test(text)) setTimeout(loadName, 500); // "change your name to ..."
           break;
@@ -2756,6 +2784,47 @@ function renderDownloads(items) {
 }
 if (WSONLY) $("mws-body").before($("dl-tray")); // its place: the top of the workspace
 else if (!MINI) $("ws")?.querySelector(".card-title")?.after($("dl-tray"));
+// the music card: only while KURAMA's player plays (title, time, progress, previous / pause / next, volume, stop)
+if (WSONLY) $("dl-tray").before($("mu-card")); else if (!MINI) $("dl-tray").before($("mu-card"));
+let muTimer = 0;
+const mmss = (s) => `${Math.floor((s || 0) / 60)}:${String(Math.floor((s || 0) % 60)).padStart(2, "0")}`;
+function renderMusic(p) {
+  const card = $("mu-card");
+  card.hidden = !p;
+  if (!p) return;
+  $("mu-title").textContent = p.title; $("mu-title").title = p.title + (p.count > 1 ? ` (${p.index} of ${p.count})` : "");
+  $("mu-time").textContent = p.duration ? `${mmss(p.pos)} / ${mmss(p.duration)}` : mmss(p.pos);
+  $("mu-fill").style.width = (p.duration ? Math.min(100, Math.max(1, (p.pos / p.duration) * 100)) : 0) + "%";
+  $("mu-vol").textContent = p.volume + "%";
+  const play = $("mu-play");
+  play.dataset.mu = p.paused ? "resume" : "pause"; play.textContent = p.paused ? "▶" : "⏸";
+  play.title = play.ariaLabel = p.paused ? "Play" : "Pause";
+  card.querySelector('[data-mu="next"]').disabled = !p.has_next;
+  card.querySelector('[data-mu="previous"]').disabled = !p.has_prev;
+  card.dataset.dur = p.duration || 0;
+}
+async function loadMusic() {
+  clearTimeout(muTimer); muTimer = 0;
+  let p = null;
+  try { p = (await api.musicState()).playing; } catch { /* offline */ }
+  renderMusic(p);
+  if (!document.hidden) muTimer = setTimeout(loadMusic, p ? 1000 : 8000); // every second while it plays
+}
+$("mu-card").onclick = async (e) => {
+  const b = e.target.closest("[data-mu]");
+  if (!b) return;
+  const a = b.dataset.mu, map = { back: ["seek", "-10"], fwd: ["seek", "+30"] };
+  const [action, value] = map[a] || [a, ""];
+  try { const r = await api.musicControl(action, value); renderMusic(r.playing); } catch (err) { toast("Music: " + err.message); }
+};
+$("mu-bar").onclick = async (e) => { // tap the bar: jump there
+  const dur = +$("mu-card").dataset.dur;
+  if (!dur) return;
+  const r = $("mu-bar").getBoundingClientRect(), at = Math.round(((e.clientX - r.left) / r.width) * dur);
+  try { renderMusic((await api.musicControl("seek", String(at))).playing); } catch { /* offline */ }
+};
+document.addEventListener("visibilitychange", () => { if (!document.hidden) loadMusic(); });
+loadMusic();
 $("dl-list").onclick = async (e) => {
   const b = e.target.closest("[data-dl]");
   if (!b) return;

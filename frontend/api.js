@@ -93,6 +93,8 @@ export class Api {
   alertsRead() { return this.request("/api/v1/alerts/read", { method: "POST", body: {} }); }
   moneyRange(start, end = "", category = "") { return this.request(`/api/v1/money/range?start=${start}&end=${end}&category=${encodeURIComponent(category)}`); }
   feedback(trace, vote, note = "") { return this.request("/api/v1/feedback", { method: "POST", body: { trace, vote, note } }); }
+  musicState() { return this.request("/api/v1/music/state"); }
+  musicControl(action, value = "") { return this.request("/api/v1/music/control", { method: "POST", body: { action, value } }); }
   musicDuck(on) { return this.request("/api/v1/music/duck", { method: "POST", body: { on } }); }
   suggest(n = 4) { return this.request(`/api/v1/suggest?n=${n}`); }
   tracker(kind, ref) { return this.request("/api/v1/tracker", { method: "POST", body: { kind, ref } }); }

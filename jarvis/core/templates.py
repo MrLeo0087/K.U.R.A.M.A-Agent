@@ -127,6 +127,8 @@ def small_talk(text: str) -> dict | None:
     t = " ".join((text or "").split())
     if not t or len(t.split()) > 10 or not semantic.ready():
         return None
+    if re.match(r"^\W*(?:type|write|say|send|search|open|text|message|play|find|google)\s+\S", t, re.I):
+        return None  # 'type hello here' is typing, not a greeting (11-04)
     from jarvis.core import planner
     # "hello, what are you doing, and tell me the time": parts, each answered; but "Hello, bro. How are you?" /
     # "Thanks. Thanks." are small talk in every part (cost 500-700 tokens each on 11-01): the last part's answer.

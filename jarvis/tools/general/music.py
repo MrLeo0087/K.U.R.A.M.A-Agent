@@ -10,7 +10,7 @@ from jarvis.core.registry import tool
       "YouTube link or playlist, a saved playlist, or the songs in ~/Music; save/list/delete playlists; pause, resume, "
       "next, previous, volume, what's playing, stop.")
 def music(action: Literal["play", "url", "playlist", "local", "save", "playlists", "delete", "pause", "resume", "next",
-                          "previous", "volume_up", "volume_down", "volume_set", "status", "stop"] = "play",
+                          "previous", "volume_up", "volume_down", "volume_set", "status", "stop", "seek"] = "play",
           query: str = "", shuffle: bool = False) -> str:
     """Music player.
 
@@ -19,7 +19,8 @@ def music(action: Literal["play", "url", "playlist", "local", "save", "playlists
             mood: 'us mod se shuru kare hindi song', never just 'hindi song' when a title was said), url (query = YouTube link; empty = the tab open in the browser),
             playlist (query = saved playlist name), local (query = folder, empty = ~/Music), save (query = name for
             the open/linked playlist), playlists (list them), delete (query = name), pause, resume, next, previous,
-            volume_up / volume_down (query = step, default 15), volume_set (query = 0-130), status, stop.
+            volume_up / volume_down (query = step, default 15), volume_set (query = 0-130), status, stop,
+            seek (query = '+30' forward, '-10' back, or a time to play from: '1:30', '2 minutes').
         query: See action.
         shuffle: Play in random order.
     """
@@ -47,6 +48,8 @@ def music(action: Literal["play", "url", "playlist", "local", "save", "playlists
         return m.playlists_text()
     if action == "delete":
         return m.delete_playlist(query)
+    if action == "seek":
+        return m.seek(query) or "No music is playing."
     out = {"pause": m.pause, "resume": m.resume, "next": m.next_track, "previous": m.prev_track,
            "volume_up": lambda: m.volume(int(query or 15)), "volume_down": lambda: m.volume(-int(query or 15)),
            "volume_set": lambda: m.volume(to=int(query or 60)), "status": m.now_playing,

@@ -293,6 +293,11 @@ body.low-power[data-state="speaking"] .halo { animation: speak 0.5s ease-in-out 
 .chip { display: inline-flex; align-items: center; gap: 4px; font-family: var(--mono); font-size: 10.5px; padding: 2px 8px; border-radius: 999px;
   border: 1px solid var(--line); color: var(--muted); background: rgba(255, 255, 255, 0.025); animation: rise 0.3s var(--ease) both; }
 .chip b { color: var(--dim); font-weight: 400; }
+.better { margin-top: 6px; padding: 6px 8px; border: 1px dashed var(--line); border-radius: 10px; font-size: 12px; }
+.better-row { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; align-items: center; }
+.better-chip { cursor: pointer; }
+.better-own { flex: 1; min-width: 140px; background: transparent; border: 1px solid var(--line); border-radius: 999px;
+  color: inherit; padding: 3px 10px; font-size: 12px; }
 .rate { display: inline-flex; gap: 2px; margin-left: auto; }
 .rate-btn { font-size: 12px; line-height: 1; padding: 2px 6px; border-radius: 999px; border: 1px solid transparent;
   background: transparent; cursor: pointer; opacity: 0.45; filter: grayscale(1); transition: opacity 0.15s, filter 0.15s; }
@@ -1270,6 +1275,18 @@ body.minimal .col.right #ws { flex: 1 1 auto; min-height: 0; margin: 0; }
 body.minimal .to-minimal { display: none; }
 
 /* downloads: one bar per download at the top of the workspace (main UI, mini's workspace window) */
+.mu-card { margin: 6px 0 8px; padding: 8px 10px; border: 1px solid var(--card-border); border-radius: 10px; background: rgba(255, 255, 255, 0.02); font-size: 12px; }
+.mu-card[hidden] { display: none; }
+.mu-row { display: flex; align-items: center; gap: 6px; }
+.mu-note { color: var(--accent-2); }
+.mu-title { flex: 1; min-width: 0; font-weight: 500; }
+.mu-time { color: var(--muted); font-family: var(--mono); font-size: 10.5px; }
+.mu-bar { cursor: pointer; margin: 6px 0; }
+.mu-btns { display: flex; align-items: center; gap: 4px; }
+.mu-btns .grow { flex: 1; }
+.mu-btns button { border: 1px solid var(--line); background: transparent; color: inherit; border-radius: 8px; padding: 2px 7px; cursor: pointer; font-size: 12px; }
+.mu-btns button:hover:not(:disabled) { border-color: var(--accent-2); }
+.mu-btns button:disabled { opacity: 0.35; cursor: default; }
 .dl-tray { margin: 6px 0 8px; padding: 8px 10px; border: 1px solid var(--card-border); border-radius: 10px; background: rgba(255, 255, 255, 0.02); font-size: 12px; }
 .dl-sum { display: flex; width: 100%; align-items: center; gap: 6px; border: 0; background: transparent; color: var(--accent-2); font: inherit; cursor: pointer; padding: 0; }
 .dl-sum span { flex: 1; text-align: left; }

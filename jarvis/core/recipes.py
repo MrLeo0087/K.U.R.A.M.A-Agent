@@ -39,6 +39,8 @@ _POINTS = re.compile(r"\b(?:this|that|these|those|it|its|here|there|selected|hig
                      r"previous|last|again|yo|tyo|yaha|yeh|woh|isko|usko)\b", re.I)
 _LIVE = re.compile(r"\b(?:today|tonight|now|right\s+now|currently|latest|recent|news|score|scores|price|prices|"
                    r"weather|tomorrow|yesterday|this\s+(?:week|month|year)|aaja|aaj|abhi|ahile|kal|bholi)\b", re.I)
+_PERSONAL = re.compile(r"\b(?:my|mine|me|i|i'm|i've|our|us|you\s+know|your\s+memory|remainder|reminders?|list|"
+                       r"todo|to-do|spend|spent|budget|contacts?|schedule|files?|folders?)\b", re.I)
 _PATHISH = re.compile(r"[/\\]|^~|\.\w{1,5}$")
 _BG = "Still working after"
 
@@ -380,7 +382,7 @@ def find(text: str) -> tuple[dict, dict, float] | None:
             else:
                 continue
         else:
-            if s < config.ANSWER_CACHE_SIM or not _same_words(r["text"], text) or _LIVE.search(text) \
+            if s < config.ANSWER_CACHE_SIM or not _same_words(r["text"], text) or _LIVE.search(text) or _PERSONAL.search(text) \
                     or now - r.get("ts", 0) > config.ANSWER_CACHE_DAYS * 86400:
                 continue
             args = {}
@@ -446,6 +448,8 @@ def forget_matching(text: str) -> int:
 def _cacheable(row: dict) -> bool:
     tools = [t for t in json.loads(row.get("tools") or "[]") if t.get("name") not in ("request_tools", "_say")]
     ans = row.get("answer") or ""
+    if _PERSONAL.search(row.get("text") or ""):
+        return False  # 'what is in my reminder', 'do you know my name': the answer changes (stale kept answers, 11-04)
     return (row.get("path") == "ai" and not tools and 2 <= len(ans) <= 1500 and not row.get("error")
             and not row.get("asked") and not _LIVE.search(row.get("text") or "") and not _POINTS.search(row.get("text") or "")
             and len(_tokens(row.get("text") or "")[1]) >= 3)
@@ -510,8 +514,32 @@ def feedback(trace_id: str, vote: int, note: str = "", veto: bool = True) -> dic
     if veto and row.get("path") == "fastpath" and row.get("intent"):
         learn.add(text, "", row["intent"], "thumbs_down")  # that shortcut is wrong for this meaning (meaning_ok)
     log.info("👎 %s %r (%d learned rows removed)", trace_id, text[:60], gone)
-    return {"ok": True, "said": "Sorry. I won't answer it that way again. Tell me what you wanted (say it as a "
-                                "correction: 'no, I meant ...') and I'll learn the right way."}
+    return {"ok": True, "said": "Noted as a bad reply.", "request": text,
+            "suggest": suggestions(text, [t.get("name") or "" for t in tools])}
+
+
+def suggestions(text: str, used: list[str], k: int = 3) -> list[dict]:
+    """What the reply could have done instead, in plain words (never tool names): the tools closest in meaning to
+    the request, minus the ones it used. The owner taps one after a 👎 (owner 11-04: "I don't know the tool names")."""
+    from jarvis.core import registry, semantic
+    if not semantic.ready() or not text:
+        return []
+    R = registry.REGISTRY
+    out, seen = [], set(used)
+    scored = []
+    for n, t in R.tools.items():
+        if n in seen or registry.group_of(t) in ("core", *config.AGENT_GROUPS) or not t.description:
+            continue
+        b = semantic.best_of(text, "tooldesc:" + n, {n: (t.description,)})
+        if b:
+            scored.append((b[1], n, t.description))
+    for _, n, d in sorted(scored, reverse=True)[:k]:
+        plain = re.sub(r"\s*\([^)]*\)", "", d)  # no '(+ - * / ^ %...)' bits
+        label = re.split(r"[:;]|\.\s|\s+-\s+", plain, maxsplit=1)[0].strip(" ,.")
+        if len(label) > 48:
+            label = label[:48].rsplit(" ", 1)[0].rstrip(",") + "…"
+        out.append({"label": label, "tool": n})
+    return out
 
 
 def late_complaint(text: str, skip: tuple[str, ...] = ()) -> str | None:

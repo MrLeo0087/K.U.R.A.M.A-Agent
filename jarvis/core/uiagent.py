@@ -394,7 +394,8 @@ def parse_type(text: str) -> dict | None:
     m = _TYPE.match((text or "").strip())
     if not m:
         return None
-    t = m.group("t").strip()
+    t = re.sub(r"^(\S+)\s+(?:here|there|in\s+(?:it|here|there))\s*$", r"\1", m.group("t").strip(), flags=re.I)  # 'type hello
+    #   here': 'here' is WHERE (11-04 it typed "hello here")
     if k := _THEN_KEY.search(t):  # 'type X then press Enter': type X, then the key (11-02: the words were typed)
         t = t[:k.start()] + ("\t" if k.group("k").lower() == "tab" else "\n")
     return {"text": t.strip(" ").strip("'\""), "app": m.group("app") or ""}

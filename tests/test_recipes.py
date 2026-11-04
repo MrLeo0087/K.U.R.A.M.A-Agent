@@ -137,7 +137,7 @@ def test_thumbs_down_forgets_and_vetoes_the_shortcut(model):
     save_trace("aabbcc000002", "what is the status of my battery charge", path="fastpath", intent="learned",
                answer="Battery 93%")
     out = recipes.feedback("aabbcc000002", -1)
-    assert out["ok"] and "won't answer it that way" in out["said"]
+    assert out["ok"] and out["said"] == "Noted as a bad reply."  # no correction forced on the owner
     assert recipes.find("what is the status of my battery charge") is None and recipes.rows() == []
     assert any(r["neg"] == "learned" for r in learn._load()[0])
     assert [r["vote"] for r in trace.feedback_rows()] == [-1, 1]

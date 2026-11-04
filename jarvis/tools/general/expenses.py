@@ -1,6 +1,8 @@
 """expenses: money tracker in ~/Documents/KURAMA/expenses.xlsx (add, reports, budgets, bills), 0 tokens (safe)."""
 from __future__ import annotations
 
+import re
+
 from typing import Literal
 
 from jarvis.core.registry import tool
@@ -37,6 +39,16 @@ def expenses(action: Literal["add", "report", "breakdown", "list", "delete", "ed
     if action == "edit":
         return ex.edit_last(text)
     if action == "budget":
+        if not amount:  # the model put '2000' in text or category ('set my budget to 2000' asked twice, 11-04)
+            m = re.search(r"\d[\d,]*(?:\.\d+)?\s*k?\b", f"{text} {category}", re.I)
+            if m:
+                v = m.group(0).replace(",", "").strip().lower()
+                amount = float(v[:-1]) * 1000 if v.endswith("k") else float(v)
+                category = re.sub(r"\d[\d,]*(?:\.\d+)?\s*k?\b", "", category, flags=re.I).strip()
+                if not category:  # 'clothes 500' in text: the words left are the category ('set the budget of
+                    rest = re.sub(r"\d[\d,]*(?:\.\d+)?\s*k?\b|\b(?:rs|npr|rupees?|for|of|to|the|budget|my|this|month)\b", " ",
+                                  text, flags=re.I).strip()  # clothes to 500' set the TOTAL, 11-04)
+                    category = rest if rest and ex.resolve_category(rest) else ""
         return ex.set_budget(ex.resolve_category(category) or category or "total", amount) if amount else "How much should the monthly budget be?"
     if action == "bill":
         return ex.add_bill(text, amount, day) if amount and day else "Tell me the bill, amount and day, e.g. 'internet 1500 on the 5th'."

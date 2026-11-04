@@ -388,6 +388,24 @@ def sendfile_intent(t: str) -> Intent | None:
     return Intent("sendfile", "send_file_telegram", "telegram", {"path": path}, tgt)
 
 
+_RANKED = re.compile(r"^(?:please\s+)?(?:find|show|list|give\s+me|what\s+are)\s+(?:me\s+)?(?:the\s+|my\s+)?(?:(?P<n>\d+)\s+)?"
+                     r"(?P<o>biggest|largest|heaviest|newest|latest|most\s+recent|recent)\s+(?:(?P<n2>\d+)\s+)?"
+                     r"(?P<q>[\w.*]+\s+)?files?\s+(?:in|on|inside|from)\s+(?:my\s+|the\s+)?(?P<p>.+?)[\s.?!]*$", I)
+
+
+def ranked_files_intent(t: str) -> Intent | None:
+    """'find the biggest files in my downloads' / 'show the 5 newest pdf files in documents': sorted, 0 tokens (the AI
+    listed the folder and wrote its own script: 5,054 tokens, 11-04)."""
+    m = _RANKED.match(t or "")
+    if not m:
+        return None
+    order = "biggest" if m.group("o").lower() in ("biggest", "largest", "heaviest") else "newest"
+    q = (m.group("q") or "").strip().lower()
+    q = f"*.{q.lstrip('*.')}" if q and q not in ("all", "the", "my") else "*"
+    return Intent("findfile", "find_files", "filesearch", {"query": q, "path": m.group("p").strip(), "kind": "name",
+                                                           "order": order, "limit": int(m.group("n") or m.group("n2") or 10)})
+
+
 def search_intent(t: str) -> Intent | None:
     if _SEARCH_ANSWER.search(t):
         return None  # they want the answer: LLM path with web_search / wikipedia
@@ -916,9 +934,22 @@ def music_intent(t: str) -> Intent | None:
         return Intent("music", "music", "media", {"action": action, "query": q, **({"shuffle": True} if shuffle else {})})
     low = t.strip(" .!?").lower()
     lead = r"(?:please\s+|kurama\W+|can\s+you\s+|hey\s+|now\s+|okay\s+|ok\s+)*"
-    if re.fullmatch(lead + r"(?:next|skip|skip\s+(?:it|this)|next\s+one|another\s+one|change\s+(?:it|the\s+song))", low, I) and music.running():
+    tm = r"(?P<n>\d+(?::\d{2})?\s*(?:seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?)?(?:\s+(?:and\s+)?\d+\s*(?:seconds?|secs?|s))?)"
+    if music.running():  # 'skip 30 seconds', 'go back 10 seconds', 'jump to 2 minutes', 'start from 1:30' (11-04: none)
+        if m := re.fullmatch(lead + r"(?:skip|forward|fast\s*forward|go\s+forward|move\s+forward|jump\s+(?:ahead|forward)|ahead)"
+                             r"\s+(?:by\s+)?" + tm + r"(?:\s+(?:ahead|forward))?[\s.!]*", low, I):
+            return mu("seek", "+" + m.group("n"))
+        if m := re.fullmatch(lead + r"(?:go\s+back|back|rewind|move\s+back|jump\s+back|skip\s+back)\s+(?:by\s+)?" + tm
+                             + r"(?:\s+back)?[\s.!]*", low, I):
+            return mu("seek", "-" + m.group("n"))
+        if m := re.fullmatch(lead + r"(?:(?:jump|go|skip|seek|move)\s+(?:direct(?:ly)?\s+)?to|(?:start|play|resume)\s+(?:it\s+|the\s+"
+                             r"(?:song|music)\s+)?(?:again\s+)?from)\s+(?:the\s+)?" + tm + r"(?:\s+mark)?[\s.!]*", low, I):
+            return mu("seek", m.group("n"))
+    if re.fullmatch(lead + r"(?:next|skip|skip\s+(?:it|this|the\s+song|this\s+song)|next\s+(?:one|song|track|music)|play\s+(?:the\s+)?next"
+                    r"(?:\s+(?:song|track|one))?|another\s+one|change\s+(?:it|the\s+song))[\s.!]*", low, I) and music.running():
         return Intent("media", "media_control", "media", {"action": "next"}, "media")
-    if re.fullmatch(lead + r"(?:previous|back|go\s+back|last\s+one|play\s+(?:the\s+)?previous\s+one)", low, I) and music.running():
+    if re.fullmatch(lead + r"(?:previous|back|go\s+back|last\s+one|previous\s+(?:song|track|one)|play\s+(?:the\s+)?previous"
+                    r"(?:\s+(?:song|track|one))?)[\s.!]*", low, I) and music.running():
         return Intent("media", "media_control", "media", {"action": "previous"}, "media")
     bare = re.sub(r"\s*https?://\S+", "", low).strip()
     if m := re.fullmatch(lead + r"(?:save|store|keep)\s+(?:this|that|the)\s+(?:playlist|song|music|mix)\s+(?:as|in)\s+(?:my\s+)?(?P<n>[\w\s]+?)(?:\s+playlist)?", bare, I) \
@@ -1535,7 +1566,8 @@ _C_FIND = [re.compile(r"^(?:please\s+)?(?:what(?:'s|\s+is)\s+|give\s+me\s+|tell\
            re.compile(r"^(?:please\s+)?(?:find|search|look\s+up)\s+(?:the\s+)?contact\s+" + _CNAME + r"$", I),
            re.compile(r"^(?:please\s+)?(?:what(?:'s|\s+is)|give\s+me|tell\s+me|send\s+me|get\s+me)\s+" + _CNAME +
                       r"\s+(?:(?:phone|mobile)\s+)?(?:number|no\.?|contact)\s*\??$", I)]
-_C_LIST = re.compile(r"^(?:please\s+)?(?:show|list|open|give\s+me)\s+(?:all\s+)?(?:of\s+)?(?:my\s+|the\s+)?(?:contacts|contact\s+list|phone\s+book|phonebook)$", I)
+_C_LIST = re.compile(r"^(?:please\s+)?(?:show|list|open|give|send|tell)(?:\s+me)?\s+(?:all\s+)?(?:of\s+)?(?:my\s+|the\s+)?(?:contacts|"
+                     r"contact\s+list|contacts\s+list|phone\s+book|phonebook)[\s.?!]*$", I)  # 'show me my contact list' (11-04)
 _C_DEL = re.compile(r"^(?:please\s+)?(?:delete|remove)\s+(?:the\s+)?contact\s+" + _CNAME + r"$", I)
 _C_UPD = re.compile(r"^(?:please\s+)?(?:change|update|edit)\s+" + _CNAME + r"(?:'s|s')?\s+(?:(?:phone|mobile)\s+)?number\s+to\s+" + _PH + r"$", I)
 _C_STOP = {"my", "your", "his", "her", "their", "our", "the", "this", "that", "a", "an", "it", "phone", "mobile",
@@ -1800,6 +1832,14 @@ def tracker_intent(t: str) -> Intent | None:
     if re.fullmatch(r"(?:please\s+)?(?:give\s+me\s+|tell\s+me\s+|read\s+me\s+|send\s+(?:me\s+)?|show\s+(?:me\s+)?|what(?:'s|\s+is)\s+)?(?:my\s+|the\s+|today'?s\s+)?(?:morning\s+|daily\s+)?brief(?:ing)?"
                     r"(?:\s+(?:for\s+)?today)?|brief\s+me|how\s+does\s+my\s+day\s+look(?:\s+like)?|what\s+does\s+my\s+day\s+look\s+like", low, I):
         return Intent("brief", "_brief", "self", {})
+    if re.fullmatch(r"(?:please\s+)?send\s+(?:me\s+)?(?:my\s+|the\s+|today'?s\s+)?(?:morning\s+|daily\s+)?brief(?:ing)?\s+"
+                    r"(?:to|on|in)\s+(?:my\s+)?telegram", low, I):  # the REAL brief, not the words / a made-up one (11-04)
+        from jarvis.core import brief
+        return Intent("tgmsg", "send_message_telegram", "telegram", {"text": brief.build()})
+    if m := re.fullmatch(r"(?:please\s+)?(?:turn|switch|set)\s+(?P<s>on|off)\s+(?:the\s+|my\s+)?(?:laptop\s+)?guard|(?:the\s+|my\s+)?"
+                         r"(?:laptop\s+)?guard\s+(?P<s2>on|off)|(?P<a>arm|disarm)\s+(?:the\s+|my\s+)?(?:laptop\s+)?guard", low, I):
+        st = m.group("s") or m.group("s2") or ("on" if m.group("a") == "arm" else "off")
+        return Intent("control", "laptop_guard", "power", {"action": st})  # 'turn off laptop guard': "no tool" (11-04)
     # --- habits ---
     if m := re.fullmatch(r"(?:please\s+)?(?:add|create|start|new|make|track)(?:\s+a)?(?:\s+new)?\s+habit(?:\s+(?:to|of|for|called|named))?[:\s]+(?P<x>.+)"
                          r"|(?:please\s+)?(?:start\s+)?track(?:ing)?\s+(?:my\s+)?(?P<y>.+?)\s+(?:daily|every\s+day|as\s+a\s+habit)(?P<r>.*)", low, I):
@@ -2143,9 +2183,15 @@ def everyday_intent(t: str) -> Intent | None:
     if m := re.fullmatch(r"(?:please\s+)?(?P<a>lock|unlock|encrypt|decrypt|password\s+protect)\s+(?:the\s+|my\s+)?(?P<p>.+?)"
                          r"(?:\s+(?:folder|file|directory))?(?:\s+with\s+(?:a\s+)?password)?[\s.!]*", t, I):
         p = m.group("p").strip()
+        if re.match(r"(?:the\s+)?(?:(?:laptop|computer)(?:'s)?\s+)?(?:screen|laptop|computer|pc|system)\b", p, I) \
+                and m.group("a").lower() == "lock":
+            return Intent("lock", "lock_screen", "power", {})  # 'lock laptop fast' locked a FOLDER 'laptop fast'
         if not re.fullmatch(r"(?:the\s+)?(?:(?:laptop|computer)(?:'s)?\s+)?(?:screen|laptop|computer|pc|kurama|phone|door|it\s+now)", p, I):
-            act = "unlock" if m.group("a").lower() in ("unlock", "decrypt") else "lock"
-            return Intent("lock", "folder_lock", "filesearch", {"action": act, "path": p}, p)
+            from jarvis.core.focus import is_anaphora
+            from jarvis.core.paths import smart_path
+            if is_anaphora(p) or smart_path(p) is not None:  # a folder / file that exists (or 'this'), else the AI
+                act = "unlock" if m.group("a").lower() in ("unlock", "decrypt") else "lock"
+                return Intent("lock", "folder_lock", "filesearch", {"action": act, "path": p}, p)
     if re.fullmatch(r"(?:nepali\s*ma|नेपालीमा|नेपाली\s*मा)\s+(?:type|lekha|lekh|लेख|लेखन|टाइप)\s*(?:gara|garnu|गर|गर्नु)?\w*[\s.!]*", t, I):
         return Intent("dictate", "dictate", "windows", {"action": "start", "lang": "ne"})
     _STT = r"(?:dictation|dictating|detection|voice\s+typing|typing|speech[\s-]+to[\s-]+text|stt|voice\s+input)"
@@ -3290,6 +3336,8 @@ _TG_TO = re.compile(r"\b(?:send|text|message|forward)\s+(?:me\s+)?(?:a\s+message
 _TG_SAYING = re.compile(r"\b(?:telegram|phone|mobile)\s*[,:]?\s+(?:me\s+)?(?:saying|that\s+says|says|that)?\s*:?\s*(?P<m>.+)$", I)
 
 
+
+
 def tg_message_text(raw: str) -> str | None:
     """The message in 'send hello to telegram' / 'message me on telegram saying X' (None when it is a FILE or 'it':
     'send the essay to telegram' sends the essay, never the word 'the essay')."""
@@ -3301,6 +3349,10 @@ def tg_message_text(raw: str) -> str | None:
     msg = m.group("m").strip(" \"'")
     if re.match(r"(?:this|that|these|those|the|my|your|its|it)\b", msg, I):
         return None  # 'my location', 'this link', 'the result': a THING to send, not the words themselves
+    if re.fullmatch(r"(?:as\s+well|too|also|again|both|it\s+too|number|the\s+number|this\s+number|that\s+number|the\s+list|"
+                    r"(?:my\s+|the\s+|today'?s\s+)?(?:morning\s+|daily\s+|evening\s+)?(?:brief|briefing|summary|digest|report|"
+                    r"status|weather|news|schedule|plan))", msg, I):
+        return None  # 'send this number in telegram as well' sent "as well"; 'send morning brief' sent the words (11-04)
     if not msg or len(msg) > 500 or focus.is_anaphora(msg) or workmem.kind_named(msg) \
             or re.search(r"(?:^|\s)(?:/|~/)|\b[\w-]+\.[a-z0-9]{2,5}\b|https?://", msg, I):
         return None  # a file, a path, a link or 'it': the send-file / send-last tools
@@ -3347,7 +3399,8 @@ def match(text: str) -> Intent | None:
         return Intent("choice", tool, registry_group(tool), args)
     if (played := player_intent(text)) is not None:  # 'pause' / 'continue' while KURAMA's music is on
         return played
-    it = app_name_intent(text) or style_intent(text) or new_project_intent(text) or agent_intent(text) or agent_coding_intent(text) or link_play_intent(text) or clean_intent(text) \
+    it = app_name_intent(text) or style_intent(text) or new_project_intent(text) or ranked_files_intent(text) \
+        or agent_intent(text) or agent_coding_intent(text) or link_play_intent(text) or clean_intent(text) \
         or shutdown_later_intent(text) or to_file_intent(text) or selection_intent(text) \
         or _code_not_file(_match(text)) or daily_intent(text)
     if it is not None and it.tool == "read_later" and semantic_ensure():  # "add a job for later: write a poem" is
@@ -3670,6 +3723,14 @@ def meaning_intent(text: str) -> Intent | None:
             #              tab' (it switched to a tab named 'sitting'; the owner meant Settings)
         if label in ("switch_tab", "close_tab"):
             if not extra:
+                return None
+            try:  # only a tab that IS open ('show me my contact list' looked for a tab 'contact list', 11-04)
+                from jarvis.core import browsertab
+                tabs = [str(x.get("title") or "").lower() for x in browsertab.tabs()] or None  # None = can't tell
+            except Exception:  # noqa: BLE001 - the extension isn't there: the old behaviour
+                tabs = None
+            want = " ".join(extra).lower()
+            if tabs is not None and not any(want in tt or all(w in tt for w in want.split()) for tt in tabs):
                 return None
             verb = "tab:" if label == "switch_tab" else "close_tab:"
             it = Intent("tab", "app_control", "windows", {"action": "shortcut", "text": verb + " ".join(extra)})
@@ -4342,12 +4403,26 @@ _SW_FOLLOW = re.compile(r"^(?:(?:turn|switch|put)\s+)?(?:it|this|that|them)?\s*(
 SWITCH_TTL_S = 600  # "turn it off" refers to the device switched in the last 10 minutes
 
 
+_AWAKE_ON = re.compile(r"\b(?:(?:turn|switch|put)\s+on\s+(?:the\s+)?always[\s-]*on\s+display|always[\s-]*on\s+display\s+on|"
+                       r"keep\s+(?:the\s+|my\s+)?(?:screen|display|laptop)\s+(?:on|awake)|stay\s+awake|don'?t\s+(?:let\s+)?"
+                       r"(?:the\s+|my\s+)?(?:screen|display|laptop)\s+(?:sleep|turn\s+off|go\s+off))\b", I)
+_AWAKE_OFF = re.compile(r"\b(?:(?:turn|switch)\s+off\s+(?:the\s+)?always[\s-]*on\s+display|always[\s-]*on\s+display\s+off|"
+                        r"let\s+(?:the\s+|my\s+)?(?:screen|display|laptop)\s+sleep)\b", I)
+
+
 def switch_intent(t: str) -> Intent | None:
     """"turn off bluetooth", "bluetooth off bro", "disable wifi", and the follow-up "turn it off" (0 tokens)."""
+    if _AWAKE_OFF.search(t):
+        return Intent("control", "laptop_toggle", "system", {"setting": "stay_awake", "state": "off"})
+    if _AWAKE_ON.search(t):  # 'turn on always on display' turned the screen OFF (11-04)
+        return Intent("control", "laptop_toggle", "system", {"setting": "stay_awake", "state": "on"})
     low = t.lower()
     device = next((name for name, rx in _DEVICES if re.search(r"\b(?:" + rx + r")\b", low)), None)
     question = re.match(r"^(?:is|are|was|check|what(?:'s| is)|tell me|show me|can you (?:tell|check|give))\b", low) \
         or re.search(r"\b(?:status|whether)\b", low)
+    if re.search(r"\b(?:speed|fast|slow|ping|bandwidth|mbps)\b", low) and re.search(r"\b(?:internet|wi[\s-]*fi|wifi|net|connection|network)\b", low):
+        return Intent("netspeed", "internet_doctor", "system", {"action": "speed"})  # 'what is speed of my internet'
+        # answered "Wi-Fi is enabled." (11-04)
     if question and not _SW_VERB.search(low) and "password" not in low:
         # "is bluetooth on?", "bluetooth status": a question, answered by reading the switch
         return Intent("control", "laptop_toggle", "system", {"setting": device, "state": "status"}) \

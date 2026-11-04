@@ -41,6 +41,9 @@ TABLE = {
                      else {"mode": a.get("value", "next")}),
     "screenshot": Act("screenshot", lambda a: _shot(a.get("value", ""))),
     "screen_off": Act("laptop_toggle", lambda a: {"setting": "screen", "state": "off"}),
+    "stay_awake": Act("laptop_toggle", lambda a: {"setting": "stay_awake", "state": a.get("value") or "on"}),
+    "guard": Act("laptop_guard", lambda a: {"action": (a.get("value") or "status").lower().replace("disarm", "off")
+                                            .replace("arm", "on")}),  # on / off / status / photo / where
     "battery": Act("battery_status"),
     "health": Act("laptop_doctor", lambda a: {"action": "check"}),
     "free_ram": Act("cleanup", lambda a: {"action": "ram"}),
@@ -70,11 +73,11 @@ def _shot(value: str) -> dict:
 
 @tool(group="core", safety="safe",
       description="Laptop settings and health: volume, brightness, wifi, bluetooth, airplane, power mode, night light, "
-                  "theme, do-not-disturb, wallpaper, screenshot, screen off, battery, health (RAM/CPU/top apps), free RAM (clean / optimize RAM: top RAM+CPU apps), "
+                  "theme, do-not-disturb, wallpaper, screenshot, screen off, stay_awake (keep the screen on / 'always on display': on, off), guard (laptop guard: on, off, status, photo, where), battery, health (RAM/CPU/top apps), free RAM (clean / optimize RAM: top RAM+CPU apps), "
                   "internet check, clean disk (clean storage: safe caches), clean_kurama (KURAMA's own caches), focus session, lock, sleep, shutdown, restart, log out, shutdown_later (value = 'after 90 min' / 'in 2 hours' "
                   "/ 'at 11 pm', or cancel / status).")
 def laptop(action: Literal["volume", "brightness", "wifi", "bluetooth", "airplane", "power_mode", "night_light", "theme",
-                           "dnd", "wallpaper", "screenshot", "screen_off", "battery", "health", "free_ram", "internet",
+                           "dnd", "wallpaper", "screenshot", "screen_off", "stay_awake", "guard", "battery", "health", "free_ram", "internet",
                            "clean_disk", "clean_kurama", "focus", "lock", "sleep", "shutdown", "restart", "logout",
                            "shutdown_later"],
            value: str = "") -> str:

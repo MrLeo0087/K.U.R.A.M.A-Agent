@@ -297,7 +297,15 @@ DIRECT_REPLY_TOOLS = {"open_url": "open", "open_app": "open", "audio": "audio", 
 DIRECT_REPLY_SINGLE = ("make_folder", "set_timer", "set_alarm", "add_reminder", "youtube", "video_download", "music",
                        "write_file", "send_file_telegram", "move_path", "delete_to_trash", "saved_links",
                        "organize_files", "code_to_file")
-DIRECT_REPLY_TOOLS.update({k: "said" for k in DIRECT_REPLY_SINGLE})
+# tools whose own sentence IS the answer: no second AI call just to repeat it (most AI requests made 2 calls,
+# ~2,700 tokens, 11-04). An error / a question back still goes to the model.
+DIRECT_REPLY_ANSWERS = ("expenses", "contacts", "schedules", "stopwatch", "laptop_toggle", "laptop_guard", "share_wifi",
+                        "wifi_share", "battery_status", "internet_doctor", "weather", "get_date", "read_later",
+                        "calculate", "lock_screen", "goals", "habits", "status_now", "disk_cleaner",
+                        "backup", "find_files", "recall", "remember", "laptop_doctor", "convert_file",
+                        "folder_lock", "do_not_disturb", "night_light", "set_theme", "focus_mode", "cleanup",
+                        "location_history", "find_my_phone", "remote_desktop", "token_usage", "daily_digest")
+DIRECT_REPLY_TOOLS.update({k: "said" for k in DIRECT_REPLY_SINGLE + DIRECT_REPLY_ANSWERS})
 DIRECT_REPLY_MAX_WORDS = 14
 DIRECT_REPLY_STEPS = {"window": ("focus", "list"), "app_control": ("task", "enable"), "saved_links": ("list", "get"),
                       "music": ("playlists", "status", "now"), "organize_files": ("edit",)}  # these continue a task

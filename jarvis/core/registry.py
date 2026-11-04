@@ -287,7 +287,7 @@ class Registry:
         wanted = set(groups)
         if not config.CORE_TOOLS:
             return [t for t in self.tools.values() if group_of(t) in wanted]
-        serving = {g: [n for n, cov in config.CORE_COVERS.items() if g in cov and n in self.tools] for g in groups}
+        serving = self._serving(groups)
         if text:  # an area two general tools serve (jobs: create / kurama): the one whose MEANING fits goes first,
             for g in groups:  # so it survives the CORE_MAX_TOOLS cap ("result of job 1" lost kurama to create)
                 if len(serving[g]) > 1:
@@ -296,12 +296,87 @@ class Registry:
         for g in groups:  # each group's main general tool first (in the router's order)...
             if serving[g] and serving[g][0] not in core:
                 core.append(serving[g][0])
-        for g in groups:  # ...then the others that also cover it, while there is room
-            core += [n for n in serving[g] if n not in core]
+        if len(core) < 2 or len(groups) == 1:  # ...the others that also cover it only for one area or when one tool
+            # would go alone: in a mix of areas each extra general
+            for g in groups:  # tool is 230-400 tokens on EVERY call (median AI request was ~2,700 tokens, 11-04)
+                core += [n for n in serving[g] if n not in core]
         core = core[:config.CORE_MAX_TOOLS]
         covered = {g for g in groups if serving[g]}
-        old = [t for t in self.tools.values() if group_of(t) in wanted - covered and group_of(t) != "core"]
+        reach = set().union(*self.reach().values()) if self.reach() else set()
+        old = [t for n, t in self.tools.items() if group_of(t) != "core" and group_of(t) in wanted
+               and group_of(t) not in covered]
+        if text:  # a tool no general tool reaches: offered as it is, when the request means it ('share wifi QR')
+            from jarvis.core import semantic
+            for n, t in self.tools.items():
+                if (group_of(t) in covered and n not in reach and group_of(t) != "core" and semantic.ready()
+                        and (b := semantic.best_of(text, "tooldesc:" + n, {n: (t.description or n,)})) and b[1] >= 0.6):
+                    old.append(t)
         return [self.tools[n] for n in core] + old
+
+    def by_meaning(self, text: str, k: int = 2, raw: bool = False) -> list[BaseTool]:
+        """The tools to try when the routed ones weren't right: every specialised tool's description by meaning
+        (local model, 0 tokens), each as the general tool that reaches it (or itself when none does). The 'I can't'
+        retry used to resend the same wrong tools ('set my budget' -> text / create / kurama, 11-04)."""
+        from jarvis.core import semantic
+        if not semantic.ready():
+            return []
+        table = {n: (t.description or n,) for n, t in self.tools.items()
+                 if group_of(t) not in ("core", *config.AGENT_GROUPS)}
+        scored = []
+        for n, exs in table.items():
+            b = semantic.best_of(text, "tooldesc:" + n, {n: exs})
+            if b:
+                scored.append((b[1], n))
+        if raw:  # the specialised tools themselves, with ALL their actions (a general tool may expose only some:
+            return [self.tools[n] for _, n in sorted(scored, reverse=True)[:k]]  # info had only the guard's 'where')
+        out: list[str] = []
+        reach = self.reach()
+        for _, n in sorted(scored, reverse=True):
+            home = next((g for g, r in sorted(reach.items(), key=lambda x: len(x[1])) if n in r), n)
+            if home not in out:
+                out.append(home)
+            if len(out) >= k:
+                break
+        return [self.tools[n] for n in out if n in self.tools]
+
+    _reach_cache: dict | None = None
+
+    def reach(self) -> dict[str, set[str]]:
+        """General tool -> the specialised tools its action table can run (read from the tables, so it never drifts
+        from the code: 18 tools were reachable by no general tool and 'tracker' was offered to `create`, which can't
+        record an expense, 11-04)."""
+        if self._reach_cache is None:
+            import importlib
+            import inspect
+            from jarvis.tools.core._hub import Act
+            out: dict[str, set[str]] = {}
+            names = set(self.tools)
+            for n, t in self.tools.items():
+                if group_of(t) != "core":
+                    continue
+                try:
+                    mod = importlib.import_module(f"jarvis.tools.core.{n}")
+                except ImportError:
+                    continue
+                got = {a.tool for a in (getattr(mod, "TABLE", {}) or {}).values() if isinstance(a, Act)}
+                got |= {w for w in re.findall(r"[\"']([a-z_]+)[\"']", inspect.getsource(mod))
+                        if w in names and group_of(self.tools[w]) != "core"}
+                out[n] = got
+            self._reach_cache = out
+        return self._reach_cache
+
+    def _serving(self, groups) -> dict[str, list[str]]:
+        """Area -> the general tools that really reach a tool of that area, the one reaching most of them first;
+        then config.CORE_COVERS for what the tables can't show."""
+        reach = self.reach()
+        out = {}
+        for g in groups:
+            tools_g = {n for n, t in self.tools.items() if group_of(t) == g}
+            real = sorted((n for n, r in reach.items() if r & tools_g), key=lambda n: -len(reach[n] & tools_g))
+            manual = [n for n, cov in config.CORE_COVERS.items() if g in cov and n in self.tools and n not in real
+                      and not (tools_g and reach.get(n) and not reach[n] & tools_g)]  # (a tool with no table: kept)
+            out[g] = real + manual
+        return out
 
     def _by_meaning(self, text: str, names: list[str]) -> list[str]:
         """names reordered: the general tool whose description is closest in meaning to text first (local model,
