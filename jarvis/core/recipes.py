@@ -521,6 +521,7 @@ def feedback(trace_id: str, vote: int, note: str = "", veto: bool = True) -> dic
 def suggestions(text: str, used: list[str], k: int = 3) -> list[dict]:
     """What the reply could have done instead, in plain words (never tool names): the tools closest in meaning to
     the request, minus the ones it used. The owner taps one after a 👎 (owner 11-04: "I don't know the tool names")."""
+    from jarvis import agents
     from jarvis.core import registry, semantic
     if not semantic.ready() or not text:
         return []
@@ -528,7 +529,7 @@ def suggestions(text: str, used: list[str], k: int = 3) -> list[dict]:
     out, seen = [], set(used)
     scored = []
     for n, t in R.tools.items():
-        if n in seen or registry.group_of(t) in ("core", *config.AGENT_GROUPS) or not t.description:
+        if n in seen or registry.group_of(t) in ("core", *agents.groups()) or not t.description:
             continue
         b = semantic.best_of(text, "tooldesc:" + n, {n: (t.description,)})
         if b:

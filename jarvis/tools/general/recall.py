@@ -37,7 +37,14 @@ def recall(which: Literal["all", "last", "search", "profile"] = "all", query: st
     if which == "search" or query:
         notes = store.notes_recent(limit, query)
         if not notes:
-            return f"I have no notes about {query!r}." if query else "error: give a query to search for"
+            if not query:
+                return "error: give a query to search for"
+            from jarvis.core import memories  # every other light memory (facts about you, saved links, ...)
+            other = [h for h in memories.search(query, 3) if h.source != "notes"]
+            if other:
+                return f"I have no notes about {query!r}, but I found: " + "; ".join(
+                    f"{h.text} ({h.source})" for h in other) + "."
+            return f"I have no notes about {query!r}."
         return format_notes(notes, len(notes))
     notes = store.notes_recent(limit)
     if not notes:

@@ -16,3 +16,4 @@ replaces it and mark the old one "Superseded by NNNN".
 | [0008](0008-frontend-no-build-step.md) | Frontend stays plain ES modules with no build step | Accepted |
 | [0009](0009-typed-tool-results.md) | Tools may return `Reply`: text plus exact data | Accepted |
 | [0010](0010-fastpath-split.md) | fastpath.py split into `jarvis/core/intents/` with re-exports | Accepted |
+| [0011](0011-plugin-architecture.md) | Plug-ins for tools, memory sources and agents | Accepted |

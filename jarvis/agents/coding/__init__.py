@@ -54,4 +54,23 @@ SPEC = AgentSpec(
     prompt=("Coding agent ON: the user is coding. Use the tool named `coding`: action=fix for errors, bridge for a "
             "prompt for ChatGPT/Gemini, project to create a new project (request = what to build), undo, run. There "
             "is no other project/fix tool. Never claim a change: changes are shown and wait for the user's yes."),
-    examples=EXAMPLES, start=_start, stop=_stop)
+    examples=EXAMPLES, start=_start, stop=_stop, aliases=("code", "coder", "programming"),
+    welcome=lambda: _welcome(), status=lambda: _status())
+
+
+def _welcome() -> str:
+    from jarvis.core import config
+    msg = ("Coding agent on. Run your code in the VS Code terminal: if it crashes I'll tell you and fix it. "
+           "Say 'stop coding agent' (or General) when you're done.")
+    try:  # a VS Code window still running the old extension can't see the terminal: say how to fix that
+        from jarvis.core import editor
+        if [s for s in editor.states() if int(s.get("ext") or 0) < config.EDITOR_EXT_MIN]:
+            msg += " (Reload your VS Code window once — Ctrl+Shift+P → Reload Window — so I can see crashes.)"
+    except Exception:  # noqa: BLE001
+        pass
+    return msg
+
+
+def _status() -> dict:
+    from jarvis.agents.coding import terminal
+    return {"events": terminal.events()}

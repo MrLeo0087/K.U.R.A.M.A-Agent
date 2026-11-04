@@ -18,7 +18,9 @@ Heavy AI runs on the Groq free tier; everything local stays small (≈ 80 MB idl
 `make js-check` (frontend parses), `make cov` (coverage with a floor), `make eval` (routing scorecard), `make check`
 (all of these, what CI runs), `make restart`, `make report` (recent failures), `make rss`, `make metrics` (live
 Prometheus metrics from `/api/v1/metrics`). Developer tools: `make install-dev`. Hooks:
-`venv/bin/pip install pre-commit && venv/bin/pre-commit install`. Design decisions: [docs/adr/](docs/adr/). How it all works and how to learn it:
+`venv/bin/pip install pre-commit && venv/bin/pre-commit install`. Design decisions: [docs/adr/](docs/adr/).
+Add a plug-in (found by itself, isolated if broken): `make new-tool NAME=x`, `make new-memory NAME=x`,
+`make new-agent NAME=x` (LEARN.md section 8.4). How it all works and how to learn it:
 [LEARN.md](LEARN.md).
 
 ## Setup

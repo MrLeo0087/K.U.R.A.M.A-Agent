@@ -41,6 +41,11 @@ def safety_of(t: BaseTool) -> str:
     return (t.metadata or {}).get("safety", "safe")
 
 
+def _agent_groups() -> tuple[str, ...]:
+    from jarvis import agents
+    return agents.groups()
+
+
 def group_of(t: BaseTool) -> str:
     return (t.metadata or {}).get("group", "general")
 
@@ -231,7 +236,8 @@ class Registry:
                     except Exception as e:  # one broken tool must not kill the others
                         log.error("failed to load tool module %s: %s", info.name, e)
         if "jarvis.tools" in self.packages:  # agents' tools (jarvis/agents/<name>/tools.py): offered only while on
-            for mod in config.AGENT_TOOL_MODULES:
+            from jarvis import agents  # every agent folder's tools.py, found by itself (+ any extra in config)
+            for mod in dict.fromkeys([*agents.tool_modules(), *config.AGENT_TOOL_MODULES]):
                 try:
                     importlib.import_module(mod)
                     imported.append(mod)
@@ -276,7 +282,7 @@ class Registry:
     def groups(self) -> list[str]:
         """The router's groups: every specialised tool's group, plus (v2) the groups a general tool covers."""
         self._ensure()
-        groups = {group_of(t) for t in self.tools.values()} - {"core", *config.AGENT_GROUPS}  # agents add theirs
+        groups = {group_of(t) for t in self.tools.values()} - {"core", *_agent_groups()}  # agents add theirs
         if config.CORE_TOOLS:
             groups |= {g for n, cov in config.CORE_COVERS.items() if n in self.tools for g in cov}
         return sorted(groups)
@@ -322,7 +328,7 @@ class Registry:
         if not semantic.ready():
             return []
         table = {n: (t.description or n,) for n, t in self.tools.items()
-                 if group_of(t) not in ("core", *config.AGENT_GROUPS)}
+                 if group_of(t) not in ("core", *_agent_groups())}
         scored = []
         for n, exs in table.items():
             b = semantic.best_of(text, "tooldesc:" + n, {n: exs})

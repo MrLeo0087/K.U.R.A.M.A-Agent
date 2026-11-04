@@ -31,7 +31,7 @@ file hangs on. Later sections are reference: come back to them when you need the
 5. [The architecture: layers and why](#5-the-architecture-layers-and-why)
 6. [The folder map](#6-the-folder-map)
 7. [Every core file: what it does, when to change it](#7-every-core-file)
-8. [Tools: the two layers, the contract, how to add one](#8-tools)
+8. [Tools, memories and agents: the plug-in points, how to add one](#8-tools)
 9. [How KURAMA understands a request (routing in depth)](#9-how-kurama-understands-a-request)
 10. [The AI models: tiers, fallbacks, limits](#10-the-ai-models)
 11. [Tokens: where they go and how they are cut](#11-tokens)
@@ -227,7 +227,8 @@ sentence by sentence (`frontend/voice.js` → `POST /api/v1/tts` → edge-tts).
 | Tool results | sentences parsed back with regexes | a tool can return `Reply(text, paths=[...])`: still a string, plus exact data; picks use the exact paths | `core/results.py`, ADR 0009 |
 | Quality gates | lint only | + `make type` (mypy on the core contracts), wider lint rules (tests that never ran, closures over loop values), coverage floor, `make js-check` | `pyproject.toml`, `Makefile` |
 | Metrics | SQLite tables only | `GET /api/v1/metrics` in Prometheus format: tokens, tool calls, routing, jobs, RAM (`make metrics`) | `core/metrics.py`, `api/routes/metrics.py` |
-| Decisions | comments in code | 10 one-page decision records | `docs/adr/` |
+| Decisions | comments in code | 11 one-page decision records | `docs/adr/` |
+| Extending | a new agent meant editing a list in `agents/__init__.py`, `config.AGENT_TOOL_MODULES` and the switch's alias table; memory kinds had no common shape | **plug-ins**: a tool, a memory source or an agent is one file/folder, found by itself, isolated if broken, checked by contract tests; `make new-tool` / `new-memory` / `new-agent` write the skeleton | `core/plugins.py`, `core/memories.py`, `memories/`, `agents/`, section 8.4, ADR 0011 |
 
 ---
 
@@ -463,13 +464,14 @@ KURAMA/
 ├── jarvis/              THE PYTHON PACKAGE (all the logic)
 │   ├── core/            ~115 modules: brain + services + foundation (section 7)
 │   │   └── intents/     the fast-path intents by area (base, files, desktop, media, todo, control)
+│   ├── memories/        memory sources, one file each (notes, profile, links, documents): section 8.4
 │   ├── tools/
 │   │   ├── core/        the 17 GENERAL tools the AI sees (thin dispatchers)
 │   │   ├── general/     ~150 real tools (one file each)
 │   │   └── interactive/ a few more real tools (code, files) + _secrets.py (key detection)
 │   ├── api/             FastAPI server: app.py, turns.py, routes/
 │   ├── workers/         background loops (reminders, Telegram, guards)
-│   ├── agents/          optional focused helpers (coding agent)
+│   ├── agents/          optional focused helpers, one folder each (coding): found by themselves, section 8.4
 │   ├── cli.py           terminal chat
 │   └── server.py        `python -m jarvis.server` (starts the API)
 │
@@ -495,6 +497,8 @@ KURAMA/
 |---|---|---|---|
 | **agent.py** | 1270 | The LangGraph graph (plan → route → llm ⇄ tools; schedule → step → finish); streaming; history, sessions, resume; `_open_question`, `did_line`, `_about_context`, direct replies; the safety nets; `SYSTEM_PROMPT`. | The AI's behaviour, the prompt, retries, how steps run or join. |
 | **intents/** | 6 files, 100–600 each | The fast-path intents moved out of fastpath.py by area: `base` (Intent, FastResult, `yes_no`, `_nth`), `files` (open/search/find/send), `desktop` (volume, brightness, media keys, DND, alerts), `media` (music, video, image, chart), `todo` (links, to-dos, goals, reading list), `control` (reminders, power, clock). | A shortcut in that area misbehaves. Add new intents to the right area file. |
+| **plugins.py** | 60 | Finds plug-ins in a package (`names`, `load`, `load_one`), isolates a broken one, lists them (`broken()`). | You add a new kind of extension point. |
+| **memories.py** | 80 | The memory-source contract (`MemorySource`, `Hit`) and `search()` across sources with rank fusion. | You add a kind of memory (`make new-memory`). |
 | **results.py** | 30 | `Reply(str)`: a tool's text plus exact data (`.data`, e.g. `paths`); `data_of()`. | A tool's result is acted on later (a pick, a chain): return a Reply. |
 | **metrics.py** | 80 | Prometheus text from the SQLite logs (last 24 h) + process RAM/CPU, for `GET /api/v1/metrics`. | You want a new number on a dashboard. |
 | **fastpath.py** | 2900 | 0-token shortcuts: `match()` (choice, patterns, meaning actions), `try_answer()`, `render()` (answer templates), `meaning_ok()`, `meaning_intent()`, `tg_message_text()`, `_focus_intent()`. | A shortcut does the wrong thing, or a frequent AI request should become 0 tokens. |
@@ -598,13 +602,56 @@ sees the failure; a short request can use the sentence as the direct reply.
 ### 8.3 How to add a tool (practise this)
 
 1. Write the logic in a service (`jarvis/core/myfeature.py`) as plain functions.
-2. Add `jarvis/tools/general/my_tool.py` with `@tool(...)` calling it. `registry.discover()` finds it.
-3. Let the AI reach it: add an action to the right general tool's `TABLE` in `jarvis/tools/core/<tool>.py`.
+2. `make new-tool NAME=my_tool [GROUP=general] [SAFETY=safe]` writes `jarvis/tools/general/my_tool.py` and
+   `tests/test_tool_my_tool.py`. Fill in the TODOs; the tool calls your service. `registry.discover()` finds it.
+   That is already enough: a tool no general tool's TABLE reaches is offered by itself when the request's meaning
+   matches its description (`registry.schemas_for`), so write the one-line description carefully.
+3. For a tool used often: also add an action to the right general tool's `TABLE` in `jarvis/tools/core/<tool>.py`
+   (it is then reached reliably and costs no extra schema tokens).
 4. Help routing: 4–6 example phrasings in `config.TOOL_EXAMPLES["my_tool"]`.
 5. If its own sentence is a complete answer for a short request, add it to `config.DIRECT_REPLY_SINGLE`.
 6. Optional, for a very common request: a 0-token shortcut (`MEANING_SHORTCUTS` label + a few lines in
    `fastpath.meaning_intent()`, or a slash command).
 7. Test with 3+ phrasings the way you really type; run the scorecard; a live `curl` (section 19).
+
+### 8.4 The plug-in architecture: add a tool, a memory or an agent without touching the others
+
+KURAMA has three extension points. Each one is **a file (or a folder) you drop in**: nothing central is edited,
+the new piece is found by itself, and **if it is broken it is logged and skipped while everything else keeps
+working**. That is the rule that keeps a big project flexible: *new code plugs in; it never edits old code.*
+
+```
+                     found by                     contract                               checked by
+tools/general/x.py   registry.discover()          @tool(group, safety, description) -> str  test_plugin_contracts (every tool)
+memories/x.py        memories.sources()           SOURCE = MemorySource(name, description,  test_plugin_contracts (every source)
+                                                           search(query, k) -> [Hit], heavy)
+agents/x/__init__.py agents.AGENTS (folders)      SPEC = AgentSpec(name, title, groups,      test_plugin_contracts (every agent)
+agents/x/tools.py    agents.tool_modules()          prompt, examples, aliases, welcome, ...)
+                     all via core/plugins.py: import each one alone, catch its errors, list them in plugins.broken()
+```
+
+| You want | Command | What you fill in | What happens by itself |
+|---|---|---|---|
+| **A new tool** | `make new-tool NAME=word_count` | the function body, its one-line description | discovered, safety-gated, logged, offered by meaning, schema built from type hints, contract-tested |
+| **A new kind of memory** | `make new-memory NAME=bookmarks` | `_search(query, k)`: read your data, return `Hit`s | `memories.search()` asks it, fuses its results with the others (rank fusion), skips it if it fails; `recall` uses it when no note matches |
+| **A new agent** | `make new-agent NAME=study` | `SPEC` (title, prompt line, example phrasings), its tools in `tools.py` | listed in the dashboard and `/agent`, switched on by name or alias, its tools offered only while it is on, its tool group kept out of normal routing |
+
+**The memory sources today:** `notes` (things you asked KURAMA to remember), `profile` (facts about you), `links`
+(saved links), `documents` (your own files, hybrid search; *heavy*, so it is asked only by name:
+`memories.search(q, only=["documents"])`). Short-term memory (`workmem`, section 3) is different: it is "what just
+happened in this conversation", not a store you search.
+
+**Why this design (the ideas to learn):**
+- **Inversion of control / plug-ins**: the core asks "who is there?" instead of keeping a list. Adding never edits
+  the list, so adding never breaks a neighbour. (Same idea as pytest plugins, Flask blueprints, VS Code extensions.)
+- **A small contract per extension point**: a dataclass (`MemorySource`, `AgentSpec`) or a decorator (`@tool`)
+  says exactly what a plug-in must provide. Anything else stays private to the plug-in.
+- **Fault isolation**: `plugins.load_one()` catches the import error of one plug-in; `memories.search()` catches the
+  error of one source at run time; the safety gate catches one tool's exception. A bug stays inside its own file.
+- **Contract tests over every plug-in**: `tests/test_plugin_contracts.py` loops over all tools, sources and agents,
+  so a new one is checked without writing a new test (you still write one for its behaviour).
+- **Lazy loading**: agent folders are listed without importing them; a heavy memory source runs only when asked.
+- **Observability**: `plugins.broken()` and the `kurama_plugins_broken` metric show what failed to load.
 
 ---
 
@@ -1154,7 +1201,7 @@ sentence will go to the fast path, tool X"), then check with the snippets in 19.
 | Day | Read / learn | Do |
 |---|---|---|
 | 78 | Sections 23 and 23.3; ADR 0009 and `core/results.py`. | Make `list_folder` return a `Reply(text, paths=[...])` like `find_files` + a test. |
-| 79 | ADR 0010; read `core/intents/base.py` and `files.py`. | Explain why `match` and `meaning_ok` stay in `fastpath.py` (hint: monkeypatch). |
+| 79 | Section 8.4 and ADR 0011 (plug-ins). | `make new-memory NAME=habits_log`: make it search your habits; check `recall` finds one. Delete it after. |
 | 80 | Type checking: mypy basics. | Add `core/intents/todo.py` to `TYPED` in the Makefile; fix what `make type` finds. |
 | 81 | Coverage. | `make cov`; open `data/coverage/index.html`; write one test for the least-covered core file you use daily. |
 | 82 | Metrics: Prometheus text format. | `make metrics`; add one metric (e.g. errors in the last 24 h) to `core/metrics.py` + the test in `test_api.py`. |
@@ -1243,6 +1290,8 @@ one process, not Kubernetes). Learn the server-scale version too, so you know wh
   results, closures over loop variables), **type gate** (`make type`), frontend parse check (`make js-check`), tests,
   scorecard. Pre-commit hooks block `.env` and private keys.
 - **Code layout**: the fast path is split by area (`core/intents/`); tools can return **typed results** (`Reply`).
+- **Plug-in architecture** (section 8.4): tools, memory sources and agents are added as files, found by
+  themselves, isolated when broken and checked by contract tests; a scaffold writes each one.
 - **Decisions are written down**: `docs/adr/` (10 records).
 
 ### 23.2 What is left (smaller now, in the order to do it)
@@ -1292,6 +1341,7 @@ version, because interviews and real jobs assume it.
 | **API design** | Versioned URLs (`/api/v1`), schemas (OpenAPI), auth, rate limits, pagination | FastAPI `/api/v1`, OpenAPI at `/docs`, bearer token |
 | **Containers and infrastructure as code** | Docker images run the same everywhere; Terraform describes servers | not needed on one laptop; learn Docker next |
 | **Code ownership and modules** | Clear module boundaries, an owner per area (`CODEOWNERS`), no 5,000-line files | `core/intents/` split, one tool = one file |
+| **Plug-in architecture** | Extension points with small contracts; new features plug in instead of editing old code; one failing plug-in is isolated | tools, `memories/`, `agents/` via `core/plugins.py` (section 8.4) |
 | **Documentation** | README to start, ADRs for decisions, runbooks for "when X breaks, do Y", docs next to the code | README, LEARN.md, MONITORING.md, `docs/adr/` |
 | **Versioning and changelog** | Semantic versioning (MAJOR.MINOR.PATCH) and a changelog per release | `version` in `pyproject.toml`; PROGRESS.md is the changelog |
 | **Security practice** | Least privilege, input validation, threat modelling, dependency scanning, security review | the safety gate, confirm levels, PINs, shell allowlist |

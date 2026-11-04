@@ -56,6 +56,9 @@ def render(now: float | None = None) -> str:
     jobs = store._exec("SELECT status, COUNT(*) n FROM jobs WHERE created >= ? GROUP BY status", (since,))
     _family(out, "kurama_jobs_24h", "gauge", "Background jobs started in the last 24 h, by status",
             [({"status": r["status"]}, r["n"]) for r in jobs])
+    from jarvis.core import plugins
+    _family(out, "kurama_plugins_broken", "gauge", "Plugins (agents, memory sources) that failed to load",
+            [({}, len(plugins.broken()))])
     try:
         import psutil
         p = psutil.Process(os.getpid())

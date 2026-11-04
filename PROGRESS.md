@@ -1223,3 +1223,17 @@ Phases (one at a time, owner tests after each):
 - LEARN.md: 2.4 rows, folder map, core-file table, 16.5 practices, week-12 days, 23.1/23.2 rewritten, new 23.3 "how
   large production codebases work" (26 practices mapped to KURAMA).
 - Next: config.py word lists into data files, app.js into modules, more Reply tools, widen mypy/lint, push for CI.
+
+## 2026-11-04 (night): plug-in architecture (tools, memory sources, agents)
+- core/plugins.py: one discovery helper for every extension point; each plug-in imported alone, a broken one
+  logged + listed in plugins.broken() (and the kurama_plugins_broken metric), the others keep working.
+- Agents: jarvis/agents/<name>/ is found by itself (no AGENTS list, no AGENT_TOOL_MODULES, no alias table to
+  edit); AgentSpec gained aliases / welcome / status, so coding-only code left agents/__init__.py; agents.groups()
+  keeps every agent's tool group out of normal routing (registry, recipes, fastpath use it).
+- Memory sources: core/memories.py (MemorySource, Hit, search with rank fusion + per-source isolation) and
+  jarvis/memories/{notes,profile,links,documents}.py (documents is heavy: only by name). recall: when no note
+  matches, it answers from the other light memories ("I have no notes about X, but I found: ...").
+- scripts/new_plugin.py + make new-tool / new-memory / new-agent (skeleton + test; never overwrites); verified that
+  the three generated plug-ins pass their tests and the contract tests, then removed them.
+- tests/test_plugin_contracts.py: every tool / source / agent keeps its contract; isolation; scaffold; recall fallback.
+- LEARN.md 8.3 + new 8.4 (the plug-in architecture), folder map, core files, 2.4, 23; ADR 0011.

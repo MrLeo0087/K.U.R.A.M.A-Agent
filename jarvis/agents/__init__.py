@@ -1,7 +1,12 @@
 """Agents: KURAMA's focused helpers, OFF until the owner turns one on (Settings pill / "start coding agent" /
 /agent coding). 'general' is plain KURAMA. An agent brings its own tools (offered first), one prompt line and its
 own background helpers, which run only while it is on (0 RAM / CPU otherwise). It switches itself off after
-AGENT_IDLE_OFF_S without use. New agents: add a module in this package and an entry in AGENTS.
+AGENT_IDLE_OFF_S without use.
+
+New agent = one new folder, nothing else to edit: jarvis/agents/<name>/__init__.py defines `SPEC = AgentSpec(...)`
+(and optionally tools.py with its @tool functions, group = one of SPEC.groups). It is found automatically
+(core/plugins.py); a broken agent is logged and skipped, the others keep working. `scripts/new_plugin.py agent X`
+writes the skeleton and its test.
 
 The active agent is kept in the kv table (every process sees it) and in ~/.local/share/kurama/agent (the VS Code
 extension reads that file to know whether to watch the terminal).
@@ -28,16 +33,69 @@ class AgentSpec:
     start: Callable[[], None] | None = None
     stop: Callable[[], None] | None = None
     examples: dict[str, tuple[str, ...]] = field(default_factory=dict)  # meaning -> phrasings (0-token routing)
+    aliases: tuple[str, ...] = ()  # other names the owner may say ("code", "coder")
+    welcome: Callable[[], str] | None = None  # the sentence said when it turns on (default: "<title> on.")
+    status: Callable[[], dict] | None = None  # extra fields for the dashboard while it is on
 
 
-def _coding() -> AgentSpec:
-    from jarvis.agents import coding
-    return coding.SPEC
+class _Agents(dict):
+    """name -> loader of its AgentSpec, found in this package (the folders are listed without importing them)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        from jarvis.core import plugins
+        for n in plugins.names(__name__):
+            self[n] = (lambda n=n: _load(n))
 
 
-AGENTS: dict[str, Callable[[], AgentSpec]] = {"coding": _coding}
-TITLES = {"general": "General", "coding": "Coding agent"}
+def _load(name: str) -> AgentSpec | None:
+    from jarvis.core import plugins
+    sp = plugins.load_one(__name__, name, "SPEC")
+    return sp if isinstance(sp, AgentSpec) else None
+
+
+AGENTS: dict[str, Callable[[], AgentSpec | None]] = _Agents()
 _last_use = [0.0]
+
+
+def title(name: str) -> str:
+    if name == "general":
+        return "General"
+    sp = spec(name)
+    return sp.title if sp else name
+
+
+def _alias(name: str) -> str:
+    fixed = {"kurama": "general", "normal": "general", "off": "general", "none": "general"}
+    if name in fixed or name in AGENTS:
+        return fixed.get(name, name)
+    for n in AGENTS:
+        if (sp := spec(n)) and name in sp.aliases:
+            return n
+    return name
+
+
+def groups() -> tuple[str, ...]:
+    """Every agent's own tool groups (never routed to; offered only while that agent is on)."""
+    out = list(config.AGENT_GROUPS)
+    for n in AGENTS:
+        if sp := spec(n):
+            out += [g for g in sp.groups if g not in out]
+    return tuple(out)
+
+
+def tool_modules() -> list[str]:
+    """jarvis.agents.<name>.tools for every agent that has one (registry.discover imports them)."""
+    import importlib.util
+    out = []
+    for n in AGENTS:
+        mod = f"{__name__}.{n}.tools"
+        try:
+            if importlib.util.find_spec(mod) is not None:
+                out.append(mod)
+        except (ImportError, ValueError):
+            pass
+    return out
 
 
 def marker() -> Path:
@@ -72,7 +130,7 @@ def current() -> str:
 
 def spec(name: str | None = None) -> AgentSpec | None:
     name = name or current()
-    return AGENTS[name]() if name in AGENTS else None
+    return AGENTS[name]() if name in AGENTS else None  # None: not an agent, or a broken one (logged)
 
 
 def touch() -> None:
@@ -83,14 +141,13 @@ def touch() -> None:
 def switch(name: str) -> str:
     """Turn an agent on ('general' = all off). Returns a sentence for the user."""
     name = (name or "general").strip().lower()
-    name = {"code": "coding", "coder": "coding", "programming": "coding", "kurama": "general", "normal": "general",
-            "off": "general", "none": "general"}.get(name, name)
-    if name != "general" and name not in AGENTS:
+    name = _alias(name)
+    if name != "general" and spec(name) is None:
         return f"I don't have a '{name}' agent. Agents: general, " + ", ".join(AGENTS) + "."
     old = _stored()
     if old == name:
         touch()
-        return f"The {TITLES.get(name, name)} is already on." if name != "general" else "Already in General mode."
+        return f"The {title(name)} is already on." if name != "general" else "Already in General mode."
     from jarvis.core import store
     if old != "general" and (s := spec(old)) and s.stop:
         try:
@@ -109,19 +166,16 @@ def switch(name: str) -> str:
         log.warning("agent marker: %s", e)
     if name != "general":
         touch()
-        if (s := spec(name)) and s.start:
+        s = spec(name)
+        if s and s.start:
             s.start()
-        msg = (f"{TITLES[name]} on. Run your code in the VS Code terminal: if it crashes I'll tell you and fix it. "
-               f"Say 'stop coding agent' (or General) when you're done.")
-        try:  # a VS Code window still running the old extension can't see the terminal: say how to fix that
-            from jarvis.core import editor
-            old = [s for s in editor.states() if int(s.get("ext") or 0) < config.EDITOR_EXT_MIN]
-            if old:
-                msg += " (Reload your VS Code window once — Ctrl+Shift+P → Reload Window — so I can see crashes.)"
-        except Exception:  # noqa: BLE001
-            pass
-        return msg
-    return "Back to General mode. The coding agent is off."
+        if s and s.welcome:
+            try:
+                return s.welcome()
+            except Exception as e:  # noqa: BLE001 - the agent is on even if its greeting failed
+                log.warning("%s welcome failed: %s", name, e)
+        return f"{title(name)} on. Say 'General' when you're done."
+    return f"Back to General mode. The {title(old).lower() if old != 'general' else 'agent'} is off."
 
 
 def prompt_line() -> str:
@@ -131,8 +185,10 @@ def prompt_line() -> str:
 
 def status() -> dict:
     name = current()
-    out = {"name": name, "title": TITLES.get(name, name), "agents": ["general", *AGENTS]}
-    if name == "coding":
-        from jarvis.agents.coding import terminal
-        out["events"] = terminal.events()
+    out = {"name": name, "title": title(name), "agents": ["general", *AGENTS]}
+    if name != "general" and (s := spec(name)) and s.status:
+        try:
+            out.update(s.status())
+        except Exception as e:  # noqa: BLE001
+            log.warning("%s status failed: %s", name, e)
     return out

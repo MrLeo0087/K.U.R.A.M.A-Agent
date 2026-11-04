@@ -1886,7 +1886,7 @@ def agent_coding_intent(text: str) -> Intent | None:
         return None
     label, score = best
     other = next((s for g, s in ranked if g not in (semantic.CHAT, "clipboard", "dev", "codequality",
-                                                    *config.AGENT_GROUPS)), 0.0)
+                                                    *agents.groups())), 0.0)
     need = {"undo": config.AGENT_UNDO_MIN, "project": config.AGENT_PROJECT_MIN}.get(label, config.AGENT_MIN)
     if score < need or score < other - config.SELECTION_MARGIN:
         return None
