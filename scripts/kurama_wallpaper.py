@@ -717,6 +717,9 @@ class WakeBridge:
                 time.sleep(5)
 
 
+PAGE_READY_FALLBACK_MS = 6000
+
+
 def pttlog(line: str) -> None:
     """data/logs/ptt.log (shared with the server's key watcher): what the window did for hold-to-talk."""
     try:
@@ -808,6 +811,8 @@ class Mini:
             self.talking = rest == "on"
             if not self.talking and self.ghost:  # talk mode ended while closed: really hide now
                 self.end_ghost()
+        elif kind == "ready":  # the page's script ran and painted: open it / let hold-to-talk in now
+            self._mark_ready()
         elif kind == "state":
             if rest != self.state:
                 self.state = rest
@@ -1011,6 +1016,22 @@ class Mini:
                f"busy={self.state}")
         was_listening = self.ptt_active
         self.ptt_active = state == "down"
+        if state == "down" and self.state != "listening":  # the ring spins AT ONCE, not when the page catches up
+            self.state = "listening"  # (11-04: no listening animation right after start-up); the page corrects it
+            self.bubble.queue_draw()
+            self.animate(True)
+        elif state == "cancel" and self.state == "listening":
+            self.state = "idle"
+            self.bubble.queue_draw()
+            self.animate(False)
+        elif state == "up":  # a release the page never recorded (too quick) must not leave the ring spinning
+            def settle():
+                if self.state == "listening" and not self.ptt_active and not self.talking:
+                    self.state = "idle"
+                    self.bubble.queue_draw()
+                    self.animate(False)
+                return False
+            GLib.timeout_add(2500, settle)
         if self.open:  # the chat is open: it all happens there
             run_js(self.view, f"window.kuramaPTT && window.kuramaPTT({js})")
             return
@@ -1053,6 +1074,9 @@ class Mini:
                     run_js(self.view, "window.kuramaMiniShown && window.kuramaMiniShown(false, true); "
                                       "window.kuramaPTT && window.kuramaPTT(1)")
                     return
+                self.state = "idle"
+                self.bubble.queue_draw()
+                self.animate(False)
                 if last == "up" and self.caption is not None:
                     self.caption.show("bot", "I was just waking up. Hold the talk key again and speak.", True)
                 self.ptt_active = False
@@ -1114,17 +1138,22 @@ class Mini:
             self.view.terminate_web_process()  # -> _panel_crashed -> load again
         return False
 
+    def _mark_ready(self) -> bool:
+        if self.page_ready:
+            return False
+        self.page_ready = True
+        pttlog(f"panel page ready (shown={bool(self.panel and self.panel.get_visible())})")
+        waiting, self.on_ready = self.on_ready, []
+        for fn in waiting:
+            fn()
+        return False
+
     def _page_loaded(self, view, event) -> None:
         if event != WebKit2.LoadEvent.FINISHED or self.page_ready:
             return
-        def ready():  # a moment for the first paint, then whatever waited for the page
-            self.page_ready = True
-            pttlog(f"panel page ready (shown={bool(self.panel and self.panel.get_visible())})")
-            waiting, self.on_ready = self.on_ready, []
-            for fn in waiting:
-                fn()
-            return False
-        GLib.timeout_add(250, ready)
+        # the page says "ready" itself once its script ran and drew (the load event came first: an empty glass box
+        # and a dead Alt key right after start-up, 11-04); this is only the fallback for a page that never says it
+        GLib.timeout_add(PAGE_READY_FALLBACK_MS, self._mark_ready)
 
     def _preload(self) -> bool:
         """Load the chat page before the first hold. A never-shown window's page did not load (11-02: every first

@@ -151,10 +151,13 @@ export class Mic {
 
   // plain = no echo cancellation / noise suppression / gain control: much cheaper (the sleeping wake-word
   // listener never talks, so it needs no echo cancellation)
-  async start({ plain = false } = {}) {
+  // system=false (hold-to-talk, the mic button): no system echo canceller. KURAMA is silent while you hold the key,
+  // so there is no echo to cancel, and loading it first cost ~1-2 s: the first holds after start-up recorded
+  // silence ('' x3 at 20:06, 11-04). Hands-free talk keeps it (KURAMA speaks while it listens).
+  async start({ plain = false, system = true } = {}) {
     if (this.stream) return;
-    this.plain = plain;
-    if (!plain) await micHooks.before?.(); // the system echo canceller starts only while KURAMA really listens
+    this.plain = plain; this.system = !plain && system;
+    if (this.system) await micHooks.before?.(); // the system echo canceller starts only while KURAMA really listens
     if (!navigator.mediaDevices?.getUserMedia) {
       throw new Error(window.isSecureContext === false
         ? "Microphone needs a secure page: open http://127.0.0.1:8000 (or https)."
@@ -206,7 +209,7 @@ export class Mic {
 
   stop() {
     if (!this.stream) return;
-    if (!this.plain) micHooks.after?.();
+    if (this.system) micHooks.after?.();
     this.stream.getTracks().forEach((t) => t.stop());
     for (const n of [this.src, this.tap, this.mute]) { try { n.disconnect(); } catch { /* ignore */ } }
     if (this.tap?.port) this.tap.port.onmessage = null;

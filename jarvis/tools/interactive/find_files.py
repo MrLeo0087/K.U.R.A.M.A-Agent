@@ -68,6 +68,25 @@ def fuzzy_search(query: str, bases: list, limit: int, ftype: str) -> list[str]:
     return [p for s, p in ranked if s >= 0.6][:limit]
 
 
+# KURAMA's own copies / caches / outputs: never what the owner means by "find the kurama folder" (11-04: 20 hits, 2-3 real)
+_JUNK = re.compile(r"/(?:\.cache|\.local/share/Trash|site-packages|node_modules|__pycache__|\.git)/", re.I)
+
+
+def _junk(p: str) -> bool:
+    from jarvis.core import config
+    return bool(_JUNK.search(p)) or p.startswith(str(config.DATA_DIR) + "/")  # KURAMA's outputs, backups, caches
+
+
+def _tops(folders: list[str]) -> list[str]:
+    """Matching folders without junk and without the ones inside another match (KURAMA/ and KURAMA/kurama/ = one)."""
+    keep: list[str] = []
+    for f in sorted((f for f in folders if not _junk(f)), key=len):
+        if not any(f.startswith(k.rstrip("/") + "/") for k in keep):
+            keep.append(f)
+    order = {f: i for i, f in enumerate(folders)}
+    return sorted(keep, key=lambda f: order[f])
+
+
 def search_names(query: str, bases: list, limit: int = 20, ftype: str = "f", regex: bool = False) -> tuple[list[str], bool]:
     """Matching paths under all bases in ONE fd run (fd searches them in parallel); (paths, timed_out)."""
     argv = name_argv(query, limit, ftype, tuple(str(b) for b in bases), regex=regex)
@@ -175,11 +194,15 @@ def find_files(query: str, path: str = "", kind: Literal["any", "name", "folder"
         fuzzy = ""
         if kind == "any":  # search folders first (what people usually mean by "find X"), then files
             folders, late1 = search_names(query, bases, limit, "d")
+            folders = _tops(folders)
             files, late2 = search_names(query, bases, limit, "f")
-            found = list(dict.fromkeys(folders + [f for f in files if f not in folders]))[:limit]
+            real = [f for f in files if not _junk(f) and not any(f.startswith(d.rstrip("/") + "/") for d in folders)]
+            files = real if (real or folders) else files  # only KURAMA's own outputs match: show those
+            found = list(dict.fromkeys(folders + files))[:limit]  # files INSIDE a found folder are that folder
             late = late1 or late2
         else:
             found, late = search_names(query, bases, limit, "d" if kind == "folder" else "f")
+            found = (_tops(found) if kind == "folder" else [f for f in found if not _junk(f)]) or found
         if not found:  # nothing exact: try a close/fuzzy match (spacing, underscores, small typos)
             for ft in (("d", "f") if kind in ("any", "folder") else ("f",)):
                 if hit := fuzzy_search(query, bases, limit, ft):
@@ -192,7 +215,7 @@ def find_files(query: str, path: str = "", kind: Literal["any", "name", "folder"
         if kind in ("folder", "any"):  # remember the top folder, so "send this folder" works next
             from jarvis.core import focus
             focus.set_path(found[0])
-        head = f"{len(found)}{'+' if len(found) == limit else ''} {what} named like {query!r}{fuzzy}{partial}:"
+        head = f"{len(found)} {what} named like {query!r}{fuzzy}{partial}:"
         return "\n".join([head, *(f"{i}. {_clean(f)}" for i, f in enumerate(found, 1))])  # numbered: 'open 4'
         # ('open that 4 number folder' after a search re-searched and opened another one, 11-04)
     argv = content_argv(query, limit)

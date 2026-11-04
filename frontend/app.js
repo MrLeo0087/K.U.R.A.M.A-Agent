@@ -187,7 +187,7 @@ async function toggleMic() {
   audioCtx();
   if (mode === "conv") setMode("text");
   if (!recording) {
-    try { await mic.start(); } catch (e) { toast(micError(e)); flashError(); return; }
+    try { await mic.start({ system: false }); } catch (e) { toast(micError(e)); flashError(); return; }
     player.stop();
     recorder.start();
     recording = true;
@@ -2097,7 +2097,7 @@ window.kuramaPTT = async (v) => {
     if (recording || pttStarting) return;
     pttStarting = true;
     audioCtx();
-    try { await mic.start(); } catch (e) { pttStarting = false; hostSay("pttlog:mic failed " + (e?.name || e)); miniCaption("bot", micError(e), true); return; }
+    try { await mic.start({ system: false }); } catch (e) { pttStarting = false; hostSay("pttlog:mic failed " + (e?.name || e)); miniCaption("bot", micError(e), true); return; }
     pttStarting = false;
     if (pttWant === -1) { mic.stop(); return; } // let go / cancelled while the mic was starting
     player.stop();
@@ -2992,3 +2992,6 @@ const MIC_ID = (MINI ? "mini-" : "main-") + Math.random().toString(36).slice(2, 
 micHooks.before = () => Promise.race([api.micUse(true, MIC_ID), new Promise((r) => setTimeout(r, 2500))]).catch(() => {});
 micHooks.after = () => { api.micUse(false, MIC_ID).catch(() => {}); };
 addEventListener("pagehide", () => { try { navigator.sendBeacon?.(api.base() + "/api/v1/voice/mic", new Blob([JSON.stringify({ on: false, id: MIC_ID })], { type: "application/json" })); } catch { /* ignore */ } });
+// the mini window shows the panel / sends hold-to-talk only after THIS (the script ran and drew the chat): its
+// load event came earlier, so the first open after start-up was an empty glass box and the Alt key did nothing (11-04)
+requestAnimationFrame(() => requestAnimationFrame(() => hostSay("ready")));

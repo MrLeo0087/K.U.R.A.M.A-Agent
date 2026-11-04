@@ -67,6 +67,19 @@ def _upload_http():
     return _upload_client
 
 
+def _upload(url: str, payload: dict | None, files: dict, timeout: float | None):
+    import httpx  # lazy
+    data = {k: str(v) for k, v in (payload or {}).items()}
+    for attempt in (1, 2):  # a CONNECT failure sent nothing, so one more try can't make a duplicate
+        try:
+            with httpx.Client(timeout=httpx.Timeout(timeout or 60, connect=8.0)) as c:
+                return c.post(url, data=data, files=files)
+        except (httpx.ConnectError, httpx.ConnectTimeout):
+            if attempt == 2:
+                raise
+            time.sleep(1)
+
+
 def telegram_call(method: str, payload: dict | None = None, timeout: float | None = None,
                   files: dict | None = None, upload: bool = False) -> dict:
     """POST one Bot API method; returns the decoded "result" (raises RuntimeError on failure).
@@ -75,9 +88,10 @@ def telegram_call(method: str, payload: dict | None = None, timeout: float | Non
         raise RuntimeError("telegram is not configured")
     url = TELEGRAM_API.format(token=config.TELEGRAM_BOT_TOKEN, method=method)
     try:
-        if files:
-            r = (_upload_http() if upload else _http()).post(url, data={k: str(v) for k, v in (payload or {}).items()},
-                                                            files=files, timeout=timeout or 120)
+        if files and upload:  # a FRESH connection per upload: a pooled one gone stale behind the router hung the
+            r = _upload(url, payload, files, timeout)  # upload for a minute and then failed (11-04)
+        elif files:
+            r = _http().post(url, data={k: str(v) for k, v in (payload or {}).items()}, files=files, timeout=timeout or 120)
         else:
             r = _http().post(url, json=payload or {}, timeout=timeout or config.HTTP_TIMEOUT_S)
         data = r.json()

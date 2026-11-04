@@ -336,6 +336,10 @@ def findfile_intent(t: str) -> Intent | None:
         return Intent("findfile", "find_files", "filesearch", {"query": name, "path": path or "/", "kind": kind}, name)
     sc = re.match(r"^(?P<n>.+?)\s+(?:folder\s+|file\s+)?(?:in|inside|under|within)\s+(?:the\s+|my\s+)?(?P<p>.+)$", q or "", I)
     if sc and len(q.split()) <= 8 and not _NOT_FINDFILE.search(q):  # "find report in project1"
+        if re.search(r"\s+(?:folder|directory)\s+(?:in|inside|under|within)\s", q, I):
+            kind = "folder"  # 'find kurama folder in project1' listed 20 files too (11-04)
+        elif re.search(r"\s+file\s+(?:in|inside|under|within)\s", q, I):
+            kind = "name"
         return Intent("findfile", "find_files", "filesearch", {"query": sc.group("n").strip(), "path": sc.group("p").strip(),
                                                                "kind": kind}, sc.group("n").strip())
     if not q or len(q.split()) > 6 or _NOT_FINDFILE.search(q) or re.search(r"\b(?:in|inside|under|within|from)\b|/", q):
@@ -367,7 +371,8 @@ def _focus_intent(said: str = "this") -> Intent | None:
 def sendfile_intent(t: str) -> Intent | None:
     if re.match(r"^\s*(?:(?:ok|okay|now|please)\s+)*(?:send|share|forward)\s+(?:me\s+)?(?:this|that|the|it|my)?\s*"
                 r"(?:photo|picture|image|pic|wallpaper|(?:pie\s+|bar\s+|line\s+)?(?:chart|graph|plot)|diagram)"  # a chart is a picture
-                r"(?:\s+(?:you\s+)?(?:made|generated|created|drew|drawn))?" + _TGDEST + r"?\s*[.!?]*$", t, I):
+                r"(?:\s+(?:you\s+)?(?:made|generated|created|drew|drawn))?" + _TGDEST +
+                r"?(?:\s+(?:as\s+well|too|also|again|now|please))?\s*[.!?]*$", t, I):  # '... as well' drew a NEW one
         return Intent("sendlast", "send_last_result", "telegram", {"kind": "image"}, "image")
     if _ANAPHORA_SEND.match(t):  # "send this folder" / "send it to telegram"
         return _focus_intent(t)

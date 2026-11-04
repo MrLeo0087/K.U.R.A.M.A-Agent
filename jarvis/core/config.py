@@ -1088,6 +1088,7 @@ MUTE_DEFAULT_MIN = 30.0  # 'mute alerts' without a time (owner: never mute for l
 MUTE_MAX_MIN = 24 * 60.0  # no mute lasts longer than a day
 # Telegram remote control (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID from .env; skipped when empty)
 TELEGRAM_PHOTO_KEEP_KB = 200  # photos bigger than this are resized to TELEGRAM_PHOTO_PX JPEG before the upload
+TELEGRAM_PHOTO_TARGET_KB = 150  # a photo is re-saved at lower JPEG quality until it is about this small
 TELEGRAM_PHOTO_PX = 1280  # what Telegram shows anyway (it recompresses photos): a slow uplink sends ~150 KB, not MBs
 TELEGRAM_POLL_TIMEOUT_S = 6  # long-poll seconds (short so Ctrl+C stops the workers quickly)
 TELEGRAM_CONFIRM_TIMEOUT_S = 60.0  # "Reply yes/no": no answer in time means no

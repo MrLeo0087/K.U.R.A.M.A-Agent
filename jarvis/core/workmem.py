@@ -312,4 +312,20 @@ def choose(text: str) -> tuple[str, dict] | None:
     if pick is None:
         return None
     drop_choice()
+    if c["tool"] in _LISTERS:  # a pick from SEARCH results means that result, never "search again inside it"
+        return act_on(pick, t)  # (11-04: 'open 1 in vs code' after a find re-ran find_files inside a .vsix file)
     return c["tool"], {**c["args"], c["field"]: pick}
+
+
+_LISTERS = {"find_files", "list_folder", "recent_files", "find_and_send", "ranked_files", "files"}
+
+
+def act_on(path: str, said: str) -> tuple[str, dict]:
+    """What the reply asks for the picked path: send it / open it in VS Code / in the file manager / just open it."""
+    if re.search(r"\b(?:send|share|forward|telegram|phone)\b", said, re.I):
+        return "send_file_telegram", {"path": path}
+    if re.search(r"\b(?:vs\s*code|vscode|code|editor)\b", said, re.I):
+        return "open_path", {"path": path, "app": "vscode"}
+    if re.search(r"\b(?:file\s*manager|files|nautilus|explorer)\b", said, re.I) or Path(path).is_dir():
+        return "open_path", {"path": path, "app": "files"}
+    return "open_path", {"path": path, "app": "default"}

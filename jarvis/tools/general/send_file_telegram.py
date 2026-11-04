@@ -227,13 +227,44 @@ def _small_photo(p: Path) -> bytes:
         with Image.open(io.BytesIO(raw)) as im:
             im = im.convert("RGB")
             im.thumbnail((config.TELEGRAM_PHOTO_PX, config.TELEGRAM_PHOTO_PX))
-            out = io.BytesIO()
-            im.save(out, "JPEG", quality=85, optimize=True)
+            for q in (80, 68, 55):  # the slow uplink to Telegram (8-150 KB/s, 11-04): aim for <= ~150 KB
+                out = io.BytesIO()
+                im.save(out, "JPEG", quality=q, optimize=True)
+                if out.tell() <= config.TELEGRAM_PHOTO_TARGET_KB * 1024:
+                    break
         small = out.getvalue()
         return small if len(small) < len(raw) else raw
     except Exception as e:  # noqa: BLE001  (not a real image / Pillow missing: send the file as it is)
         log.info("photo not shrunk (%s): sending %s as it is", e, p.name)
         return raw
+
+
+_STILL = object()
+
+
+def _bounded(fn, seconds: float):
+    """fn() in a thread; its result, or _STILL after `seconds` (httpx timeouts are per read/write, so a trickling
+    upload never timed out: one ran past 2 min, 11-04). The upload keeps going; a late failure is told on Telegram."""
+    import threading
+    box: dict = {}
+
+    def run():
+        try:
+            box["r"] = fn()
+        except Exception as e:  # noqa: BLE001
+            box["e"] = e
+            if done.is_set():
+                log.warning("late telegram upload failed: %s", e)
+    done = threading.Event()
+    th = threading.Thread(target=run, name="tg-upload", daemon=True)
+    th.start()
+    th.join(seconds)
+    if th.is_alive():
+        done.set()
+        return _STILL
+    if "e" in box:
+        raise box["e"]
+    return box.get("r")
 
 
 def deliver(p: Path, caption: str = "") -> str:
@@ -247,7 +278,11 @@ def deliver(p: Path, caption: str = "") -> str:
     data = _small_photo(p) if photo else p.read_bytes()  # bytes, not a file object: a known length
     t0 = time.monotonic()
     try:  # ONE try, never a retry: Telegram answered "500" / timed out yet DELIVERED the file (owner got duplicates)
-        ok = notify.telegram_call(method, payload, files={field: (p.name, data)}, timeout=60, upload=True)
+        ok = _bounded(lambda: notify.telegram_call(method, payload, files={field: (p.name, data)}, timeout=45,
+                                                   upload=True), 20 + len(data) / 1024 / 10)
+        if ok is _STILL:  # it keeps going by itself and arrives when the slow uplink lets it
+            return (f"Your internet to Telegram is slow right now, so {p.name} is still uploading; it will arrive "
+                    f"by itself. (Saved at {p}.)")
     except RuntimeError as e:
         if re.search(r"\b5\d\d\b|Internal Server Error|Timeout|RemoteProtocol", str(e)):
             notify.telegram_send(f"📄 {p.name}: Telegram gave an error while uploading, so it may or may not have "

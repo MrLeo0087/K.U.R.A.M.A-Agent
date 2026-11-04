@@ -128,19 +128,44 @@ def text(r: NetReport) -> str:
     return f"{r.verdict}" + (f" {r.fix}" if r.fix else "") + f"\n{steps}"
 
 
-def speed(megabytes: int = 10) -> str:
-    """Download speed from Cloudflare's test server (uses ~10 MB)."""
-    url = f"https://speed.cloudflare.com/__down?bytes={megabytes * 1_000_000}"
-    t = time.monotonic()
-    n = 0
-    try:
-        with notify._http().stream("GET", url, timeout=30) as resp:
-            for chunk in resp.iter_bytes():
-                n += len(chunk)
-    except Exception as e:
-        return f"error: speed test failed ({type(e).__name__})"
-    sec = max(time.monotonic() - t, 0.001)
-    return f"Download speed about {n * 8 / sec / 1e6:.1f} Mbps ({n / 1e6:.0f} MB in {sec:.1f} s)."
+def speed(seconds: float = 8.0) -> str:
+    """A real speed test against Cloudflare's test servers (~15 s): latency (5 pings), download for ~8 s, upload
+    for ~6 s. The old test fetched 10 MB once (0.3 s on a fast line: a number from a fraction of a second, 11-04)."""
+    import httpx  # lazy
+    base = "https://speed.cloudflare.com"
+    with httpx.Client(timeout=httpx.Timeout(20.0, connect=8.0)) as c:
+        try:
+            pings = []
+            for _ in range(5):
+                t = time.monotonic()
+                c.get(f"{base}/__down?bytes=0")
+                pings.append((time.monotonic() - t) * 1000)
+            ping = sorted(pings)[len(pings) // 2]
+        except Exception as e:  # noqa: BLE001
+            return f"error: speed test failed, can't reach the test server ({type(e).__name__})"
+        n, t0 = 0, time.monotonic()
+        try:  # download: 25 MB pieces until the time is up (a slow line stops early, a fast one keeps measuring)
+            while time.monotonic() - t0 < seconds:
+                with c.stream("GET", f"{base}/__down?bytes=25000000") as resp:
+                    for chunk in resp.iter_bytes():
+                        n += len(chunk)
+                        if time.monotonic() - t0 > seconds:
+                            break
+        except Exception:  # noqa: BLE001
+            pass
+        down = n * 8 / max(time.monotonic() - t0, 0.001) / 1e6
+        up_n, t1, blob = 0, time.monotonic(), b"0" * 2_000_000
+        try:
+            while time.monotonic() - t1 < seconds * 0.75:
+                c.post(f"{base}/__up", content=blob)
+                up_n += len(blob)
+        except Exception:  # noqa: BLE001
+            pass
+        up = up_n * 8 / max(time.monotonic() - t1, 0.001) / 1e6
+    if not n:
+        return "error: speed test failed (the download didn't start)"
+    return (f"Download {down:.0f} Mbps, upload {up:.0f} Mbps, ping {ping:.0f} ms "
+            f"(measured just now: {n / 1e6:.0f} MB down, {up_n / 1e6:.0f} MB up, Cloudflare's test server).")
 
 
 def reconnect() -> str:
