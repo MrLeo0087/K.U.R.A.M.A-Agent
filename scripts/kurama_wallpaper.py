@@ -82,7 +82,7 @@ PANEL_KEEP_S = 0  # 0 = the hidden panel's page stays loaded and is preloaded at
 #                  first hold after 20 min idle / a restart said "Getting ready… keep holding" for ~2 s while the
 #                  page reloaded; kept loaded it costs the measured RAM in PROGRESS.md and ~0 CPU: its animations
 #                  are frozen and its timers skip while hidden). >0 = close it after that many seconds hidden.
-PANEL_PRELOAD_S = 8  # load the hidden panel this long after start (after the wallpaper's own first paint)
+PANEL_PRELOAD_S = 1  # load the hidden panel this long after start (after the wallpaper's own first paint)
 CAPTION_W = 340  # reply caption next to the button while talking with the panel closed
 RING = {"listening": (0.25, 0.85, 0.78), "capturing": (0.25, 0.95, 0.6), "thinking": (1, 0.75, 0.25),
         "speaking": (1, 0.55, 0.15)}  # button ring colour per voice state (talk mode, panel closed)
@@ -539,7 +539,9 @@ class Wallpaper:
             self.restore()
         elif msg == "hide" and self.mini:
             self.mini.hide_panel()
-        elif self.mini and msg.startswith(("talk:", "state:", "caption:", "ws:", "resize:")):  # only the mini panel sends these
+        elif self.mini and (msg == "ready" or msg.startswith(("talk:", "state:", "caption:", "ws:", "resize:", "pttlog:"))):
+            # only the mini panel sends these. "ready" and "pttlog:" were missing (11-05): the page's ready never
+            # arrived, so every start waited for the 6 s fallback and hold-to-talk said "Getting ready" meanwhile
             self.mini.on_page(msg)
 
     def on_ptt(self):
@@ -814,7 +816,7 @@ class Mini:
             if not self.talking and self.ghost:  # talk mode ended while closed: really hide now
                 self.end_ghost()
         elif kind == "ready":  # the page's script ran and painted: open it / let hold-to-talk in now
-            self._mark_ready()
+            self._mark_ready("page")
         elif kind == "state":
             if rest != self.state:
                 self.state = rest
@@ -913,7 +915,7 @@ class Mini:
         return True
 
     def fade(self, win, show: bool, then=None) -> None:
-        """A short fade (~140 ms) when the panel opens / closes."""
+        """A short fade (~180 ms, eased) when the panel opens / closes."""
         if self.fader:
             GLib.source_remove(self.fader)
             self.fader = 0
@@ -921,8 +923,9 @@ class Mini:
 
         def tick():
             step[0] += 1
-            t = min(1.0, step[0] / 7)
-            win.set_opacity(t if show else 1 - t)
+            t = min(1.0, step[0] / 9)  # ~180 ms, eased out: fast at first, soft at the end
+            e = 1 - (1 - t) ** 3
+            win.set_opacity(e if show else 1 - e)
             if t >= 1:
                 self.fader = 0
                 if then:
@@ -1059,7 +1062,7 @@ class Mini:
             if self.caption is None:
                 self.caption = Caption(self)
             ready = getattr(self, "page_ready", False)
-            self.caption.show("you", "Listening…" if ready else "Getting ready… keep holding", False)
+            self.caption.show("you", "Listening…" if ready else "Starting the mic… keep holding", False)
             if not ready:  # never stuck on "Getting ready" (11-02: the page's web process was broken)
                 GLib.timeout_add_seconds(PANEL_READY_S, self._ready_or_restart)
         self.ptt_last = state
@@ -1080,7 +1083,7 @@ class Mini:
                 self.bubble.queue_draw()
                 self.animate(False)
                 if last == "up" and self.caption is not None:
-                    self.caption.show("bot", "I was just waking up. Hold the talk key again and speak.", True)
+                    self.caption.show("bot", "The mic was still starting. Hold Alt again and speak.", True)
                 self.ptt_active = False
                 GLib.timeout_add(600, self.end_ghost_if_idle)
             self.when_ready(apply)
@@ -1141,11 +1144,11 @@ class Mini:
             self.view.terminate_web_process()  # -> _panel_crashed -> load again
         return False
 
-    def _mark_ready(self) -> bool:
+    def _mark_ready(self, via: str = "fallback") -> bool:
         if self.page_ready or self.panel_failed:  # an error page is never "ready"
             return False
         self.page_ready = True
-        pttlog(f"panel page ready (shown={bool(self.panel and self.panel.get_visible())})")
+        pttlog(f"panel page ready via {via} (shown={bool(self.panel and self.panel.get_visible())})")
         waiting, self.on_ready = self.on_ready, []
         for fn in waiting:
             fn()
@@ -1312,21 +1315,13 @@ class Mini:
             return
         self.shrunk = False
         self.hold_size()
-        wa = workarea()
+        if self.panel.get_visible():  # resized while mapped, the 1 x 1 window grew in steps: the chat opened small,
+            self.panel.hide()  # then jumped to its size a moment later (11-05). Unmapped, it maps at the right size
+        wa = workarea()  # (the caller shows it again, with the fade)
         self.panel.set_size_request(PANEL_MIN_W, PANEL_MIN_H)
         sw, sh = self.saved_size()
-        want = (min(sw, wa.width - 40), min(sh, wa.height - 40))
-        self.panel.resize(*want)
+        self.panel.resize(min(sw, wa.width - 40), min(sh, wa.height - 40))
         self.place_panel()
-
-        def again():  # the window manager may clamp a mapped 1 x 1 window to the minimum: ask for your size again
-            if self.panel is not None and not getattr(self, "shrunk", False) and self.panel.get_size() != want:
-                self.hold_size()
-                self.panel.resize(*want)
-                self.place_panel()
-            return False
-        GLib.timeout_add(250, again)
-        GLib.timeout_add(900, again)
 
     def unghost(self, hide_caption: bool = True) -> None:
         if not self.ghost or self.panel is None:

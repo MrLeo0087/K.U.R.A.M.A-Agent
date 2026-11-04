@@ -2994,4 +2994,10 @@ micHooks.after = () => { api.micUse(false, MIC_ID).catch(() => {}); };
 addEventListener("pagehide", () => { try { navigator.sendBeacon?.(api.base() + "/api/v1/voice/mic", new Blob([JSON.stringify({ on: false, id: MIC_ID })], { type: "application/json" })); } catch { /* ignore */ } });
 // the mini window shows the panel / sends hold-to-talk only after THIS (the script ran and drew the chat): its
 // load event came earlier, so the first open after start-up was an empty glass box and the Alt key did nothing (11-04)
-requestAnimationFrame(() => requestAnimationFrame(() => hostSay("ready")));
+{ // the invisible preload window never paints, so its animation frames never come: "ready" also goes after a
+  // short timer (this line runs last, so the chat is built by then). 11-05: hold-to-talk waited ~15 s after start-up
+  let said = false;
+  const ready = () => { if (!said && MINI) { said = true; hostSay("ready"); } }; // (the dashboard page shares the host)
+  requestAnimationFrame(() => requestAnimationFrame(ready));
+  setTimeout(ready, 400);
+}

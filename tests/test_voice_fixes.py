@@ -212,4 +212,18 @@ def test_mini_window_startup_and_size_regressions():
     assert 'v.connect("load-failed", self._panel_load_failed)' in src
     assert "if self.page_ready or self.panel_failed:" in src  # an error page is never ready
     assert "if (w, h) == (PANEL_MIN_W, PANEL_MIN_H):" in src  # a clamped size is not the owner's size
-    assert src.count("self.hold_size()") >= 3 and "time.monotonic() < getattr(self, \"size_hold_until\"" in src
+    assert src.count("self.hold_size()") >= 2 and "time.monotonic() < getattr(self, \"size_hold_until\"" in src
+
+
+def test_mini_window_opens_at_full_size_and_is_ready_soon():
+    """11-05: after an Alt hold the chat opened small and jumped to its size a moment later (the mapped 1 x 1 window
+    was resized in place); after start-up the invisible page took ~15 s to say "ready" (no animation frames there)."""
+    from pathlib import Path
+    root = Path(__file__).resolve().parent.parent
+    src = (root / "scripts" / "kurama_wallpaper.py").read_text()
+    unshrink = src[src.index("def unshrink_ghost"):src.index("def unghost")]
+    assert unshrink.index("self.panel.hide()") < unshrink.index("self.panel.resize(")  # resized while unmapped
+    assert "PANEL_PRELOAD_S = 1 " in src
+    assert 'msg == "ready" or msg.startswith(' in src  # the page's "ready" reaches the panel (it never did)
+    js = (root / "frontend" / "app.js").read_text()
+    assert 'setTimeout(ready, 400);' in js

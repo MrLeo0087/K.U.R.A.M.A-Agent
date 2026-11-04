@@ -1245,3 +1245,8 @@ Phases (one at a time, owner tests after each):
 - Size: the 1 x 1 hold-to-talk window grew back clamped to the 300 x 260 minimum and that was saved as the owner's
   size (data/mini.json had 300 x 260). KURAMA's own resizes are no longer saved for 3 s, the size is asked for
   again if the window manager clamps it, and an exact-minimum saved size falls back to the default 400 x 600.
+- (later) Root cause of the slow start-up Alt: the host never forwarded the page's "ready" (nor "pttlog:") from
+  the mini page, so readiness always waited for the 6 s fallback, and an unpainted invisible page has no animation
+  frames. Now "ready" is forwarded (mini page only), also sent on a 400 ms timer, and the preload starts after 1 s:
+  hold-to-talk is ready 3.2 s after power-on (was ~15 s). Opening the chat after a hold: the 1 x 1 window is
+  hidden, resized, then faded in at full size (it used to open small and jump). Fade 180 ms, eased.
