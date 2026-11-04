@@ -16,7 +16,11 @@ def used(model: str) -> int:
 def remaining(model: str | None = None) -> int | dict[str, int]:
     """Tokens left today for model; with no model, a dict for every budgeted model."""
     if model is None:
-        return {m: remaining(m) for m in config.DAILY_TOKEN_BUDGET}
+        return {m: _left(m) for m in config.DAILY_TOKEN_BUDGET}
+    return _left(model)
+
+
+def _left(model: str) -> int:
     cap = limit(model)
     if cap is None:
         return 10**12
@@ -27,7 +31,7 @@ def allow(model: str, needed: int = 0) -> bool:
     """True if model still has more than `needed` tokens left today."""
     if limit(model) is None:
         return True
-    return remaining(model) > needed
+    return _left(model) > needed
 
 
 def summary() -> str:

@@ -1,0 +1,6 @@
+{
+  "name": "kurama-frontend",
+  "private": true,
+  "type": "module",
+  "description": "No build step: the browser loads these ES modules directly. This file only tells Node (make js-check) they are modules."
+}

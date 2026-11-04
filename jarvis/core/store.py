@@ -199,7 +199,7 @@ def log_tool(tool: str, args: Any, ok: bool, latency_ms: int, safety: str = "saf
 
 def location_add(device: str, lat: float, lon: float, accuracy: int = 0, source: str = "",
                  place: str = "", ts: float | None = None) -> int:
-    row = _exec("INSERT INTO locations(ts,device,lat,lon,accuracy,source,place) VALUES (?,?,?,?,?,?,?)",
+    _exec("INSERT INTO locations(ts,device,lat,lon,accuracy,source,place) VALUES (?,?,?,?,?,?,?)",
                 (ts or time.time(), device, float(lat), float(lon), int(accuracy or 0), source, place))
     return _exec("SELECT last_insert_rowid() AS id")[0]["id"]
 

@@ -1,0 +1,5 @@
+# Developer-only tools (not needed to run KURAMA). Install: venv/bin/pip install -r requirements-dev.txt
+# Checked: no torch / GPU packages pulled in.
+-r requirements.txt
+mypy==2.4.1        # `make type`: the type gate on the core contracts
+pytest-cov==7.0.0  # `make cov`: test coverage with a minimum

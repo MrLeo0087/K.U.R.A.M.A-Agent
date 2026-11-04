@@ -256,7 +256,7 @@ def _move_streams_off(saved: dict) -> None:
     """Every app still recording from our mic or playing to our speaker (a Facebook / Meet call started while
     KURAMA listened) is moved to the real mic / speaker BEFORE ours goes, so it never loses its device mid-call."""
     try:
-        sources, sinks = _names("sources"), _names("sinks")
+        sources = _names("sources")
         mic = saved.get("source") if saved.get("source") in sources else next((x for x in sources if _real(x)), None)
         spk = _best(saved)
         for kind, ours, to, move in (("source-outputs", EC_SOURCE, mic, "move-source-output"),

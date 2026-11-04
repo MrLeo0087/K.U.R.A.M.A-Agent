@@ -8,6 +8,7 @@ import shutil
 from typing import Literal
 
 from jarvis.core.registry import tool
+from jarvis.core.results import Reply
 from jarvis.tools.interactive import _proc
 
 TIMEOUT = 25
@@ -216,7 +217,8 @@ def find_files(query: str, path: str = "", kind: Literal["any", "name", "folder"
             from jarvis.core import focus
             focus.set_path(found[0])
         head = f"{len(found)} {what} named like {query!r}{fuzzy}{partial}:"
-        return "\n".join([head, *(f"{i}. {_clean(f)}" for i, f in enumerate(found, 1))])  # numbered: 'open 4'
+        return Reply("\n".join([head, *(f"{i}. {_clean(f)}" for i, f in enumerate(found, 1))]),  # numbered: 'open 4'
+                     paths=found)  # the exact paths: a pick never re-reads a shortened line
         # ('open that 4 number folder' after a search re-searched and opened another one, 11-04)
     argv = content_argv(query, limit)
     out, partial = "", ""

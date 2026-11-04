@@ -12,3 +12,8 @@ logs/
 *.zip
 data/wp_probe.js
 data/wp_probe.out
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+node_modules/

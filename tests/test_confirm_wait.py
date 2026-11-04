@@ -56,7 +56,7 @@ def test_shutdown_later_schedules_ubuntu_shutdown_after_a_yes(monkeypatch, tmp_p
         assert i.tool == "shutdown_timer" and i.args == {"action": "set", "when": w, "kind": kind}, t
     for t, w in (("shutdown 2hrs", "2hrs"), ("shutdown after 3s", "after 3s"), ("turn off pc in 4min", "in 4min")):
         assert fastpath.match(t).args["when"] == w, t
-    secs = st_secs = __import__("jarvis.tools.general.shutdown_timer", fromlist=["x"]).seconds_from
+    secs = __import__("jarvis.tools.general.shutdown_timer", fromlist=["x"]).seconds_from
     assert secs("3s") == 3 and secs("4min") == 240 and secs("2hrs") == 7200 and secs("1h 30m") == 5400
     assert secs("after 90 minutes") == 5400 and secs("half an hour") == 1800 and 0 < secs("at 11 pm") < 86400
     assert fastpath.match("shutdown now").tool == "power_off" and fastpath.match("shutdown laptop").tool == "power_off"

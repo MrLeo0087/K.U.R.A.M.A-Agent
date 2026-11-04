@@ -120,7 +120,7 @@ async def shortcuts_get():
             paths = subprocess.run(["gsettings", "get", base, "custom-keybindings"], capture_output=True, text=True,
                                    timeout=5).stdout.strip().replace("@as ", "")
             for p in json.loads(paths.replace("'", '"')) if paths.startswith("[") else []:
-                get = lambda k: subprocess.run(["gsettings", "get", f"{base}.custom-keybinding:{p}", k],  # noqa: E731
+                get = lambda k: subprocess.run(["gsettings", "get", f"{base}.custom-keybinding:{p}", k],  # noqa: E731, B023 (used at once, in this loop pass)
                                                capture_output=True, text=True, timeout=5).stdout.strip().strip("'")
                 name = get("name")
                 if "KURAMA" in name.upper():

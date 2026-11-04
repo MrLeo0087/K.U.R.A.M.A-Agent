@@ -1,4 +1,4 @@
-# Every push / pull request: lint gate, then the full test suite (no network, no real AI calls: tests use fakes).
+# Every push / pull request: lint gate, type gate, frontend parse check, then the full test suite (no network, no real AI calls: tests use fakes).
 name: ci
 on:
   push:
@@ -16,8 +16,12 @@ jobs:
           cache: pip
       - name: System libraries (PortAudio for sounddevice, fd + ripgrep for file search, xdotool)
         run: sudo apt-get update && sudo apt-get install -y libportaudio2 fd-find ripgrep xdotool
-      - run: pip install -r requirements.txt
+      - run: pip install -r requirements-dev.txt
       - name: Lint gate
         run: ruff check jarvis tests scripts
+      - name: Type gate
+        run: make type BIN=
+      - name: Frontend parses
+        run: make js-check
       - name: Tests
-        run: python -m pytest
+        run: python -m pytest --cov=jarvis --cov-report=term:skip-covered

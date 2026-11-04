@@ -60,6 +60,7 @@ class ToolResult:
     ok: bool
     output: str
     error: str = ""
+    data: dict = field(default_factory=dict)  # structured data from a results.Reply (paths, items...)
 
 
 # --- schema building ---
@@ -439,7 +440,8 @@ class Registry:
                 limit = max(limit or 0, config.TOOL_OUTPUT_FULL_CHARS)
         except Exception as e:
             log.warning("workspace publish failed: %s", e)
-        return ToolResult(True, truncate(full, limit) + note)
+        from jarvis.core.results import data_of
+        return ToolResult(True, truncate(full, limit) + note, data=data_of(out))
 
 
 REGISTRY = Registry()

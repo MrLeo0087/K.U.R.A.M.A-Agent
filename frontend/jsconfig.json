@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "checkJs": false,
+    "strict": false,
+    "noEmit": true
+  },
+  "include": ["*.js"]
+}

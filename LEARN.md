@@ -14,8 +14,9 @@ This guide is for you, the owner. You have used KURAMA every day; this is the ma
 Read it in order the first time. Sections 2, 3, 4 and 5 are the most important: they are the skeleton every other
 file hangs on. Later sections are reference: come back to them when you need them.
 
-> Updated 2026-11-05 (learning from feedback, tool reach, Telegram, hold-to-talk, engineering tooling; see 2.4 for
-> what changed). Names and line counts are from that day. Files grow; if a name
+> Updated 2026-11-05 (learning from feedback, tool reach, Telegram, hold-to-talk, engineering tooling, and the
+> production-readiness phase: fastpath split into `intents/`, typed tool results, type gate, wider lint gate,
+> coverage floor, `/metrics`, frontend checks, ADRs; see 2.4 and 23). Names and line counts are from that day. Files grow; if a name
 > moved, `grep -n "def name" -r jarvis` finds it. Never trust a doc over the code: the code is the truth, this guide
 > is the map.
 
@@ -222,6 +223,11 @@ sentence by sentence (`frontend/voice.js` → `POST /api/v1/tts` → edge-tts).
 | Hold-to-talk | first holds after start recorded silence | no system echo canceller for hold-to-talk; the panel opens only after the page says "ready"; the ring spins at key-down | `voice.js`, `app.js`, `kurama_wallpaper.py` |
 | Speed test | 10 MB once (0.3 s) | ~15 s: ping, download, upload | `netdoctor.speed()` |
 | Engineering | — | `pyproject.toml`, `Makefile`, lint gate, pre-commit, GitHub CI | section 23 |
+| Code layout | `fastpath.py` 4,587 lines | split by area into `jarvis/core/intents/` (base, files, desktop, media, todo, control); `fastpath.py` ~2,900 lines re-imports them, so `fastpath.X` still works | `core/intents/`, ADR 0010 |
+| Tool results | sentences parsed back with regexes | a tool can return `Reply(text, paths=[...])`: still a string, plus exact data; picks use the exact paths | `core/results.py`, ADR 0009 |
+| Quality gates | lint only | + `make type` (mypy on the core contracts), wider lint rules (tests that never ran, closures over loop values), coverage floor, `make js-check` | `pyproject.toml`, `Makefile` |
+| Metrics | SQLite tables only | `GET /api/v1/metrics` in Prometheus format: tokens, tool calls, routing, jobs, RAM (`make metrics`) | `core/metrics.py`, `api/routes/metrics.py` |
+| Decisions | comments in code | 10 one-page decision records | `docs/adr/` |
 
 ---
 
@@ -449,10 +455,14 @@ KURAMA/
 ├── PROGRESS.md          a diary of every change, newest at the bottom
 ├── COMMAND.md           your user guide (what to say); your own edits live here
 ├── requirements.txt     every Python dependency, pinned
+├── requirements-dev.txt developer tools only (mypy, pytest-cov), pinned
+├── pyproject.toml       project settings: lint gate, type gate, pytest, coverage floor
+├── Makefile             every everyday command: `make help`
 ├── .env                 secrets (Groq key, Gemini key, Telegram token...). Never committed.
 │
 ├── jarvis/              THE PYTHON PACKAGE (all the logic)
 │   ├── core/            ~115 modules: brain + services + foundation (section 7)
+│   │   └── intents/     the fast-path intents by area (base, files, desktop, media, todo, control)
 │   ├── tools/
 │   │   ├── core/        the 17 GENERAL tools the AI sees (thin dispatchers)
 │   │   ├── general/     ~150 real tools (one file each)
@@ -469,6 +479,7 @@ KURAMA/
 ├── vscode_ext/          tiny VS Code extension: the open file, the selection, edits
 ├── tests/               ~140 test files; tests/eval/ = the scorecard
 ├── docs/                HANDOFF.md (state for a new session), plans
+│   └── adr/             Architecture Decision Records: one page per big choice
 └── data/                everything KURAMA stores (not in git): databases, logs, outputs, models
 ```
 
@@ -483,7 +494,10 @@ KURAMA/
 | File | Lines | What it does | Change it when |
 |---|---|---|---|
 | **agent.py** | 1270 | The LangGraph graph (plan → route → llm ⇄ tools; schedule → step → finish); streaming; history, sessions, resume; `_open_question`, `did_line`, `_about_context`, direct replies; the safety nets; `SYSTEM_PROMPT`. | The AI's behaviour, the prompt, retries, how steps run or join. |
-| **fastpath.py** | 4230 | 0-token shortcuts: `match()` (choice, patterns, meaning actions), `try_answer()`, `render()` (answer templates), `meaning_ok()`, `meaning_intent()`, `tg_message_text()`, `_focus_intent()`. | A shortcut does the wrong thing, or a frequent AI request should become 0 tokens. |
+| **intents/** | 6 files, 100–600 each | The fast-path intents moved out of fastpath.py by area: `base` (Intent, FastResult, `yes_no`, `_nth`), `files` (open/search/find/send), `desktop` (volume, brightness, media keys, DND, alerts), `media` (music, video, image, chart), `todo` (links, to-dos, goals, reading list), `control` (reminders, power, clock). | A shortcut in that area misbehaves. Add new intents to the right area file. |
+| **results.py** | 30 | `Reply(str)`: a tool's text plus exact data (`.data`, e.g. `paths`); `data_of()`. | A tool's result is acted on later (a pick, a chain): return a Reply. |
+| **metrics.py** | 80 | Prometheus text from the SQLite logs (last 24 h) + process RAM/CPU, for `GET /api/v1/metrics`. | You want a new number on a dashboard. |
+| **fastpath.py** | 2900 | 0-token shortcuts: `match()` (choice, patterns, meaning actions), `try_answer()`, `render()` (answer templates), `meaning_ok()`, `meaning_intent()`, `tg_message_text()`, `_focus_intent()`. | A shortcut does the wrong thing, or a frequent AI request should become 0 tokens. |
 | **planner.py** | 480 | One task or several (`is_multi`), `parts()` (clauses without filler), `decompose()` (the AI split), `add_dependencies()` (refers back → needs the step before), `_shortcut_tasks()` (0-token plans). | Splitting or linking of tasks is wrong. |
 | **taskgraph.py** | 220 | Step helpers: `judge`, `replan`, `settle` (skipped / after), `filler`, learned plans, `inputs_text`, window guard. | Step checks, re-planning, filler, learned plans. |
 | **workmem.py** | 300 | Working memory: things, kinds, `record_call`, `latest`, `line`, choices, `collect` (one step's calls). | "it / that image" resolves wrongly; a tool's paths aren't remembered. |
@@ -807,6 +821,12 @@ is and when you'd reach for it.
 | **Safety by design** | ★ | `safety.py`, `telesec.py`, `_secrets.py` | one gate for every action, least privilege, confirm destructive actions, secrets never in prompts |
 | **Configuration** | ★ | `config.py` + `.env` | one source of truth; secrets from the environment (12-factor) |
 | **Resource budgets** | ◆ | `resource_guard` worker, CLAUDE.md budgets | idle RSS < 600 MB, lazy load, idle unload |
+| **Type checking (mypy)** | ◆ | `make type`, `[tool.mypy]` in `pyproject.toml`, the `TYPED` list in `Makefile` | type hints, `Optional`, `TypedDict`, generics; a gate that covers a few modules and grows one module at a time |
+| **Coverage** | ◆ | `make cov`, `fail_under` in `pyproject.toml` | line vs branch coverage; a floor that only goes up; coverage shows untested code, not good tests |
+| **Metrics (Prometheus)** | ◆ | `core/metrics.py`, `/api/v1/metrics`, `make metrics` | counters vs gauges, labels, scraping, Grafana dashboards on top |
+| **Typed results** | ◆ | `core/results.py` | return data, not sentences; keep the old contract while moving over (`Reply` is still a `str`) |
+| **Refactoring safely** | ★ | ADR 0010 (the fastpath split) | move code without changing it, keep the old names importable, let the tests prove nothing changed |
+| **ADRs** | ○ | `docs/adr/` | context → decision → consequences; never edit an old one, supersede it |
 
 ---
 
@@ -1015,7 +1035,7 @@ sentence will go to the fast path, tool X"), then check with the snippets in 19.
 | 1 | Sections 1–2 of this guide. `CLAUDE.md`. | Draw the life of one request on paper from memory. |
 | 2 | Python: functions, dataclasses, type hints, `pathlib`. Read `core/paths.py`. | Write a function that lists the 5 biggest files in a folder (with a test). |
 | 3 | Decorators. Read `core/registry.py` `tool()`. | Write your own `@register` decorator that fills a dict. |
-| 4 | Regex. Read `core/spelling.py` (small) and one area of `fastpath.py` (`findfile_intent`). | Add a typo fix to `spelling.py` + test. |
+| 4 | Regex. Read `core/spelling.py` (small) and one area of the fast path (`core/intents/files.py`, `findfile_intent`). | Add a typo fix to `spelling.py` + test. |
 | 5 | Exceptions + context managers. Read `core/safety.py` `execute()`. | Trace a tool call through the gate with a print. |
 | 6 | `subprocess`. Read `tools/interactive/_proc.py`. | Write a tool helper that runs `uptime` with a timeout. |
 | 7 | Review. | Explain the safety gate out loud. |
@@ -1133,12 +1153,12 @@ sentence will go to the fast path, tool X"), then check with the snippets in 19.
 ### Week 12: industry level, by doing it
 | Day | Read / learn | Do |
 |---|---|---|
-| 78 | Section 23. | Pick debt item 2 (typed tool results) for one tool; design the Pydantic model. |
-| 79 | Pydantic models in depth. | Make that one tool return the typed result + test. |
-| 80 | Type checking: mypy basics. | Run mypy on `core/workmem.py`; fix 5 findings. |
-| 81 | Coverage. | `pytest --cov=jarvis.core`; find the least-covered core file. |
-| 82 | Metrics: Prometheus text format. | Sketch a `/metrics` endpoint with request count and latency. |
-| 83 | ADRs. | Write `docs/adr/0001-sqlite.md`: context, decision, consequences. |
+| 78 | Sections 23 and 23.3; ADR 0009 and `core/results.py`. | Make `list_folder` return a `Reply(text, paths=[...])` like `find_files` + a test. |
+| 79 | ADR 0010; read `core/intents/base.py` and `files.py`. | Explain why `match` and `meaning_ok` stay in `fastpath.py` (hint: monkeypatch). |
+| 80 | Type checking: mypy basics. | Add `core/intents/todo.py` to `TYPED` in the Makefile; fix what `make type` finds. |
+| 81 | Coverage. | `make cov`; open `data/coverage/index.html`; write one test for the least-covered core file you use daily. |
+| 82 | Metrics: Prometheus text format. | `make metrics`; add one metric (e.g. errors in the last 24 h) to `core/metrics.py` + the test in `test_api.py`. |
+| 83 | ADRs. | Read `docs/adr/`; write ADR 0011 for a choice you make yourself. |
 | 84 | Final review. | Explain KURAMA end to end in 15 minutes, without notes. |
 
 **After week 12** you can explain, change and debug every part. Then keep the routine of section 20 (15 minutes
@@ -1215,33 +1235,72 @@ one process, not Kubernetes). Learn the server-scale version too, so you know wh
 - A real **agent architecture**: routing by meaning → planning → a task graph with dependencies → one safety gate → tracing.
 - **Hybrid RAG** (BM25 + vectors + rank fusion) with incremental indexing and lazy, unloadable embeddings.
 - **Cost engineering**: two of every three requests cost 0 tokens; model fallback chains; rate limiting; caches.
-- **Observability**: every request is a trace with route, tools, tokens and latency; a report finds the failures.
-- **Tests**: ~1,820 offline tests plus an evaluation scorecard; mocked network.
+- **Observability**: every request is a trace with route, tools, tokens and latency; a report finds the failures;
+  `/api/v1/metrics` exposes the same numbers in Prometheus format for any dashboard.
+- **Tests**: ~1,830 offline tests plus an evaluation scorecard; mocked network; a **coverage floor** (`make cov`).
 - **Safety**: confirm levels, a PIN for risky remote commands, secrets kept out of prompts and git.
-- **Tooling** (added 11-05): `pyproject.toml`, `Makefile` (`make help`), a lint gate, pre-commit hooks, GitHub CI.
+- **Quality gates** (`make check`, also in CI): lint gate (syntax, undefined names, duplicate definitions, unused
+  results, closures over loop variables), **type gate** (`make type`), frontend parse check (`make js-check`), tests,
+  scorecard. Pre-commit hooks block `.env` and private keys.
+- **Code layout**: the fast path is split by area (`core/intents/`); tools can return **typed results** (`Reply`).
+- **Decisions are written down**: `docs/adr/` (10 records).
 
-### 23.2 Not yet at industry level (the honest debt, in the order to fix it)
+### 23.2 What is left (smaller now, in the order to do it)
 
-1. **Giant files.** `fastpath.py` is ~4,600 lines, `config.py` ~1,430, `frontend/app.js` ~3,000. Industry code
-   splits by area: `fastpath/` as a package (one module per area), example lists out of `config.py` into data files,
-   `app.js` into modules (chat, voice, music card, workspace).
-2. **Tools return sentences, not data.** Working memory reads paths out of text (`workmem.paths_in`). Industry
-   tools return a typed result (`{"ok": true, "paths": [...], "text": "..."}`, a Pydantic model) and the sentence is
-   made from it.
-3. **No type checking.** Add `mypy` (or pyright) on `jarvis/core` first, then make it a CI gate.
-4. **Lint gate is narrow.** `make lint-all` lists ~1,200 style findings. Clean one folder at a time and widen the
-   `select` list in `pyproject.toml`.
-5. **No coverage number.** `pip install pytest-cov`, `pytest --cov`, then set a floor in CI.
-6. **Metrics are in SQLite only.** A `/metrics` endpoint (Prometheus format) for latency, tokens and errors would let
-   any dashboard read them.
-7. **Frontend has no build step and no types.** Fine today; at the next big UI change move to TypeScript + Vite
-   (still no framework needed), with a few Playwright tests for the chat and the mini window.
-8. **Decision records.** Write a one-page ADR in `docs/adr/` for each big choice (why SQLite, why LangGraph, why
-   meaning routing). Many of the "why" notes already exist as code comments.
+1. **`config.py` (~1,430 lines)**: move the long example and word lists into data files under `jarvis/core/data/`
+   and keep only settings in `config.py`.
+2. **`frontend/app.js` (~3,000 lines)**: split into ES modules (chat, voice, music card, workspace); no build step
+   needed (ADR 0008). Add `// @ts-check` to each new module.
+3. **More typed results**: every tool that lists things (`list_folder`, `recent_files`, links, to-dos) returns a
+   `Reply` with its items; then `workmem` can drop the text parsing.
+4. **Widen the type gate**: add one module at a time to `TYPED` in the `Makefile` (next: `intents/todo.py`,
+   `intents/media.py`, `store.py`, `memory.py`); each needs a few `Optional` checks.
+5. **Widen the lint gate**: unused imports (F401, ~47) need care because tests patch module attributes; then
+   `E7`, then `B` rules, one folder at a time.
+6. **End-to-end UI tests** (Playwright) for the chat and the mini window, run by hand (too heavy to run all day).
+7. **Push to GitHub** so CI runs on every change (it has never run there yet).
 
-Each item is one phase of work: do it, measure, test, commit, and update this list.
+Each item is one phase: do it, measure, test, commit, update this list.
 
-### 23.3 Smaller known weak spots
+### 23.3 How large production codebases work (and how KURAMA maps to it)
+
+What teams of 10–1,000 engineers do so that a big codebase keeps working while many people change it every day.
+You don't need all of it for a one-person project, but you should know each one, why it exists, and its small
+version, because interviews and real jobs assume it.
+
+| Practice | What it is, why it exists | In KURAMA |
+|---|---|---|
+| **Version control flow** | Short-lived branches, a pull request (PR) per change, `main` always releasable ("trunk-based development") | Git with small commits; try a branch + PR on GitHub for your next change |
+| **Code review** | Every change is read by someone else before it merges; catches bugs and spreads knowledge | `/code-review` in Claude Code, or review your own diff the next day |
+| **CI (continuous integration)** | Every push runs lint, types and tests on a clean machine; red CI blocks the merge | `.github/workflows/ci.yml` (not pushed yet) |
+| **CD (continuous delivery)** | A merge to `main` builds and deploys automatically, first to staging, then production | `make restart` is the one-laptop version |
+| **Environments** | dev → staging → production, each with its own config and data | `.env` + `config.py`; tests use a temp database (`tests/conftest.py`) |
+| **Testing pyramid** | Many fast unit tests, fewer integration tests, a few end-to-end tests; plus contract, load and regression tests | ~1,830 unit/integration tests + `tests/eval` regression scorecard; no e2e yet |
+| **Static analysis** | Linters and type checkers catch bugs before running the code | `make lint`, `make type` |
+| **Coverage floor** | Coverage may not go down; new code comes with tests | `fail_under` in `pyproject.toml` |
+| **Dependency management** | Pinned versions, lock files, automatic security updates (Dependabot), audits (`pip-audit`) | `requirements*.txt` pinned; run `pip-audit` now and then |
+| **Secrets management** | Secrets in a vault (AWS Secrets Manager, Vault), never in code, rotated | `.env` only, pre-commit blocks it, `_secrets.py` keeps keys out of prompts |
+| **Configuration** | Settings from the environment (12-factor), feature flags to turn features on without a deploy | `config.py` reads env vars; flags like `FASTPATH`, `WORKERS_IN_SERVER` |
+| **Observability** | Logs (what happened), metrics (how much, how fast), traces (one request end to end), dashboards and alerts | logs, `traces.db`, `/api/v1/metrics`, `scripts/trace_report.py` |
+| **SLOs and alerting** | A target ("95% of replies under 2 s") and an alert when it is missed; on-call engineers respond | budgets in CLAUDE.md; `resource_guard` and notifications |
+| **Incidents and postmortems** | After an outage: a blameless write-up of cause, fix and prevention | `PROGRESS.md` and `MONITORING.md` fix history do this |
+| **Resilience** | Timeouts, retries with backoff, circuit breakers, fallbacks, idempotent jobs | Groq backoff + model fallback, upload deadlines, resumable jobs |
+| **Caching layers** | Browser → CDN → app cache (Redis) → database; every cache has a TTL and an invalidation rule | TTL caches for weather/web/answers (ADR 0007) |
+| **Queues and workers** | Slow work goes to a queue (Kafka, RabbitMQ, SQS, Celery) so requests stay fast | SQLite job queue + background jobs |
+| **Database migrations** | Every schema change is a versioned, reversible script (Alembic, Flyway) | `store._migrate` |
+| **Backups and recovery** | Scheduled backups and a tested restore | one file (`data/`) to copy; KURAMA's reset keeps a backup |
+| **API design** | Versioned URLs (`/api/v1`), schemas (OpenAPI), auth, rate limits, pagination | FastAPI `/api/v1`, OpenAPI at `/docs`, bearer token |
+| **Containers and infrastructure as code** | Docker images run the same everywhere; Terraform describes servers | not needed on one laptop; learn Docker next |
+| **Code ownership and modules** | Clear module boundaries, an owner per area (`CODEOWNERS`), no 5,000-line files | `core/intents/` split, one tool = one file |
+| **Documentation** | README to start, ADRs for decisions, runbooks for "when X breaks, do Y", docs next to the code | README, LEARN.md, MONITORING.md, `docs/adr/` |
+| **Versioning and changelog** | Semantic versioning (MAJOR.MINOR.PATCH) and a changelog per release | `version` in `pyproject.toml`; PROGRESS.md is the changelog |
+| **Security practice** | Least privilege, input validation, threat modelling, dependency scanning, security review | the safety gate, confirm levels, PINs, shell allowlist |
+| **Performance budgets** | Limits on latency, memory and bundle size, checked in CI | idle RSS < 600 MB, token budgets; `make rss` |
+
+**How to use this table:** pick one row a week that KURAMA does not have yet (e2e tests, `pip-audit`, Docker, a
+Grafana dashboard on `/metrics`), learn it with a 30-minute tutorial, then try its small version on KURAMA.
+
+### 23.4 Smaller known weak spots
 
 - **Reference words.** "it / that image / the essay" are matched with small noun lists (`workmem._NOUNS`,
   `focus.is_anaphora`). They only pick *which* remembered thing, never the action, but they can miss a new noun.

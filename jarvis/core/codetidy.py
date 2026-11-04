@@ -104,7 +104,7 @@ def check_file(f: Path, fix: bool = False) -> str:
         return "ruff isn't installed: venv/bin/pip install ruff"
     before = f.read_text(errors="replace")
     if fix:
-        r = subprocess.run([ruff, "check", "--fix", "--quiet", "--exit-zero", *_RULES, str(f)], capture_output=True, text=True,
+        subprocess.run([ruff, "check", "--fix", "--quiet", "--exit-zero", *_RULES, str(f)], capture_output=True, text=True,
                            timeout=60)
         after = f.read_text(errors="replace")
         if after != before:

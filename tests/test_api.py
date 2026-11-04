@@ -415,3 +415,12 @@ def test_merge_open_replies_and_image_wallpaper_flow():
 def test_image_wallpaper_request_is_single():
     from jarvis.core import planner
     assert not planner.is_multi("generate the image of a calm workspace and very cinematic light and make it my wallpaper")
+
+
+def test_metrics_prometheus_text(client):
+    store.log_llm("openai/gpt-oss-20b", "chat", 10, 5, 0.1, True)
+    r = client.get("/api/v1/metrics")
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/plain")
+    assert "# TYPE kurama_llm_calls_24h gauge" in r.text
+    assert 'kurama_llm_tokens_24h{model="openai/gpt-oss-20b",kind="prompt"}' in r.text
+    assert "process_resident_memory_bytes " in r.text

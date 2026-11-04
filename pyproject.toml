@@ -15,7 +15,12 @@ extend-exclude = ["venv", "data", "browser_ext", "vscode_ext", "packaging"]
 [tool.ruff.lint]
 # The gate every commit and CI must pass: syntax errors, undefined names, bad comparisons, f-string slips.
 # Wider style rules (B, UP, SIM...) are reported by `make lint-all`, cleaned file by file, then moved up here.
-select = ["E9", "F63", "F7", "F82", "F5", "F601"]
+select = ["E9", "F63", "F7", "F82", "F5", "F601",
+          "F811", "F841",  # a name defined twice (a test that never runs), a value computed and thrown away
+          "B023", "W605", "PLE"]  # a closure that sees the wrong loop value, a broken escape, invalid characters
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["F811"]  # pytest fixtures are parameters with the fixture's name: not a redefinition
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -24,8 +29,23 @@ filterwarnings = ["ignore::DeprecationWarning"]
 
 [tool.coverage.run]
 source = ["jarvis"]
+data_file = "data/.coverage"
 omit = ["jarvis/__main__.py", "*/__pycache__/*"]
 
 [tool.coverage.report]
 skip_covered = true
+fail_under = 75  # measured 78.5% on 2026-11-04 (CI machines skip some desktop paths); raise it as tests are added
 show_missing = false
+
+[tool.mypy]
+# Type gate on the core contracts (`make type`). Lenient on purpose: untyped code is allowed, imported third-party
+# packages without stubs are ignored, and only the modules listed in the Makefile are checked. Widen one module at a time.
+python_version = "3.12"
+ignore_missing_imports = true
+follow_imports = "silent"
+check_untyped_defs = false
+warn_unused_ignores = false
+warn_redundant_casts = true
+no_implicit_optional = true
+strict_equality = true
+cache_dir = "data/.mypy_cache"

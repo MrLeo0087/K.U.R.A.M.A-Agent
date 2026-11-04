@@ -50,7 +50,8 @@ def laptop_doctor(action: Literal["check", "free_ram", "port", "stop", "kurama"]
             return f"Port {m.group(1)} is free, nothing to stop."
         try:
             proc = doctor.psutil.Process(pid)
-            if "jarvis" in " ".join(proc.cmdline()):
+            if re.search(r"-m\s+jarvis(?:\.|\s|$)|jarvis/server\.py|kurama_wallpaper", " ".join(proc.cmdline())):
+                # only KURAMA itself: a bare "jarvis" also matched any path or `pytest --cov=jarvis`
                 return f"Port {m.group(1)} is KURAMA itself, I won't stop it."
         except doctor.psutil.Error:
             return f"Port {m.group(1)} belongs to another user's process; I can't stop it."

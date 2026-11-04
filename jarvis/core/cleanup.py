@@ -214,7 +214,6 @@ def ram() -> str:
 
 
 def storage() -> str:
-    before = shutil.disk_usage(HOME).free
     freed, done = 0, []
     for rel in STORAGE_CACHES:
         p = HOME / rel

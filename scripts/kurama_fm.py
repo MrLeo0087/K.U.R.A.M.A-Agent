@@ -119,9 +119,9 @@ def _selected(title: str, folder: str, folders: list[str] | None = None) -> tupl
             seen = [0]
 
             def walk(a, depth=0):  # ANY element marked selected (cell, row, list / grid item: it differs by view)
-                if a is None or depth > 30 or seen[0] > 8000:
+                if a is None or depth > 30 or seen[0] > 8000:  # noqa: B023 (used at once, in this loop pass)
                     return
-                seen[0] += 1
+                seen[0] += 1  # noqa: B023 (used at once, in this loop pass)
                 try:
                     if a.get_state_set().contains(Atspi.StateType.SELECTED) and a.get_name():
                         raw.append((a.get_role_name(), a.get_name()))

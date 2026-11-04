@@ -212,7 +212,7 @@ _FAILED = ("error", "refused", "the user declined", "sorry, that didn't work", "
 _NUMBERED = re.compile(r"^\s*(?:\d{1,2}[.)]|[-*•])\s+")
 
 
-def record_call(name: str, args: Any, ok: bool, result: str) -> None:
+def record_call(name: str, args: Any, ok: bool, result: str, data: dict | None = None) -> None:
     """Called by the safety gate for every finished tool call: remember the paths it acted on or produced; a
     numbered list of real paths ('I found three copies: 1. ... 2. ...') becomes a choice the next reply can pick."""
     if name in _SKIP_TOOLS or name.startswith("_"):
@@ -228,7 +228,8 @@ def record_call(name: str, args: Any, ok: bool, result: str) -> None:
             from jarvis.core import registry  # the real tool, not the general one around it ('memory')
             if (t := registry.REGISTRY.tools.get(name)) is None or registry.group_of(t) != "core":
                 store.kv_set(_LAST_LIST, json.dumps({"tool": name, "t": time.time()}))
-        listed = [p for ln in res.splitlines() if _NUMBERED.match(ln) for p in paths_in(ln)]
+        exact = [Path(p) for p in (data or {}).get("paths") or [] if Path(p).exists()]  # a typed Reply's paths
+        listed = exact or [p for ln in res.splitlines() if _NUMBERED.match(ln) for p in paths_in(ln)]
         if len(listed) >= 2 and isinstance(args, dict):
             _offer(name, args, listed)
             return

@@ -21,7 +21,7 @@ _RX = [(re.compile(a, re.I), b) for a, b in _FIX]
 def fix(text: str) -> str:
     t = text or ""
     for rx, to in _RX:
-        t = rx.sub(lambda m: _case(m.group(0), to), t)
+        t = rx.sub(lambda m: _case(m.group(0), to), t)  # noqa: B023 (used at once, in this loop pass)
     return t
 
 

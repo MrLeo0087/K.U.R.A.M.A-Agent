@@ -45,7 +45,7 @@ def _load(p: Path) -> list[dict]:
     col = {k: head.index(k) for k in ("name", "phone", "note", "added") if k in head}
     out = []
     for r in rows[1:]:
-        get = lambda k: str(r[col[k]]).strip() if k in col and col[k] < len(r) and r[col[k]] is not None else ""  # noqa: E731
+        get = lambda k: str(r[col[k]]).strip() if k in col and col[k] < len(r) and r[col[k]] is not None else ""  # noqa: E731, B023 (used at once, in this loop pass)
         if get("name") or get("phone"):
             out.append({"name": get("name"), "phone": get("phone"), "note": get("note"), "added": get("added")})
     return out

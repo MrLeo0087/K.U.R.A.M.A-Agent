@@ -367,7 +367,7 @@ class ProcessWatcher(Worker):
             w = runs.get(name)
             if w is None and name in ended and m.get("event") != "start":
                 if m.get("event") == "file":  # kurama_send() after kurama("done"): still deliver the file
-                    self.colab_file(ended[name], m, lambda t, x, level="info": notify.notify(
+                    self.colab_file(ended[name], m, lambda t, x, level="info", name=name: notify.notify(
                         f"{t}: {name}", x, level=level, source=SOURCE))
                 continue
             if w is None:  # the snippet from an earlier day, run again: a new run

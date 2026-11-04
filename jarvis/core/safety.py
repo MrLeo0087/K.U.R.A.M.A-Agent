@@ -164,7 +164,7 @@ def execute(name: str, args: Any = None, confirm: ConfirmFn | None = None,
             log.warning("could not log tool call: %s", e)
         if outcome in ("allowed", "error"):  # what it made/touched becomes "it" / "that image" (workmem)
             from jarvis.core import workmem
-            workmem.record_call(name, logged_args, res.ok, res.output)
+            workmem.record_call(name, logged_args, res.ok, res.output, data=res.data)
         return res
 
     if tool is None:

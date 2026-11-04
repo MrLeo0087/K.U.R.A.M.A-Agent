@@ -267,7 +267,7 @@ class Agent:
                               "answer": job_started_text(job.id, job.title, job.kind, lang or "en")}]}
         text, status, answer, got = s["text"], "failed", "", {}
         for attempt in range(2):  # the step, then (failed) one corrected step from a re-plan
-            with workmem.collect() as got, taskgraph.plan_windows(state.get("windows")):
+            with workmem.collect() as got, taskgraph.plan_windows(state.get("windows")):  # noqa: F811 (got is set before the loop for the no-attempt case)
                 answer = self._run_task(text, mode, lang, taskgraph.inputs_text(inputs), request=request,
                                         fast_first=all(r.get("things") for r in inputs),
                                         history=False if inputs else "last")

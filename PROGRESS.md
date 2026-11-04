@@ -1205,3 +1205,21 @@ Phases (one at a time, owner tests after each):
   (ruff, private keys, large files, never .env), .github/workflows/ci.yml (lint + tests). Fixed the 4 gate findings
   (duplicate "volumn" key, 3 empty f-strings) and a dead test helper. codetidy keeps ruff's default checks.
 - Next (section 23.2): split fastpath.py by area, typed tool results, mypy on core, coverage floor, /metrics.
+
+## 2026-11-04 (late): production-readiness phase (LEARN.md 23.2 items 1-8)
+- fastpath.py 4,587 -> ~2,900 lines: six self-contained areas moved unchanged into jarvis/core/intents/ (base, files,
+  desktop, media, todo, control) by a script that checked every name each block needs; fastpath re-imports each name
+  where it was defined, so `fastpath.X`, import order and monkeypatched names (match, meaning_ok, _internal) behave
+  as before. Full suite and the scorecard unchanged (73% instant, 100% right; router 98%).
+- Typed results: core/results.py `Reply(str)` carries `.data`; registry -> ToolResult.data -> workmem.record_call
+  uses exact paths first (find_files returns one; a 140-char display cut no longer breaks a pick).
+- Gates: `make type` (mypy 2.4.1 on 10 core modules, budget.remaining split so types are exact); lint gate + F811,
+  F841, B023, W605, PLE (fixed: a Colab-file callback that could report the wrong job name, 4 dead values);
+  coverage floor 78% (measured 79%); `make js-check` (frontend/package.json marks the ES modules for node --check);
+  frontend/jsconfig.json for editor IntelliSense. CI runs all of them. requirements-dev.txt (mypy, pytest-cov; no torch).
+- GET /api/v1/metrics (core/metrics.py): Prometheus text from the SQLite logs, last 24 h, + process RSS/CPU; `make metrics`.
+- docs/adr/: 10 decision records. TypeScript deliberately not adopted (ADR 0008: no build step, no node_modules on
+  an 8 GB laptop); opt-in `// @ts-check` instead.
+- LEARN.md: 2.4 rows, folder map, core-file table, 16.5 practices, week-12 days, 23.1/23.2 rewritten, new 23.3 "how
+  large production codebases work" (26 practices mapped to KURAMA).
+- Next: config.py word lists into data files, app.js into modules, more Reply tools, widen mypy/lint, push for CI.

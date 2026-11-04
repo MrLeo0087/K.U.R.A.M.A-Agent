@@ -27,7 +27,7 @@ from fastapi.responses import JSONResponse
 from starlette.staticfiles import StaticFiles
 
 from jarvis.api import settings as settings_mod
-from jarvis.api.routes import chat, dash, info, voice, wake
+from jarvis.api.routes import chat, dash, info, metrics, voice, wake
 from jarvis.api.security import Guard
 from jarvis.api.settings import Settings
 from jarvis.api.status import StatusCollector
@@ -103,7 +103,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.engine = engine
     _share_token(s.token)
     app.state.status = StatusCollector(s, engine)
-    for r in (chat.router, voice.router, info.router, wake.router, dash.router):
+    for r in (chat.router, voice.router, info.router, wake.router, dash.router, metrics.router):
         app.include_router(r)
 
     # Guard first, CORS last = CORS outermost: preflights answered, and 401/403 still carry CORS headers.
