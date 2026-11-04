@@ -1250,3 +1250,7 @@ Phases (one at a time, owner tests after each):
   frames. Now "ready" is forwarded (mini page only), also sent on a 400 ms timer, and the preload starts after 1 s:
   hold-to-talk is ready 3.2 s after power-on (was ~15 s). Opening the chat after a hold: the 1 x 1 window is
   hidden, resized, then faded in at full size (it used to open small and jump). Fade 180 ms, eased.
+- (later) Chat position: one fixed rule decided only by where the button is (beside it, on the side towards the
+  middle of the screen, edges level, growing towards the middle; above/below only on a too-narrow screen), placed
+  by the size it will open at, never the hidden 1 x 1 size (that made it open up / down / left / right at random).
+  beside_pos() is pure and tested over a grid of button positions. Dragging the button moves the open chat with it.

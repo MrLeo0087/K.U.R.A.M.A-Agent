@@ -227,3 +227,43 @@ def test_mini_window_opens_at_full_size_and_is_ready_soon():
     assert 'msg == "ready" or msg.startswith(' in src  # the page's "ready" reaches the panel (it never did)
     js = (root / "frontend" / "app.js").read_text()
     assert 'setTimeout(ready, 400);' in js
+
+
+def _beside_pos():
+    """scripts/kurama_wallpaper.py's beside_pos + clamp, loaded without GTK."""
+    import ast
+    from pathlib import Path
+    src = (Path(__file__).resolve().parent.parent / "scripts" / "kurama_wallpaper.py").read_text()
+    tree = ast.parse(src)
+    code = "\n\n".join(ast.get_source_segment(src, n) for n in tree.body
+                       if isinstance(n, ast.FunctionDef) and n.name in ("clamp", "beside_pos"))
+    ns = {"BUBBLE": 56}
+    exec(compile(code, "beside_pos", "exec"), ns)  # noqa: S102 - our own source
+    return ns["beside_pos"]
+
+
+def test_chat_position_is_one_fixed_rule():
+    """11-05: the chat opened above / below / left / right at random from the same button position."""
+    from types import SimpleNamespace as NS
+    pos = _beside_pos()
+    wa = NS(x=0, y=27, width=1920, height=1053)
+    w, h, b = 400, 600, 56
+    # same button place -> same chat place, every time
+    assert len({pos(1800, 900, w, h, wa) for _ in range(5)}) == 1
+    # button bottom-right: chat to its LEFT, bottoms level
+    x, y = pos(1800, 900, w, h, wa)
+    assert x + w <= 1800 and y + h == 900 + b
+    # button top-left: chat to its RIGHT, tops level
+    x, y = pos(40, 60, w, h, wa)
+    assert x >= 40 + b and y == 60
+    # button bottom-left: right side, bottoms level; top-right: left side, tops level
+    x, y = pos(30, 980, w, h, wa)
+    assert x >= 30 + b and y + h <= 27 + 1053 - 8
+    x, y = pos(1850, 40, w, h, wa)
+    assert x + w <= 1850 and y == 40
+    # never outside the screen, never over the button
+    for bx in range(0, 1920 - b, 97):
+        for by in range(27, 1080 - b, 89):
+            x, y = pos(bx, by, w, h, wa)
+            assert 0 <= x and x + w <= 1920 and 27 <= y and y + h <= 1080
+            assert not (x < bx + b and bx < x + w and y < by + b and by < y + h), (bx, by)

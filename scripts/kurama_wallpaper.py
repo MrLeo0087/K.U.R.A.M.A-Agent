@@ -185,6 +185,26 @@ def clamp(v, lo, hi):
     return max(lo, min(int(v), hi))
 
 
+def beside_pos(bx: int, by: int, w: int, h: int, wa, top: bool = False, b: int = BUBBLE) -> tuple[int, int]:
+    """Where a w x h window goes next to the button at (bx, by) of size b; wa = the work area (.x .y .width
+    .height). Pure, so it is tested on its own (see MiniKurama.beside for the rule)."""
+    gap, edge = 10, 8
+    right_half = bx + b / 2 > wa.x + wa.width / 2
+    low_half = by + b / 2 > wa.y + wa.height / 2
+    left_x, right_x = bx - w - gap, bx + b + gap
+    fits_left, fits_right = left_x >= wa.x + edge, right_x + w <= wa.x + wa.width - edge
+    order = [(left_x, fits_left), (right_x, fits_right)]
+    if not right_half:
+        order.reverse()
+    x = next((px for px, ok in order if ok), None)
+    y = by if top or not low_half else by + b - h
+    if x is None:  # a very narrow screen: above (button low) or below (button high)
+        x = bx + b // 2 - w // 2
+        y = by - h - gap if low_half else by + b + gap
+    return (clamp(x, wa.x + edge, wa.x + wa.width - w - edge),
+            clamp(y, wa.y + edge, wa.y + wa.height - h - edge))
+
+
 def message_text(res) -> str:
     """Text of a window.webkit.messageHandlers.kurama.postMessage(...) call (JavascriptResult or JSCValue)."""
     try:
@@ -1213,30 +1233,28 @@ class Mini:
             self.on_ready.append(fn)
 
     def beside(self, w: int, h: int, top: bool = False) -> tuple[int, int]:
-        """Where a w x h window goes next to the button without ever covering it: the side towards the middle of
-        the screen first, then the other side, then above / below."""
+        """Where a w x h window goes next to the button. ONE rule, decided only by where the button is, so the same
+        button position always gives the same place (11-05: the chat opened above, below, left or right at random,
+        because the old search used the window's current size, 1 x 1 while hidden):
+        - beside the button, on the side towards the middle of the screen (the other side if it doesn't fit there);
+        - its edge level with the button's, growing towards the middle (button low: bottoms level; high: tops level);
+        - only if neither side has room: above or below, centred on the button. Always kept inside the screen."""
         bx, by = self.bubble.get_position()
+        return beside_pos(bx, by, w, h, workarea(), top)
+
+    def panel_size(self) -> tuple[int, int]:
+        """The chat's real size: what it is on screen, or (hidden, 1 x 1 invisible, not drawn yet) the size it will
+        open at. Placing it by a hidden window's size put it somewhere else on every click."""
         wa = workarea()
-        gap = 10
-        cx = clamp(bx + BUBBLE // 2 - w // 2, wa.x + 8, wa.x + wa.width - w - 8)
-        cy = by if top else by + BUBBLE - h
-        towards_left = bx + BUBBLE / 2 > wa.x + wa.width / 2
-        sides = [(bx - w - gap, cy), (bx + BUBBLE + gap, cy)]
-        if not towards_left:
-            sides.reverse()
-        cands = sides + [(cx, by - h - gap), (cx, by + BUBBLE + gap)]
-        best = None
-        for x, y in cands:
-            x2 = clamp(x, wa.x + 8, wa.x + wa.width - w - 8)
-            y2 = clamp(y, wa.y + 8, wa.y + wa.height - h - 8)
-            covers = x2 < bx + BUBBLE and bx < x2 + w and y2 < by + BUBBLE and by < y2 + h
-            if not covers:
-                return x2, y2
-            best = best or (x2, y2)
-        return best
+        sw, sh = self.saved_size()
+        want = (min(sw, wa.width - 40), min(sh, wa.height - 40))
+        if self.panel is None or not self.panel.get_visible() or self.ghost or getattr(self, "shrunk", False):
+            return want
+        w, h = self.panel.get_size()
+        return (w, h) if w >= PANEL_MIN_W and h >= PANEL_MIN_H else want
 
     def place_panel(self) -> None:
-        self.panel.move(*self.beside(*self.panel.get_size()))
+        self.panel.move(*self.beside(*self.panel_size()))
 
     def show_panel(self, time: int = 0) -> None:
         if self.reaper:
