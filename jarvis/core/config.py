@@ -1311,6 +1311,11 @@ MEANING_SHORTCUTS: dict[str, tuple[str, ...]] = {
                     "connect my colab training to kurama", "colab setup code", "setup google colab notebook",
                     "give me the colab notebook", "how do i connect colab to you", "set up colab",
                     "setup colab notebook to watch out my training"),
+    # your own commands ("when I say X, do Y" saves one): list them, forget one (X = its words)
+    "my_commands": ("show my commands", "list my custom commands", "what are my own commands",
+                    "show the words i taught you", "list my words", "what commands did i teach you"),
+    "my_command_forget": ("forget my command X", "delete my custom command X", "remove my command X",
+                          "forget when i say X", "stop using my command X"),
     "kaggle_setup": ("set up kaggle", "setup kaggle notebook for training", "give me the kaggle notebook",
                      "code to paste in my kaggle notebook so you can watch the training", "kaggle setup",
                      "connect my kaggle training to kurama", "how do i connect kaggle to you"),
@@ -1377,7 +1382,7 @@ MEANING_SHORTCUTS: dict[str, tuple[str, ...]] = {
 MEANING_SHORTCUT_AREAS = {"save_link": "links", "list_links": "links", "read_later_add": "links", "copy_path": "clipboard",
                           "open_vscode": "files", "jobs_start": "jobs", "jobs_list": "jobs",
                           "clean_ram": "system", "clean_kurama": "system", "clean_storage": "system", "show_desktop": "windows", "window_minimize": "windows", "window_maximize": "windows", "window_restore": "windows", "switch_tab": "windows",
-                          "list_tabs": "windows", "close_tab": "windows", "close_all_tabs": "windows", "scroll_down": "windows", "scroll_up": "windows", "colab_setup": "watch", "kaggle_setup": "watch", "new_folder": "files",
+                          "list_tabs": "windows", "close_tab": "windows", "close_all_tabs": "windows", "scroll_down": "windows", "scroll_up": "windows", "colab_setup": "watch", "kaggle_setup": "watch", "my_commands": "apps", "my_command_forget": "apps", "new_folder": "files",
                           "tg_message": "telegram", "time_now": "general", "date_today": "general",
                           "battery": "power", "git_status": "git", "daily_summary": "usage"}  # the router offers it too
 MEANING_SHORTCUT_MIN = 0.82

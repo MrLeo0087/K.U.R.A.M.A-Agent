@@ -178,3 +178,27 @@ def test_a_folder_named_in_words_is_found_for_vs_code(tmp_path, monkeypatch):
     assert fastpath.folder_in_words("open the kurama folder from project1 in vs code") == new  # the recent one
     assert fastpath.folder_in_words("open the kurama folder in test project in vs code") == old
     assert fastpath.folder_in_words("open the zzqx folder in vs code") is None
+
+
+def test_a_path_said_in_parts_is_one_task_not_four(monkeypatch):
+    """11-05 11:21: 'from project1 then new_project and kurama folder .. open this folder in vs code' was planned as
+    4 AI steps (3.4k tokens, 3 failed): the parts that only name folders on the path are not tasks."""
+    from jarvis.core import planner
+    where = "/media/leo/Project1/New_project/KURAMA"
+    assert planner._names_a_place_in("new_project then kurama folder .", where)
+    assert planner._names_a_place_in("from project1", where)
+    assert not planner._names_a_place_in("play a song", where)
+
+
+def test_your_own_commands_list_and_forget(meaning, monkeypatch, tmp_path):
+    from jarvis.core import config, mywords
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    mywords.save("open kurama project", "open /tmp in vs code")
+    meaning.update(label="my_commands", score=0.95)
+    assert (fastpath.meaning_intent("show my commands").args) == {"action": "list"}
+    meaning.update(label="my_command_forget", score=0.95)
+    it = fastpath.meaning_intent("forget my command open kurama project")
+    assert it.args == {"action": "forget", "name": "open kurama project"}
+    assert fastpath.meaning_intent("forget my command never saved") is None  # only a command that exists
+    assert fastpath._mask_my_commands("delete my command open kurama project") == "delete my command X"
+    assert fastpath.folder_in_words("open /tmp in vs code") == Path("/tmp")  # a written-out path counts

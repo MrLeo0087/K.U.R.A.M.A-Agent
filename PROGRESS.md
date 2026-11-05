@@ -1287,3 +1287,13 @@ Phases (one at a time, owner tests after each):
   marked), Keras and Hugging Face versions, troubleshooting. The link cell reads Kaggle secrets too, and a new
   epoch always reaches KURAMA (it was throttled to one message a minute).
 - The laptop's Kaggle CLI is now 'install kaggle' / 'set up kaggle cli'. Tests never write to the real Downloads.
+
+## 2026-11-05 (late morning): a path said in parts; your own commands
+- 11:21 'from project1 then new_project and kurama folder .. open this folder in vs code' skipped the shortcut
+  (planner.is_multi: 'then', 'and', '..') and became 4 AI steps (3.4k tokens, 3 failed). planner.one_tool now
+  skips clauses that only name folders on the whole request's path (_names_a_place_in): one 0-token open.
+- Own commands ("when I say X, Y", mywords) existed but were hidden: the save reply now says whether it runs
+  instantly; new meaning shortcuts my_commands ("show my commands") and my_command_forget ("forget my command X",
+  X must be a saved one, masked like an open app name, checked before the word patterns: it went to time_machine).
+  A written-out folder path counts in folder_in_words. Saved for the owner: 'open kurama project' -> open
+  /media/leo/Project1/New_project/KURAMA in VS Code.

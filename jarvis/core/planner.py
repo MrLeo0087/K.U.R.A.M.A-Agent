@@ -427,7 +427,10 @@ def one_tool(text: str) -> bool:
         if whole is None:
             return False
         tools = set()
+        where = str(whole.args.get("path") or "") if isinstance(whole.args, dict) else ""
         for c in split_clauses(text):
+            if where and _names_a_place_in(c, where):
+                continue  # 'from project1 then new_project and kurama folder': the whole request's path, not a task
             i = fastpath.match(c)
             if i is None:
                 if is_command(c) and len(c.split()) >= 2 and not re.match(r"\s*(?:i|we|you|it|this|that)\b", c, re.I):
@@ -439,6 +442,16 @@ def one_tool(text: str) -> bool:
     except Exception:  # noqa: BLE001 - never break a turn on the check
         return False
     return tools <= {whole.tool}
+
+
+def _names_a_place_in(clause: str, path: str) -> bool:
+    """Every name in this clause is a folder on `path` (only glue words otherwise): it describes where, it is no task."""
+    from jarvis.core import fastpath
+
+    def key(x: str) -> str:
+        return re.sub(r"[\W_]+", "", x.lower())
+    names = [n for n in re.split(r"[|,.;!?]+", fastpath._FOLDER_GLUE.sub("|", clause)) if key(n)]
+    return bool(names) and all(key(n) in key(path) for n in names)
 
 
 _MEDIA_MAKE = re.compile(r"\b(?:image|images|picture|pictures|photo|photos|drawing|painting|illustration|wallpaper|"

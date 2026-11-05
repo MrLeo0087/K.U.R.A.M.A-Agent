@@ -60,7 +60,18 @@ def save(phrase: str, command: str) -> str:
     from jarvis.tools.general import _apps
     if k in _apps.taught():  # one meaning per word: the newest wins
         _apps.teach(k, "")
-    return f"Got it: when you say '{k}', I'll {cmd}." + (f" (It was: {old}.)" if old and old != cmd else "")
+    return (f"Got it: when you say '{k}', I'll {cmd}." + (f" (It was: {old}.)" if old and old != cmd else "")
+            + _how_it_runs(cmd))
+
+
+def _how_it_runs(cmd: str) -> str:
+    """Whether the saved command is one of the instant (0-token) actions, so the owner knows what it costs."""
+    try:
+        from jarvis.core import fastpath
+        return " It runs instantly (no AI)." if fastpath.match(cmd) is not None else \
+            " (The AI will do it each time: make it more exact, e.g. a full folder path, to make it instant.)"
+    except Exception:  # noqa: BLE001
+        return ""
 
 
 def forget(phrase: str) -> str:

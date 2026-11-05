@@ -2052,7 +2052,21 @@ def meaning_label(t: str) -> tuple[str, float] | None:
         wb = semantic.best_of(apps, "window_shortcuts", win)
         if wb and (best is None or wb[1] > best[1]):
             best = wb
+    if (mine := _mask_my_commands(t)) is not None:  # one of the owner's saved commands named: it is the X
+        fb = semantic.best_of(mine, "my_command_forget", {"my_command_forget": config.MEANING_SHORTCUTS["my_command_forget"]})
+        if fb and (best is None or fb[1] > best[1]):
+            best = fb
     return best
+
+
+def _mask_my_commands(t: str) -> str | None:
+    """The request with one of the owner's saved command phrases replaced by X, or None (none named)."""
+    from jarvis.core import mywords
+    low = " ".join(re.sub(r"[^\w\s']", " ", (t or "").lower()).split())
+    for k in sorted(mywords.all_words(), key=len, reverse=True):
+        if len(k) >= 3 and re.search(rf"\b{re.escape(k)}\b", low):
+            return re.sub(rf"\b{re.escape(k)}\b", "X", low, count=1)
+    return None
 
 
 _WINDOW_LABELS = ("window_minimize", "window_maximize", "window_restore")
@@ -2066,10 +2080,10 @@ def _window_first(text: str) -> Intent | None:
         return None
     t = " ".join((text or "").split()).strip(" .!?")
     best = meaning_label(t)
-    if not best or best[0] not in _WINDOW_LABELS or best[1] < 0.95:
-        return None
+    if not best or best[0] not in (*_WINDOW_LABELS, "my_command_forget") or best[1] < 0.95:
+        return None  # (actions whose X is checked against what really exists: an open window, a saved command)
     it = meaning_intent(text)
-    return it if it is not None and it.tool == "window" else None
+    return it if it is not None and it.tool in ("window", "app_name") else None
 
 
 def _mask_open_apps(t: str) -> str | None:
@@ -2154,6 +2168,15 @@ def meaning_intent(text: str) -> Intent | None:
             return None
         it = Intent("tgmsg", "send_message_telegram", "telegram", {"text": msg}, known=msg)
         return it if meaning_ok(t, it) else None
+    if label == "my_commands":
+        return None if extra else _ok(t, Intent("mywords", "app_name", "apps", {"action": "list"}))
+    if label == "my_command_forget":  # only one of the owner's commands that exists ('forget my command X')
+        from jarvis.core import mywords
+        from jarvis.tools.general import _apps
+        name = mywords.key(" ".join(extra))
+        if not name or (name not in mywords.all_words() and _apps.clean_query(name) not in _apps.taught()):
+            return None
+        return _ok(t, Intent("mywords", "app_name", "apps", {"action": "forget", "name": name}, known=name))
     if label in ("window_minimize", "window_maximize", "window_restore"):  # one window, never all of them
         if pos and (pos[-1] - pos[0] + 1 != len(pos) or len(pos) > 4):
             return None  # two separate unknown parts or a long one: more than an app name -> the AI
@@ -2248,12 +2271,19 @@ _FOLDER_GLUE = re.compile(r"\b(?:please|can\s+you|could\s+you|open(?:\s+up)?|lau
                           r"inside|under|from|in|into|at|on|of|to|go|editor|code\s+editor)\b", I)
 
 
+def _ok(t: str, it: Intent) -> Intent | None:
+    return it if meaning_ok(t, it) else None
+
+
 def folder_in_words(text: str) -> Path | None:
     """The real folder a request names, also as a path in words: 'from project1, then new project, there is the
     folder Kurama' / 'the kurama folder in new project in project1' -> /media/leo/Project1/New_project/KURAMA.
     The names left after the glue words are tried in both orders as 'X in Y in Z'; only a folder that exists and
     is called like one of the names counts. None when nothing (or more than 4 names) is left."""
     from jarvis.core.paths import smart_path
+    for m in re.finditer(r"(?:~|/)[^\s,;]+", text or ""):  # a real path written out wins
+        if (p := Path(m.group(0).rstrip(".")).expanduser()).is_dir():
+            return p
     s = _FOLDER_GLUE.sub("|", _VSCODE_NAME.sub("|", text or ""))
     names = [n.strip(" ,.!?'\"") for n in re.split(r"[|,.;!?]+", s)]
     names = [n for n in names if n and not n.isspace()]
