@@ -33,15 +33,36 @@ TABLE = {
     "mute_alerts": Act("mute_alerts", lambda a: {"action": "on", "minutes": a.get("text", "")}),
     "remote": Act("remote_desktop", lambda a: {"stop": (a.get("text") or "").lower() in ("stop", "off")}),
     "make_tool": Act("make_tool", lambda a: {"task": a.get("text")}),
+    "settings": Act("kurama_settings", lambda a: _settings_args(a.get("text") or "")),
+    "explain": Act("explain_self", lambda a: {"question": a.get("text") or "how did you do that?"}),
+    "help": Act("help_me", lambda a: {"topic": a.get("text", "")}),
 }
+
+
+def _settings_args(text: str) -> dict:
+    """'set speed test seconds to 30' / 'reset all' / 'undo' / 'speed test seconds' / '' -> kurama_settings args."""
+    import re
+    t = " ".join(text.split())
+    if not t or re.fullmatch(r"(?:list|all|show)(?:\s+settings)?", t, re.I):
+        return {"action": "list"}
+    if re.match(r"undo\b", t, re.I):
+        return {"action": "undo"}
+    if m := re.match(r"reset\s*(.*)", t, re.I):
+        return {"action": "reset", "name": m.group(1) or "all"}
+    if m := re.match(r"(?:set|change|make)?\s*(?P<n>.+?)\s+(?:to|=|at)\s+(?P<v>.+)$", t, re.I):
+        return {"action": "set", "name": m.group("n"), "value": m.group("v")}
+    return {"action": "get", "name": t}
 
 
 @tool(group="core", safety="safe",
       description="About KURAMA: about (what you are, where things are stored), can_you (is there a way to do X), rename, "
                   "mode (power mode), jobs (KURAMA's job list: add/edit/remove/start jobs for later; background jobs: is it done, progress, result, cancel, pause, resume), "
                   "clear_chat, mute_alerts, remote (remote desktop on/off), "
-                  "make_tool (build a small new tool when nothing else fits).")
-def kurama(action: Literal["about", "can_you", "rename", "mode", "jobs", "clear_chat", "mute_alerts", "remote", "make_tool"],
+                  "make_tool (build a small new tool when nothing else fits), settings (list / set <name> to <value> "
+                  "/ reset / undo your own settings), explain (how you did the last thing / how a tool works), "
+                  "help (what you can do, by area or for a need).")
+def kurama(action: Literal["about", "can_you", "rename", "mode", "jobs", "clear_chat", "mute_alerts", "remote", "make_tool",
+                           "settings", "explain", "help"],
            text: str = "") -> str:
     """KURAMA itself.
 

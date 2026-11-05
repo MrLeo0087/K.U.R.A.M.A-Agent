@@ -1297,3 +1297,16 @@ Phases (one at a time, owner tests after each):
   X must be a saved one, masked like an open app name, checked before the word patterns: it went to time_machine).
   A written-out folder path counts in folder_in_words. Saved for the owner: 'open kurama project' -> open
   /media/leo/Project1/New_project/KURAMA in VS Code.
+
+## 2026-11-05 (afternoon): KURAMA knows itself (explain, settings, help)
+- core/selfindex.py: a card per tool from its code (description, file docstring, its own functions' and the core
+  modules' docstrings it uses, the settings its code reads, example phrases); a contract test covers all 156 tools.
+- explain_self: "how did you do that?" / "how do you measure my speed?" / "can I use this in VS Code?" answered from
+  FACTS (last request's trace, 3 cards, the start of a file it made); one smart-model call, low reasoning, 700 max
+  (the fast model invented UI buttons). Questions about itself are checked before the word patterns.
+- core/usersettings.py: 20 safe settings (range, unit, restart flag), set / undo / reset / list at 0 tokens, saved in
+  data/user_settings.json and applied by config.py at start (never in tests). New SPEEDTEST_SECONDS (15 s total).
+- help_me (areas with real examples, or a need by meaning) and find_capability by meaning; hub kurama gains
+  settings / explain / help. Router: the new self examples are not router examples (they pulled 'set a timer'
+  and 'stop audio' to the wrong areas; scorecard back to 98%).
+- LEARN.md 8.5 (with test commands), 2.4, core files, 23.1; ADR 0012.

@@ -1311,11 +1311,25 @@ MEANING_SHORTCUTS: dict[str, tuple[str, ...]] = {
                     "connect my colab training to kurama", "colab setup code", "setup google colab notebook",
                     "give me the colab notebook", "how do i connect colab to you", "set up colab",
                     "setup colab notebook to watch out my training"),
+    # KURAMA about itself: its own settings (a safe list, core/usersettings.py), explaining what it just did, help
+    "settings_list": ("what settings can i change", "show my settings", "what can i change in you", "list your settings",
+                      "show all kurama settings"),
+    "setting_change": ("make the speed test X seconds", "set the X to X", "change the X to X", "increase the X to X",
+                       "decrease the X to X", "make the X X minutes", "set X to X seconds", "make your replies longer X",
+                       "change the setting X to X", "talk faster X", "speak slower X"),
+    "setting_undo": ("undo that setting", "undo the setting change", "put the setting back", "undo the last setting"),
+    "settings_reset": ("reset all settings", "reset my settings to default", "put every setting back to default"),
+    "explain_last": ("how did you do that", "how did you get that", "how do you find the time", "how do you measure my "
+                     "internet speed", "what method did you use", "explain how that works", "explain this code you gave",
+                     "how can i use this", "can i use this with vs code", "why did you do that", "where did that answer "
+                     "come from", "how does that work", "explain what you just did"),
+    "help_me": ("help me use kurama", "how do i use you", "i am confused how to use you", "what commands can i use",
+                "help with X", "what can you do with X", "show me what you can do", "which command should i use for X"),
     # your own commands ("when I say X, do Y" saves one): list them, forget one (X = its words)
     "my_commands": ("show my commands", "list my custom commands", "what are my own commands",
                     "show the words i taught you", "list my words", "what commands did i teach you"),
     "my_command_forget": ("forget my command X", "delete my custom command X", "remove my command X",
-                          "forget when i say X", "stop using my command X"),
+                          "forget when i say X"),
     "kaggle_setup": ("set up kaggle", "setup kaggle notebook for training", "give me the kaggle notebook",
                      "code to paste in my kaggle notebook so you can watch the training", "kaggle setup",
                      "connect my kaggle training to kurama", "how do i connect kaggle to you"),
@@ -1382,13 +1396,15 @@ MEANING_SHORTCUTS: dict[str, tuple[str, ...]] = {
 MEANING_SHORTCUT_AREAS = {"save_link": "links", "list_links": "links", "read_later_add": "links", "copy_path": "clipboard",
                           "open_vscode": "files", "jobs_start": "jobs", "jobs_list": "jobs",
                           "clean_ram": "system", "clean_kurama": "system", "clean_storage": "system", "show_desktop": "windows", "window_minimize": "windows", "window_maximize": "windows", "window_restore": "windows", "switch_tab": "windows",
-                          "list_tabs": "windows", "close_tab": "windows", "close_all_tabs": "windows", "scroll_down": "windows", "scroll_up": "windows", "colab_setup": "watch", "kaggle_setup": "watch", "my_commands": "apps", "my_command_forget": "apps", "new_folder": "files",
+                          "list_tabs": "windows", "close_tab": "windows", "close_all_tabs": "windows", "scroll_down": "windows", "scroll_up": "windows", "colab_setup": "watch", "kaggle_setup": "watch", "settings_list": "self", "new_folder": "files",
                           "tg_message": "telegram", "time_now": "general", "date_today": "general",
                           "battery": "power", "git_status": "git", "daily_summary": "usage"}  # the router offers it too
 MEANING_SHORTCUT_MIN = 0.82
 # actions that change everything on screen need more certainty ("show my screen" is not "go to the home screen": 0.86)
-MEANING_SHORTCUT_MIN_BY = {"show_desktop": 0.90, "colab_setup": 0.90, "kaggle_setup": 0.90}  # "what is colab" is a question (0.87)
+MEANING_SHORTCUT_MIN_BY = {"show_desktop": 0.90, "colab_setup": 0.90, "kaggle_setup": 0.90, "help_me": 0.90,
+                           "explain_last": 0.86}  # "what is colab" is a question (0.87)
 MEANING_FOLDER_MIN = 0.80  # 'open <a real folder named in words> in vs code': harmless, and the folder must exist
+MEANING_SETTING_MIN = 0.78  # 'set <a real setting> to <a valid value>': checked against the safe list and its range
 # talk mode, speech long after KURAMA spoke: it is for KURAMA if it greets it or clearly MEANS an action (calibrated on
 # stt.log 10-30..11-01: 'Hello, shut down the laptop.' power 0.88; room talk 0.65-0.72)
 AMBIENT_ACTION_MIN = 0.80
@@ -1451,3 +1467,27 @@ EDITOR_EXT_MIN = 4  # the VS Code extension version that reports terminal crashe
 AGENT_UNDO_MIN = 0.90  # undo puts code back: only a near-exact 'undo that'
 AGENT_PROJECT_MIN = 0.74  # 'make a yolo object detection project' (still must beat every other area)
 AGENT_OVER_SELECTION = 0.05  # an agent action must beat the closest editing action by this much
+
+SPEEDTEST_SECONDS = 15  # the whole internet speed test (download ~55%, upload ~40%); the owner can change it
+
+# --- the owner's own settings (jarvis/core/usersettings.py: a fixed safe list, changed by voice/text) ---
+SETTING_DEFAULTS: dict = {}  # the values from this file for every setting the owner changed
+
+
+def _apply_user_settings() -> None:
+    import json
+    import sys
+    if "pytest" in sys.modules:  # tests always see this file's values
+        return
+    try:
+        saved = json.loads((DATA_DIR / "user_settings.json").read_text(encoding="utf-8")).get("values") or {}
+    except (OSError, ValueError, AttributeError):
+        return
+    g = globals()
+    for k, v in saved.items():
+        if k.isupper() and k in g and not callable(g[k]) and type(v) in (int, float, str):
+            SETTING_DEFAULTS.setdefault(k, g[k])
+            g[k] = v
+
+
+_apply_user_settings()

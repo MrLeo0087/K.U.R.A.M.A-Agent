@@ -202,3 +202,22 @@ def test_your_own_commands_list_and_forget(meaning, monkeypatch, tmp_path):
     assert fastpath.meaning_intent("forget my command never saved") is None  # only a command that exists
     assert fastpath._mask_my_commands("delete my command open kurama project") == "delete my command X"
     assert fastpath.folder_in_words("open /tmp in vs code") == Path("/tmp")  # a written-out path counts
+
+
+@pytest.mark.parametrize("text,want", [
+    ("make the speed test 30 seconds", {"action": "set", "name": "speed test seconds", "value": "30 seconds"}),
+    ("set the daily summary time to 9 PM", {"action": "set", "name": "daily summary time", "value": "9 PM"}),
+    ("make the speed test 500 seconds", None),          # out of range: the AI explains the range
+    ("set the moon brightness to 3", None),             # not a setting: never touches anything
+])
+def test_a_setting_changes_only_when_real_and_in_range(meaning, text, want):
+    meaning.update(label="setting_change", score=0.95)
+    it = fastpath.meaning_intent(text)
+    assert (it.args if it else None) == want
+
+
+def test_explain_and_help_by_meaning(meaning):
+    meaning.update(label="explain_last", score=0.97)
+    assert fastpath.meaning_intent("how did you do that").args == {"question": "how did you do that"}
+    meaning.update(label="help_me", score=0.97)
+    assert fastpath.meaning_intent("help me use kurama").tool == "help_me"

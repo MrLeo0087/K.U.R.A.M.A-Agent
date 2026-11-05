@@ -4,6 +4,13 @@ stop watching, or stop a run KURAMA started (safe; stopping a run asks first).
 Merged from watch_log, watch_process, list_watches and stop_watch (their old names still work as aliases).
 The process_watch worker does the watching: progress, NaN loss, out of memory, crash (+ one-line cause), stuck,
 finished, Colab disconnected; alerts go to the desktop and Telegram.
+
+Colab / Kaggle: "set up colab" (or kaggle) writes a ready notebook, KURAMA_colab.ipynb / KURAMA_kaggle.ipynb, to
+~/Downloads and the workspace (0 tokens). Colab: colab.research.google.com > File > Upload notebook; Kaggle: New
+Notebook > File > Import Notebook (Internet on). Turn the GPU on, run the cells top to bottom: step 3 (the link cell)
+reports epochs / loss / accuracy over a private ntfy.sh channel made for this laptop, step 5 is a demo training.
+On the laptop: "training status", "stop training". It is a normal Jupyter notebook: it also opens in VS Code (Jupyter
+extension) and runs there on the laptop (CPU, needs torch installed locally) and still reports here.
 """
 from __future__ import annotations
 

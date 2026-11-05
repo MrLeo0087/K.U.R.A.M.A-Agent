@@ -12,7 +12,7 @@ import subprocess
 import time
 from dataclasses import dataclass, field
 
-from jarvis.core import notify, store
+from jarvis.core import config, notify, store
 
 
 @dataclass
@@ -128,10 +128,11 @@ def text(r: NetReport) -> str:
     return f"{r.verdict}" + (f" {r.fix}" if r.fix else "") + f"\n{steps}"
 
 
-def speed(seconds: float = 8.0) -> str:
-    """A real speed test against Cloudflare's test servers (~15 s): latency (5 pings), download for ~8 s, upload
-    for ~6 s. The old test fetched 10 MB once (0.3 s on a fast line: a number from a fraction of a second, 11-04)."""
+def speed(total: float | None = None) -> str:
+    """A real speed test against Cloudflare's test servers (config.SPEEDTEST_SECONDS in total, 15 s by default, the
+    owner can change it: "make the speed test 30 seconds"): latency (5 pings), download ~55%, upload ~40%. The old test fetched 10 MB once (0.3 s on a fast line: a number from a fraction of a second, 11-04)."""
     import httpx  # lazy
+    seconds = float(total or config.SPEEDTEST_SECONDS) * 0.55  # download time; upload gets 0.75 of it
     base = "https://speed.cloudflare.com"
     with httpx.Client(timeout=httpx.Timeout(20.0, connect=8.0)) as c:
         try:

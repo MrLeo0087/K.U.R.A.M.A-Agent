@@ -229,6 +229,8 @@ sentence by sentence (`frontend/voice.js` → `POST /api/v1/tts` → edge-tts).
 | Metrics | SQLite tables only | `GET /api/v1/metrics` in Prometheus format: tokens, tool calls, routing, jobs, RAM (`make metrics`) | `core/metrics.py`, `api/routes/metrics.py` |
 | Decisions | comments in code | 11 one-page decision records | `docs/adr/` |
 | Extending | a new agent meant editing a list in `agents/__init__.py`, `config.AGENT_TOOL_MODULES` and the switch's alias table; memory kinds had no common shape | **plug-ins**: a tool, a memory source or an agent is one file/folder, found by itself, isolated if broken, checked by contract tests; `make new-tool` / `new-memory` / `new-agent` write the skeleton | `core/plugins.py`, `core/memories.py`, `memories/`, `agents/`, section 8.4, ADR 0011 |
+| Knows itself | a hand-written page about itself; "can you" by word match | **self-knowledge**: every tool has a card built from its own code (what, how, settings, how to ask); "how did you do that?" is explained from the real last request; 20 safe **settings** changed by voice ("make the speed test 30 seconds", undo, reset); **help** by area or need; "can you" by meaning | `core/selfindex.py`, `core/usersettings.py`, `tools/general/{explain_self,kurama_settings,help_me,find_capability}.py`, section 8.5, ADR 0012 |
+| Small fixes | — | window commands at 0 tokens ("minimize YouTube"); a folder named in words opens in VS Code; your own commands ("when I say X, Y", "show my commands"); a ready Colab / Kaggle notebook linked to KURAMA | sections 8.4–8.5, PROGRESS.md |
 
 ---
 
@@ -497,6 +499,8 @@ KURAMA/
 |---|---|---|---|
 | **agent.py** | 1270 | The LangGraph graph (plan → route → llm ⇄ tools; schedule → step → finish); streaming; history, sessions, resume; `_open_question`, `did_line`, `_about_context`, direct replies; the safety nets; `SYSTEM_PROMPT`. | The AI's behaviour, the prompt, retries, how steps run or join. |
 | **intents/** | 6 files, 100–600 each | The fast-path intents moved out of fastpath.py by area: `base` (Intent, FastResult, `yes_no`, `_nth`), `files` (open/search/find/send), `desktop` (volume, brightness, media keys, DND, alerts), `media` (music, video, image, chart), `todo` (links, to-dos, goals, reading list), `control` (reminders, power, clock). | A shortcut in that area misbehaves. Add new intents to the right area file. |
+| **usersettings.py** | 230 | The safe list of settings the owner can change (`SETTINGS`: name, config key, range, unit), `set_value` / `undo` / `reset` / `listing`; saved in `data/user_settings.json`, applied by `config.py` at start. | Add a setting: one `Setting(...)` line (the key must exist in config.py and be read as `config.KEY` at run time). |
+| **selfindex.py** | 70 | A card per tool built from its code: description, its file's docstring (how it works), the settings it reads, example phrases. `card`, `cards_for`, `by_meaning`. | Never by hand: write a clear docstring at the top of a tool's file. |
 | **plugins.py** | 60 | Finds plug-ins in a package (`names`, `load`, `load_one`), isolates a broken one, lists them (`broken()`). | You add a new kind of extension point. |
 | **memories.py** | 80 | The memory-source contract (`MemorySource`, `Hit`) and `search()` across sources with rank fusion. | You add a kind of memory (`make new-memory`). |
 | **results.py** | 30 | `Reply(str)`: a tool's text plus exact data (`.data`, e.g. `paths`); `data_of()`. | A tool's result is acted on later (a pick, a chain): return a Reply. |
@@ -654,6 +658,36 @@ happened in this conversation", not a store you search.
 - **Observability**: `plugins.broken()` and the `kurama_plugins_broken` metric show what failed to load.
 
 ---
+
+### 8.5 KURAMA knows itself: explain, settings, help
+
+Three abilities so you never have to remember how KURAMA works:
+
+| You say | What happens | Cost |
+|---|---|---|
+| "how did you do that?", "how do you measure my internet speed?", "explain the code you gave me", "can I use this with VS Code?" | `explain_self` collects FACTS: your last request from the trace (what ran, with which arguments, what came back), the **cards** of those tools (+ the 2 closest by meaning), and the start of a file it made (a notebook, a script). One smart-model call (gpt-oss-120b, low reasoning: the fast one invented menu buttons) answers from those facts only. | ~800–1,500 tokens, only when asked |
+| "make the speed test 30 seconds", "set end of speech wait to 1500 ms", "talk faster +30%", "set the daily summary time to 9 PM" | the setting is found by name or meaning, the value parsed with its unit ("2 minutes" for a seconds setting) and checked against its range; saved and applied at once (`restart=True` ones after a restart) | 0 tokens |
+| "what settings can I change?", "undo that setting", "reset all settings" | the list with current values; undo the last change; back to defaults | 0 tokens |
+| "help me use kurama", "help with sending files to my phone", "can you translate a pdf?" | every area with real example commands, or the closest tools by meaning, plus "teach me your own command" and "I can make a new tool" | 0 tokens |
+
+**How it stays true:** nothing here is a hand-kept description. `core/selfindex.py` builds each tool's card from the
+tool's description, the docstring at the top of its file, the settings its code reads (`config.KEY`) and its example
+phrases. A contract test fails if any tool lacks them. Change the code, and the explanation changes with it.
+
+**Why settings are a fixed list:** the AI never edits code or arbitrary config. `usersettings.SETTINGS` names what may
+change, with ranges; everything else needs a code change, and KURAMA says so. That keeps "change yourself" safe.
+
+**Questions about itself win before the word patterns** ("how do you measure my internet speed" must explain, not run
+a speed test): `fastpath._window_first` checks a few high-confidence, verified meanings first.
+
+**Try these (copy them into the chat):**
+1. "what is my internet speed" then "how did you measure that?"
+2. "make the speed test 30 seconds", "what is my internet speed" (it now runs ~30 s), "undo that setting"
+3. "what time is it" then "how do you get the time?"
+4. "set up colab" then "explain this notebook" then "can I use it with VS Code?"
+5. "what settings can I change?", "talk faster +25%", "reset all settings"
+6. "help me use kurama", "help with sending files to my phone", "can you convert a pdf to word?"
+7. "minimize vs code", "open kurama project", "show my commands"
 
 ## 9. How KURAMA understands a request
 
@@ -1292,6 +1326,8 @@ one process, not Kubernetes). Learn the server-scale version too, so you know wh
 - **Code layout**: the fast path is split by area (`core/intents/`); tools can return **typed results** (`Reply`).
 - **Plug-in architecture** (section 8.4): tools, memory sources and agents are added as files, found by
   themselves, isolated when broken and checked by contract tests; a scaffold writes each one.
+- **Self-knowledge** (section 8.5): cards built from the code, explanations grounded in the real trace, a safe
+  settings list changed by voice, help by meaning.
 - **Decisions are written down**: `docs/adr/` (10 records).
 
 ### 23.2 What is left (smaller now, in the order to do it)

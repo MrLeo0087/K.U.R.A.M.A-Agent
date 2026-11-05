@@ -2076,14 +2076,19 @@ def _window_first(text: str) -> Intent | None:
     """A short request that clearly MEANS one window action (>= 0.95 to its examples, an open app named or none)
     wins before the word patterns: they read 'make vs code full screen' as a writing request about VS Code."""
     from jarvis.core import semantic
-    if len(text.split()) > 7 or not semantic.ready():  # never loads the model just for this (later steps may)
+    if len(text.split()) > 16 or not semantic.ready():  # never loads the model just for this (later steps may)
         return None
     t = " ".join((text or "").split()).strip(" .!?")
     best = meaning_label(t)
-    if not best or best[0] not in (*_WINDOW_LABELS, "my_command_forget") or best[1] < 0.95:
-        return None  # (actions whose X is checked against what really exists: an open window, a saved command)
+    first = {**{w: 0.95 for w in _WINDOW_LABELS}, "my_command_forget": 0.95, "setting_change": 0.88,
+             "explain_last": 0.97, "help_me": 0.97}
+    if not best or best[0] not in first or best[1] < first[best[0]]:
+        return None  # (actions whose X is checked against what really exists: an open window, a saved command, a
+        #              setting and its range; or a question about KURAMA itself: 'how do you measure my speed'
+        #              must explain, not run a speed test)
     it = meaning_intent(text)
-    return it if it is not None and it.tool in ("window", "app_name") else None
+    return it if it is not None and it.tool in ("window", "app_name", "kurama_settings", "explain_self", "help_me") \
+        else None
 
 
 def _mask_open_apps(t: str) -> str | None:
@@ -2126,8 +2131,10 @@ def meaning_intent(text: str) -> Intent | None:
     if best is None:
         return None
     if best[1] < config.MEANING_SHORTCUT_MIN_BY.get(best[0], config.MEANING_SHORTCUT_MIN) and not (
-            best[0] == "open_vscode" and best[1] >= config.MEANING_FOLDER_MIN and folder_in_words(raw) is not None):
-        return None  # (a folder that really exists, named in words, may be a little less close in meaning)
+            best[0] == "open_vscode" and best[1] >= config.MEANING_FOLDER_MIN and folder_in_words(raw) is not None) \
+            and not (best[0] == "setting_change" and best[1] >= config.MEANING_SETTING_MIN):
+        return None  # (a real folder / a real setting with a valid value may be a little less close in meaning:
+        #              the slot is checked below, and nothing runs unless it is real)
     label, score = best
     chat = next((s for g, s in semantic.scores(t) if g == semantic.CHAT), 0.0)
     if score < chat + config.SEMANTIC_OVER_CHAT:
@@ -2168,6 +2175,8 @@ def meaning_intent(text: str) -> Intent | None:
             return None
         it = Intent("tgmsg", "send_message_telegram", "telegram", {"text": msg}, known=msg)
         return it if meaning_ok(t, it) else None
+    if label in ("settings_list", "setting_undo", "settings_reset", "setting_change", "explain_last", "help_me"):
+        return _about_me_intent(label, raw, t, extra)
     if label == "my_commands":
         return None if extra else _ok(t, Intent("mywords", "app_name", "apps", {"action": "list"}))
     if label == "my_command_forget":  # only one of the owner's commands that exists ('forget my command X')
@@ -2271,6 +2280,34 @@ _FOLDER_GLUE = re.compile(r"\b(?:please|can\s+you|could\s+you|open(?:\s+up)?|lau
                           r"inside|under|from|in|into|at|on|of|to|go|editor|code\s+editor)\b", I)
 
 
+def _about_me_intent(label: str, raw: str, t: str, extra: list[str]) -> Intent | None:
+    """KURAMA about itself: settings (0 tokens, only a real setting with a valid value), explain (a short AI call
+    grounded in the last request + tool notes), help (0 tokens)."""
+    from jarvis.core import usersettings
+    if label == "explain_last":
+        return _ok(t, Intent("explain", "explain_self", "self", {"question": raw}))
+    if label == "help_me":
+        return _ok(t, Intent("help", "help_me", "self", {"topic": " ".join(extra)}))
+    if label == "settings_list":
+        return None if extra else _ok(t, Intent("settings", "kurama_settings", "self", {"action": "list"}))
+    if label == "setting_undo":
+        return None if extra else _ok(t, Intent("settings", "kurama_settings", "self", {"action": "undo"}))
+    if label == "settings_reset":
+        return None if extra else _ok(t, Intent("settings", "kurama_settings", "self", {"action": "reset", "name": "all"}))
+    m = re.search(r"\b(?:to|at|=)\s+(?P<v>[+-]?\d.*)$", raw, I) or re.search(r"(?P<v>[+-]?\d+(?:\.\d+)?\s*(?:%|[a-z]+)?)", raw, I)
+    if not m:
+        return None  # "make the speed test longer": how much? -> the AI asks / picks
+    s = usersettings.find(raw[:m.start()] + " " + raw[m.end():])
+    if s is None:
+        return None
+    try:
+        usersettings.parse(s, m.group("v"))
+    except ValueError:
+        return None  # out of range / not a value: the AI explains the allowed range
+    return _ok(t, Intent("settings", "kurama_settings", "self", {"action": "set", "name": s.name, "value": m.group("v")},
+                         known=s.name))
+
+
 def _ok(t: str, it: Intent) -> Intent | None:
     return it if meaning_ok(t, it) else None
 
@@ -2281,6 +2318,8 @@ def folder_in_words(text: str) -> Path | None:
     The names left after the glue words are tried in both orders as 'X in Y in Z'; only a folder that exists and
     is called like one of the names counts. None when nothing (or more than 4 names) is left."""
     from jarvis.core.paths import smart_path
+    if not _VSCODE_NAME.search(text or "") and not re.search(r"\bcode\s+editor\b", text or "", I):
+        return None  # only for "... in VS Code": a disk-wide search for every request was 12 s ('open youtube and ...')
     for m in re.finditer(r"(?:~|/)[^\s,;]+", text or ""):  # a real path written out wins
         if (p := Path(m.group(0).rstrip(".")).expanduser()).is_dir():
             return p
