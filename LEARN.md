@@ -1753,6 +1753,20 @@ status" and "/claude report" are built from the events (0 tokens); on Telegram, 
 "/claude say <next step>" continues a finished task in the background (`claude -p --resume <session>`, same
 folder and account). Answering yes, sending a step and the screenshot need the Telegram PIN.
 
+**Long replies are never cut.** A tool's whole output reaches you (`ToolResult.full`; only the AI's copy is
+shortened). In the workspace a long text opens folded with "Show more" / "Show less". On Telegram
+(`notify.send_long`) a long reply shows its start and folds the rest behind Telegram's own "show more"
+(an expandable quote); longer than two messages, the whole text also comes as an .md file.
+
+**Telegram sections (`core/tgtopics.py`).** "/topics setup" sorts what KURAMA sends by itself into topics of your
+own Telegram group: ⚠️ Alerts, 🤖 Claude Code, ⏰ Reminders & jobs, 📌 Other (`notify.notify` asks
+`tgtopics.where(source, level)`); your conversation with KURAMA stays in the private chat. Setup: a group with Topics
+on, the bot added as an admin that can manage topics, any message in the group, then "/topics setup".
+
+**Claude Code limits.** "/claude usage" runs Claude Code's own `/usage` for each account on the laptop
+(`claude -p /usage`: a local command, 0 tokens, ~0.5 s) and shows the 5-hour window and the week: used, left and
+when each resets, plus how much was used today.
+
 **Every command is always listed.** A command added to `slash.COMMANDS` appears by itself in `/list` (laptop and
 Telegram; Telegram shows its phone commands first, then all of these), in the chat box suggestions, and in the
 Telegram "/" menu (max 100: the phone ones first). `tests/test_claude_watch.py` checks that nothing is ever missing.

@@ -349,8 +349,10 @@ def test_telegram_ignores_other_chats_and_routes_text(tg):
                       upd(12, sticker={"file_id": "v"})]]
     bot.tick()
     assert bot._agent.calls == [("what time is it?", "text")]  # chat 999 ignored silently
-    assert len(tg["sent"]) == 3 and all(len(m) <= config.TELEGRAM_MAX_REPLY_CHARS for m in tg["sent"])
-    assert "".join(tg["sent"][:2]) == "x" * 5000 and tg["sent"][2] == telegram_bot.TEXT_ONLY  # long = split, not cut
+    import re as _re
+    plain = "".join(_re.sub(r"</?blockquote[^>]*>|\n", "", m) for m in tg["sent"][:2])
+    assert len(tg["sent"]) == 3 and all(len(m) <= config.TELEGRAM_MAX_REPLY_CHARS + 60 for m in tg["sent"])
+    assert plain == "x" * 5000 and tg["sent"][2] == telegram_bot.TEXT_ONLY  # long = folded + split, never cut
     assert bot.offset == 13 and store.kv_get("telegram_offset") == "13"
 
 

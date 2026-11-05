@@ -110,7 +110,73 @@ def telegram_call(method: str, payload: dict | None = None, timeout: float | Non
     return data.get("result")
 
 
-def telegram_send(text: str, chat_id: str | int | None = None) -> bool:
+def _cut_at(s: str, n: int) -> int:
+    c = s.rfind("\n", 0, n)
+    if c > n // 2:
+        return c
+    c = s.rfind(" ", 0, n)
+    return c if c > n // 2 else n
+
+
+def split_for_telegram(text: str) -> tuple[list[str], str]:
+    """(messages as Telegram HTML, the whole text for a file or ''): nothing is ever cut.
+    Short: as it is. Long: the first lines show, the rest is folded in an expandable quote ("show more" on the
+    phone, like a post). Longer than two messages: the start + "show more", and the WHOLE text as an .md file."""
+    import html
+    text = (text or "").strip()
+    limit = config.TELEGRAM_MAX_REPLY_CHARS
+    if len(text) <= config.TELEGRAM_FOLD_CHARS:
+        return [html.escape(text, quote=False)], ""
+
+    def folded(head: str, rest: str) -> str:
+        return html.escape(head.rstrip(), quote=False) + ("\n<blockquote expandable>" + html.escape(rest.strip(), quote=False) + "</blockquote>"
+                                             if rest.strip() else "")
+    c = _cut_at(text, config.TELEGRAM_FOLD_CHARS // 2)
+    head, rest = text[:c], text[c:]
+    if len(text) <= limit:
+        return [folded(head, rest)], ""
+    if len(text) <= 2 * limit - 200:
+        c2 = _cut_at(rest, limit - len(head) - 50)
+        return [folded(head, rest[:c2]), "<blockquote expandable>" + html.escape(rest[c2:].strip(), quote=False) + "</blockquote>"], ""
+    c2 = _cut_at(rest, limit - len(head) - 200)
+    return [folded(head, rest[:c2]) + "\n📎 The whole text is in the file below."], text
+
+
+def send_long(text: str, chat_id: str | int | None = None, title: str = "reply", thread: int | None = None) -> bool:
+    """Send any text to Telegram complete: folded "show more" messages, plus an .md file when it is very long."""
+    parts, whole = split_for_telegram(text)
+    ok = True
+    for part in parts:
+        try:
+            telegram_call("sendMessage", {"chat_id": chat_id or config.TELEGRAM_CHAT_ID, "text": part,
+                                          "parse_mode": "HTML", "disable_web_page_preview": True,
+                                          **({"message_thread_id": thread} if thread else {})})
+        except RuntimeError as e:  # (an HTML problem: the same text plain, never lost)
+            log.warning("telegram send failed (%s): sending plain", e)
+            try:
+                import html
+                plain = re.sub(r"</?blockquote[^>]*>", "", part)
+                telegram_call("sendMessage", {"chat_id": chat_id or config.TELEGRAM_CHAT_ID,
+                                              "text": html.unescape(plain), "disable_web_page_preview": True,
+                                              **({"message_thread_id": thread} if thread else {})})
+            except RuntimeError as e2:
+                log.warning("telegram send failed: %s", e2)
+                return False
+    if whole:
+        import io
+        name = re.sub(r"[^\w-]+", "-", title.lower()).strip("-")[:40] or "reply"
+        try:
+            telegram_call("sendDocument", {"chat_id": chat_id or config.TELEGRAM_CHAT_ID,
+                                           **({"message_thread_id": thread} if thread else {})},
+                          files={"document": (f"{name}.md", io.BytesIO(whole.encode("utf-8")))}, upload=True,
+                          timeout=60)
+        except RuntimeError as e:
+            log.warning("telegram file send failed: %s", e)
+            ok = False
+    return ok
+
+
+def telegram_send(text: str, chat_id: str | int | None = None, thread: int | None = None) -> bool:
     """sendMessage to the configured chat (rate-limited). False when not configured or failed."""
     if not telegram_configured():
         return False
@@ -122,14 +188,7 @@ def telegram_send(text: str, chat_id: str | int | None = None) -> bool:
             log.warning("telegram rate limit reached; message dropped")
             return False
         _tg_sent.append(now)
-    try:
-        telegram_call("sendMessage", {"chat_id": chat_id or config.TELEGRAM_CHAT_ID,
-                                      "text": text[: config.TELEGRAM_MAX_REPLY_CHARS],
-                                      "disable_web_page_preview": True})
-        return True
-    except RuntimeError as e:
-        log.warning("telegram send failed: %s", e)
-        return False
+    return send_long(text, chat_id, title=text.split("\n", 1)[0][:40], thread=thread)  # complete, never cut
 
 
 def desktop_send(title: str, text: str, level: str = "info") -> bool:
@@ -262,7 +321,7 @@ def notify(title: str, text: str = "", level: str = "info", source: str = "", de
     A muted source (mute()) is only saved (channel 'muted'), never shown or sent."""
     level = level if level in LEVELS else "info"
     telegram = wants_phone(level, source) if telegram is None else telegram
-    title, text = (title or "KURAMA").strip()[:120], (text or "").strip()[:3000]
+    title, text = (title or "KURAMA").strip()[:120], (text or "").strip()  # whole: send_long never cuts it
     if _duplicate(title, text):
         log.info("dedupe: %s", title)
         return []
@@ -272,9 +331,15 @@ def notify(title: str, text: str = "", level: str = "info", source: str = "", de
     except Exception as e:  # a broken kv must never block alerts
         log.warning("mute check failed: %s", e)
     sent: list[str] = []
-    if desktop and desktop_send(title, text, level):
+    if desktop and desktop_send(title, text[:600], level):
         sent.append("desktop")
-    if telegram and telegram_send(f"{_ICON[level]}{title}\n{text}".strip()):
+    group, thread = None, None
+    try:  # sorted into a topic of the owner's group when sections are on (core/tgtopics.py)
+        from jarvis.core import tgtopics
+        group, thread = tgtopics.where(source, level, title)
+    except Exception:  # noqa: BLE001 - no sections: the private chat
+        pass
+    if telegram and telegram_send(f"{_ICON[level]}{title}\n{text}".strip(), group, thread):
         sent.append("telegram")
     if save:
         try:

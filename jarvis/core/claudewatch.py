@@ -276,7 +276,44 @@ def stop() -> str:
     return "Stopping Claude Code: it stops at its next step (a few seconds). I'll tell you when it has."
 
 
+def plan_limits() -> list[str]:
+    """Your plan's limits for each Claude Code account on this laptop: the 5-hour window and the week, used / left
+    and when each resets. Claude Code's own /usage, run on its own ('claude -p /usage': a local command, 0 tokens,
+    about half a second); nothing else is read."""
+    exe = claude_binary()
+    if exe is None:
+        return []
+    out = []
+    for f in settings_files():
+        env = dict(os.environ, CLAUDE_CONFIG_DIR=str(f.parent))
+        try:
+            r = subprocess.run([str(exe), "-p", "/usage", "--output-format", "json"], env=env, cwd=str(Path.home()),
+                               capture_output=True, text=True, timeout=30)
+            res = json.loads(r.stdout or "{}")
+        except (OSError, subprocess.TimeoutExpired, ValueError):
+            continue
+        text = str(res.get("result") or "")
+        rows = re.findall(r"^(Current [^:]+):\s*(\d+)%\s*used\s*[·•-]\s*resets\s*(.+)$", text, re.M)
+        if not rows or res.get("is_error"):
+            continue
+        acc = "your account" if len(settings_files()) == 1 else f"account {f.parent.name}"
+        out.append(f"📊 Claude Code limits ({acc})")
+        for name, pct, reset in rows:
+            label = {"current session": "5-hour window"}.get(name.lower(), name.replace("Current week", "Weekly"))
+            reset = re.sub(r"\s*\([^)]*\)\s*$", "", reset.strip())  # '(Asia/Kathmandu)': local time anyway
+            used = int(pct)
+            bar = "█" * (used // 10) + "░" * (10 - used // 10)
+            out.append(f"{label}: {bar} {used}% used, {100 - used}% left · resets {reset}")
+    return out
+
+
 def usage() -> str:
+    """Your plan's limits (5-hour window, week: used, left, when they reset) and how much was used today."""
+    limits = plan_limits()
+    return "\n".join(limits + ([""] if limits else []) + [_used_today()]).strip()
+
+
+def _used_today() -> str:
     """How much Claude Code was used: this task and today (from its own conversation files; 0 tokens)."""
     today = time.strftime("%Y-%m-%d")
     tot = {"in": 0, "out": 0, "cache": 0, "msgs": 0}
@@ -319,11 +356,11 @@ def usage() -> str:
                     task["cache"] += n_cache
                     task["msgs"] += 1
     if not tot["msgs"]:
-        return "Claude Code hasn't been used today."
+        return "Claude Code hasn't been used today on this laptop."
 
     def k(n: int) -> str:
         return f"{n / 1_000_000:.1f}M" if n >= 1_000_000 else (f"{n / 1000:.0f}k" if n >= 1000 else str(n))
-    out = ["📊 Claude Code use today"]
+    out = ["📈 Used today"]
     if cur and task["msgs"]:
         out.append(f"This task: {task['msgs']} replies, {k(task['out'])} words written by it (tokens), "
                    f"{k(task['in'] + task['cache'])} read (mostly re-read from its memory), running "
@@ -332,7 +369,6 @@ def usage() -> str:
                f"{k(tot['in'] + tot['cache'])} read (most of it re-read from its memory, which is cheap)")
     if models:
         out.append("Model: " + ", ".join(sorted(models, key=models.get, reverse=True)[:2]))
-    out.append("Your plan's limit and what's left are only shown inside Claude Code (type /usage there).")
     return "\n".join(out)
 
 
@@ -377,7 +413,7 @@ def _finished_text(s: dict) -> str:
     if s.get("prompt"):
         out.append(f"📝 {s['prompt'][:150]}")
     if s.get("final"):
-        out.append(f"💬 {s['final'][:600]}")
+        out.append(f"💬 Its answer:\n{s['final']}")  # the whole answer (a long one arrives as a file too)
     return "\n".join(out)
 
 
@@ -438,6 +474,8 @@ def report() -> str:
         out += ["Its plan:"] + [f"  {mark.get(t['status'], '⬜')} {t['text']}" for t in s["todos"]]
     if s.get("files"):
         out += ["Files it changed:"] + [f"  • {Path(f).name}" for f in s["files"][:30]]
+    if s.get("final"):
+        out += ["Its full answer:", s["final"]]
     if s["steps"]:
         out.append("What it did, in order:")
         last = ""

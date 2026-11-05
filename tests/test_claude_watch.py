@@ -138,5 +138,23 @@ def test_usage_reads_its_own_conversation_files(told, tmp_path, monkeypatch):
         "input_tokens": 1000, "output_tokens": 2500, "cache_read_input_tokens": 40000}}}] * 3
     (acc / "projects" / "p" / "s9.jsonl").write_text("\n".join(json.dumps(r) for r in rows))
     monkeypatch.setattr(cw, "settings_files", lambda: [acc / "settings.json"])
+    monkeypatch.setattr(cw, "plan_limits", lambda: ["📊 Claude Code limits (your account)",
+                                                    "5-hour window: ██░░░░░░░░ 23% used, 77% left · resets 6:54am"])
     out = cw.usage()
+    assert out.startswith("📊 Claude Code limits") and "77% left" in out
     assert "Today: 1 conversations, 3 replies, 8k written, 123k read" in out and "claude-opus-5-5" in out
+
+
+def test_plan_limits_from_claude_codes_own_usage(monkeypatch, tmp_path):
+    import subprocess
+    (tmp_path / ".claude-a" / "projects").mkdir(parents=True)
+    monkeypatch.setattr(cw, "settings_files", lambda: [tmp_path / ".claude-a" / "settings.json"])
+    monkeypatch.setattr(cw, "claude_binary", lambda: Path("/bin/true"))
+
+    class R:
+        stdout = json.dumps({"is_error": False, "result": "Current session: 23% used · resets Nov 6, 6:54am "
+                             "(Asia/Kathmandu)\nCurrent week (all models): 58% used · resets Nov 9, 3:44pm (Asia/K)"})
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: R())
+    rows = cw.plan_limits()
+    assert rows[1] == "5-hour window: ██░░░░░░░░ 23% used, 77% left · resets Nov 6, 6:54am"
+    assert rows[2] == "Weekly (all models): █████░░░░░ 58% used, 42% left · resets Nov 9, 3:44pm"

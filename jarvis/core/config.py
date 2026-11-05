@@ -1137,6 +1137,7 @@ TELEGRAM_POLL_TIMEOUT_S = 6  # long-poll seconds (short so Ctrl+C stops the work
 TELEGRAM_CONFIRM_TIMEOUT_S = 60.0  # "Reply yes/no": no answer in time means no
 TELEGRAM_ANSWER_TIMEOUT_S = 90.0  # a reply that takes longer than this is given up on (no "typing" forever)
 TELEGRAM_MAX_REPLY_CHARS = 3500
+TELEGRAM_FOLD_CHARS = 700  # a longer reply shows its start; the rest folds behind "show more"
 # --- Telegram security: a PIN for risky actions, and a /lock switch (PINs live in .env, change anytime) ---
 TELEGRAM_RISKY_PIN = os.getenv("TELEGRAM_RISKY_PIN", "1500")  # needed to run risky actions from Telegram
 TELEGRAM_LOCK_PIN = os.getenv("TELEGRAM_LOCK_PIN", "0087")    # /unlock <this> clears a /lock

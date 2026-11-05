@@ -1305,11 +1305,25 @@ async function wsBody(it, box) {
   }
   const doc = el("div", "ws-text");
   if (it.type === "code" || it.type === "data") {
-    const lines = (it.text || "").split("\n").slice(0, 400);
+    const lines = (it.text || "").split("\n"); // every line (it showed only the first 400)
     doc.innerHTML = `<pre class="code">${lines.map((l, i) => `<span class="ln">${i + 1}</span>${esc(l)}`).join("\n")}</pre>`;
   } else doc.innerHTML = renderDoc(it.text || ""); // headings, lists, tables...: a readable document
   box.append(doc);
+  // any length: a long text opens folded, "Show more" unfolds all of it, "Show less" folds it back (like a post)
+  if ((it.text || "").length > WS_FOLD_CHARS) {
+    doc.classList.add("ws-folded");
+    const more = el("button", "ws-more");
+    more.type = "button";
+    more.textContent = "Show more";
+    more.onclick = () => {
+      const folded = doc.classList.toggle("ws-folded");
+      more.textContent = folded ? "Show more" : "Show less";
+      if (folded) doc.scrollIntoView({ block: "start", behavior: "smooth" });
+    };
+    box.append(more);
+  }
 }
+const WS_FOLD_CHARS = 3000;
 
 async function wsShow(it) {
   if (typeof it === "number") it = ws.items[it];
@@ -1998,7 +2012,7 @@ async function mwsShow() {
   }
   let txt = "";
   try { txt = await (await fetch(api.outputUrl(x.name))).text(); } catch { txt = "(couldn't load it)"; }
-  for (const block of txt.slice(0, 40000).split(/\n(?=## )/)) { // "## Folder (n)" headings of a plan
+  for (const block of txt.split(/\n(?=## )/)) { // "## Folder (n)" headings of a plan (all of it, any length)
     const m = block.match(/^## (.*)\n?([\s\S]*)$/);
     if (m) { const h = document.createElement("h4"); h.textContent = m[1]; body.append(h); }
     const pre = document.createElement("pre");

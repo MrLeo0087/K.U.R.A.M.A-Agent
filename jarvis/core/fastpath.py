@@ -2939,7 +2939,7 @@ def try_answer(text: str, lang: str | None = None, confirm=None, mode: str = "te
         res = safety.execute(intent.tool, {k: v for k, v in intent.args.items() if not k.startswith("_")},
                               confirm=confirm, ctx={**(ctx or {}), "user_text": text, "published": shelf,
                                                     "jobs": started})
-        ok, output = res.ok, res.output
+        ok, output = res.ok, (getattr(res, "full", "") or res.output)  # the user gets the whole text (the AI's copy is cut)
         if shelf:
             from jarvis.core import workspace
             output = workspace.strip_note(output)  # "[The full result ... is shown in the workspace]" is for the AI

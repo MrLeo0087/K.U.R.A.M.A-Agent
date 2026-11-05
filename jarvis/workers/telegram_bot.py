@@ -37,6 +37,8 @@ HELP = (
     "/claude say <next step> — tell it what to do next\n"
     "/claude stop — stop it now (it stops at its next step)\n"
     "/claude usage — how much Claude Code was used today\n"
+    "\n🗂 Sections\n"
+    "/topics setup | off — sort alerts, Claude Code and reminders into topics of your own group\n"
     "\n📷 Camera & screen\n"
     "/camera — a photo from the laptop camera\n"
     "/video [secs] — a short camera clip (e.g. /video 8)\n"
@@ -192,7 +194,7 @@ class TelegramBot(Worker):
     def poll(self, timeout: int | None = None) -> list[dict]:
         timeout = config.TELEGRAM_POLL_TIMEOUT_S if timeout is None else timeout
         updates = notify.telegram_call("getUpdates", {"offset": self.offset, "timeout": timeout,
-                                                      "allowed_updates": ["message", "edited_message"]},
+                                                      "allowed_updates": ["message", "edited_message", "my_chat_member"]},
                                        timeout=timeout + 10) or []
         if updates:
             self.offset = max(int(u.get("update_id", 0)) for u in updates) + 1
@@ -226,6 +228,7 @@ class TelegramBot(Worker):
             finally:
                 self._confirm_lock.release()
             for u in updates:
+                self._note_group(u)
                 msg = self._own_message(u)
                 if msg is not None and is_fast(msg.get("text") or ""):
                     self.handle(u, watch=False)
@@ -263,27 +266,16 @@ class TelegramBot(Worker):
         return box.get("out") or "(no answer)"
 
     def send(self, text: str) -> None:
-        text = (text or "(no answer)").strip()
-        limit = config.TELEGRAM_MAX_REPLY_CHARS
-        parts: list[str] = []
-        while text and len(parts) < 4:  # a long reply (the /list of every command) in up to 4 messages, cut at lines
-            if len(text) <= limit:
-                parts.append(text)
-                break
-            cut = text.rfind("\n", 0, limit)
-            cut = cut if cut > limit // 2 else limit
-            parts.append(text[:cut].rstrip())
-            text = text[cut:].lstrip("\n")
-        else:
-            if text:
-                parts[-1] = parts[-1][: limit - 20].rstrip() + "\n…(truncated)"
-        for part in parts:
-            try:
-                notify.telegram_call("sendMessage", {"chat_id": config.TELEGRAM_CHAT_ID, "text": part,
-                                                     "disable_web_page_preview": True})
-            except RuntimeError as e:
-                self.log.warning("reply failed: %s", e)
-                return
+        """The whole reply, never cut: split into messages, plus an .md file when it is very long."""
+        if not notify.send_long((text or "(no answer)").strip(), config.TELEGRAM_CHAT_ID):
+            self.log.warning("reply failed")
+
+    def _note_group(self, update: dict) -> None:
+        """A group the bot is in (for /topics setup): remembered, never answered."""
+        m = update.get("message") or update.get("my_chat_member") or {}
+        if (m.get("chat") or {}).get("type") == "supergroup":
+            from jarvis.core import tgtopics
+            tgtopics.note_group(m["chat"])
 
     def _own_message(self, update: dict) -> dict | None:
         msg = update.get("message") or update.get("edited_message")
@@ -527,6 +519,10 @@ class TelegramBot(Worker):
                     return ("This wipes EVERYTHING: every chat, fact, reminder, to-do and result (a backup is kept). "
                             f"Send '{cmd} yes' to do it.")
                 return reset.reset_all(self._agent)
+            if cmd in ("/topics", "/sections"):  # alerts sorted into topics of the owner's group
+                from jarvis.core import tgtopics
+                arg = text.split()[1].lower() if len(text.split()) > 1 else ""
+                return tgtopics.setup() if arg in ("setup", "on") else tgtopics.off() if arg == "off" else tgtopics.status()
             if cmd in ("/all", "/commands", "/command", "/kurama", "/list", "/help", "/menu"):
                 from jarvis.core import slash  # the phone's own commands, then every KURAMA command + tool (the same
                 return HELP + "\n\n" + slash.help_text()  # list as the laptop chat): nothing is ever left out
@@ -618,6 +614,7 @@ class TelegramBot(Worker):
                     break
                 updates = self.poll(timeout=int(min(config.TELEGRAM_POLL_TIMEOUT_S, max(1, left))))
                 for i, u in enumerate(updates):
+                    self._note_group(u)
                     msg = self._own_message(u)
                     if msg is None:
                         continue

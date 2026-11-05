@@ -1376,3 +1376,10 @@ Phases (one at a time, owner tests after each):
   config.py", "ran the tests", "Progress: 4 of 7 parts done, about 15 min to go"); /claude stop (a PreToolUse hook
   answers {"continue": false}: it stops at its next step); /claude usage (this task and today, from Claude Code's own
   conversation files: replies, tokens written / read, model; the plan limit is only shown inside Claude Code).
+- (later) Nothing long is cut any more: fastpath answers use the tool's whole output (ToolResult.full; the AI's
+  copy stays short); the workspace shows any length folded with Show more / Show less (the 400-line and 40k caps are
+  gone); Telegram (notify.send_long) folds a long reply behind "show more" (expandable quote), splits it, and sends
+  the whole text as an .md file when it is longer than two messages; the Claude Code finished message carries its
+  whole answer. /topics setup|off: alerts, Claude Code and reminders/jobs go to topics of the owner's group
+  (tgtopics.py). /claude usage: the 5-hour and weekly limits (used, left, reset) from Claude Code's own /usage
+  (`claude -p /usage`, a local command, 0 tokens) for each account, plus today's use.

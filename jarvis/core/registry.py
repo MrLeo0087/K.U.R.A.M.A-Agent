@@ -66,6 +66,7 @@ class ToolResult:
     output: str
     error: str = ""
     data: dict = field(default_factory=dict)  # structured data from a results.Reply (paths, items...)
+    full: str = ""  # the whole output when `output` was cut for the AI (the user always gets everything)
 
 
 # --- schema building ---
@@ -447,7 +448,8 @@ class Registry:
         except Exception as e:
             log.warning("workspace publish failed: %s", e)
         from jarvis.core.results import data_of
-        return ToolResult(True, truncate(full, limit) + note, data=data_of(out))
+        cut = truncate(full, limit)
+        return ToolResult(True, cut + note, data=data_of(out), full=full if cut != full else "")
 
 
 REGISTRY = Registry()
