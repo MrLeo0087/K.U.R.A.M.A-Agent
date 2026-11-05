@@ -302,9 +302,8 @@ def usage() -> str:
                     continue
                 m = d.get("message") if isinstance(d, dict) else None
                 u = m.get("usage") if isinstance(m, dict) else None
-                ts = str(d.get("timestamp") or "")
-                if not isinstance(u, dict) or not ts.startswith(today):
-                    continue
+                if not isinstance(u, dict) or _local_day(str(d.get("timestamp") or "")) != today:
+                    continue  # (its times are UTC: compared as local days)
                 n_in, n_out = int(u.get("input_tokens") or 0), int(u.get("output_tokens") or 0)
                 n_cache = int(u.get("cache_read_input_tokens") or 0) + int(u.get("cache_creation_input_tokens") or 0)
                 tot["in"] += n_in
@@ -330,11 +329,19 @@ def usage() -> str:
                    f"{k(task['in'] + task['cache'])} read (mostly re-read from its memory), running "
                    f"{_mins(time.time() - since)}")
     out.append(f"Today: {len(sessions)} conversations, {tot['msgs']} replies, {k(tot['out'])} written, "
-               f"{k(tot['in'] + tot['cache'])} read")
+               f"{k(tot['in'] + tot['cache'])} read (most of it re-read from its memory, which is cheap)")
     if models:
         out.append("Model: " + ", ".join(sorted(models, key=models.get, reverse=True)[:2]))
     out.append("Your plan's limit and what's left are only shown inside Claude Code (type /usage there).")
     return "\n".join(out)
+
+
+def _local_day(ts: str) -> str:
+    from datetime import datetime
+    try:
+        return datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone().strftime("%Y-%m-%d")
+    except ValueError:
+        return ""
 
 
 def decision(qid: str) -> str:
