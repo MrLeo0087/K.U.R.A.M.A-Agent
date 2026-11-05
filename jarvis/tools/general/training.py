@@ -26,17 +26,53 @@ def _newest_log(folder: Path) -> Path | None:
     return max(logs, key=lambda p: p.stat().st_mtime) if logs else None
 
 
+def _notebook(platform: str, label: str = "") -> str:
+    """0 tokens: the ready notebook (.ipynb) for Colab or Kaggle, linked to this laptop. Saved in Downloads (easy to
+    upload) and the workspace; on Telegram it comes as a file. The link cell is also copied to the clipboard."""
+    import shutil
+    cell = tg.colab_setup(label)  # a fixed template, no LLM code generation
+    name = "KURAMA_kaggle.ipynb" if platform == "kaggle" else "KURAMA_colab.ipynb"
+    d = Path(config.OUTPUTS_DIR) / "colab"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "kurama_link_cell.py").write_text(cell)
+    nb = d / name
+    nb.write_text(tg.colab_notebook(cell, platform))
+    site = "Kaggle" if platform == "kaggle" else "Colab"
+    ctx = safety.context()
+    if ctx.get("channel") == "telegram":  # on the phone: the notebook comes as a file
+        from jarvis.tools.general.send_file_telegram import deliver
+        deliver(nb, f"KURAMA {site} notebook: open it in {site}, run the cells top to bottom")
+        return f"Sent you {name}. Open it in {site} and run the cells from top to bottom; the steps are inside."
+    where = str(nb)
+    try:
+        dl = Path(config.NOTEBOOK_COPY_DIR)
+        if dl.is_dir():
+            shutil.copy2(nb, dl / name)
+            where = str(dl / name)
+    except OSError:
+        pass
+    rel = str(nb.relative_to(Path(config.OUTPUTS_DIR)))
+    if ctx.get("published") is not None:
+        ctx["published"].append(rel)
+    how = ("kaggle.com/code > New Notebook > File > Import Notebook" if platform == "kaggle"
+           else "colab.research.google.com > File > Upload notebook")
+    return (f"Your {site} training notebook is ready: {where} (also in the workspace). Open {how}, turn on the GPU"
+            + (" and Internet" if platform == "kaggle" else "") + ", and run the cells from top to bottom: step 3 "
+            "links the run to me, step 5 is a complete demo training to replace with yours. Then ask me "
+            "\"training status\" or \"stop training\".")
+
+
 @tool(group="watch", safety="safe",
       description="Training Guard: how training is going (status: epochs, accuracy, ETA), watch a run/process/log, "
-                  "link a Google Colab notebook (colab), stop a training run (stop = after this epoch, stop_now = "
+                  "get the training notebook linked to KURAMA (colab / kaggle: a ready .ipynb), stop a training run (stop = after this epoch, stop_now = "
                   "at once; local or Colab, asks first), or stop watching.")
-def training(action: Literal["status", "watch", "colab", "stop", "stop_now", "stop_watching", "kill"] = "status",
+def training(action: Literal["status", "watch", "colab", "kaggle", "stop", "stop_now", "stop_watching", "kill"] = "status",
              target: str = "", label: str = "", patterns: str = "") -> str:
     """Training Guard.
 
     Args:
-        action: status = progress of every run; watch = start watching `target`; colab = get the notebook cell
-            that makes a Colab run report here; stop = stop a training run after the current epoch (Colab) / now
+        action: status = progress of every run; watch = start watching `target`; colab / kaggle = the ready
+            notebook (.ipynb) whose runs report here; stop = stop a training run after the current epoch (Colab) / now
             (local); stop_now = interrupt it at once; stop_watching = forget a watch.
         target: For watch: a log file, a folder (its newest log), a PID or a process name (e.g. "train.py").
             For stop_watching / kill: the run's number or name ("all" for every watch).
@@ -47,35 +83,8 @@ def training(action: Literal["status", "watch", "colab", "stop", "stop_now", "st
 
     if action == "status":
         return tg.status_text(detailed=True)  # fetches the latest Colab metrics right now, formatted
-    if action == "colab":
-        cell = tg.colab_setup(label)  # 0 tokens: a fixed template, no LLM code generation
-        d = Path(config.OUTPUTS_DIR) / "colab"
-        d.mkdir(parents=True, exist_ok=True)
-        py = d / "kurama_colab_cell.py"
-        py.write_text(cell)
-        nb = d / "KURAMA_colab.ipynb"
-        nb.write_text(tg.colab_notebook(cell))  # an .ipynb you can import into Colab (File > Upload notebook)
-        ctx = safety.context()
-        if ctx.get("channel") == "telegram":  # on the phone: the notebook comes as a file
-            from jarvis.tools.general.send_file_telegram import deliver
-            deliver(nb, "KURAMA Colab notebook — open it in Colab (Upload notebook), or copy its first cell")
-            where = "sent to you as a notebook (.ipynb) file"
-        else:
-            rel = str(nb.relative_to(Path(config.OUTPUTS_DIR)))
-            if ctx.get("published") is not None:
-                ctx["published"].append(rel)
-            where = "in your workspace as KURAMA_colab.ipynb (also at " + str(nb) + ")"
-            try:  # the owner wants to paste it at once: the cell goes to the clipboard too
-                from jarvis.tools.general import _sys
-                _sys.clip_set(cell)
-                where += "; the cell is COPIED: paste it as the first cell of your Colab or Kaggle notebook"
-            except Exception:  # noqa: BLE001 - no clipboard tool: the file is enough
-                pass
-        return (f"The training notebook is {where}. Works in Colab and Kaggle (Kaggle: Settings > Internet on). "
-                "Run that cell once, then start training. Keras: model.fit(..., callbacks=[KuramaKeras()]); "
-                "PyTorch: call kurama(epoch=e, epochs=N, loss=l, acc=a) each epoch and 'if kurama_should_stop(): break'; "
-                "HF: callbacks=[KuramaCallback()]. At the end kurama_send('best.pt') sends the checkpoint here. "
-                "Optional Colab secrets KURAMA_TG_TOKEN and KURAMA_TG_CHAT make alerts reach your phone when the laptop is off.")
+    if action in ("colab", "kaggle"):
+        return _notebook(action, label)
     if action in ("stop", "stop_now", "kill"):
         runs = [w for w in pw.find_watch(target) if w["kind"] in ("run", "colab")]
         if not runs:

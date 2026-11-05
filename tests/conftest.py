@@ -11,6 +11,7 @@ from jarvis.core import config, jobs, llm, ratelimit, store
 def tmp_store(tmp_path, monkeypatch):
     store.init(tmp_path / "test.db")
     monkeypatch.setattr(config, "OUTPUTS_DIR", tmp_path / "outputs")
+    monkeypatch.setattr(config, "NOTEBOOK_COPY_DIR", tmp_path / "downloads")  # never the owner's Downloads
     monkeypatch.setattr(config, "TRACE_DB", tmp_path / "traces.db")  # never the real traces
     monkeypatch.setattr(config, "DATA_DIR", tmp_path)  # never KURAMA's real data (backups, learned wordings...)
     monkeypatch.setattr(config, "LOG_DIR", tmp_path / "logs")  # never the real worker logs

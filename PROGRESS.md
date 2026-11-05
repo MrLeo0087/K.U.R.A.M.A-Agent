@@ -1276,3 +1276,14 @@ Phases (one at a time, owner tests after each):
   orders; only a real folder called like one of the names counts; several same-named folders at that level -> the
   one worked in last (git index / mtime). A real named folder may be a little less close in meaning
   (MEANING_FOLDER_MIN 0.80); 'what is vs code' still goes to the AI.
+
+## 2026-11-05: Colab / Kaggle training notebook (0 tokens, linked to KURAMA)
+- 'Setup Google Colab Notebook' hit a generic small-talk template (GPU check + pip tips, no link to KURAMA, no
+  .ipynb); 'set up kaggle' installed the laptop's Kaggle CLI. Removed the template; 'set up colab' / 'set up
+  kaggle' (by meaning, >= 0.90 so "what is colab" stays a question) give training(action=colab|kaggle).
+- core/notebook_template.py: one ready .ipynb per platform, saved to ~/Downloads (config.NOTEBOOK_COPY_DIR) and the
+  workspace, sent as a file on Telegram: how to open it, GPU (+ Internet on Kaggle), data (Drive / Kaggle input),
+  the KURAMA link cell, a link test, a complete PyTorch demo training (runs in seconds, the three KURAMA lines
+  marked), Keras and Hugging Face versions, troubleshooting. The link cell reads Kaggle secrets too, and a new
+  epoch always reaches KURAMA (it was throttled to one message a minute).
+- The laptop's Kaggle CLI is now 'install kaggle' / 'set up kaggle cli'. Tests never write to the real Downloads.

@@ -45,27 +45,6 @@ deactivate                     # leave it
 ```
 If `venv` is missing: `sudo apt install python3-venv`."""
 
-COLAB = """Google Colab notebook setup (paste these cells at the top):
-
-```python
-# 1. GPU check (Runtime -> Change runtime type -> T4 GPU first)
-!nvidia-smi
-import torch; print(torch.cuda.is_available())
-
-# 2. Your Google Drive (keeps files after the session ends)
-from google.colab import drive
-drive.mount('/content/drive')
-%cd /content/drive/MyDrive
-
-# 3. Packages
-!pip install -q transformers datasets accelerate
-
-# 4. Secrets (left bar -> key icon -> add HF_TOKEN etc.)
-from google.colab import userdata
-# token = userdata.get('HF_TOKEN')
-```
-Tips: save checkpoints to Drive; a free session stops after ~12 h or when idle. Say "open colab" to open it."""
-
 _RULES: list[tuple[re.Pattern, dict]] = [
     (re.compile(_LEAD + r"how(?:'s|\s+is|\s+was)\s+(?:your|ur)\s+day(?:\s+going)?(?:\s+so\s+far)?|how\s+are\s+things|how(?:'s|\s+is)\s+it\s+going", I),
      {"en": "It's going well, thanks for asking! What can I do for you?", "hi": "अच्छा चल रहा है, पूछने के लिए धन्यवाद! बताइए क्या करूँ?",
@@ -79,8 +58,6 @@ _RULES: list[tuple[re.Pattern, dict]] = [
                 r"|(?:give\s+me\s+)?(?:a\s+|the\s+)?(?:whole\s+|full\s+)?python\s+(?:project\s+)?(?:setup|set\s*up)", I), {"en": PYTHON_PROJECT}),
     (re.compile(_LEAD + r"(?:how\s+(?:do|can|to)\s+i\s+|give\s+me\s+|help\s+me\s+)?(?:create|make|set\s*up|setup|activate)\s+(?:a\s+)?(?:python\s+)?"
                 r"(?:virtual\s+environment|venv)(?:\s+in\s+python)?", I), {"en": VENV}),
-    (re.compile(_LEAD + r"(?:give\s+me|show\s+me|how\s+(?:do|can|to)\s+i)?\s*(?:a\s+|the\s+)?(?:google\s+)?colab\s+(?:notebook\s+)?(?:setup|set\s*up)"
-                r"|(?:give\s+me\s+)?(?:the\s+)?(?:setup|set\s*up)\s+(?:for\s+)?(?:a\s+|the\s+)?(?:google\s+)?colab(?:\s+notebook)?", I), {"en": COLAB}),
 ]
 
 

@@ -22,12 +22,14 @@ def test_no_binary_files_from_text(path):
     assert write_file.write_file(path, "iVBORw0KGgo=").startswith("error: write_file only writes text")
 
 
-@pytest.mark.parametrize("text", ["Setup, Colab, Notebook,", "setup kaggle notebook for training bro",
-                                  "give me code for kaggle notebook so kurama watch my training"])
-def test_colab_cell_by_meaning(monkeypatch, text):
+@pytest.mark.parametrize("text,label,want", [("Setup, Colab, Notebook,", "colab_setup", "colab"),
+                                             ("setup kaggle notebook for training bro", "kaggle_setup", "kaggle"),
+                                             ("give me code for kaggle notebook so kurama watch my training",
+                                              "kaggle_setup", "kaggle")])
+def test_colab_cell_by_meaning(monkeypatch, text, label, want):
     monkeypatch.setattr(semantic, "ready", lambda: True)
-    monkeypatch.setattr(semantic, "best_of", lambda t, name, table: ("colab_setup", 0.95))
+    monkeypatch.setattr(semantic, "best_of", lambda t, name, table: (label, 0.95))
     monkeypatch.setattr(semantic, "scores", lambda t: [(semantic.CHAT, 0.5)])
     monkeypatch.setattr(fastpath, "meaning_ok", lambda t, it: True)
     it = fastpath.meaning_intent(text)
-    assert (it.tool, it.args) == ("training", {"action": "colab"})
+    assert (it.tool, it.args) == ("training", {"action": want})

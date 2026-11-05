@@ -62,7 +62,7 @@ def test_already_read_marks_the_reading_list(monkeypatch):
     assert readlater.run(**i.args).startswith("✔ Read: Second article")  # not the to-do "Reading the book"
 
 
-@pytest.mark.parametrize("q", ["how is your day going", "what are you doing", "set up the colab notebook",
+@pytest.mark.parametrize("q", ["how is your day going", "what are you doing",
                                "set up the environment for a python project", "give me a whole python project setup",
                                "how do I create a virtual environment in python"])
 def test_ready_answers_cost_zero_tokens(q):

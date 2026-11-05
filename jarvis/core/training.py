@@ -302,20 +302,11 @@ def colab_setup(label: str = "") -> str:
     return colab_cell(topic, run)
 
 
-def colab_notebook(cell: str) -> str:
-    """Wrap the KURAMA cell as a .ipynb notebook (JSON) you can import into Colab (File > Upload notebook)."""
-    def code_cell(src: str) -> dict:
-        lines = src.splitlines(keepends=True)
-        return {"cell_type": "code", "metadata": {}, "execution_count": None, "outputs": [], "source": lines}
-
-    example = ("# Your training goes here. Add KURAMA to your callbacks so 'status' shows live metrics:\n"
-               "#   Keras:  model.fit(x, y, epochs=10, callbacks=[KuramaKeras()])\n"
-               "#   HF:     Trainer(..., callbacks=[KuramaCallback()])\n"
-               "#   PyTorch loop:  kurama(epoch=e, epochs=N, loss=l, acc=a);  if kurama_should_stop(): break\n")
-    nb = {"nbformat": 4, "nbformat_minor": 0,
-          "metadata": {"colab": {"name": "KURAMA_colab.ipynb"}, "kernelspec": {"name": "python3", "display_name": "Python 3"}},
-          "cells": [code_cell(cell), code_cell(example)]}
-    return json.dumps(nb, indent=1)
+def colab_notebook(cell: str, platform: str = "colab") -> str:
+    """The whole ready-to-run notebook (.ipynb JSON): steps in plain words, GPU check, data, the KURAMA link cell,
+    a test, a complete demo training and Keras / Hugging Face versions (core/notebook_template.py)."""
+    from jarvis.core import notebook_template
+    return notebook_template.build(cell, platform)
 
 
 def colab_command(run: str, cmd: str, **extra) -> bool:

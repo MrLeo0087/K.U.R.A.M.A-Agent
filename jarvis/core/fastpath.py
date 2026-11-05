@@ -1224,7 +1224,9 @@ def everyday_intent(t: str) -> Intent | None:
     if re.fullmatch(r"(?:please\s+)?(?:(?:show|check|what(?:'s|\s+is))\s+(?:the\s+|my\s+)?)?kaggle\s+(?:run\s+)?(?:status|runs?)"
                     r"[\s?.!]*|(?:is\s+)?(?:my\s+)?kaggle\s+(?:training|run)\s+(?:done|finished)\??", t, I):
         return Intent("kaggle", "kaggle_train", "watch", {"action": "status"})
-    if re.fullmatch(r"(?:please\s+)?(?:set\s*up|install|configure)\s+kaggle(?:\s+(?:gpu|tool|cli))?[\s.!]*", t, I):
+    if re.fullmatch(r"(?:please\s+)?(?:install\s+(?:the\s+)?kaggle(?:\s+(?:cli|tool|api))?|(?:set\s*up|configure)\s+(?:the\s+)?"
+                    r"kaggle\s+(?:cli|tool|api|command\s+line)(?:\s+on\s+(?:my\s+)?laptop)?)[\s.!]*", t, I):
+        # the laptop's Kaggle CLI ("train this on Kaggle's GPU" from here); plain "set up kaggle" = the notebook
         return Intent("kaggle", "kaggle_train", "watch", {"action": "setup"})
     if ai := assist_intent(t):
         return ai
@@ -2203,8 +2205,8 @@ def meaning_intent(text: str) -> Intent | None:
     if label == "read_later_add":
         it = Intent("readlater", "read_later", "links", {"action": "add", "url": ""})
         return it if meaning_ok(t, it) else None
-    if label == "colab_setup":  # the ready-made notebook cell (Colab / Kaggle), copied: 0 tokens
-        it = Intent("colab", "training", "watch", {"action": "colab"})
+    if label in ("colab_setup", "kaggle_setup"):  # the ready notebook (.ipynb) linked to KURAMA: 0 tokens
+        it = Intent("colab", "training", "watch", {"action": "kaggle" if label == "kaggle_setup" else "colab"})
         return it if meaning_ok(t, it) else None
     if label == "close_all_tabs":  # every tab = the browser window (11-01 'Close all tab.' cost an AI call)
         it = Intent("close", "close_app", "windows", {"name": "browser"})

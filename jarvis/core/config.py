@@ -1050,6 +1050,7 @@ BACKUP_EVERY_DAYS = 7  # automatic backup interval (also runs when the backup dr
 COLAB_POLL_S = 60.0  # how often KURAMA checks for Colab pings (only while a Colab run is active)
 COLAB_FILES_DIR = "~/Downloads/Colab"  # checkpoints sent from Colab land in <this>/<run>/
 COLAB_SILENT_MIN = 25  # no ping for this long = the Colab runtime probably disconnected
+NOTEBOOK_COPY_DIR = Path.home() / "Downloads"  # the ready training notebook is also put here (easy to upload)
 COLAB_PROGRESS_EVERY_S = 60  # the notebook sends within-epoch progress at most this often (epoch ends are forced)
 # Crash watchdog: targets come ONLY from here plus data/watchdog_targets.json (add_watchdog_target,
 # confirm-level, allowlist-checked). Example: {"name": "n8n", "command": "n8n start", "cwd": "~",
@@ -1307,9 +1308,12 @@ MEANING_SHORTCUTS: dict[str, tuple[str, ...]] = {
     "scroll_up": ("scroll up", "scroll up a bit", "scroll up a lot", "go up the page", "scroll up more", "scroll up a little",
                   "move the page up"),
     "colab_setup": ("set up a colab notebook for training", "give me the colab cell to watch my training",
-                    "setup kaggle notebook for training", "connect my colab training to kurama", "colab setup code",
-                    "code to paste in my kaggle notebook so you can watch the training",
+                    "connect my colab training to kurama", "colab setup code", "setup google colab notebook",
+                    "give me the colab notebook", "how do i connect colab to you", "set up colab",
                     "setup colab notebook to watch out my training"),
+    "kaggle_setup": ("set up kaggle", "setup kaggle notebook for training", "give me the kaggle notebook",
+                     "code to paste in my kaggle notebook so you can watch the training", "kaggle setup",
+                     "connect my kaggle training to kurama", "how do i connect kaggle to you"),
     "new_folder": ("create a new folder here named X", "make a folder called X in this folder", "new folder here",
                    "create folder X here", "make a new folder in this folder", "create a new folder in here, name it X",
                    "create a new folder in X named X", "make a folder called X in X"),
@@ -1373,12 +1377,12 @@ MEANING_SHORTCUTS: dict[str, tuple[str, ...]] = {
 MEANING_SHORTCUT_AREAS = {"save_link": "links", "list_links": "links", "read_later_add": "links", "copy_path": "clipboard",
                           "open_vscode": "files", "jobs_start": "jobs", "jobs_list": "jobs",
                           "clean_ram": "system", "clean_kurama": "system", "clean_storage": "system", "show_desktop": "windows", "window_minimize": "windows", "window_maximize": "windows", "window_restore": "windows", "switch_tab": "windows",
-                          "list_tabs": "windows", "close_tab": "windows", "close_all_tabs": "windows", "scroll_down": "windows", "scroll_up": "windows", "colab_setup": "watch", "new_folder": "files",
+                          "list_tabs": "windows", "close_tab": "windows", "close_all_tabs": "windows", "scroll_down": "windows", "scroll_up": "windows", "colab_setup": "watch", "kaggle_setup": "watch", "new_folder": "files",
                           "tg_message": "telegram", "time_now": "general", "date_today": "general",
                           "battery": "power", "git_status": "git", "daily_summary": "usage"}  # the router offers it too
 MEANING_SHORTCUT_MIN = 0.82
 # actions that change everything on screen need more certainty ("show my screen" is not "go to the home screen": 0.86)
-MEANING_SHORTCUT_MIN_BY = {"show_desktop": 0.90}
+MEANING_SHORTCUT_MIN_BY = {"show_desktop": 0.90, "colab_setup": 0.90, "kaggle_setup": 0.90}  # "what is colab" is a question (0.87)
 MEANING_FOLDER_MIN = 0.80  # 'open <a real folder named in words> in vs code': harmless, and the folder must exist
 # talk mode, speech long after KURAMA spoke: it is for KURAMA if it greets it or clearly MEANS an action (calibrated on
 # stt.log 10-30..11-01: 'Hello, shut down the laptop.' power 0.88; room talk 0.65-0.72)

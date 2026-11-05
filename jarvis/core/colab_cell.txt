@@ -2,7 +2,8 @@
 # Keras:   model.fit(..., callbacks=[KuramaKeras()])        PyTorch: kurama(epoch=e, loss=l, acc=a) each epoch and
 #          `if kurama_should_stop(): break`                   HF Trainer: Trainer(..., callbacks=[KuramaCallback()])
 # At the end: kurama("done") ... and kurama_send("best.pt") sends a checkpoint to your laptop.
-# Optional: Colab Secrets (key icon) KURAMA_TG_TOKEN + KURAMA_TG_CHAT = alerts reach your phone even if the laptop is off.
+# Optional: secrets KURAMA_TG_TOKEN + KURAMA_TG_CHAT (Colab: key icon; Kaggle: Add-ons > Secrets) = alerts reach your
+# phone even if the laptop is off. Works in Google Colab and Kaggle (Kaggle: Internet on).
 import json, os, threading, time, urllib.request, _thread
 KURAMA_TOPIC, KURAMA_RUN, KURAMA_EVERY = "{topic}", "{run}", {every}
 _K = {"last": 0.0, "stop": False, "nan": False, "ctl": "", "tg": None, "files": {}}
@@ -10,7 +11,12 @@ try:
     from google.colab import userdata
     _K["tg"] = (userdata.get("KURAMA_TG_TOKEN"), userdata.get("KURAMA_TG_CHAT"))
 except Exception:
-    pass
+    try:  # Kaggle: Add-ons -> Secrets
+        from kaggle_secrets import UserSecretsClient
+        _ks = UserSecretsClient()
+        _K["tg"] = (_ks.get_secret("KURAMA_TG_TOKEN"), _ks.get_secret("KURAMA_TG_CHAT"))
+    except Exception:
+        pass
 
 
 def _k_post(data, headers=None, url=None):
@@ -37,6 +43,9 @@ def kurama(event="progress", force=False, **metrics):
     bad = [k for k, v in nums.items() if isinstance(v, float) and v != v and "loss" in k]
     if bad and not _K["nan"]:
         _K["nan"], event, force = True, "nan", True
+    ep = nums.get("epoch")
+    if isinstance(ep, float) and int(ep) != _K.get("ep"):  # a new epoch always gets through (else max 1 a minute)
+        _K["ep"], force = int(ep), force or _K.get("ep") is not None or ep >= 1
     if event == "progress" and not force and time.time() - _K["last"] < KURAMA_EVERY:
         return
     _K["last"] = time.time()

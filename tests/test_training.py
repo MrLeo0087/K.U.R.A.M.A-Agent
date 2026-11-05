@@ -165,11 +165,13 @@ def test_stalled_run_warns_once(tmp_path, monkeypatch):
 # --- Colab ---
 def test_colab_setup_events_and_silence(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "OUTPUTS_DIR", tmp_path / "out")
+    from pathlib import Path
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)  # never the owner's real Downloads
     out = registry.call("training", {"action": "colab", "label": "bert"}).output
     topic = store.kv_get("colab_topic")
-    cell = (tmp_path / "out" / "colab" / "kurama_colab_cell.py").read_text()
-    assert topic.startswith("kurama-") and len(topic) > 25 and f'"{topic}"' in cell and "KuramaCallback" in out
-    compile((tmp_path / "out" / "colab" / "kurama_colab_cell.py").read_text(), "cell", "exec")  # the saved cell is valid Python
+    cell = (tmp_path / "out" / "colab" / "kurama_link_cell.py").read_text()
+    assert topic.startswith("kurama-") and len(topic) > 25 and f'"{topic}"' in cell and "training status" in out
+    compile((tmp_path / "out" / "colab" / "kurama_link_cell.py").read_text(), "cell", "exec")  # the saved cell is valid Python
     msgs = [{"id": "a", "event": "start", "run": "bert"},
             {"id": "b", "event": "progress", "run": "bert", "epoch": 1, "loss": 0.8, "eval_accuracy": 0.7},
             {"id": "c", "event": "progress", "run": "bert", "epoch": 2, "loss": 0.5}]
@@ -294,3 +296,27 @@ def test_keep_awake_reaps_stale_blockers(monkeypatch):
     w = pw.ProcessWatcher()
     w.keep_awake(True)
     assert killed == [11] and started[0][-2:] == ["sleep", "600"]
+
+
+@pytest.mark.parametrize("platform", ["colab", "kaggle"])
+def test_the_training_notebook_is_complete_and_linked(tmp_path, monkeypatch, platform):
+    """11-05: 'Setup Google Colab Notebook' answered with generic tips, not the KURAMA link, and no .ipynb. Now one
+    ready notebook per platform: steps in words, GPU check, data, the link cell, a test, a full demo, Keras / HF."""
+    import ast
+    import json
+    from pathlib import Path
+    from jarvis.core import config
+    from jarvis.tools.general import training as tool
+    monkeypatch.setattr(config, "OUTPUTS_DIR", tmp_path / "out")
+    monkeypatch.setattr(config, "NOTEBOOK_COPY_DIR", tmp_path / "Downloads")
+    (tmp_path / "Downloads").mkdir()
+    out = tool.training(platform)
+    name = f"KURAMA_{platform}.ipynb"
+    assert str(tmp_path / "Downloads" / name) in out and "top to bottom" in out
+    nb = json.loads((tmp_path / "Downloads" / name).read_text())
+    text = "".join("".join(c["source"]) for c in nb["cells"])
+    codes = ["".join(c["source"]) for c in nb["cells"] if c["cell_type"] == "code"]
+    for src in codes:
+        ast.parse(src)  # every code cell is valid Python
+    assert "KURAMA is linked to this notebook" in text and "kurama_should_stop()" in text and "kurama_send(" in text
+    assert ("Import Notebook" in text and "Internet" in text) if platform == "kaggle" else "Upload notebook" in text
