@@ -2107,8 +2107,11 @@ def meaning_intent(text: str) -> Intent | None:
     # words no action knows (a name: 'whatsapp', 'watest') become X, like in the examples, so the name never pulls
     # the meaning away ('save this website names whatsapp' -> 'save this website names X')
     best = meaning_label(t)
-    if best is None or best[1] < config.MEANING_SHORTCUT_MIN_BY.get(best[0], config.MEANING_SHORTCUT_MIN):
+    if best is None:
         return None
+    if best[1] < config.MEANING_SHORTCUT_MIN_BY.get(best[0], config.MEANING_SHORTCUT_MIN) and not (
+            best[0] == "open_vscode" and best[1] >= config.MEANING_FOLDER_MIN and folder_in_words(raw) is not None):
+        return None  # (a folder that really exists, named in words, may be a little less close in meaning)
     label, score = best
     chat = next((s for g, s in semantic.scores(t) if g == semantic.CHAT), 0.0)
     if score < chat + config.SEMANTIC_OVER_CHAT:
@@ -2186,6 +2189,12 @@ def meaning_intent(text: str) -> Intent | None:
         else:
             it = Intent("links", "saved_links", "links", {"action": "save", **({"name": " ".join(extra)} if extra else {})})
         return it if meaning_ok(t, it) else None
+    if label == "open_vscode" and extra:  # a folder named in words: only one that really exists, else the AI
+        if (folder := folder_in_words(raw)) is None:
+            return None
+        it = Intent("openpath", "open_path", "files", {"path": str(folder), "app": "vscode"}, "VS Code",
+                    known=" ".join(extra))
+        return it if meaning_ok(t, it) else None
     if extra:  # something the examples don't cover: a number, a name, a place -> the AI
         return None
     if label == "list_links":
@@ -2230,6 +2239,55 @@ def meaning_intent(text: str) -> Intent | None:
     if label == "copy_path":
         return Intent("copypath", "write_clipboard", "clipboard", {"text": str(p)})
     return Intent("openpath", "open_path", "files", {"path": str(p), "app": "vscode"}, "VS Code")
+
+
+_FOLDER_GLUE = re.compile(r"\b(?:please|can\s+you|could\s+you|open(?:\s+up)?|launch|show|start|with|using|this|that|it|"
+                          r"the|a|an|my|there\s+is|there's|is|named?|called|folders?|director(?:y|ies)|dir|then|and|"
+                          r"inside|under|from|in|into|at|on|of|to|go|editor|code\s+editor)\b", I)
+
+
+def folder_in_words(text: str) -> Path | None:
+    """The real folder a request names, also as a path in words: 'from project1, then new project, there is the
+    folder Kurama' / 'the kurama folder in new project in project1' -> /media/leo/Project1/New_project/KURAMA.
+    The names left after the glue words are tried in both orders as 'X in Y in Z'; only a folder that exists and
+    is called like one of the names counts. None when nothing (or more than 4 names) is left."""
+    from jarvis.core.paths import smart_path
+    s = _FOLDER_GLUE.sub("|", _VSCODE_NAME.sub("|", text or ""))
+    names = [n.strip(" ,.!?'\"") for n in re.split(r"[|,.;!?]+", s)]
+    names = [n for n in names if n and not n.isspace()]
+    if not 1 <= len(names) <= 4:
+        return None
+
+    def key(x: str) -> str:
+        return re.sub(r"[\W_]+", "", x.lower())
+    for order in (names[::-1], names):
+        p = smart_path(" in ".join(order), want="dir")
+        if p is not None and p.is_dir() and key(p.name) in {key(n) for n in names}:
+            return _latest_alike(p, order, key)
+    return None
+
+
+def _latest_alike(p: Path, order: list[str], key) -> Path:
+    """Several folders fit ('kurama in project1': Project1/New_project/KURAMA and Project1/Test_project/KURAMA): the
+    one worked in most recently (its git index, else the folder itself, changed last), not the first one found."""
+    from jarvis.core import paths
+    top = paths.smart_path(order[-1], want="dir") if len(order) > 1 else None
+    bases = [top] if top is not None and top != p else paths.roots()
+    want = [key(n) for n in order]
+    alike = {p}
+    for b in bases:
+        for c in paths.find_children(b, p.name, depth=4, dirs_only=True, k=8):
+            if key(c.name) == key(p.name) and len(c.parts) == len(p.parts) and all(w in key(str(c)) for w in want):
+                alike.add(c)
+
+    def used(c: Path) -> float:
+        for f in (c / ".git" / "index", c):
+            try:
+                return f.stat().st_mtime
+            except OSError:
+                continue
+        return 0.0
+    return max(alike, key=used)
 
 
 def selection_intent(text: str) -> Intent | None:

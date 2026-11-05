@@ -1328,7 +1328,12 @@ MEANING_SHORTCUTS: dict[str, tuple[str, ...]] = {
                   "path copy gara"),
     "open_vscode": ("open this folder in vs code", "open vs code in this folder", "open the selected folder in code",
                     "open this file with visual studio code", "open the current folder in my code editor",
-                    "launch vscode here"),
+                    "launch vscode here",
+                    # a folder by name, also as a path in words (11-05: 'From the project1, then new project, there is
+                    # the folder name Kurama, open this folder in VS Code.' cost 3.8k tokens and saved a link)
+                    "open the X folder in vs code", "open X in vs code", "open the X folder from X in vs code",
+                    "in X open the X folder with vs code", "from X there is a folder X, open it in vs code",
+                    "open the X folder in the X project in vs code"),
     # X = the name the user gives: whatever words are left after the action's own words (none -> KURAMA asks)
     "save_link": ("save this link as X", "save this page as X", "store this website link as X", "bookmark this site "
                   "as X", "keep this page's link under the name X", "save this url with the name X",
@@ -1374,6 +1379,7 @@ MEANING_SHORTCUT_AREAS = {"save_link": "links", "list_links": "links", "read_lat
 MEANING_SHORTCUT_MIN = 0.82
 # actions that change everything on screen need more certainty ("show my screen" is not "go to the home screen": 0.86)
 MEANING_SHORTCUT_MIN_BY = {"show_desktop": 0.90}
+MEANING_FOLDER_MIN = 0.80  # 'open <a real folder named in words> in vs code': harmless, and the folder must exist
 # talk mode, speech long after KURAMA spoke: it is for KURAMA if it greets it or clearly MEANS an action (calibrated on
 # stt.log 10-30..11-01: 'Hello, shut down the laptop.' power 0.88; room talk 0.65-0.72)
 AMBIENT_ACTION_MIN = 0.80

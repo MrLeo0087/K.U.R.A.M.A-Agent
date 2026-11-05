@@ -1270,3 +1270,9 @@ Phases (one at a time, owner tests after each):
 - Hold-to-talk: the mic stays open (unused, nothing recorded) 15 s after a hold, so the next hold starts at once
   (a hold 2 s after another waited 2-5 s for the mic); Mic.start reopens with the right settings for talk mode.
 - Links: a pending "what should I call this link?" no longer takes 'Hi' / 'i' / thanks as the name.
+- (later) 'From the project1, then new project, there is the folder name Kurama, open this folder in VS Code.' (AI
+  plan of 4 steps, 3.8k tokens, opened/saved links): open_vscode now takes a folder named in words.
+  fastpath.folder_in_words() keeps the names left after glue words and tries them as 'X in Y in Z' in both
+  orders; only a real folder called like one of the names counts; several same-named folders at that level -> the
+  one worked in last (git index / mtime). A real named folder may be a little less close in meaning
+  (MEANING_FOLDER_MIN 0.80); 'what is vs code' still goes to the AI.

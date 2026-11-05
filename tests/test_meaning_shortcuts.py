@@ -37,7 +37,7 @@ def test_close_in_meaning_and_nothing_extra_runs_without_the_ai(meaning, text, l
 @pytest.mark.parametrize("text,label", [
     ("start job 2", "jobs_start"),                                  # which job: only the AI can pass it on
     ("start the jobs and send result to telegram", "jobs_start"),
-    ("open vs code from kurama folder from tara", "open_vscode"),   # names another folder
+    ("open vs code from zzqx folder from qqzz", "open_vscode"),   # names folders that do not exist
     ("copy the path of kurama folder", "copy_path"),
 ])
 def test_an_extra_detail_goes_to_the_ai(meaning, text, label):
@@ -152,3 +152,29 @@ def test_open_app_names_are_slots(monkeypatch):
     assert fastpath._mask_open_apps("minimize vs code") == "minimize X"
     assert fastpath._mask_open_apps("make youtube full screen") == "make X full screen"
     assert fastpath._mask_open_apps("minimize the window") is None
+
+
+def test_a_folder_named_in_words_is_found_for_vs_code(tmp_path, monkeypatch):
+    """11-05: 'From the project1, then new project, there is the folder name Kurama, open this folder in VS Code.'
+    was split into 4 AI steps (3.8k tokens) and saved a link. The words are a path; several same-named folders ->
+    the one worked in last."""
+    import os
+    import time
+    from jarvis.core import config, paths
+    new = tmp_path / "Project1" / "New_project" / "KURAMA"
+    old = tmp_path / "Project1" / "Test_project" / "KURAMA"
+    (new / ".git").mkdir(parents=True)
+    old.mkdir(parents=True)
+    (new / ".git" / "index").write_text("x")
+    past = time.time() - 86400
+    os.utime(old, (past, past))
+    monkeypatch.setattr(config, "SEARCH_ROOTS", [str(tmp_path)])
+    monkeypatch.setattr(config, "PATH_ALIASES", {})
+    monkeypatch.setattr(paths, "all_disks", lambda: [])
+    monkeypatch.setattr(focus, "cwd", lambda: None)
+    monkeypatch.setattr(focus, "refer", lambda t: None)
+    said = "From the project1, then new project, there is the folder name Kurama, open this folder in VS Code."
+    assert fastpath.folder_in_words(said) == new
+    assert fastpath.folder_in_words("open the kurama folder from project1 in vs code") == new  # the recent one
+    assert fastpath.folder_in_words("open the kurama folder in test project in vs code") == old
+    assert fastpath.folder_in_words("open the zzqx folder in vs code") is None
