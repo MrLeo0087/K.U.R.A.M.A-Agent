@@ -27,7 +27,14 @@ HELP = (
     "/battery — battery level and time left\n"
     "/ram — RAM, CPU, disk and KURAMA's memory\n"
     "/lockscreen — lock the laptop screen\n"
+    "/aod on | off — always-on display (keep the screen on); /aod alone = is it on?\n"
     "/jobs — background jobs\n"
+    "\n🤖 Claude Code (while you're away)\n"
+    "/claude on | off — watch it: a message when a task starts, asks something, finishes\n"
+    "/claude status — progress, time, what it's doing now + the screen\n"
+    "/claude report — every step, file and to-do of the task\n"
+    "/claude yes | no — answer its permission question\n"
+    "/claude say <next step> — tell it what to do next\n"
     "\n📷 Camera & screen\n"
     "/camera — a photo from the laptop camera\n"
     "/video [secs] — a short camera clip (e.g. /video 8)\n"
@@ -66,7 +73,8 @@ HELP = (
     "/clear — clear chat + reminders/alarms\n"
     "/reset — wipe everything (keeps password + settings)")
 # the Telegram "/" menu (setMyCommands): the commands you can't remember, one tap away
-MENU = (("list", "all commands"), ("status", "what the laptop is doing"), ("battery", "battery level"),
+MENU = (("list", "all commands"), ("status", "what the laptop is doing"), ("claude", "Claude Code: status / on / off / yes / no"),
+        ("aod", "always-on display: on / off"), ("battery", "battery level"),
         ("ram", "RAM / CPU / disk"), ("screen", "screenshot"), ("camera", "camera photo"), ("where", "laptop location"),
         ("mute", "pause alerts: /mute ram 20"), ("unmute", "turn alerts back on"), ("notifications", "which alerts are on / paused"),
         ("guard", "anti-theft on/off"), ("track", "lost mode on/off"), ("clip", "laptop clipboard"),
@@ -518,8 +526,8 @@ class TelegramBot(Worker):
                             f"Send '{cmd} yes' to do it.")
                 return reset.reset_all(self._agent)
             if cmd in ("/all", "/commands", "/command", "/kurama", "/list", "/help", "/menu"):
-                from jarvis.core import slash  # every command + every tool (the same list as the laptop chat)
-                return slash.help_text()
+                from jarvis.core import slash  # the phone's own commands, then every KURAMA command + tool (the same
+                return HELP + "\n\n" + slash.help_text()  # list as the laptop chat): nothing is ever left out
             if cmd in ("/start", "/?"):
                 return HELP
             if cmd in ("/battery", "/bat"):

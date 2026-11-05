@@ -85,6 +85,8 @@ COMMANDS: tuple[Cmd, ...] = (
     Cmd("dark", "dark mode", "Laptop", phrase="dark mode"),
     Cmd("light", "light mode", "Laptop", phrase="light mode"),
     Cmd("dnd", "do not disturb on / off", "Laptop", "[on|off]", phrase="do not disturb on|do not disturb {a}"),
+    Cmd("aod", "always-on display: keep the screen on (on / off; alone = status)", "Laptop", "[on|off]",
+        phrase="what is the status of always on display|turn {a} always on display", aliases=("caffeine", "awake")),
     Cmd("internet", "check / fix the internet", "Laptop", phrase="check my internet", aliases=("net", "wifi")),
     Cmd("clip", "clipboard history", "Laptop", phrase="show the clipboard history"),
     Cmd("jobs", "background jobs", "Laptop", tool=("jobs", "jobs", {"action": "list"}, "")),
@@ -174,6 +176,9 @@ COMMANDS: tuple[Cmd, ...] = (
     Cmd("lyrics", "write song lyrics", "Web & text", "<topic>", tool=("write_document", "jobs", {}, "request"),
         template="song lyrics about {a}"),
     Cmd("offline", "the commands that work without internet", "KURAMA"),
+    Cmd("claude", "watch Claude Code: on / off / status / report / yes / no / say <next step>", "Code",
+        "[on|off|status|report|yes|no|say]", tool=("claude_code", "dev", {"action": "status"}, "text"),
+        actions=("on", "off", "status", "report", "yes", "no", "say"), aliases=("claudecode", "cc")),
     Cmd("alerts", "recent alerts / which are muted", "KURAMA", phrase="notification status"),
 )
 _BY_NAME: dict[str, Cmd] = {}

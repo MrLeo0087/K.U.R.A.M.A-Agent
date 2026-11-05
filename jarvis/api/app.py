@@ -27,7 +27,7 @@ from fastapi.responses import JSONResponse
 from starlette.staticfiles import StaticFiles
 
 from jarvis.api import settings as settings_mod
-from jarvis.api.routes import chat, dash, info, metrics, voice, wake
+from jarvis.api.routes import chat, claude, dash, info, metrics, voice, wake
 from jarvis.api.security import Guard
 from jarvis.api.settings import Settings
 from jarvis.api.status import StatusCollector
@@ -86,6 +86,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 from jarvis.workers import inproc
                 inproc.start()
             threading.Thread(target=_recover_long_jobs, name="kurama-longjobs", daemon=True).start()
+            try:  # Claude Code watch: tasks seen before a restart come back (only while it is on)
+                from jarvis.core import claudewatch
+                claudewatch.load()
+            except Exception as e:  # noqa: BLE001
+                log.warning("claude watch load failed: %s", e)
             try:  # hold Right Ctrl anywhere, speak, let go (captions beside the KURAMA button)
                 from jarvis.core import ptt
                 ptt.start()
@@ -103,7 +108,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.engine = engine
     _share_token(s.token)
     app.state.status = StatusCollector(s, engine)
-    for r in (chat.router, voice.router, info.router, wake.router, dash.router, metrics.router):
+    for r in (chat.router, voice.router, info.router, wake.router, dash.router, metrics.router, claude.router):
         app.include_router(r)
 
     # Guard first, CORS last = CORS outermost: preflights answered, and 401/403 still carry CORS headers.

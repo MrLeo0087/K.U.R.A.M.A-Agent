@@ -1358,3 +1358,16 @@ Phases (one at a time, owner tests after each):
   Devanagari (any script, written as it is, plus an 'English:' line), dark/flat photos get contrast stretched, and a
   failed read is read again by the stronger vision chain (Gemini first).
 - 'can you share file to phone' sent the whole project folder: no file named -> asks which file.
+
+## 2026-11-06: Claude Code watch; /aod; every command listed
+- core/claudewatch.py + scripts/claude_hook.py + api/routes/claude.py + tools/general/claude_code.py: "/claude on|off|
+  status|report|yes|no|say" (and plain words: "watch my Claude Code", "what is Claude Code doing"...). Off by default;
+  on = a flag file + one hook in every ~/.claude*/settings.json (added once, backup kept; the hook checks the flag
+  first, so it does nothing while off). Events: start, each tool (steps, files, to-do from TodoWrite / Task events),
+  PermissionRequest (Telegram yes/no, the hook waits up to 10 min), Notification (waiting for input), Stop (final
+  message from the transcript), stuck after 10 quiet min. Status (+ screenshot on Telegram) / report at 0 tokens;
+  say = `claude -p --resume <session>` in the same folder and account. yes / say / status need the Telegram PIN.
+- /aod (aliases /caffeine, /awake): always-on display on / off / status; Telegram menu and phone list have /aod and
+  /claude; Telegram /list = the phone commands + every KURAMA command (it showed only the second half).
+  tests/test_claude_watch.py: every slash command is in /list, the suggestions and the menu.
+- yes_no: 'stop watching claude code' / 'cancel the timer' are commands, not a "no".

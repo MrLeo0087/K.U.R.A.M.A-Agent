@@ -82,6 +82,8 @@ def yes_no(t: str) -> str:
     if s[0] in ("ok", "okay", "alright", "sure", "fine") and len(s) > 1 and s[1] not in _YES_WORDS | _NO_WORDS | {
             "go", "do", "add", "please", "now", "then", "thanks", "thank", "bro", "kurama"}:
         return ""  # 'Ok, replace it.' is a new request, not a yes to the offer before it (ca0ed9c4 explained more)
+    if s[0] in ("stop", "cancel") and len(s) > 1 and s[1] not in ("it", "that", "this", "please", "now", "kurama"):
+        return ""  # 'stop watching claude code', 'cancel the timer': a command, not a "no" to a question
     if s[0] in _NO_WORDS or _NO_LEADS.match(joined):
         return "no"
     if s[0] in _YES_WORDS or _YES_LEADS.match(joined):

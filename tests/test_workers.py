@@ -391,10 +391,10 @@ def test_telegram_status_and_help(tg, monkeypatch):
     out = bot.answer("/status")
     assert "Laptop: RAM" in out and "essay about Nepal" in out  # /status = the full overview now
     from jarvis.core import slash  # /list and /help: every command and every tool (11-02, the owner's ask)
-    assert bot.answer("/help") == slash.help_text() and bot.answer("/start@JarvisBot") == telegram_bot.HELP
+    assert bot.answer("/help") == telegram_bot.HELP + "\n\n" + slash.help_text() and bot.answer("/start@JarvisBot") == telegram_bot.HELP
     assert "/camera" in telegram_bot.HELP and "/where" in telegram_bot.HELP  # the laptop-control list
-    assert bot.answer("give me all laptop control commands") in (telegram_bot.HELP, slash.help_text())
-    assert bot.answer("/list") == slash.help_text()  # /list = every command + every tool
+    assert bot.answer("give me all laptop control commands") in (telegram_bot.HELP, telegram_bot.HELP + "\n\n" + slash.help_text())
+    assert bot.answer("/list") == telegram_bot.HELP + "\n\n" + slash.help_text()  # phone commands + every command + tool
     assert "/camera" in slash.help_text() and "/where" in slash.help_text()
     for c in ("/mute", "/battery", "/ram", "/camera", "/screen", "/guard", "/track", "/clip", "/control", "/lock"):
         assert c in telegram_bot.HELP
@@ -465,7 +465,7 @@ def test_telegram_plain_words_work_like_slash_commands(tg, monkeypatch):
     bot = telegram_bot.TelegramBot()
     assert bot.answer("ram usage") == resource_guard.summary(dict(SNAP))  # same answer as /ram, 0 tokens
     from jarvis.core import slash
-    assert bot.answer("show all commands") == slash.help_text()
+    assert bot.answer("show all commands") == telegram_bot.HELP + "\n\n" + slash.help_text()
 
 
 def test_core_alert_says_kurama_and_one_model_process(monkeypatch):

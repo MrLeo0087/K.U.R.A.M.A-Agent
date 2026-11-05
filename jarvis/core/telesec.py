@@ -33,7 +33,7 @@ _RISKY = re.compile(
     r"camera|webcam|photo\s+(?:from|of)|selfie|/camera|/photo|/video|/vid|/rec|record\b|"
     r"screenshot|screen\s*shot|/screen|"
     r"where(?:'s| is)?\s+(?:my\s+)?laptop|/where|/locate|/here|/track|/history|location\s+of\s+(?:my\s+)?laptop|"
-    r"guard|/guard|"
+    r"guard|/guard|/claude\s+(?:yes|allow|say|status)\b|"
     r"kill\b|stop\s+(?:the\s+)?process|install\b|"
     r"remote\s+desktop|rust\s*desk|/control|control\s+(?:my\s+)?laptop|"
     # driving the laptop's screen (screen agent): clicking, typing, pressing keys, tasks "on screen"/"in <app>"

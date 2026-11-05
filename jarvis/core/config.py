@@ -350,6 +350,8 @@ ROUTER_MAX_GROUPS = 3
 # Free phrasing for tools: paraphrases embedded by the semantic router (0 tokens), so "enable speech to text
 # mode" finds dictate even though no keyword rule says so. Add a few lines here for any tool that gets missed.
 TOOL_EXAMPLES: dict[str, tuple[str, ...]] = {
+    "claude_code": ("watch my claude code", "what is claude code doing", "give me the claude code report",
+                    "stop watching claude code"),
     "nepal_docs": ("what is the fee for nepal citizenship", "what is the overspeeding rule in nepal",
                    "what is the divorce process in nepal", "which is the largest district of nepal"),
     "open_path": ("open this folder in vs code", "open downloads in vs code", "open main.py in vscode",
@@ -1359,6 +1361,14 @@ MEANING_SHORTCUTS: dict[str, tuple[str, ...]] = {
     "settings_reset": ("reset all settings", "reset my settings to default", "put every setting back to default"),
     "help_me": ("help me use kurama", "how do i use you", "i am confused how to use you", "what commands can i use",
                 "show me what you can do", "how do i use kurama"),
+    # the Claude Code watch (core/claudewatch.py), in plain words; the same as /claude on|off|status|report
+    "claude_on": ("watch my claude code", "start watching claude code", "turn on the claude code watch",
+                  "keep an eye on claude code", "watch claude code for me", "now watch the claude code"),
+    "claude_off": ("stop watching claude code", "turn off the claude code watch", "don't watch claude code anymore"),
+    "claude_status": ("what is claude code doing", "claude code status", "how is claude code going",
+                      "is claude code done", "what is happening in claude code", "how much has claude code done"),
+    "claude_report": ("give me the claude code report", "claude code report", "what did claude code do",
+                      "report of the claude code task"),
     # your own commands ("when I say X, do Y" saves one): list them, forget one (X = its words)
     "my_commands": ("show my commands", "list my custom commands", "what are my own commands",
                     "show the words i taught you", "list my words", "what commands did i teach you"),
@@ -1552,3 +1562,7 @@ NEPAL_DEVANAGARI_WORDS = ("संविधान", "कानुन", "कान
                           "जिल्ला", "प्रदेश", "विवाह", "बिहे", "सम्बन्ध विच्छेद", "पारपाचुके", "लाइसेन्स", "अनुमतिपत्र",
                           "मालपोत", "जग्गा", "अदालत", "मुद्दा", "सजाय", "जरिवाना", "दस्तुर", "शुल्क", "प्रक्रिया", "अंशबण्डा",
                           "नेपालको", "नेपाल")
+
+# --- Claude Code watch (core/claudewatch.py; '/claude on|off|status|report|yes|no|say') ---
+CLAUDE_ANSWER_WAIT_S = 600.0  # a permission question waits this long for your Telegram answer, then the laptop asks
+CLAUDE_STUCK_S = 600.0  # a working task silent this long: one "⚠️ quiet" message
