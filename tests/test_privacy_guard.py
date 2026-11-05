@@ -64,5 +64,7 @@ def test_a_bare_yes_is_never_a_selection_or_meaning_action(monkeypatch, reply):
     monkeypatch.setattr(semantic, "ready", lambda: True)
     monkeypatch.setattr(semantic, "scores", lambda t: [("clipboard", 0.9)])
     monkeypatch.setattr(semantic, "best_of", lambda t, n, table: (next(iter(table)), 0.95))
+    from jarvis.core import querykind
+    monkeypatch.setattr(querykind, "opening_kind", lambda text: None)  # (its own test: test_self_knowledge.py)
     assert fastpath.selection_intent(reply) is None
     assert fastpath.match(reply) is None

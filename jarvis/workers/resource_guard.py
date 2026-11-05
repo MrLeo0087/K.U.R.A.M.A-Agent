@@ -180,6 +180,10 @@ class ResourceGuard(Worker):
             say = lambda m: _SAY.get(m, m)  # noqa: E731 - the user hears "KURAMA core", never "jarvis_core"
             parts = [f"{say(m)} {checks(snap)[m][0]:.0f}{checks(snap)[m][2]} (limit {checks(snap)[m][1]:.0f})"
                      for m in fired]
+            tip = ""
+            if any(m in ("ram", "swap", "jarvis_core") for m in fired):  # the fix, as a 0-token command (and "yes")
+                from jarvis.core import nextstep
+                tip = " " + nextstep.offer("clean my ram", "Say 'clean my RAM' (or yes) to free memory.")
             notify.notify("Resource alert: " + ", ".join(map(say, fired)),
-                          f"{'; '.join(parts)}. Top memory: {hogs}.", level="warning", source="resource_guard")
+                          f"{'; '.join(parts)}. Top memory: {hogs}.{tip}".rstrip(), level="warning", source="resource_guard")
         return fired

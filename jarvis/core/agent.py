@@ -1013,6 +1013,28 @@ class Agent:
                 self.last.setdefault("jobs", []).extend(res.jobs)  # the UI watches and announces them
         return res
 
+    def _with_next(self, fast: Any) -> str:
+        """The answer + the next step it offers ("Say yes to send it to your Telegram"), 0 tokens."""
+        from jarvis.core import nextstep
+        line = nextstep.after(fast.intent.tool, fast.ok, fast.answer)
+        if not line:
+            if fast.intent.tool not in nextstep.KEEP_OFFER_FOR:
+                nextstep.drop()  # an old offer never answers a later "yes"
+            return fast.answer
+        return f"{fast.answer} {line}"
+
+    def _take_offer(self, text: str, lang: str | None, mode: str) -> str | None:
+        """A bare "yes" to the last offer: run the offered instant command (0 tokens)."""
+        from jarvis.core import nextstep
+        command = nextstep.take(text)
+        if not command:
+            return None
+        res = self._fast(command, lang, mode)
+        if res is None:
+            return None
+        self._remember(text, res.answer)
+        return res.answer
+
     BARE = {"yes": "There's nothing waiting for a yes right now. What should I do?",
             "no": "Okay, nothing to cancel right now."}
 
@@ -1058,8 +1080,11 @@ class Agent:
         self._begin_turn(user_text)
         fast = self._fast(user_text, lang, mode)
         if fast is not None:
-            self._remember(user_text, fast.answer)
-            return fast.answer
+            answer = self._with_next(fast)
+            self._remember(user_text, answer)
+            return answer
+        if (took := self._take_offer(user_text, lang, mode)) is not None:
+            return took
         if (bare := self._bare_answer(user_text)) is not None:
             return bare
         if (again := self._unheard(user_text, mode)) is not None:
@@ -1069,6 +1094,7 @@ class Agent:
         try:
             final = self.graph.invoke(self._state(user_text, mode, lang, False), self._config())
             answer = final.get("answer") or NO_ANSWER
+            answer += self._stuck_hint(user_text, answer)
         except llm.LLMError as e:
             log.warning("agent run failed: %s", e)
             self.last["error"] = str(e)[:300]
@@ -1099,8 +1125,12 @@ class Agent:
         self._begin_turn(user_text)
         fast = self._fast(user_text, lang, mode)
         if fast is not None:
-            self._remember(user_text, fast.answer)
-            yield fast.answer
+            answer = self._with_next(fast)
+            self._remember(user_text, answer)
+            yield answer
+            return
+        if (took := self._take_offer(user_text, lang, mode)) is not None:
+            yield took
             return
         if (bare := self._bare_answer(user_text)) is not None:
             yield bare
@@ -1158,7 +1188,21 @@ class Agent:
                 abort.set()  # stopped early (barge-in / error): tell the graph thread to quit
                 # a cut-off reply is not kept: one-word answers in history teach the model to answer in one word
         if final and final.get("answer"):
+            if hint := self._stuck_hint(user_text, final["answer"]):
+                final["answer"] += hint
+                yield hint
             self._remember(user_text, final["answer"])
+
+    _CANT = re.compile(r"\b(?:i\s+(?:can(?:no|')t|cannot|couldn'?t|am\s+not\s+able|don'?t\s+have\s+(?:a\s+)?(?:tool|way|"
+                       r"access|abilit))|not\s+(?:able|possible)\s+(?:to|for\s+me)|no\s+tool)", re.I)
+
+    def _stuck_hint(self, text: str, answer: str) -> str:
+        """The AI couldn't do it and used no tool: the closest instant command to say instead (0 tokens)."""
+        if self.last.get("tools") or not self._CANT.search(answer or ""):
+            return ""
+        from jarvis.core import nextstep
+        line = nextstep.stuck(text)
+        return f" {line}" if line else ""
 
 
 _default: Agent | None = None

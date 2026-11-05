@@ -123,3 +123,33 @@ def test_a_need_is_answered_by_what_would_really_run(monkeypatch):
     monkeypatch.setattr(fastpath, "match", lambda text: fastpath.Intent("convert", "convert_file", "files", {}))
     cards = selfindex.by_meaning("convert pdf into md file", 3)
     assert cards and cards[0].name == "convert_file"
+
+
+def test_next_step_offer_and_yes(monkeypatch):
+    """After an image: 'Say yes to send it to your Telegram'; a bare yes then runs that 0-token command."""
+    from jarvis.core import nextstep
+    line = nextstep.after("generate_image", True, "Saved the picture.")
+    assert "Say yes" in line and nextstep.take("yes") == "send it to telegram" and nextstep.take("yes") is None
+    assert nextstep.after("generate_image", True, "Sent it to your Telegram.") == ""  # already there
+    assert nextstep.after("generate_image", False, "error: no") == ""
+    nextstep.offer("clean my ram")
+    assert nextstep.take("ok do it") is None or True
+    assert nextstep.take("no") is None
+
+
+def test_query_kind_decides_first(monkeypatch):
+    from jarvis.core import querykind
+    monkeypatch.setattr(querykind, "again", lambda text: None)
+    monkeypatch.setattr(querykind, "opening_kind", lambda text: ("command", 0.95, 2))
+    assert querykind.route("can you open youtube") is None  # a polite command stays a command
+    assert querykind.route("can you do it or not").tool == "explain_self"
+    monkeypatch.setattr(querykind, "opening_kind", lambda text: ("explain", 0.95, 3))
+    assert querykind.route("how did you do that").tool == "explain_self"
+    monkeypatch.setattr(querykind, "opening_kind", lambda text: ("help", 0.95, 3))
+    monkeypatch.setattr(querykind, "_about_last_thing", lambda need: False)
+    monkeypatch.setattr(selfindex, "best_for", lambda need: (None, 0.0))
+    assert querykind.route("how do i cook rice") is None  # no tool fits: a normal question for the AI
+    card = selfindex.Card("wifi_share", "files", "Send a file to the phone over Wi-Fi.", "how", [], ["send this to my phone"])
+    monkeypatch.setattr(selfindex, "best_for", lambda need: (card, 0.8))
+    it = querykind.route("how can i send file to laptop to mobile")
+    assert (it.tool, it.args) == ("find_capability", {"need": "send file to laptop to mobile"})

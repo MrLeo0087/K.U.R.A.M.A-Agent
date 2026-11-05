@@ -82,6 +82,8 @@ def test_make_a_folder_then_open_it_in_vs_code(files, q, monkeypatch):
     from jarvis.core import semantic
     monkeypatch.setattr(semantic, "ready", lambda: True)  # the meaning model picks 'open in VS Code' (the scorecard
     monkeypatch.setattr(semantic, "best_of", lambda t, n, table: ("open_vscode", 0.95))  # checks the real one)
+    from jarvis.core import querykind
+    monkeypatch.setattr(querykind, "opening_kind", lambda text: None)  # the fake model would call it a help request
     monkeypatch.setattr(semantic, "scores", lambda t: [(semantic.CHAT, 0.5)])
     workmem.record_call("make_folder", {"path": str(files.folder)}, True, f"Made {files.folder}")
     it = fastpath.match(q)

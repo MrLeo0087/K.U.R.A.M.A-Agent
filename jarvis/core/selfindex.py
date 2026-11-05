@@ -20,6 +20,7 @@ class Card:
     settings: list[str]
     say: list[str]
     direct: bool = False  # saying the need itself runs this tool (the instant shortcut matched it)
+    score: float = 0.0  # how sure: 1.0 when direct, else the closeness of its description / examples
 
     def short(self) -> str:
         """What it does in a few words, for the owner ('Send a file or folder to the phone over Wi-Fi')."""
@@ -139,10 +140,19 @@ def by_meaning(text: str, k: int = 3) -> list[Card]:
         if (b := semantic.best_of(text, "toolcard:" + n, {n: exs})) is not None:
             scored.append((b[1], n))
     scored.sort(reverse=True)
+    sure = {n: s for s, n in scored}
     cards = cards_for(first + [n for s, n in scored if s >= 0.5])[:k]
+    for c in cards:
+        c.score = sure.get(c.name, 0.0)
     if first and cards and cards[0].name == first[0]:
-        cards[0].direct = True
+        cards[0].direct, cards[0].score = True, 1.0
     return cards
 
 
-_SELF_TOOLS = {"find_capability", "help_me", "explain_self", "kurama_settings", "about_me"}
+def best_for(need: str) -> tuple[Card | None, float]:
+    """The one tool for a need and how sure (1.0 = saying it runs it)."""
+    cards = by_meaning(need, 1)
+    return (cards[0], cards[0].score) if cards else (None, 0.0)
+
+
+_SELF_TOOLS = {"find_capability", "help_me", "explain_self", "kurama_settings", "about_me", "make_tool"}

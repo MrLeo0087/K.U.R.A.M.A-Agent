@@ -232,9 +232,6 @@ def test_one_time_values_keep_and_generic_open():
     assert fastpath._alike_name("kurama", ["kurma"]) and not fastpath._alike_name("kurama", ["tara"])
 
 
-def test_a_capability_question_is_answered_not_done(meaning):
-    meaning.update(label="capability_ask", score=0.95)
-    it = fastpath.meaning_intent("do you have the ability to convert pdf into md file")
-    assert (it.tool, it.args) == ("find_capability", {"need": "convert pdf into md file"})
+def test_make_it_permanent(meaning):  # (capability questions: core/querykind.py, test_self_knowledge.py)
     meaning.update(label="setting_keep", score=0.95)
     assert fastpath.meaning_intent("make it permanent").args == {"action": "keep"}

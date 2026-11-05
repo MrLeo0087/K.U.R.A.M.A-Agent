@@ -40,17 +40,31 @@ _LONGNUM = re.compile(r"#\d{4,}\b|\b\d{7,}\b|\b(?=[0-9a-f]*\d)[0-9a-f]{12,}\b")
 
 def clean_for_speech(text: str) -> str:
     """Strip markdown, code, links and emojis that sound bad when read aloud."""
+    text = re.sub(r"\s*(?:->|=>|→)\s*", " to ", text or "")  # before '>' is dropped as markdown
+    text = re.sub(r"\s+>\s+", " then ", text)  # 'File > Upload notebook'
     text = _FENCE.sub(" (code omitted) ", text)
     text = re.sub(r"`([^`]*)`", r"\1", text)
     text = re.sub(r"!?\[([^\]]+)\]\([^)]+\)", r"\1", text)  # [label](url) -> label
-    text = re.sub(r"https?://\S+", "a link", text)
-    text = _PATH.sub("", text)
+    text = re.sub(r"https?://\S+?(?=[.,;)]?(?:\s|$))", "a link", text)
+    text = re.sub(r"\ba link\s+(?=[A-Z])", "a link. ", text)
+    text = _PATH.sub(lambda m: "." if m.group(0).endswith(".") else "", text)  # a path ending a sentence keeps its full stop
     text = _LONGNUM.sub("", text)
     text = re.sub(r"^\s*#{1,6}\s*", "", text, flags=re.M)  # headings
     text = re.sub(r"^\s*(?:[-*+•]|\d+[.)])\s+", "", text, flags=re.M)  # list bullets/numbers
     text = re.sub(r"[*_~>|#]+", "", text)
     text = _EMOJI.sub("", text)
     text = re.sub(r"\s*°\s*C\b", " degrees", text)
+    # what removing paths / links / ids leaves behind ("open (also at )", "Saved to .", "( , )"), and signs that
+    # are read out letter by letter ('->', ' / ', 'e.g.')
+    text = re.sub(r"\s+/\s+", ", ", text)
+    text = re.sub(r"\be\.g\.", "for example", text, flags=re.I)
+    text = re.sub(r"\b(?:also\s+)?(?:at|in|to|from)\s*(?=[)\].,;:]|$)", "", text)
+    for _ in range(2):
+        text = re.sub(r"[(\[]\s*[,;:.]*\s*[)\]]", "", text)
+    text = re.sub(r":\s*(?=\()", " ", text)  # 'ready: (also in the workspace)'
+    text = re.sub(r"\s+([,.;:!?])", r"\1", text)
+    text = re.sub(r"\.(?:\s*\.)+", ".", text)
+    text = re.sub(r"([,;:])\s*(?=[,;:.!?])", "", text)
     return re.sub(r"\s+", " ", text).strip()
 
 

@@ -1788,6 +1788,9 @@ def match(text: str) -> Intent | None:
         return Intent("choice", tool, registry_group(tool), args)
     if (played := player_intent(text)) is not None:  # 'pause' / 'continue' while KURAMA's music is on
         return played
+    from jarvis.core import querykind
+    if (qk := querykind.route(text)) is not None:  # help / explain / 'run it again with ...': decided FIRST, by the
+        return qk  # request's kind, so 'how can I send a file to my phone' is never done, only answered
     if (win := _window_first(text)) is not None:  # 'restore vs code' was read as a question about the open file
         return win
     it = app_name_intent(text) or style_intent(text) or new_project_intent(text) or ranked_files_intent(text) \
@@ -2052,31 +2055,11 @@ def meaning_label(t: str) -> tuple[str, float] | None:
         wb = semantic.best_of(apps, "window_shortcuts", win)
         if wb and (best is None or wb[1] > best[1]):
             best = wb
-    if (op := _opening(t)) is not None and (best is None or op[1] > best[1]):
-        best = op
     if (mine := _mask_my_commands(t)) is not None:  # one of the owner's saved commands named: it is the X
         fb = semantic.best_of(mine, "my_command_forget", {"my_command_forget": config.MEANING_SHORTCUTS["my_command_forget"]})
         if fb and (best is None or fb[1] > best[1]):
             best = fb
     return best
-
-
-def _opening(t: str) -> tuple[str, float] | None:
-    """The meaning of how the request STARTS (its first 3-6 words) against config.MEANING_OPENINGS: 'do you ahve
-    abality to convery pdf into md file' is a capability question whatever the need is (it converted a file, 5.3k
-    tokens). Only a close opening counts."""
-    from jarvis.core import semantic
-    toks = re.findall(r"[\w'.+#-]+", t or "")
-    if len(toks) < 4:
-        return None
-    best = None
-    for k in (3, 4, 5, 6):
-        if k >= len(toks):
-            break
-        b = semantic.best_of(" ".join(toks[:k]), "meaning_openings", config.MEANING_OPENINGS)
-        if b and (best is None or b[1] > best[1]):
-            best = b
-    return best if best and best[1] >= config.MEANING_OPENING_MIN else None
 
 
 def _mask_my_commands(t: str) -> str | None:
@@ -2101,8 +2084,7 @@ def _window_first(text: str) -> Intent | None:
     t = " ".join((text or "").split()).strip(" .!?")
     best = meaning_label(t)
     first = {**{w: 0.95 for w in _WINDOW_LABELS}, "my_command_forget": 0.95, "setting_change": 0.88,
-             "explain_last": 0.88 if _about_last(t) and re.search(r"\b(?:you|your)\b|\buse\s+(?:it|that|this)\b", t, I)
-             else 0.97, "help_me": 0.93, "capability_ask": 0.89,
+             "help_me": 0.93,
              "setting_keep": 0.92}
     if not best or best[0] not in first or best[1] < first[best[0]]:
         return None  # (actions whose X is checked against what really exists: an open window, a saved command, a
@@ -2167,8 +2149,7 @@ def meaning_intent(text: str) -> Intent | None:
         return None
     if best[1] < config.MEANING_SHORTCUT_MIN_BY.get(best[0], config.MEANING_SHORTCUT_MIN) and not (
             best[0] == "open_vscode" and best[1] >= config.MEANING_FOLDER_MIN and folder_in_words(raw) is not None) \
-            and not (best[0] == "setting_change" and best[1] >= config.MEANING_SETTING_MIN) \
-            and not (best[0] == "explain_last" and best[1] >= config.MEANING_EXPLAIN_MIN and _about_last(raw)):
+            and not (best[0] == "setting_change" and best[1] >= config.MEANING_SETTING_MIN):
         return None  # (a real folder / a real setting with a valid value may be a little less close in meaning:
         #              the slot is checked below, and nothing runs unless it is real)
     label, score = best

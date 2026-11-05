@@ -1331,3 +1331,17 @@ Phases (one at a time, owner tests after each):
   decided the same way a request is (selfindex.by_meaning: the instant shortcut that would run it, else the router's
   areas, then meaning inside them; description-only ranking said 'lock the screen' for 'read my screen'); "just say
   <your words>" only when your words really run it. help_me(topic) = that answer (its list went to the workspace).
+
+## 2026-11-05 (night): request kinds first, next-step offers, speakable replies, LEARN.md rebuilt
+- core/querykind.py decides the KIND before any tool (first 2-5 words by meaning, config.QUERY_OPENINGS): command
+  ("can you…": done), help / ability ("how can I…", "do you have the ability…": the words to say, decided like a
+  real request; a how-to no tool fits goes to the AI), explain ("how did you…"), again ("run it for 30 seconds":
+  the last request with the new value). Replaces the scattered capability/help/explain thresholds (the loose
+  explain match took "can you tell me what you know about me"). A bare yes/no is never a kind.
+- core/nextstep.py: after an image / screenshot / document "Say yes to send it to your Telegram"; RAM alert "Say yes
+  to clean your RAM"; a bare yes within 3 min runs that instant command (0 tokens); when the AI can't and used no
+  tool, the closest instant command is suggested. (jarvis/core/suggest.py, the chat chips, is unchanged.)
+- tts.clean_for_speech: no "( )", "Saved to ." or "File > Upload" leftovers; arrows and " / " read naturally.
+- LEARN.md rebuilt in four parts: 1 plain words (story, real examples, problems solved), 2 technologies + plan,
+  3 the code in reading order (26 stops) + every file (generated: scripts/file_guide.py, make files-guide),
+  4 the technical details (old sections, renumbered).

@@ -78,7 +78,7 @@ def test_whisper_hallucinations_and_unspoken_text():
     assert stt.is_hallucination("KURAMA, KURAMA, VS Code, Brave, YouTube, Kathmandu, Pokhara.")
     assert not stt.is_hallucination("open VS Code and YouTube")
     assert tts.clean_for_speech("• /home/leo/newproject/src/main.py") == ""
-    assert tts.clean_for_speech("Saved job 1234567 ✅ to ~/a/b.md") == "Saved job to"
+    assert tts.clean_for_speech("Saved job 1234567 ✅ to ~/a/b.md") == "Saved job"
     assert tts.clean_for_speech("18% of 2500 = 450") == "18% of 2500 = 450"
 
 

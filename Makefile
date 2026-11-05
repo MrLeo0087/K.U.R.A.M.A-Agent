@@ -2,7 +2,7 @@
 BIN ?= venv/bin/
 PY := $(BIN)python
 .DEFAULT_GOAL := help
-.PHONY: help install install-dev lint lint-all type js-check test test-fast cov eval check run on off restart status report rss metrics new-tool new-memory new-agent
+.PHONY: help install install-dev lint lint-all type js-check test test-fast cov eval check run on off restart status report rss metrics new-tool new-memory new-agent files-guide
 
 help:  ## list the commands
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-10s %s\n", $$1, $$2}'
@@ -73,3 +73,6 @@ new-memory:  ## skeleton of a new memory source + its test: make new-memory NAME
 
 new-agent:  ## skeleton of a new agent (folder, tools, test): make new-agent NAME=study
 	$(PY) scripts/new_plugin.py agent $(NAME)
+
+files-guide:  ## refresh LEARN.md's "every file" list from each file's own description
+	$(PY) scripts/file_guide.py
