@@ -1126,9 +1126,13 @@ MUTE_ALL_KEEPS = ("scheduler", "timer", "guard", "goals")
 MUTE_DEFAULT_MIN = 30.0  # 'mute alerts' without a time (owner: never mute for life)
 MUTE_MAX_MIN = 24 * 60.0  # no mute lasts longer than a day
 # Telegram remote control (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID from .env; skipped when empty)
-TELEGRAM_PHOTO_KEEP_KB = 200  # photos bigger than this are resized to TELEGRAM_PHOTO_PX JPEG before the upload
-TELEGRAM_PHOTO_TARGET_KB = 150  # a photo is re-saved at lower JPEG quality until it is about this small
-TELEGRAM_PHOTO_PX = 1280  # what Telegram shows anyway (it recompresses photos): a slow uplink sends ~150 KB, not MBs
+TELEGRAM_PHOTO_KEEP_KB = 500  # photos bigger than this are resized to TELEGRAM_PHOTO_PX JPEG before the upload
+TELEGRAM_PHOTO_TARGET_KB = 450  # a photo is re-saved at lower JPEG quality until it is about this small
+TELEGRAM_PHOTO_PX = 1920  # a screenshot at full laptop width stays readable (1280 px q55 was blurry text); the
+#                           real uplink to Telegram is 230-380 KB/s (11-06): ~450 KB = ~1.5 s. The old "slow uplink"
+#                           was IPv6 connections hanging (TELEGRAM_IPV4), not the bandwidth
+TELEGRAM_PHOTO_QUALITY = 85  # JPEG quality for screenshots / photos to the phone (lower only if still too big)
+TELEGRAM_IPV4 = True  # talk to Telegram over IPv4 only (IPv6 to api.telegram.org hangs here 1 time in 4)
 TELEGRAM_POLL_TIMEOUT_S = 6  # long-poll seconds (short so Ctrl+C stops the workers quickly)
 TELEGRAM_CONFIRM_TIMEOUT_S = 60.0  # "Reply yes/no": no answer in time means no
 TELEGRAM_ANSWER_TIMEOUT_S = 90.0  # a reply that takes longer than this is given up on (no "typing" forever)

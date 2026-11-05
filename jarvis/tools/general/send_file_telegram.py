@@ -227,7 +227,7 @@ def _small_photo(p: Path) -> bytes:
         with Image.open(io.BytesIO(raw)) as im:
             im = im.convert("RGB")
             im.thumbnail((config.TELEGRAM_PHOTO_PX, config.TELEGRAM_PHOTO_PX))
-            for q in (80, 68, 55):  # the slow uplink to Telegram (8-150 KB/s, 11-04): aim for <= ~150 KB
+            for q in (config.TELEGRAM_PHOTO_QUALITY, 75, 62):  # sharp first; smaller only for a huge photo
                 out = io.BytesIO()
                 im.save(out, "JPEG", quality=q, optimize=True)
                 if out.tell() <= config.TELEGRAM_PHOTO_TARGET_KB * 1024:

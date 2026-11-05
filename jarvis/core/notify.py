@@ -45,12 +45,20 @@ def telegram_configured() -> bool:
     return bool(config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID)
 
 
+def _transport():
+    """IPv4 only for Telegram (config.TELEGRAM_IPV4): on this network 1 of 4 IPv6 connections to api.telegram.org
+    hangs for 20 s+ (measured 11-06: curl -6 20.0 s twice in 8, IPv4 0.6 s every time), and httpx doesn't fall back
+    to IPv4 by itself. That hang was the "screenshot arrives after a minute"."""
+    import httpx  # lazy
+    return httpx.HTTPTransport(local_address="0.0.0.0", retries=1) if config.TELEGRAM_IPV4 else None
+
+
 def _http():
     global _client
     if _client is None:
         import httpx  # lazy
 
-        _client = httpx.Client(timeout=config.HTTP_TIMEOUT_S + config.TELEGRAM_POLL_TIMEOUT_S + 5)
+        _client = httpx.Client(timeout=config.HTTP_TIMEOUT_S + config.TELEGRAM_POLL_TIMEOUT_S + 5, transport=_transport())
     return _client
 
 
@@ -63,7 +71,7 @@ def _upload_http():
     if _upload_client is None:
         import httpx  # lazy
 
-        _upload_client = httpx.Client(timeout=httpx.Timeout(60.0, connect=10.0))
+        _upload_client = httpx.Client(timeout=httpx.Timeout(60.0, connect=10.0), transport=_transport())
     return _upload_client
 
 
@@ -72,7 +80,7 @@ def _upload(url: str, payload: dict | None, files: dict, timeout: float | None):
     data = {k: str(v) for k, v in (payload or {}).items()}
     for attempt in (1, 2):  # a CONNECT failure sent nothing, so one more try can't make a duplicate
         try:
-            with httpx.Client(timeout=httpx.Timeout(timeout or 60, connect=8.0)) as c:
+            with httpx.Client(timeout=httpx.Timeout(timeout or 60, connect=8.0), transport=_transport()) as c:
                 return c.post(url, data=data, files=files)
         except (httpx.ConnectError, httpx.ConnectTimeout):
             if attempt == 2:
