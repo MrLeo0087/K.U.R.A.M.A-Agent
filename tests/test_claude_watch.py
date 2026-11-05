@@ -49,8 +49,8 @@ def test_a_task_from_start_to_finish(told, tmp_path):
     ev("PostToolUse", tool_name="Edit", tool_input={"file_path": "/home/leo/KURAMA/jarvis/core/x.py"})
     ev("PostToolUse", tool_name="Bash", tool_input={"command": "pytest -q tests/test_x.py"})
     card = cw.status()
-    assert "🤖 Claude Code: working" in card and "To-do: 1 of 3 done" in card and "▶️ Now: add tests" in card
-    assert "ran: pytest -q tests/test_x.py" in card and "edited x.py" in card
+    assert card.startswith("🤖 Claude Code is working (KURAMA)") and "Progress: 1 of 3 parts done" in card
+    assert "Right now: add tests." in card and "ran the tests" in card and "changed x.py" in card
     transcript = tmp_path / "t.jsonl"
     transcript.write_text(json.dumps({"type": "assistant", "message": {"content": [
         {"type": "text", "text": "All done: the service works and the tests pass."}]}}) + "\n")
@@ -58,7 +58,7 @@ def test_a_task_from_start_to_finish(told, tmp_path):
     assert told[-1][0] == "✅ Claude Code finished" and "1 files changed" in told[-1][1]
     assert "All done: the service works" in told[-1][1]
     rep = cw.report()
-    assert "📋 To-do list:" in rep and "📄 Files changed:" in rep and "x.py" in rep and "🧾 Steps:" in rep
+    assert "Its plan:" in rep and "Files it changed:" in rep and "x.py" in rep and "What it did, in order:" in rep
     cw.turn_off()
 
 
@@ -66,9 +66,9 @@ def test_a_permission_question_waits_for_the_answer(told):
     cw.turn_on()
     out = ev("PermissionRequest", tool_name="Bash", tool_input={"command": "npm install"})
     qid = out["wait"]
-    assert told[-1][0] == "❓ Claude Code needs your OK" and "ran: npm install" in told[-1][1]
+    assert told[-1][0] == "❓ Claude Code needs your OK" and "installed something: npm install" in told[-1][1]
     assert cw.decision(qid) == "" and "Waiting" not in cw.status()
-    assert cw.answer(True).startswith("Allowed: ran: npm install")
+    assert cw.answer(True).startswith("Allowed: installed something: npm install")
     assert cw.decision(qid) == "allow" and cw.answer(False) == "Claude Code isn't waiting for an answer right now."
     cw.turn_off()
 
@@ -116,3 +116,27 @@ def test_every_command_is_listed_everywhere():
     menu = [c for c, _ in tb.menu()]
     assert "aod" in menu and "claude" in menu and len(menu) <= 100
     assert time.time() > 0
+
+
+def test_stop_reaches_claude_code_at_its_next_step(told, monkeypatch):
+    monkeypatch.setattr(cw, "install_hooks", lambda: "")
+    cw.turn_on()
+    ev("UserPromptSubmit", prompt="a long task")
+    assert cw.stop().startswith("Stopping Claude Code")
+    out = ev("PreToolUse", tool_name="Bash", tool_input={"command": "pytest"})
+    assert out == {"stop": "Stopped by the owner from KURAMA."} and told[-1][0] == "⏹ Claude Code stopped"
+    assert "was stopped" in cw.status() and cw.stop() == "Claude Code isn't working on anything right now."
+    cw.turn_off()
+
+
+def test_usage_reads_its_own_conversation_files(told, tmp_path, monkeypatch):
+    acc = tmp_path / ".claude-x"
+    (acc / "projects" / "p").mkdir(parents=True)
+    import time as _t
+    today = _t.strftime("%Y-%m-%d")
+    rows = [{"timestamp": f"{today}T10:00:00Z", "message": {"model": "claude-opus-5-5", "usage": {
+        "input_tokens": 1000, "output_tokens": 2500, "cache_read_input_tokens": 40000}}}] * 3
+    (acc / "projects" / "p" / "s9.jsonl").write_text("\n".join(json.dumps(r) for r in rows))
+    monkeypatch.setattr(cw, "settings_files", lambda: [acc / "settings.json"])
+    out = cw.usage()
+    assert "Today: 1 conversations, 3 replies, 8k written, 123k read" in out and "claude-opus-5-5" in out

@@ -35,6 +35,8 @@ HELP = (
     "/claude report — every step, file and to-do of the task\n"
     "/claude yes | no — answer its permission question\n"
     "/claude say <next step> — tell it what to do next\n"
+    "/claude stop — stop it now (it stops at its next step)\n"
+    "/claude usage — how much Claude Code was used today\n"
     "\n📷 Camera & screen\n"
     "/camera — a photo from the laptop camera\n"
     "/video [secs] — a short camera clip (e.g. /video 8)\n"

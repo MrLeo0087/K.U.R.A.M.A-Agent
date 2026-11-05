@@ -36,8 +36,9 @@ _lock = threading.Lock()
 _sessions: dict[str, dict] = {}  # session id -> its state (kept while the watch is on; saved in data/)
 _questions: dict[str, dict] = {}  # question id -> {"session", "what", "answer", "t"}
 _stuck_thread: threading.Thread | None = None
+_stop_asked: dict[str, float] = {}  # session id -> when the owner asked it to stop
 
-HOOK_EVENTS = ("SessionStart", "UserPromptSubmit", "PostToolUse", "PostToolUseFailure", "PermissionRequest",
+HOOK_EVENTS = ("SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionRequest",
                "Notification", "Stop", "TaskCreated", "TaskCompleted", "SessionEnd")
 EDIT_TOOLS = ("Edit", "Write", "MultiEdit", "NotebookEdit")
 
@@ -102,7 +103,7 @@ def install_hooks() -> str:
             entry: dict[str, Any] = {"hooks": [{"type": "command", "command": cmd,
                                                 "timeout": int(config.CLAUDE_ANSWER_WAIT_S) + 30
                                                 if ev == "PermissionRequest" else 10}]}
-            if ev in ("PostToolUse", "PostToolUseFailure", "PermissionRequest"):
+            if ev in ("PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionRequest"):
                 entry["matcher"] = "*"
             entries.append(entry)
             added = True
@@ -122,25 +123,38 @@ def _short(v: Any, n: int = 90) -> str:
 
 
 def _step_text(tool: str, inp: dict) -> str:
-    """'edited querykind.py', 'ran: pytest -q', 'read config.py': one line for a tool call."""
+    """One step in everyday words: 'changed config.py', 'ran the tests', 'looked at the code'."""
     inp = inp if isinstance(inp, dict) else {}
     path = inp.get("file_path") or inp.get("notebook_path") or inp.get("path") or ""
-    name = Path(str(path)).name if path else ""
+    name = Path(str(path)).name if path else "a file"
+    if tool == "Write":
+        return f"created {name}"
     if tool in EDIT_TOOLS:
-        return f"edited {name}"
+        return f"changed {name}"
     if tool == "Read":
-        return f"read {name}"
+        return f"looked at {name}"
     if tool == "Bash":
-        return f"ran: {_short(inp.get('command'), 70)}"
+        cmd = str(inp.get("command") or "").lower()
+        for rx, said in ((r"pytest|unittest|npm (?:run )?test|make test", "ran the tests"),
+                         (r"git commit", "saved the work in git"), (r"git push", "uploaded the work (git push)"),
+                         (r"git (?:status|diff|log)", "checked what changed (git)"),
+                         (r"pip install|npm install|apt(?:-get)? install", "installed something"),
+                         (r"ruff|flake8|eslint|mypy|lint", "checked the code style"),
+                         (r"\bls\b|\bfind\b|\btree\b", "looked around the folders"),
+                         (r"\bgrep\b|\brg\b", "searched the code"), (r"mkdir", "made a folder"),
+                         (r"\brm\b", "deleted something"), (r"python|node", "ran a program")):
+            if re.search(rx, cmd):
+                return said
+        return "ran a command"
     if tool in ("Grep", "Glob"):
-        return f"searched {_short(inp.get('pattern'), 40)}"
+        return "searched the code"
     if tool in ("WebFetch", "WebSearch"):
-        return f"looked up {_short(inp.get('url') or inp.get('query'), 50)}"
+        return "looked something up on the web"
     if tool in ("TodoWrite", "TaskCreate", "TaskUpdate"):
-        return "updated its to-do list"
+        return "updated its plan"
     if tool in ("Task", "Agent"):
-        return f"started a helper: {_short(inp.get('description') or inp.get('prompt'), 50)}"
-    return tool
+        return "asked a helper to do part of it"
+    return f"used {tool}"
 
 
 def _todos(inp: dict) -> list[dict] | None:
@@ -174,7 +188,13 @@ def event(data: dict) -> dict:
         s["last"], s["warned"] = time.time(), False
         if data.get("transcript_path"):
             s["transcript"] = data["transcript_path"]
-        if ev == "UserPromptSubmit":
+        if sid in _stop_asked and ev in ("PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionRequest"):
+            _stop_asked.pop(sid)  # '/claude stop': this hook answer makes Claude Code stop at once
+            s["status"], s["finished"] = "stopped", time.time()
+            out, msg = {"stop": "Stopped by the owner from KURAMA."}, ("⏹ Claude Code stopped", _project(s))
+        elif ev == "PreToolUse":
+            pass  # (only there so a stop can reach it before the next step)
+        elif ev == "UserPromptSubmit":
             if s["status"] == "finished" or not s["prompt"]:  # a new task in this conversation
                 s.update(started=time.time(), steps=[], files=[], todos=[], status="working", finished=None, final="")
             s["prompt"] = _short(data.get("prompt"), 300)
@@ -200,7 +220,8 @@ def event(data: dict) -> dict:
                     break
         elif ev == "PermissionRequest":
             qid = secrets.token_hex(3)
-            what = _step_text(str(data.get("tool_name") or ""), data.get("tool_input") or {})
+            tool, inp = str(data.get("tool_name") or ""), data.get("tool_input") or {}
+            what = _step_text(tool, inp) + (f": {_short(inp.get('command'), 120)}" if tool == "Bash" else "")
             _questions[qid] = {"session": sid, "what": what, "answer": None, "t": time.time()}
             s["status"], s["questions"] = "waiting for you", s["questions"] + 1
             out = {"wait": qid}
@@ -238,6 +259,82 @@ def answer(yes: bool, qid: str = "") -> str:
         if s := _sessions.get(q["session"]):
             s["status"] = "working"
     return f"{'Allowed' if yes else 'Denied'}: {q['what']}. Claude Code continues."
+
+
+def stop() -> str:
+    """Stop the task that is working: Claude Code stops at its next step (a few seconds)."""
+    install_hooks()  # (the stop needs the before-each-step hook: older installs get it now)
+    with _lock:
+        live = [s for s in _sessions.values() if s["status"] in ("working", "waiting for you")]
+        for s in live:
+            _stop_asked[s["id"]] = time.time()
+        for q in _questions.values():
+            if q["answer"] is None:
+                q["answer"] = "deny"
+    if not live:
+        return "Claude Code isn't working on anything right now."
+    return "Stopping Claude Code: it stops at its next step (a few seconds). I'll tell you when it has."
+
+
+def usage() -> str:
+    """How much Claude Code was used: this task and today (from its own conversation files; 0 tokens)."""
+    today = time.strftime("%Y-%m-%d")
+    tot = {"in": 0, "out": 0, "cache": 0, "msgs": 0}
+    sessions: set[str] = set()
+    models: dict[str, int] = {}
+    cur = _current()
+    task = {"in": 0, "out": 0, "cache": 0, "msgs": 0}
+    since = (cur or {}).get("started", 0)
+    for f in settings_files():
+        for tr in f.parent.glob("projects/*/*.jsonl"):
+            try:
+                if time.strftime("%Y-%m-%d", time.localtime(tr.stat().st_mtime)) != today:
+                    continue
+                lines = tr.read_text(encoding="utf-8", errors="replace").splitlines()
+            except OSError:
+                continue
+            for line in lines:
+                if '"usage"' not in line:
+                    continue
+                try:
+                    d = json.loads(line)
+                except ValueError:
+                    continue
+                m = d.get("message") if isinstance(d, dict) else None
+                u = m.get("usage") if isinstance(m, dict) else None
+                ts = str(d.get("timestamp") or "")
+                if not isinstance(u, dict) or not ts.startswith(today):
+                    continue
+                n_in, n_out = int(u.get("input_tokens") or 0), int(u.get("output_tokens") or 0)
+                n_cache = int(u.get("cache_read_input_tokens") or 0) + int(u.get("cache_creation_input_tokens") or 0)
+                tot["in"] += n_in
+                tot["out"] += n_out
+                tot["cache"] += n_cache
+                tot["msgs"] += 1
+                sessions.add(tr.stem)
+                if m.get("model"):
+                    models[m["model"]] = models.get(m["model"], 0) + 1
+                if cur and tr.stem == cur["id"]:
+                    task["in"] += n_in
+                    task["out"] += n_out
+                    task["cache"] += n_cache
+                    task["msgs"] += 1
+    if not tot["msgs"]:
+        return "Claude Code hasn't been used today."
+
+    def k(n: int) -> str:
+        return f"{n / 1_000_000:.1f}M" if n >= 1_000_000 else (f"{n / 1000:.0f}k" if n >= 1000 else str(n))
+    out = ["📊 Claude Code use today"]
+    if cur and task["msgs"]:
+        out.append(f"This task: {task['msgs']} replies, {k(task['out'])} words written by it (tokens), "
+                   f"{k(task['in'] + task['cache'])} read (mostly re-read from its memory), running "
+                   f"{_mins(time.time() - since)}")
+    out.append(f"Today: {len(sessions)} conversations, {tot['msgs']} replies, {k(tot['out'])} written, "
+               f"{k(tot['in'] + tot['cache'])} read")
+    if models:
+        out.append("Model: " + ", ".join(sorted(models, key=models.get, reverse=True)[:2]))
+    out.append("Your plan's limit and what's left are only shown inside Claude Code (type /usage there).")
+    return "\n".join(out)
 
 
 def decision(qid: str) -> str:
@@ -284,45 +381,63 @@ def _current() -> dict | None:
 
 
 def status() -> str:
-    """The status card of the newest Claude Code task (0 tokens)."""
+    """What Claude Code is doing, in everyday words (0 tokens)."""
     if not is_on():
         return "I'm not watching Claude Code. Say '/claude on' (or 'watch my Claude Code') first."
     s = _current()
     if s is None:
-        return "Watching Claude Code. No task has started since: give it a prompt and I'll follow it."
+        return "I'm watching Claude Code, but no task has started yet. Give it a prompt and I'll follow it."
     todos = s.get("todos") or []
     done = sum(1 for t in todos if t["status"] == "completed")
-    running = _mins((s.get("finished") or time.time()) - s["started"])
-    out = [f"🤖 Claude Code: {s['status']} ({'took' if s['status'] == 'finished' else 'running'} {running})", _project(s)]
+    took = _mins((s.get("finished") or time.time()) - s["started"])
+    state = {"working": "is working", "waiting for you": "is waiting for you", "finished": "has finished",
+             "stopped": "was stopped", "closed": "was closed"}.get(s["status"], s["status"])
+    out = [f"🤖 Claude Code {state} ({_project(s)[2:]})"]
     if s.get("prompt"):
-        out.append(f"📝 {s['prompt'][:160]}")
+        out.append(f"You asked: \"{s['prompt'][:160]}\"")
+    if s["status"] in ("finished", "stopped"):
+        out.append(f"It took {took}.")
+    else:
+        out.append(f"It started {took} ago.")
     if todos:
-        out.append(f"✅ To-do: {done} of {len(todos)} done" + (f"   {_eta(s)}" if _eta(s) else ""))
+        line = f"Progress: {done} of {len(todos)} parts done"
+        out.append(line + (f", about {_eta(s)[2:].replace(' left', '')} to go." if _eta(s) else "."))
         now = next((t["text"] for t in todos if t["status"] == "in_progress"), "")
-        if now:
-            out.append(f"▶️ Now: {now}")
-    if s["steps"]:
-        out.append(f"🕘 Last steps ({len(s['steps'])} so far, last {_mins(time.time() - s['steps'][-1][0])} ago):")
-        out += [f"   • {line}" for _, line in s["steps"][-5:][::-1]]
+        if now and s["status"] == "working":
+            out.append(f"Right now: {now[:1].lower() + now[1:]}.")
+    if s["status"] == "waiting for you":
+        q = next((q for q in _questions.values() if q["session"] == s["id"] and q["answer"] is None), None)
+        out.append(f"It needs your OK to {q['what']}. Reply /claude yes or /claude no." if q else
+                   "It is waiting for your next instruction: /claude say <what to do>.")
+    if s["steps"] and s["status"] != "finished":
+        recent = list(dict.fromkeys(line for _, line in s["steps"][-8:][::-1]))[:4]
+        ago = _mins(time.time() - s["steps"][-1][0])
+        out.append(f"Lately it {', '.join(recent)} (last step {ago} ago).")
     if s.get("final") and s["status"] == "finished":
-        out.append(f"💬 {s['final'][:300]}")
+        out.append(f"Its answer: {s['final'][:300]}")
+    if s.get("files"):
+        out.append(f"Files changed so far: {len(s['files'])}.")
     return "\n".join(out)
 
 
 def report() -> str:
-    """Everything about the newest task: the full to-do list, every file changed, the step log with times."""
+    """The whole task in everyday words: what you asked, its plan, the files, the timeline, the result."""
     s = _current()
     if not is_on() or s is None:
         return status()
     out = [status(), ""]
     if s.get("todos"):
         mark = {"completed": "✅", "in_progress": "▶️"}
-        out += ["📋 To-do list:"] + [f"   {mark.get(t['status'], '⬜')} {t['text']}" for t in s["todos"]]
+        out += ["Its plan:"] + [f"  {mark.get(t['status'], '⬜')} {t['text']}" for t in s["todos"]]
     if s.get("files"):
-        out += ["📄 Files changed:"] + [f"   • {Path(f).name}" for f in s["files"][:40]]
+        out += ["Files it changed:"] + [f"  • {Path(f).name}" for f in s["files"][:30]]
     if s["steps"]:
-        out.append("🧾 Steps:")
-        out += [f"   {time.strftime('%H:%M', time.localtime(ts))} {line}" for ts, line in s["steps"][-40:]]
+        out.append("What it did, in order:")
+        last = ""
+        for ts, line in s["steps"][-60:]:
+            if line != last:  # 'changed config.py' five times in a row reads as one line
+                out.append(f"  {time.strftime('%H:%M', time.localtime(ts))}  {line}")
+            last = line
     return "\n".join(out)
 
 

@@ -30,6 +30,9 @@ def main():
         got = call("/event", data)
     except Exception:  # KURAMA not running: Claude Code goes on as if nothing happened
         return
+    if got.get("stop"):  # '/claude stop': Claude Code stops here (it shows the reason)
+        print(json.dumps({"continue": False, "stopReason": got["stop"]}))
+        return
     qid, wait_s = got.get("wait"), float(got.get("wait_s") or 0)
     if not qid or data.get("hook_event_name") != "PermissionRequest":
         return

@@ -176,9 +176,9 @@ COMMANDS: tuple[Cmd, ...] = (
     Cmd("lyrics", "write song lyrics", "Web & text", "<topic>", tool=("write_document", "jobs", {}, "request"),
         template="song lyrics about {a}"),
     Cmd("offline", "the commands that work without internet", "KURAMA"),
-    Cmd("claude", "watch Claude Code: on / off / status / report / yes / no / say <next step>", "Code",
-        "[on|off|status|report|yes|no|say]", tool=("claude_code", "dev", {"action": "status"}, "text"),
-        actions=("on", "off", "status", "report", "yes", "no", "say"), aliases=("claudecode", "cc")),
+    Cmd("claude", "watch Claude Code: on / off / status / report / yes / no / say <next step> / stop / usage", "Code",
+        "[on|off|status|report|yes|no|say|stop|usage]", tool=("claude_code", "dev", {"action": "status"}, "text"),
+        actions=("on", "off", "status", "report", "yes", "no", "say", "stop", "usage"), aliases=("claudecode", "cc")),
     Cmd("alerts", "recent alerts / which are muted", "KURAMA", phrase="notification status"),
 )
 _BY_NAME: dict[str, Cmd] = {}

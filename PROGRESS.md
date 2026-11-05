@@ -1371,3 +1371,8 @@ Phases (one at a time, owner tests after each):
   /claude; Telegram /list = the phone commands + every KURAMA command (it showed only the second half).
   tests/test_claude_watch.py: every slash command is in /list, the suggestions and the menu.
 - yes_no: 'stop watching claude code' / 'cancel the timer' are commands, not a "no".
+- (later) Telegram over IPv4 (IPv6 to api.telegram.org hung 20 s+ one time in four: the late screenshots);
+  screenshots 1920 px JPEG q85 (~260 KB, ~1 s). Claude Code watch: status / report in everyday words ("changed
+  config.py", "ran the tests", "Progress: 4 of 7 parts done, about 15 min to go"); /claude stop (a PreToolUse hook
+  answers {"continue": false}: it stops at its next step); /claude usage (this task and today, from Claude Code's own
+  conversation files: replies, tokens written / read, model; the plan limit is only shown inside Claude Code).
