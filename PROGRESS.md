@@ -1310,3 +1310,18 @@ Phases (one at a time, owner tests after each):
   settings / explain / help. Router: the new self examples are not router examples (they pulled 'set a timer'
   and 'stop audio' to the wrong areas; scorecard back to 98%).
 - LEARN.md 8.5 (with test commands), 2.4, core files, 23.1; ADR 0012.
+
+## 2026-11-05 (evening): self-knowledge made consistent (from the 19:42-19:48 traces)
+- Capability questions are answered, never done: 'do you ahve abality to convery pdf into md file' converted a
+  random file (5.3k tokens). New meaning capability_ask + config.MEANING_OPENINGS: the first 3-6 words are compared
+  by meaning on their own (fastpath._opening); spelling fixes ahve/abality/convery/posible. find_capability answers
+  in plain words ("Yes, I can help with that: ... Say: ...").
+- 'help me with sending files to phone' ran Wi-Fi sharing (1.9k tokens): help_me by opening ("help me with").
+- 'how you measure that and what time you use?' went to the AI (1.5k): explain_last with a looser match when it
+  points at a request from the last 15 minutes (_about_last). 'how can i use colab notebook' / 'how can i use it'
+  said "I couldn't see any highlighted text": with nothing selected, text_assist explain/code/use now explains what
+  KURAMA just gave. Explanations get facts without tool / file names ("I look at the get_time tool" is gone).
+- One-time values: 'run the speed test with 30 seconds' passes seconds to that test only (internet_doctor
+  seconds=30); 'make it permanent' (setting_keep, 30 min) saves it. 'make the speed test 30 seconds' still saves.
+- 'can you open app?' opened KDE Connect: a generic target asks which app. Folder names match loosely
+  ('kurma' -> KURAMA, 'folde' -> folder).

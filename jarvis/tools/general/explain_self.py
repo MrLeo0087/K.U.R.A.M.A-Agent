@@ -67,12 +67,13 @@ def facts(question: str) -> str:
         for c in calls[:4]:
             if c.get("name", "").startswith("_"):
                 continue
-            out.append(f"RAN {c.get('name')} with {json.dumps(c.get('args') or {}, ensure_ascii=False)[:200]} -> "
+            what = (getattr(selfindex.card(c.get("name", "")), "what", "") or "an action").split(":")[0]
+            out.append(f"DID: {what} with {json.dumps(c.get('args') or {}, ensure_ascii=False)[:200]} -> "
                        f"{str(c.get('result') or '')[:300]}")
         if f := _file_facts(str(last.get("answer") or "") + " " + " ".join(str(c.get("result") or "") for c in calls)):
             out.append(f)
     cards = selfindex.cards_for(names) + [c for c in selfindex.by_meaning(question, 2) if c.name not in names]
-    out += [c.text(how_chars=1100) for c in cards[:3]]
+    out += [c.text(how_chars=1100, plain=True) for c in cards[:3]]
     return "\n\n".join(out)
 
 

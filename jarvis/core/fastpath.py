@@ -2052,11 +2052,31 @@ def meaning_label(t: str) -> tuple[str, float] | None:
         wb = semantic.best_of(apps, "window_shortcuts", win)
         if wb and (best is None or wb[1] > best[1]):
             best = wb
+    if (op := _opening(t)) is not None and (best is None or op[1] > best[1]):
+        best = op
     if (mine := _mask_my_commands(t)) is not None:  # one of the owner's saved commands named: it is the X
         fb = semantic.best_of(mine, "my_command_forget", {"my_command_forget": config.MEANING_SHORTCUTS["my_command_forget"]})
         if fb and (best is None or fb[1] > best[1]):
             best = fb
     return best
+
+
+def _opening(t: str) -> tuple[str, float] | None:
+    """The meaning of how the request STARTS (its first 3-6 words) against config.MEANING_OPENINGS: 'do you ahve
+    abality to convery pdf into md file' is a capability question whatever the need is (it converted a file, 5.3k
+    tokens). Only a close opening counts."""
+    from jarvis.core import semantic
+    toks = re.findall(r"[\w'.+#-]+", t or "")
+    if len(toks) < 4:
+        return None
+    best = None
+    for k in (3, 4, 5, 6):
+        if k >= len(toks):
+            break
+        b = semantic.best_of(" ".join(toks[:k]), "meaning_openings", config.MEANING_OPENINGS)
+        if b and (best is None or b[1] > best[1]):
+            best = b
+    return best if best and best[1] >= config.MEANING_OPENING_MIN else None
 
 
 def _mask_my_commands(t: str) -> str | None:
@@ -2081,14 +2101,29 @@ def _window_first(text: str) -> Intent | None:
     t = " ".join((text or "").split()).strip(" .!?")
     best = meaning_label(t)
     first = {**{w: 0.95 for w in _WINDOW_LABELS}, "my_command_forget": 0.95, "setting_change": 0.88,
-             "explain_last": 0.97, "help_me": 0.97}
+             "explain_last": 0.88 if _about_last(t) and re.search(r"\b(?:you|your)\b|\buse\s+(?:it|that|this)\b", t, I)
+             else 0.97, "help_me": 0.93, "capability_ask": 0.89,
+             "setting_keep": 0.92}
     if not best or best[0] not in first or best[1] < first[best[0]]:
         return None  # (actions whose X is checked against what really exists: an open window, a saved command, a
         #              setting and its range; or a question about KURAMA itself: 'how do you measure my speed'
         #              must explain, not run a speed test)
     it = meaning_intent(text)
-    return it if it is not None and it.tool in ("window", "app_name", "kurama_settings", "explain_self", "help_me") \
-        else None
+    return it if it is not None and it.tool in ("window", "app_name", "kurama_settings", "explain_self", "help_me",
+                                                "find_capability") else None
+
+
+def _about_last(text: str) -> bool:
+    """A question that points at what KURAMA just did ('how did you measure THAT', 'how can I use IT'), asked while
+    there is a request from the last 15 minutes to explain."""
+    if not re.search(r"\b(?:you|your|it|that|this|those|these)\b", text or "", I):
+        return False
+    try:
+        from jarvis.core import trace
+        cur = (trace.current() or {}).get("id")
+        return any(r["id"] != cur and time.time() - float(r["ts"]) < 900 for r in trace.recent(1, 3))
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def _mask_open_apps(t: str) -> str | None:
@@ -2132,7 +2167,8 @@ def meaning_intent(text: str) -> Intent | None:
         return None
     if best[1] < config.MEANING_SHORTCUT_MIN_BY.get(best[0], config.MEANING_SHORTCUT_MIN) and not (
             best[0] == "open_vscode" and best[1] >= config.MEANING_FOLDER_MIN and folder_in_words(raw) is not None) \
-            and not (best[0] == "setting_change" and best[1] >= config.MEANING_SETTING_MIN):
+            and not (best[0] == "setting_change" and best[1] >= config.MEANING_SETTING_MIN) \
+            and not (best[0] == "explain_last" and best[1] >= config.MEANING_EXPLAIN_MIN and _about_last(raw)):
         return None  # (a real folder / a real setting with a valid value may be a little less close in meaning:
         #              the slot is checked below, and nothing runs unless it is real)
     label, score = best
@@ -2175,7 +2211,8 @@ def meaning_intent(text: str) -> Intent | None:
             return None
         it = Intent("tgmsg", "send_message_telegram", "telegram", {"text": msg}, known=msg)
         return it if meaning_ok(t, it) else None
-    if label in ("settings_list", "setting_undo", "settings_reset", "setting_change", "explain_last", "help_me"):
+    if label in ("settings_list", "setting_undo", "settings_reset", "setting_change", "explain_last", "help_me",
+                 "setting_keep", "capability_ask"):
         return _about_me_intent(label, raw, t, extra)
     if label == "my_commands":
         return None if extra else _ok(t, Intent("mywords", "app_name", "apps", {"action": "list"}))
@@ -2288,12 +2325,20 @@ def _about_me_intent(label: str, raw: str, t: str, extra: list[str]) -> Intent |
         return _ok(t, Intent("explain", "explain_self", "self", {"question": raw}))
     if label == "help_me":
         return _ok(t, Intent("help", "help_me", "self", {"topic": " ".join(extra)}))
+    if label == "capability_ask":  # 'do you have the ability to convert a pdf?': answer it, never do it
+        need = re.sub(r"^.*?\b(?:ability|able|possible|support|know how|way|feature|abality)\b\s*(?:for you\s+)?(?:to\s+)?",
+                      "", raw, flags=I).strip(" ?.!") or raw
+        return _ok(t, Intent("can", "find_capability", "self", {"need": need}))
+    if label == "setting_keep":
+        return None if extra else _ok(t, Intent("settings", "kurama_settings", "self", {"action": "keep"}))
     if label == "settings_list":
         return None if extra else _ok(t, Intent("settings", "kurama_settings", "self", {"action": "list"}))
     if label == "setting_undo":
         return None if extra else _ok(t, Intent("settings", "kurama_settings", "self", {"action": "undo"}))
     if label == "settings_reset":
         return None if extra else _ok(t, Intent("settings", "kurama_settings", "self", {"action": "reset", "name": "all"}))
+    if re.search(r"\b(?:with|for|using|in)\s+\d", raw, I) and not re.search(r"\b(?:to|=)\s*[+-]?\d", raw, I):
+        return None  # 'run the speed test WITH 30 seconds': that one run only (the tool's own intent), not a change
     m = re.search(r"\b(?:to|at|=)\s+(?P<v>[+-]?\d.*)$", raw, I) or re.search(r"(?P<v>[+-]?\d+(?:\.\d+)?\s*(?:%|[a-z]+)?)", raw, I)
     if not m:
         return None  # "make the speed test longer": how much? -> the AI asks / picks
@@ -2333,9 +2378,15 @@ def folder_in_words(text: str) -> Path | None:
         return re.sub(r"[\W_]+", "", x.lower())
     for order in (names[::-1], names):
         p = smart_path(" in ".join(order), want="dir")
-        if p is not None and p.is_dir() and key(p.name) in {key(n) for n in names}:
+        if p is not None and p.is_dir() and _alike_name(key(p.name), [key(n) for n in names]):
             return _latest_alike(p, order, key)
     return None
+
+
+def _alike_name(found: str, said: list[str]) -> bool:
+    """The folder found is called like one of the names said ('kurma' / 'kuramaa' for KURAMA: a voice or typing slip)."""
+    import difflib
+    return any(found == s or (len(s) >= 4 and difflib.SequenceMatcher(None, found, s).ratio() >= 0.8) for s in said)
 
 
 def _latest_alike(p: Path, order: list[str], key) -> Path:
@@ -2348,7 +2399,8 @@ def _latest_alike(p: Path, order: list[str], key) -> Path:
     alike = {p}
     for b in bases:
         for c in paths.find_children(b, p.name, depth=4, dirs_only=True, k=8):
-            if key(c.name) == key(p.name) and len(c.parts) == len(p.parts) and all(w in key(str(c)) for w in want):
+            if key(c.name) == key(p.name) and len(c.parts) == len(p.parts) and \
+                    all(w in key(str(c)) or _alike_name(key(c.name), [w]) for w in want):
                 alike.add(c)
 
     def used(c: Path) -> float:
@@ -2584,9 +2636,15 @@ def _folder_intent(target: str) -> Intent | None:
     return Intent("openfolder", "open_folder", "filesearch", {"name": target}, target, known=target if real else "")
 
 
+_GENERIC_APP = re.compile(r"(?:an?\s+|the\s+|some\s+|any\s+|my\s+)?(?:app|apps|application|program|software|something)",
+                          I)
+
+
 def _open_intent(target: str, verb: str) -> Intent | None:
     if not target or len(target.split()) > 4 or _BAD_TARGET.search(target):
         return None
+    if _GENERIC_APP.fullmatch(target.strip(" ?.!")):  # 'can you open app?' opened KDE Connect (11-05)
+        return Intent("say", "_say", "apps", {"en": "Which app should I open? Say e.g. 'open VS Code' or 'open Brave'."})
     from jarvis.tools.general import _apps, open_url  # lazy: desktop index only when needed
 
     url = open_url.resolve(target)

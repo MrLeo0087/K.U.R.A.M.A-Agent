@@ -12,12 +12,13 @@ from jarvis.core.registry import tool
 @tool(group="self", safety="safe", max_chars=2500,
       description="Change your own settings from a safe list (speed test seconds, reply length, end of speech wait, "
                   "telegram photo size, ram alert percent, speaking speed...): list, get, set, reset, undo.")
-def kurama_settings(action: Literal["list", "get", "set", "reset", "undo"] = "list", name: str = "",
+def kurama_settings(action: Literal["list", "get", "set", "reset", "undo", "keep"] = "list", name: str = "",
                     value: str = "") -> str:
     """Your settings.
 
     Args:
-        action: list (all, with values), get (one), set (name + value), reset (name, or "all"), undo (last change).
+        action: list (all, with values), get (one), set (name + value), reset (name, or "all"), undo (last change),
+            keep (make the last one-time value permanent).
         name: The setting, e.g. "speed test seconds".
         value: For set: the new value as said, e.g. "30 seconds", "2 minutes", "9 PM", "+20%".
     """
@@ -29,4 +30,6 @@ def kurama_settings(action: Literal["list", "get", "set", "reset", "undo"] = "li
         return usersettings.reset(name)
     if action == "undo":
         return usersettings.undo()
+    if action == "keep":
+        return usersettings.keep_once()
     return usersettings.listing()

@@ -20,9 +20,15 @@ class Card:
     settings: list[str]
     say: list[str]
 
-    def text(self, how_chars: int = 600) -> str:
+    def text(self, how_chars: int = 600, plain: bool = False) -> str:
+        """plain: no internal names (for answers to the owner: 'I look at the get_time tool' sounded like a robot)."""
         from jarvis.core import usersettings
-        out = [f"TOOL {self.name} ({self.group}): {self.what}", f"HOW IT WORKS: {self.how[:how_chars]}"]
+        head = f"ABILITY: {self.what}" if plain else f"TOOL {self.name} ({self.group}): {self.what}"
+        how = self.how
+        if plain:  # no file / function names: "[netdoctor.speed]", "internet_doctor: ..."
+            import re
+            how = re.sub(r"\[[\w.]+\]\s*", "", re.sub(r"^\w+:\s*", "", how)).replace(self.name, "this")
+        out = [head, f"HOW IT WORKS: {how[:how_chars]}"]
         if self.settings:
             vals = [f"{n} = {usersettings.shown(usersettings.BY_NAME[n])}" for n in self.settings]
             out.append("SETTINGS THE OWNER CAN CHANGE: " + "; ".join(vals))

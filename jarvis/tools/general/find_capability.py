@@ -15,9 +15,11 @@ def find_capability(need: str) -> str:
     """
     from jarvis.core import selfindex, selfknow
     cards = selfindex.by_meaning(need, 4)
-    if cards:
-        return "\n".join(f"- {c.name} ({c.group}): {c.what}" + (f' Say: "{c.say[0]}"' if c.say else "")
-                         for c in cards)
+    if cards:  # in the owner's words: what it is and how to ask (no internal names)
+        top, rest = cards[0], cards[1:]
+        out = [f"Yes, I can help with that: {top.what}" + (f' Say: "{top.say[0]}".' if top.say else "")]
+        out += [f"Also: {c.what}" + (f' ("{c.say[0]}")' if c.say else "") for c in rest[:2]]
+        return "\n".join(out)
     hits = selfknow.find_tools(need)
     if not hits:
         return ("no built-in tool matches; options: search the web for how-to steps, the owner's own command ('when I "

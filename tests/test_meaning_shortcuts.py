@@ -221,3 +221,20 @@ def test_explain_and_help_by_meaning(meaning):
     assert fastpath.meaning_intent("how did you do that").args == {"question": "how did you do that"}
     meaning.update(label="help_me", score=0.97)
     assert fastpath.meaning_intent("help me use kurama").tool == "help_me"
+
+
+def test_one_time_values_keep_and_generic_open():
+    from jarvis.core.intents import control
+    it = control._control_intent("run wifi speed test with 30 seconds") if hasattr(control, "_control_intent") else None
+    it = it or fastpath._match("run wifi speed test with 30 seconds")
+    assert it.tool == "internet_doctor" and it.args == {"action": "speed", "seconds": 30}
+    assert fastpath._open_intent("app", "open").tool == "_say"  # 'can you open app?' asks which one
+    assert fastpath._alike_name("kurama", ["kurma"]) and not fastpath._alike_name("kurama", ["tara"])
+
+
+def test_a_capability_question_is_answered_not_done(meaning):
+    meaning.update(label="capability_ask", score=0.95)
+    it = fastpath.meaning_intent("do you have the ability to convert pdf into md file")
+    assert (it.tool, it.args) == ("find_capability", {"need": "convert pdf into md file"})
+    meaning.update(label="setting_keep", score=0.95)
+    assert fastpath.meaning_intent("make it permanent").args == {"action": "keep"}

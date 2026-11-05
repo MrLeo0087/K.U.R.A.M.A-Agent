@@ -1317,14 +1317,21 @@ MEANING_SHORTCUTS: dict[str, tuple[str, ...]] = {
     "setting_change": ("make the speed test X seconds", "set the X to X", "change the X to X", "increase the X to X",
                        "decrease the X to X", "make the X X minutes", "set X to X seconds", "make your replies longer X",
                        "change the setting X to X", "talk faster X", "speak slower X"),
+    "setting_keep": ("make it permanent", "keep it always", "always use that", "save that setting", "make that the "
+                     "default", "keep that setting", "use that every time"),
+    "capability_ask": ("do you have the ability to X", "are you able to X", "is it possible for you to X",
+                       "do you support X", "do you know how to X", "is there a way to X", "do you have a feature to X",
+                       "can you do X or not", "do you have abality to X"),
     "setting_undo": ("undo that setting", "undo the setting change", "put the setting back", "undo the last setting"),
     "settings_reset": ("reset all settings", "reset my settings to default", "put every setting back to default"),
     "explain_last": ("how did you do that", "how did you get that", "how do you find the time", "how do you measure my "
                      "internet speed", "what method did you use", "explain how that works", "explain this code you gave",
                      "how can i use this", "can i use this with vs code", "why did you do that", "where did that answer "
-                     "come from", "how does that work", "explain what you just did"),
+                     "come from", "how does that work", "explain what you just did", "how can i use X",
+                     "how do i use the X you gave me", "how you measure that", "what did you use for that"),
     "help_me": ("help me use kurama", "how do i use you", "i am confused how to use you", "what commands can i use",
-                "help with X", "what can you do with X", "show me what you can do", "which command should i use for X"),
+                "help with X", "what can you do with X", "show me what you can do", "which command should i use for X",
+                "help me with X", "how do i X with you", "what should i say to X"),
     # your own commands ("when I say X, do Y" saves one): list them, forget one (X = its words)
     "my_commands": ("show my commands", "list my custom commands", "what are my own commands",
                     "show the words i taught you", "list my words", "what commands did i teach you"),
@@ -1402,8 +1409,18 @@ MEANING_SHORTCUT_AREAS = {"save_link": "links", "list_links": "links", "read_lat
 MEANING_SHORTCUT_MIN = 0.82
 # actions that change everything on screen need more certainty ("show my screen" is not "go to the home screen": 0.86)
 MEANING_SHORTCUT_MIN_BY = {"show_desktop": 0.90, "colab_setup": 0.90, "kaggle_setup": 0.90, "help_me": 0.90,
-                           "explain_last": 0.86}  # "what is colab" is a question (0.87)
+                           "explain_last": 0.86, "capability_ask": 0.89}  # "what is colab" is a question (0.87)
 MEANING_FOLDER_MIN = 0.80  # 'open <a real folder named in words> in vs code': harmless, and the folder must exist
+# requests whose MEANING is in how they start ("do you have the ability to <anything>", "help me with <anything>"):
+# the first words are compared by meaning on their own, so a long or misspelled need can't hide it
+MEANING_OPENINGS = {
+    "capability_ask": ("do you have the ability to", "are you able to", "is it possible for you to", "is it possible to",
+                       "do you know how to",
+                       "do you support", "is there a way to", "do you have an option to", "can you even"),
+    "help_me": ("help me with", "help with", "how do i use you to", "what should i say to", "which command do i use to"),
+}
+MEANING_OPENING_MIN = 0.89  # 'is it possible that it rains' is 0.887: a question about rain, not about KURAMA
+MEANING_EXPLAIN_MIN = 0.80  # "how you measure that?" right after an answer that names it ('it / that / you')
 MEANING_SETTING_MIN = 0.78  # 'set <a real setting> to <a valid value>': checked against the safe list and its range
 # talk mode, speech long after KURAMA spoke: it is for KURAMA if it greets it or clearly MEANS an action (calibrated on
 # stt.log 10-30..11-01: 'Hello, shut down the laptop.' power 0.88; room talk 0.65-0.72)

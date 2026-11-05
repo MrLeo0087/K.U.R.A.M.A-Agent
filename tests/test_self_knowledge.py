@@ -71,7 +71,8 @@ def test_explain_uses_the_real_last_request(monkeypatch):
     monkeypatch.setattr(llm, "chat", fake_chat)
     out = ex.explain_self("how did you measure that?")
     assert out.startswith("I download from Cloudflare")
-    assert 'LAST REQUEST: "what is my internet speed"' in seen["facts"] and "RAN internet_doctor" in seen["facts"]
+    assert 'LAST REQUEST: "what is my internet speed"' in seen["facts"] and "DID: " in seen["facts"]
+    assert "internet_doctor" not in seen["facts"]  # no internal names in what the answer is built from
     assert "speed test seconds = 15 seconds" in seen["facts"] and seen["kw"]["tier"] == "smart"
     assert seen["kw"]["max_tokens"] <= 700
 
@@ -89,3 +90,27 @@ def test_help_lists_areas_with_real_examples():
     from jarvis.tools.general import help_me
     out = help_me.help_me("")
     assert out.startswith("What I can do") and "when I say" in out and out.count("\n- ") >= 5
+
+
+def test_a_length_in_the_request_is_for_that_test_only(monkeypatch):
+    """'run the speed test with 30 seconds' = this test only; 'make it permanent' then keeps it."""
+    from jarvis.core import netdoctor, store
+    from jarvis.tools.general import internet_doctor as tool
+    ran = []
+    monkeypatch.setattr(netdoctor, "speed", lambda total=None: ran.append(total) or "Download 50 Mbps")
+    out = tool.internet_doctor("speed", seconds=30)
+    assert ran == [30] and "this time only" in out and config.SPEEDTEST_SECONDS == 15  # the setting is unchanged
+    assert usersettings.keep_once().startswith("Done: speed test seconds is now 30 seconds")
+    assert config.SPEEDTEST_SECONDS == 30 and usersettings.keep_once().startswith("There's no one-time setting")
+    assert store.kv_get("setting_once") is None
+
+
+def test_capability_answers_in_plain_words(monkeypatch):
+    from jarvis.tools.general import find_capability as fc
+
+    class C:
+        def __init__(self, what, say):
+            self.name, self.group, self.what, self.say = "x", "files", what, say
+    monkeypatch.setattr(selfindex, "by_meaning", lambda text, k=3: [C("Convert files locally.", ["change this pdf to word"])])
+    out = fc.find_capability("convert pdf to md")
+    assert out.startswith("Yes, I can help with that: Convert files locally.") and "x (files)" not in out

@@ -34,7 +34,15 @@ def text_assist(action: Literal["explain", "meaning", "translate", "improve", "c
         text: Explain/meaning/translate this typed text instead of the highlighted one.
     """
     from jarvis.core import assist
-    return assist.run(action, request, lang, replace, path, text)
+    out = assist.run(action, request, lang, replace, path, text)
+    if action in ("explain", "code", "use") and not text and str(out).startswith("I couldn't see any highlighted text"):
+        # nothing selected: 'how can I use it?' / 'explain this code' is about what KURAMA just gave (11-05: "I
+        # couldn't see any highlighted text" right after 'set up colab notebook')
+        from jarvis.core import trace
+        from jarvis.tools.general.explain_self import explain_self
+        q = request or str((trace.current() or {}).get("text") or "") or "how can I use what you just gave me?"
+        return explain_self(q)
+    return out
 
 
 alias("rewrite_text", "text_assist", lambda a: {"action": "improve", "request": a.get("instruction", ""),

@@ -668,6 +668,8 @@ Three abilities so you never have to remember how KURAMA works:
 | "how did you do that?", "how do you measure my internet speed?", "explain the code you gave me", "can I use this with VS Code?" | `explain_self` collects FACTS: your last request from the trace (what ran, with which arguments, what came back), the **cards** of those tools (+ the 2 closest by meaning), and the start of a file it made (a notebook, a script). One smart-model call (gpt-oss-120b, low reasoning: the fast one invented menu buttons) answers from those facts only. | ~800–1,500 tokens, only when asked |
 | "make the speed test 30 seconds", "set end of speech wait to 1500 ms", "talk faster +30%", "set the daily summary time to 9 PM" | the setting is found by name or meaning, the value parsed with its unit ("2 minutes" for a seconds setting) and checked against its range; saved and applied at once (`restart=True` ones after a restart) | 0 tokens |
 | "what settings can I change?", "undo that setting", "reset all settings" | the list with current values; undo the last change; back to defaults | 0 tokens |
+| "run the speed test with 30 seconds" | **this test only**: the value goes to the tool as an argument, the saved setting stays; "make it permanent" (within 30 min) saves it | 0 tokens |
+| "do you have the ability to convert pdf to md?", "is it possible to send a file to my phone?", "are you able to read my screen?" | **answered, never done**: what it can do and the words to say (a capability question once converted a random file for 5.3k tokens) | 0 tokens |
 | "help me use kurama", "help with sending files to my phone", "can you translate a pdf?" | every area with real example commands, or the closest tools by meaning, plus "teach me your own command" and "I can make a new tool" | 0 tokens |
 
 **How it stays true:** nothing here is a hand-kept description. `core/selfindex.py` builds each tool's card from the
@@ -676,6 +678,18 @@ phrases. A contract test fails if any tool lacks them. Change the code, and the 
 
 **Why settings are a fixed list:** the AI never edits code or arbitrary config. `usersettings.SETTINGS` names what may
 change, with ranges; everything else needs a code change, and KURAMA says so. That keeps "change yourself" safe.
+
+**How a question is told from a command (consistency rules, 11-05):**
+- *Openings carry meaning.* "do you have the ability to …", "help me with …": the first 3–6 words are compared by
+  meaning on their own (`config.MEANING_OPENINGS`, `fastpath._opening`), so a long or misspelled need can't hide that
+  it is a question. Common slips ("ahve", "abality", "convery") are fixed first (`spelling.py`).
+- *"How … that / it / you" right after an answer* is about that answer (`fastpath._about_last`: a request in the last
+  15 minutes), so it is explained even when the words are loose ("how you measure that and what time you use?").
+- *Nothing selected* when you say "explain this code" / "how can I use it": the editing helper no longer says "I
+  couldn't see any highlighted text"; it explains what KURAMA just gave you.
+- *Answers use your words, not internal names:* the facts given to the AI drop tool and file names, so it says "I
+  time a download from Cloudflare", not "I call internet_doctor".
+- *A vague target asks:* "open app" says "Which app?" (it opened KDE Connect).
 
 **Questions about itself win before the word patterns** ("how do you measure my internet speed" must explain, not run
 a speed test): `fastpath._window_first` checks a few high-confidence, verified meanings first.
@@ -688,6 +702,9 @@ a speed test): `fastpath._window_first` checks a few high-confidence, verified m
 5. "what settings can I change?", "talk faster +25%", "reset all settings"
 6. "help me use kurama", "help with sending files to my phone", "can you convert a pdf to word?"
 7. "minimize vs code", "open kurama project", "show my commands"
+8. "run the speed test with 20 seconds" (one time) → "make it permanent" → "what settings can I change?"
+9. "do you ahve abality to convery pdf into md file?" (typos on purpose: answered, nothing converted)
+10. "set up colab notebook" → "how can I use it?" → "can I run it in VS Code?"
 
 ## 9. How KURAMA understands a request
 

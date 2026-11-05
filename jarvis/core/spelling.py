@@ -13,7 +13,9 @@ _FIX: list[tuple[str, str]] = [
     (r"\b(?:funtion|fuction|funcion)\b", "function"), (r"\b(?:pyhton|pyton)\b", "python"), (r"\bcalculater\b", "calculator"),
     (r"\b(?:opne|oprn)\b", "open"), (r"\b(?:goolge|googel|gogle)\b", "google"), (r"\b(?:laptlp|labtop|leptop)\b", "laptop"),
     (r"\bdisply\b", "display"), (r"\b(?:moeny|mony)\b", "money"), (r"\bwffi\b", "wifi"), (r"\bscreen\s+shot\b", "screenshot"),
-    (r"\bthne\b", "then"), (r"\b(?:fodler|foldr|floder)\b", "folder"), (r"\bsettign\b", "setting"),
+    (r"\bthne\b", "then"), (r"\b(?:fodler|foldr|floder|folde)\b", "folder"), (r"\bsettign\b", "setting"),
+    (r"\b(?:ahve|hvae|hav)\b", "have"), (r"\b(?:abality|abilty|ablity|abiltiy)\b", "ability"),
+    (r"\b(?:convery|covert|conevrt|convet)\b", "convert"), (r"\b(?:posible|possibel)\b", "possible"),
 ]
 _RX = [(re.compile(a, re.I), b) for a, b in _FIX]
 

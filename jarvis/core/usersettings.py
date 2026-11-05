@@ -240,6 +240,29 @@ def listing() -> str:
             "settings'):\n" + "\n".join(lines))
 
 
+def note_once(name: str, value: str) -> None:
+    """A value used for one request only ('run the speed test with 30 seconds'): 'make it permanent' saves it."""
+    try:
+        from jarvis.core import store
+        store.kv_set("setting_once", json.dumps({"name": name, "value": value, "t": time.time()}))
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def keep_once() -> str:
+    """Save the last one-time value as the setting ('make it permanent', within 30 minutes)."""
+    try:
+        from jarvis.core import store
+        d = json.loads(store.kv_get("setting_once") or "{}")
+    except Exception:  # noqa: BLE001
+        d = {}
+    if not d or time.time() - float(d.get("t", 0)) > 1800:
+        return "There's no one-time setting to keep. Say e.g. 'set speed test seconds to 30'."
+    from jarvis.core import store
+    store.kv_delete("setting_once")
+    return set_value(d["name"], d["value"])
+
+
 def related(source: str) -> list[Setting]:
     """The settings a piece of code reads (its source mentions config.<KEY>)."""
     return [s for s in SETTINGS if f"config.{s.key}" in (source or "")]
