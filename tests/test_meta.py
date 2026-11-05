@@ -18,7 +18,7 @@ def no_classifier(monkeypatch):
 def test_meta_schema_is_compact():
     s = meta.schema()["function"]
     assert s["name"] == "request_tools" and "web(" in s["description"] and "system(" in s["description"]
-    assert meta.estimate_tokens() < 200  # chars/4 over the JSON; real prompt tokens are lower
+    assert meta.estimate_tokens() < 210  # chars/4 over the JSON; real prompt tokens are lower
     assert meta.pick({"groups": ["System", "nope", "web", "system"]}) == ["system", "web"]
     assert meta.pick({"groups": "web, git"}) == ["web", "git"]
 

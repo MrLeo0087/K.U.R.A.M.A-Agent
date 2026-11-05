@@ -1345,3 +1345,16 @@ Phases (one at a time, owner tests after each):
 - LEARN.md rebuilt in four parts: 1 plain words (story, real examples, problems solved), 2 technologies + plan,
   3 the code in reading order (26 stops) + every file (generated: scripts/file_guide.py, make files-guide),
   4 the technical details (old sections, renumbered).
+
+## 2026-11-06: five request kinds incl. the Nepal documents service; OCR in any script; vague sends ask
+- Kinds, decided first in querykind.route: again > explain > NEPAL DOCUMENTS > help > the usual path (general chat,
+  live search, actions). Nepal = closest to config.LANE_EXAMPLES["nepal"] and ahead of "search" (live data); in
+  Devanagari config.NEPAL_DEVANAGARI_WORDS stand in. Removed the leftover explain_last meaning label ('how to make
+  tea' was explained as a KURAMA action).
+- core/nepaldocs.py + tools/general/nepal_docs.py: the owner's RAG API (KURAMA_RAG_API_URL / _KEY in .env, POST
+  /ask, server-sent events) in a background job (5-15 s); the answer is the job's reply ("» "), shown and spoken by
+  itself, sent back to the phone from Telegram; cached 6 h; 0 KURAMA tokens. Group "nepal" for the router / AI.
+- OCR: 'what is written in screen' on a handwritten Tamil note gave five '[?]': the vision prompt no longer assumes
+  Devanagari (any script, written as it is, plus an 'English:' line), dark/flat photos get contrast stretched, and a
+  failed read is read again by the stronger vision chain (Gemini first).
+- 'can you share file to phone' sent the whole project folder: no file named -> asks which file.

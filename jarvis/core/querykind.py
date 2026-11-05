@@ -104,38 +104,58 @@ def _about_last_thing(need: str) -> bool:
         return False
     if re.search(r"\b(?:it|this|that|these|those)\b", need, I):
         return True
-    words = {w for w in re.findall(r"[a-z]{4,}", need.lower())} - {"with", "from", "into", "file", "files", "this", "that"}
-    return len(words & set(re.findall(r"[a-z]{4,}", str(last.get("text") or "").lower()))) >= 1
+    common = {"with", "from", "into", "file", "files", "this", "that", "make", "open", "send", "take", "give", "show",
+              "tell", "find", "write", "have", "what", "your", "about", "want"}
+    words = {w for w in re.findall(r"[a-z]{4,}", need.lower())} - common
+    return bool(words) and len(words & set(re.findall(r"[a-z]{4,}", str(last.get("text") or "").lower()))) >= min(2, len(words))
+
+
+def nepal(text: str) -> bool:
+    """A question for the Nepal documents (laws, legal processes, services and fees, Nepal general knowledge), not
+    live data: its meaning is closest to config.LANE_EXAMPLES['nepal'] by NEPAL_LANE_MARGIN over every other lane.
+    Devanagari (the meaning model reads English only): config.NEPAL_DEVANAGARI_WORDS stand in."""
+    t = text or ""
+    if re.search(r"[\u0900-\u097F]", t):
+        return any(w in t for w in config.NEPAL_DEVANAGARI_WORDS) and not re.search(
+            r"आज|अहिले|अहिलेको|भोलि|मौसम|समाचार|मूल्य|भाउ", t)  # today / now / weather / news / price: live data
+    from jarvis.core import lanes
+    s = lanes.scores(t)
+    if not s or "nepal" not in s:
+        return False
+    rest = max((v for k, v in s.items() if k != "nepal"), default=0.0)
+    v = s["nepal"]  # close and ahead, or a little less close but far ahead ('what is divorce process': .75 vs .57)
+    return (v >= config.NEPAL_LANE_MIN and v - rest >= config.NEPAL_LANE_MARGIN) or (v >= 0.70 and v - rest >= 0.12)
 
 
 def route(text: str):
-    """The Intent for a help / explain / again request, or None (the usual path decides)."""
+    """The Intent for the request's KIND, or None (the usual path decides). The kinds, in order:
+    again ('run it for 30 seconds') > explain ('how did you…') > nepal documents (laws, processes, Nepal facts) >
+    help ('how can I…' with a tool that fits) > everything else (general chat, live search, actions: the
+    usual path: small talk, the router, the tools)."""
     from jarvis.core import safety
     from jarvis.core.fastpath import Intent
     if safety.parse_yes_no(text) is not None and len((text or "").split()) <= 4:
         return None  # 'ok go ahead' / 'yeah do it' answer a question: never a help request
     if (it := again(text)) is not None:
         return it
-    k = opening_kind(text)
-    if k is None:
-        return None
-    kind, _score, n = k
     raw = " ".join((text or "").split()).strip(" ?.!")
-    if kind == "command":  # 'can you open youtube': a command (only 'can you do it or not?' asks about the last one)
-        if re.fullmatch(r"(?:(?:do|make|run|open|send)\s+)?(?:it|that|this|them)(?:\s+or\s+not)?", rest_after(raw, n), I):
-            return Intent("explain", "explain_self", "self", {"question": raw})
-        return None
-    if kind == "help" and _about_last_thing(rest_after(raw, n)):  # 'how can I use colab notebook' right after
-        return Intent("explain", "explain_self", "self", {"question": raw})  # 'set up colab notebook'
-    if kind == "explain":
-        return Intent("explain", "explain_self", "self", {"question": raw})
-    need = rest_after(raw, n)
-    if not need or re.fullmatch(r"(?:(?:do|make|run|open|send)\s+)?(?:it|that|this|them)(?:\s+or\s+not)?", need, I):
+    k = opening_kind(text)
+    kind, n = (k[0], k[2]) if k else ("", 0)
+    pronoun = r"(?:(?:do|make|run|open|send)\s+)?(?:it|that|this|them)(?:\s+or\s+not)?"
+    if kind == "command" and re.fullmatch(pronoun, rest_after(raw, n), I):
         return Intent("explain", "explain_self", "self", {"question": raw})  # 'can you do it or not?'
-    from jarvis.core import selfindex
-    card, sure = selfindex.best_for(need)
-    if card is None or sure < config.HELP_TOOL_MIN:
-        if kind == "ability":  # 'are you able to fly?': a clear no, with what to do instead
+    if kind == "explain" or (kind == "help" and _about_last_thing(rest_after(raw, n))):
+        return Intent("explain", "explain_self", "self", {"question": raw})  # 'how can I use it' right after
+    if nepal(raw):  # 'what is the citizenship fee', 'how do I get a passport in Nepal', 'नेपालको सबैभन्दा ठूलो जिल्ला'
+        return Intent("nepal", "nepal_docs", "nepal", {"question": raw})
+    if kind in ("help", "ability"):
+        need = rest_after(raw, n)
+        if not need or re.fullmatch(pronoun, need, I):
+            return Intent("explain", "explain_self", "self", {"question": raw})
+        from jarvis.core import selfindex
+        card, sure = selfindex.best_for(need)
+        if card is not None and sure >= config.HELP_TOOL_MIN:
             return Intent("can", "find_capability", "self", {"need": need})
-        return None  # 'how do I cook rice?': a normal question for the AI
-    return Intent("can", "find_capability", "self", {"need": need})
+    if kind == "ability":  # 'are you able to fly?': a clear no, with what to do instead
+        return Intent("can", "find_capability", "self", {"need": rest_after(raw, n)})
+    return None  # general chat, a live search, an action: the usual path

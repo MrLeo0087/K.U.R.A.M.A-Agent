@@ -216,9 +216,7 @@ def test_a_setting_changes_only_when_real_and_in_range(meaning, text, want):
     assert (it.args if it else None) == want
 
 
-def test_explain_and_help_by_meaning(meaning):
-    meaning.update(label="explain_last", score=0.97)
-    assert fastpath.meaning_intent("how did you do that").args == {"question": "how did you do that"}
+def test_help_by_meaning(meaning):  # (explaining: core/querykind.py, test_self_knowledge.py)
     meaning.update(label="help_me", score=0.97)
     assert fastpath.meaning_intent("help me use kurama").tool == "help_me"
 

@@ -230,6 +230,11 @@ def sendfile_intent(t: str) -> Intent | None:
                 r"(?:\s+(?:you\s+)?(?:made|generated|created|drew|drawn))?" + _TGDEST +
                 r"?(?:\s+(?:as\s+well|too|also|again|now|please))?\s*[.!?]*$", t, I):  # '... as well' drew a NEW one
         return Intent("sendlast", "send_last_result", "telegram", {"kind": "image"}, "image")
+    if re.match(r"^\s*(?:(?:can|could)\s+you\s+|please\s+)?(?:send|share|forward)\s+(?:me\s+)?(?:a\s+|any\s+|some\s+|"
+                r"my\s+)?(?:files?|folders?|documents?|something|stuff)\s+(?:to|on|in)\s+(?:my\s+)?(?:phone|mobile|"
+                r"telegram)\b", t, I):  # no file named: ask (it sent the whole project folder, 11-06)
+        return Intent("say", "_say", "telegram", {"en": "Which file? Say its name, e.g. 'send report.pdf to telegram', "
+                                                         "or 'send this to my phone without internet' for Wi-Fi."})
     if _ANAPHORA_SEND.match(t):  # "send this folder" / "send it to telegram"
         return _focus_intent(t)
     m = _full(SENDFILE, t)

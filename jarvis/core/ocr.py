@@ -236,10 +236,18 @@ def tesseract(src: Path, langs: str = "") -> Result:
     return Result(text, "tesseract", sum(confs) / len(confs) if confs else 0.0, unsure, len(confs) / mpx)
 
 
+def _unread(text: str) -> bool:
+    """The read failed: nothing, or mostly '[?]' (11-06: a handwritten Tamil note came back as five '[?]')."""
+    words = re.findall(r"\[\?\]|\S+", text or "")
+    return not words or sum(1 for w in words if w == "[?]") / len(words) >= 0.4
+
+
 def vision(src: Path, focus: bool = False) -> Result:
     """The vision model reads it: one call. Small crops are enlarged (the model reads small letters badly), big
-    pictures kept up to 1600 px. focus = a window/screen capture: only the main content, not the app around it."""
-    from PIL import Image, ImageOps
+    pictures kept up to 1600 px, dark or tinted photos get their contrast stretched. focus = a window/screen capture:
+    only the main content, not the app around it. Text in any language and script is written as it is, with an
+    English line added when it isn't English. If the first read fails, a stronger model reads it once more."""
+    from PIL import Image, ImageEnhance, ImageOps
     from jarvis.core import llm
     with Image.open(src) as im:
         im = ImageOps.exif_transpose(im).convert("RGB")
@@ -247,6 +255,9 @@ def vision(src: Path, focus: bool = False) -> Result:
             f = min(3.0, 1200 / max(im.size))
             im = im.resize((int(im.width * f), int(im.height * f)), Image.LANCZOS)
         im.thumbnail((1600, 1600))
+        grey = ImageOps.grayscale(im)
+        if (max(grey.getextrema()) - min(grey.getextrema())) < 200 or sum(grey.resize((32, 32)).getdata()) / 1024 < 90:
+            im = ImageEnhance.Sharpness(ImageOps.autocontrast(grey, cutoff=1).convert("RGB")).enhance(1.6)  # dark / flat
         buf = io.BytesIO()
         im.save(buf, "JPEG", quality=88)
     b64 = base64.b64encode(buf.getvalue()).decode()
@@ -255,13 +266,23 @@ def vision(src: Path, focus: bool = False) -> Result:
             "This is ONE picture cut from the user's screen (a page, slide, video frame, photo or handwriting). ") +
            "Transcribe ALL of its text exactly as written, top to bottom: keep headings, line breaks, bullets, "
            "numbering, code and symbols (→, ε, {}) as they are; a table row per line. Handwritten words and notes "
-           "too; ignore drawings and pen marks that are not words. Nepali/Hindi in Devanagari. Do not describe the "
-           "picture, do not split it into parts, do not add anything. '[?]' for a word you can't read.")
-    r = llm.chat([{"role": "user", "content": [
+           "too; ignore drawings and pen marks that are not words. The text can be in ANY language and script "
+           "(English, Nepali, Hindi, Tamil, Arabic, Chinese...): write it in its own script, never guess it is "
+           "Devanagari. Do not describe the picture, do not split it into parts. '[?]' only for a word you really "
+           "can't read. If the text is not English, add a last line: 'English: <its meaning in English>'.")
+    msgs = [{"role": "user", "content": [
         {"type": "text", "text": ask},
-        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}]}],
-        tier="vision", purpose="ocr_vision", max_tokens=2000)
-    return Result((r.text or "").strip(), "vision", 100.0)
+        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}]}]
+    r = llm.chat(msgs, tier="vision", purpose="ocr_vision", max_tokens=2000)
+    text = (r.text or "").strip()
+    if _unread(text) and "vision_strong" in config.TIER_CHAIN:
+        try:
+            again = (llm.chat(msgs, tier="vision_strong", purpose="ocr_vision_retry", max_tokens=2000).text or "").strip()
+            if again and not _unread(again):
+                text = again
+        except Exception as e:  # noqa: BLE001 - keep the first read
+            log.info("second OCR read failed: %s", e)
+    return Result(text, "vision", 100.0)
 
 
 def _english_ratio(text: str) -> float:

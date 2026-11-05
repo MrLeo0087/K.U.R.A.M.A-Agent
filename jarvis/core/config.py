@@ -44,7 +44,10 @@ TIER_CHAIN: dict[str, list[str]] = {
     "smart": [LLM_DEFAULT, LLM_FAST, *_GEM, LLM_VISION],  # qwen last: when both gpt-oss models hit their daily limit (200k
     #                                                tokens each, 11-01) KURAMA keeps answering instead of "busy"
     "fast": [LLM_FAST, LLM_DEFAULT, *_GEM, LLM_VISION],  # rate-limited: the smart one, then qwen (its own daily quota)
-    "vision": [LLM_VISION, LLM_DEFAULT, *_GEM[:1]],  # second vision model; the text fallback still answers non-image asks
+    "vision": [LLM_VISION, LLM_DEFAULT, *_GEM[:1]],
+    # a second, stronger read when the first one couldn't read the text (handwriting, Tamil, a dark photo): Gemini
+    # reads handwriting and non-Latin scripts much better; it is only used when the first read failed
+    "vision_strong": [*_GEM[:1], LLM_VISION],  # second vision model; the text fallback still answers non-image asks
     "voice": list(dict.fromkeys([LLM_VOICE, LLM_FAST, *_GEM])),
     # Background writer jobs: smart model only (never falls back onto the fast/voice models' TPM).
     "writer": [LLM_DEFAULT, *_GEM[:1]],
@@ -347,6 +350,8 @@ ROUTER_MAX_GROUPS = 3
 # Free phrasing for tools: paraphrases embedded by the semantic router (0 tokens), so "enable speech to text
 # mode" finds dictate even though no keyword rule says so. Add a few lines here for any tool that gets missed.
 TOOL_EXAMPLES: dict[str, tuple[str, ...]] = {
+    "nepal_docs": ("what is the fee for nepal citizenship", "what is the overspeeding rule in nepal",
+                   "what is the divorce process in nepal", "which is the largest district of nepal"),
     "open_path": ("open this folder in vs code", "open downloads in vs code", "open main.py in vscode",
                   "open the kurama project in code", "open /home/leo/Downloads/test in vs code", "open it in vs code"),
     "move_path": ("rename this folder to old_test", "rename the folder test to test2", "rename report.pdf to final",
@@ -471,6 +476,21 @@ NOT_CLAIM_EXAMPLES = ("the sky is blue because of light scattering", "hello, how
 LANE_MIN = 0.80  # below this for every lane = unclear (garbled speech, or something new: the old routing decides)
 LANE_GENERAL_MARGIN = 0.03  # general must beat every other lane by this much to skip the tools
 LANE_EXAMPLES: dict[str, tuple[str, ...]] = {
+    # Nepal's laws, legal processes, government services, fees and Nepal general knowledge: the Nepal documents
+    # service (core/nepaldocs.py). Not live data (news, prices, scores today): that is "search".
+    "nepal": ("what is the fee for nepal citizenship", "how do i make a citizenship certificate in nepal",
+              "what is the overspeeding rule in nepal", "what is the fine for drunk driving in nepal",
+              "what is the marriage registration process in nepal", "how does divorce work in nepal",
+              "when was the constitution of nepal made", "which is the largest district of nepal",
+              "which is the smallest district of nepal", "how to get a passport in nepal",
+              "what documents are needed for a driving license in nepal", "what is the punishment for theft in nepal law",
+              "how to register land in nepal", "what is the tax on land sale in nepal", "how many provinces does nepal have",
+              "what are the fundamental rights in the nepal constitution", "how to register a company in nepal",
+              "what is the legal age of marriage in nepal", "what is the process for a birth certificate in nepal",
+              "how to file a case in a nepal court", "what does the nepal labour act say about leave",
+              "who appoints the chief justice of nepal", "what is the inheritance law in nepal",
+              "explain the citizenship law", "what does the law say about divorce", "tell me about nepal traffic rules",
+              "what is the process to get a national id card", "what is the penalty for not wearing a helmet"),
     "general": (
         "how are you", "hello bro how are you", "what's going on with you", "kya ho raha hai", "k xa khabar",
         "tell me a joke", "i am sad today", "i feel tired", "i am bored", "i am happy today", "thank you so much",
@@ -555,6 +575,19 @@ ROUTER_CHAT_EXAMPLES: tuple[str, ...] = (
 )
 # A few natural ways people ask, per group (what keywords can't list). Short and different from each other.
 ROUTER_EXAMPLES: dict[str, tuple[str, ...]] = {
+    "nepal": ("what is the fee for nepal citizenship", "how do i make a citizenship certificate in nepal",
+              "what is the overspeeding rule in nepal", "what is the fine for drunk driving in nepal",
+              "what is the marriage registration process in nepal", "how does divorce work in nepal",
+              "when was the constitution of nepal made", "which is the largest district of nepal",
+              "which is the smallest district of nepal", "how to get a passport in nepal",
+              "what documents are needed for a driving license in nepal", "what is the punishment for theft in nepal law",
+              "how to register land in nepal", "what is the tax on land sale in nepal", "how many provinces does nepal have",
+              "what are the fundamental rights in the nepal constitution", "how to register a company in nepal",
+              "what is the legal age of marriage in nepal", "what is the process for a birth certificate in nepal",
+              "how to file a case in a nepal court", "what does the nepal labour act say about leave",
+              "who appoints the chief justice of nepal", "what is the inheritance law in nepal",
+              "explain the citizenship law", "what does the law say about divorce", "tell me about nepal traffic rules",
+              "what is the process to get a national id card", "what is the penalty for not wearing a helmet"),
     "tracker": ("spent 500 on food", "how much did I spend this month", "set my food budget to 8000",
                 "check in my exercise habit", "show my habit streaks", "add a habit to read 20 pages a day"),
     "system": ("my laptop feels slow and laggy", "what is eating my memory", "check cpu and ram usage",
@@ -849,6 +882,9 @@ ROUTER_RULES: dict[str, tuple[str, ...]] = {
 }
 # Descriptions offered to the fast classifier when no rule matched.
 TOOL_GROUP_DESCRIPTIONS: dict[str, str] = {
+    "nepal": "Nepal's laws, legal processes, government services and fees, and Nepal general knowledge (citizenship, "
+             "passport, marriage, divorce, traffic rules and fines, land, tax, courts, the constitution, provinces and "
+             "districts), answered from Nepal's official documents (not live news or prices)",
     "tracker": "money spent/earned, budgets, bills; habit streaks",
     "general": "time and date (any city or country), simple utilities",
     "weather": "current weather and up to 3-day forecast for any place",
@@ -913,7 +949,7 @@ TOOL_GROUP_GLOSS: dict[str, str] = {
     "screen": "screenshot", "power": "battery", "clipboard": "", "windows": "",
     "apps": "", "media": "music", "desktop": "wallpaper", "git": "", "dev": "tests", "codequality": "review",
     "devutils": "notebooks", "study": "lectures",
-    "web": "search", "memory": "notes",
+    "web": "search", "memory": "notes", "nepal": "",
     "knowledge": "code", "usage": "tokens", "browser": "", "links": "",
     "jobs": "writing",
     "schedule": "remind",
@@ -1321,11 +1357,6 @@ MEANING_SHORTCUTS: dict[str, tuple[str, ...]] = {
                      "default", "keep that setting", "use that every time"),
     "setting_undo": ("undo that setting", "undo the setting change", "put the setting back", "undo the last setting"),
     "settings_reset": ("reset all settings", "reset my settings to default", "put every setting back to default"),
-    "explain_last": ("how did you do that", "how did you get that", "how do you find the time", "how do you measure my "
-                     "internet speed", "what method did you use", "explain how that works", "explain this code you gave",
-                     "how can i use this", "can i use this with vs code", "why did you do that", "where did that answer "
-                     "come from", "how does that work", "explain what you just did", "how can i use X",
-                     "how do i use the X you gave me", "how you measure that", "what did you use for that"),
     "help_me": ("help me use kurama", "how do i use you", "i am confused how to use you", "what commands can i use",
                 "show me what you can do", "how do i use kurama"),
     # your own commands ("when I say X, do Y" saves one): list them, forget one (X = its words)
@@ -1510,3 +1541,14 @@ def _apply_user_settings() -> None:
 
 
 _apply_user_settings()
+
+# --- the Nepal documents service (core/nepaldocs.py; URL + key in .env: KURAMA_RAG_API_URL, KURAMA_RAG_API_KEY) ---
+NEPAL_DOCS_TIMEOUT_S = 60.0  # it usually answers in 5-15 s
+NEPAL_DOCS_CACHE_S = 6 * 3600  # the same question again within 6 h: the saved answer
+NEPAL_LANE_MIN = 0.80  # the request is this close to a Nepal-documents example...
+NEPAL_LANE_MARGIN = 0.02  # ...and closer than to every other lane (search, general, ...) by this much
+# Nepali / Hindi in Devanagari (the meaning model reads English only): these words stand in for the meaning check
+NEPAL_DEVANAGARI_WORDS = ("संविधान", "कानुन", "कानून", "ऐन", "नियमावली", "नियम", "नागरिकता", "राहदानी", "पासपोर्ट",
+                          "जिल्ला", "प्रदेश", "विवाह", "बिहे", "सम्बन्ध विच्छेद", "पारपाचुके", "लाइसेन्स", "अनुमतिपत्र",
+                          "मालपोत", "जग्गा", "अदालत", "मुद्दा", "सजाय", "जरिवाना", "दस्तुर", "शुल्क", "प्रक्रिया", "अंशबण्डा",
+                          "नेपालको", "नेपाल")

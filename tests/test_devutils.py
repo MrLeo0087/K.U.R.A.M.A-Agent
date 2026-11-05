@@ -36,7 +36,7 @@ def test_routing_disambiguation_en_hi_ne(monkeypatch):
     assert route("generate requirements and run tests") == ["devutils", "dev"]
     assert route("run tests") == ["dev"] and route("what is this project about") == ["knowledge"]
     assert "devutils(" in meta.schema()["function"]["description"]
-    assert meta.estimate_tokens() < 200
+    assert meta.estimate_tokens() < 210
 
 
 SRC = '''import os

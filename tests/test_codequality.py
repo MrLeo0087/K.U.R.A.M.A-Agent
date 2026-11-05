@@ -51,7 +51,7 @@ def test_routing_en_hi_ne_and_meta_budget(monkeypatch):
     assert "git" in router.route("run the pre-commit checks then commit it", log_it=False).groups
     assert router.route("run tests", log_it=False).groups == ["dev"]
     assert "codequality(" in meta.schema()["function"]["description"]
-    assert meta.estimate_tokens() < 200
+    assert meta.estimate_tokens() < 210
 
 
 def _fake_llm(seen, bullets=12):
