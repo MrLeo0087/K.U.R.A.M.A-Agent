@@ -2064,6 +2064,9 @@ window.kuramaMiniShown = (on, keepTalking = false) => { // mini panel opened / h
   if (on) {
     const c = document.querySelector(".chat"); // a short rise-in as the window fades in
     c.classList.remove("enter"); void c.offsetWidth; c.classList.add("enter");
+    // the chat was laid out in the invisible 1 x 1 window: it opened as an empty box until a new message scrolled
+    // it (11-05). Show the newest messages at once, and again once the window has its real size
+    scrollDown(true); requestAnimationFrame(() => scrollDown(true)); setTimeout(() => scrollDown(true), 120);
     input.focus(); return;
   }
   if (miniGhost) { saveMiniLog(); return; }
@@ -2088,7 +2091,14 @@ function miniCaption(who, text, done = false) {
 }
 // Hold-to-talk (global key, see jarvis/core/ptt.py): the host calls kuramaPTT(1) on key down, (0) on release
 // (send what was said), (-1) to drop it (the key was part of a shortcut). Works with the panel open or closed.
-let pttOn = false, pttWant = null, pttStarting = false;
+let pttOn = false, pttWant = null, pttStarting = false, pttMicTimer = 0;
+// a hold right after another one waited 2-5 s for the mic to open again (11-05 07:57: "it just goes round and
+// round"): after a hold the mic stays open, unused (nothing is recorded or sent), for PTT_WARM_MS, then closes
+const PTT_WARM_MS = 15000;
+function pttMicDone() {
+  clearTimeout(pttMicTimer);
+  pttMicTimer = setTimeout(() => { if (!recording && !pttOn && !pttStarting && !conv.on && mode !== "mic") mic.stop(); }, PTT_WARM_MS);
+}
 window.kuramaPTT = async (v) => {
   if (v === -2) { player.stop(); return; } // Super+X: stop the spoken reply (the host hides the caption)
   pttWant = v; // the latest key event wins: fast presses never leave the mic on
@@ -2096,10 +2106,11 @@ window.kuramaPTT = async (v) => {
   if (v === 1) {
     if (recording || pttStarting) return;
     pttStarting = true;
+    clearTimeout(pttMicTimer);
     audioCtx();
     try { await mic.start({ system: false }); } catch (e) { pttStarting = false; hostSay("pttlog:mic failed " + (e?.name || e)); miniCaption("bot", micError(e), true); return; }
     pttStarting = false;
-    if (pttWant === -1) { mic.stop(); return; } // let go / cancelled while the mic was starting
+    if (pttWant === -1) { pttMicDone(); return; } // let go / cancelled while the mic was starting
     player.stop();
     recorder.start(); recording = pttOn = true; recSecs = 0;
     hostSay("pttlog:recording");
@@ -2110,10 +2121,10 @@ window.kuramaPTT = async (v) => {
   }
   if (!pttOn) return; // up / cancel with nothing recording (or still starting: handled above)
   pttOn = false; recording = false;
-  if (v === -1) { recorder.cancel(); mic.stop(); updateState(); return; }
+  if (v === -1) { recorder.cancel(); pttMicDone(); updateState(); return; }
   sttBusy = true; updateState(); // the host keeps the hidden panel alive while this says "thinking"
   const blob = await recorder.stop();
-  mic.stop();
+  pttMicDone();
   hostSay(`pttlog:stopped, ${blob ? blob.size : 0} bytes`);
   let r = null;
   if (blob && blob.size >= 1200) { try { r = await api.stt(blob, S.lang); } catch { /* offline */ } }

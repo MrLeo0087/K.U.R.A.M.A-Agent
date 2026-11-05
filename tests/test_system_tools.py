@@ -448,3 +448,15 @@ def test_volume_above_100_with_over_amplification(desk, monkeypatch):
     monkeypatch.setattr(vol, "max_level", lambda: 100)
     assert "Over-Amplification" in vol.volume("set", 130)
     assert fastpath.match("set volumn 130").args == {"action": "set", "level": 130}
+
+
+def test_the_window_is_the_one_below_kurama(desk, monkeypatch):
+    """Typed in KURAMA's own chat, KURAMA is the active window: 'minimize the window' means the one you were in."""
+    from jarvis.core import rewrite
+    from jarvis.tools.general import _sys, snap_window as sw
+    real = _sys.run
+    monkeypatch.setattr(_sys, "run", lambda argv, **k: "KURAMA" if argv[:2] == ["xdotool", "getwindowname"] else real(argv, **k))
+    monkeypatch.setattr(rewrite, "target_window", lambda skip_hidden=False: (0x4a00003, False))
+    monkeypatch.setattr(rewrite, "_window_name", lambda wid, limit=60: "GitHub - Mozilla Firefox")
+    assert sw.snap_window("minimize") == "minimized GitHub - Mozilla Firefox"
+    assert desk.ran("xdotool", "windowminimize", str(0x4a00003))

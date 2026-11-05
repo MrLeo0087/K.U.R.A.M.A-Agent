@@ -155,7 +155,10 @@ export class Mic {
   // so there is no echo to cancel, and loading it first cost ~1-2 s: the first holds after start-up recorded
   // silence ('' x3 at 20:06, 11-04). Hands-free talk keeps it (KURAMA speaks while it listens).
   async start({ plain = false, system = true } = {}) {
-    if (this.stream) return;
+    if (this.stream) {
+      if (this.plain === plain && this.system === (!plain && system)) return; // already open as wanted
+      this.stop(); // open with other settings (the warm hold-to-talk mic, then talk mode wants echo cancelling)
+    }
     this.plain = plain; this.system = !plain && system;
     if (this.system) await micHooks.before?.(); // the system echo canceller starts only while KURAMA really listens
     if (!navigator.mediaDevices?.getUserMedia) {

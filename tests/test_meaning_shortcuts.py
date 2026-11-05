@@ -118,3 +118,37 @@ def test_cleanups_by_meaning(meaning, monkeypatch, text, label, action):
     monkeypatch.setattr(fastpath, "meaning_ok", lambda t, it: True)
     meaning.update(label=label, score=0.9)
     assert fastpath.meaning_intent(text).args == {"action": action}
+
+
+WINS = [{"id": "0x03c00006", "wmclass": "code.Code", "title": "main.py - Visual Studio Code"},
+        {"id": "0x04a00003", "wmclass": "brave-browser.Brave-browser", "title": "(1) YouTube - Brave"}]
+
+
+@pytest.mark.parametrize("text,label,want", [
+    ("Minimize the window.", "window_minimize", {"action": "minimize", "name": ""}),
+    ("minimize youtube", "window_minimize", {"action": "minimize", "name": "youtube"}),
+    ("maximize vs code", "window_maximize", {"action": "maximize", "name": "vs code"}),
+    ("restore the window", "window_restore", {"action": "restore", "name": ""}),
+])
+def test_one_window_by_meaning_never_all_of_them(meaning, monkeypatch, text, label, want):
+    """11-05: 'Minimize the window.' showed the desktop (every window); 'Minimized Browser' cost 1.5k tokens."""
+    from jarvis.tools.general import _apps
+    monkeypatch.setattr(_apps, "list_windows", lambda: WINS)
+    meaning.update(label=label, score=0.97)
+    it = fastpath.meaning_intent(text)
+    assert it is not None and (it.tool, it.args) == ("window", want)
+
+
+def test_a_window_action_on_an_app_that_is_not_open_goes_to_the_ai(meaning, monkeypatch):
+    from jarvis.tools.general import _apps
+    monkeypatch.setattr(_apps, "list_windows", lambda: WINS)
+    meaning.update(label="window_minimize", score=0.97)
+    assert fastpath.meaning_intent("minimize spotify") is None
+
+
+def test_open_app_names_are_slots(monkeypatch):
+    from jarvis.tools.general import _apps
+    monkeypatch.setattr(_apps, "list_windows", lambda: WINS)
+    assert fastpath._mask_open_apps("minimize vs code") == "minimize X"
+    assert fastpath._mask_open_apps("make youtube full screen") == "make X full screen"
+    assert fastpath._mask_open_apps("minimize the window") is None

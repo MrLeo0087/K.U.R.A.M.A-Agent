@@ -1786,6 +1786,8 @@ def match(text: str) -> Intent | None:
         return Intent("choice", tool, registry_group(tool), args)
     if (played := player_intent(text)) is not None:  # 'pause' / 'continue' while KURAMA's music is on
         return played
+    if (win := _window_first(text)) is not None:  # 'restore vs code' was read as a question about the open file
+        return win
     it = app_name_intent(text) or style_intent(text) or new_project_intent(text) or ranked_files_intent(text) \
         or agent_intent(text) or agent_coding_intent(text) or link_play_intent(text) or clean_intent(text) \
         or shutdown_later_intent(text) or to_file_intent(text) or selection_intent(text) \
@@ -2042,7 +2044,54 @@ def meaning_label(t: str) -> tuple[str, float] | None:
         _vocab[""] = set().union(*(_words(e) for exs in config.MEANING_SHORTCUTS.values() for e in exs)) - {"x"}
     masked = re.sub(r"\bX(?:\s+X\b)+", "X", " ".join(w if _known(w, _vocab[""]) else "X"
                                                      for w in re.findall(r"[\w'.+#-]+", t)))
-    return semantic.best_of(masked, "meaning_shortcuts", config.MEANING_SHORTCUTS)
+    best = semantic.best_of(masked, "meaning_shortcuts", config.MEANING_SHORTCUTS)
+    if (apps := _mask_open_apps(t)) is not None:  # an open app's name is a slot too ('minimize vs code': "code" and
+        win = {k: config.MEANING_SHORTCUTS[k] for k in _WINDOW_LABELS}  # "telegram" are words other actions know)
+        wb = semantic.best_of(apps, "window_shortcuts", win)
+        if wb and (best is None or wb[1] > best[1]):
+            best = wb
+    return best
+
+
+_WINDOW_LABELS = ("window_minimize", "window_maximize", "window_restore")
+
+
+def _window_first(text: str) -> Intent | None:
+    """A short request that clearly MEANS one window action (>= 0.95 to its examples, an open app named or none)
+    wins before the word patterns: they read 'make vs code full screen' as a writing request about VS Code."""
+    from jarvis.core import semantic
+    if len(text.split()) > 7 or not semantic.ready():  # never loads the model just for this (later steps may)
+        return None
+    t = " ".join((text or "").split()).strip(" .!?")
+    best = meaning_label(t)
+    if not best or best[0] not in _WINDOW_LABELS or best[1] < 0.95:
+        return None
+    it = meaning_intent(text)
+    return it if it is not None and it.tool == "window" else None
+
+
+def _mask_open_apps(t: str) -> str | None:
+    """The request with the name of an app that has a window open replaced by X ('minimize vs code' -> 'minimize X'),
+    or None (no open app named, or not a short request). The window list is read once (wmctrl, ~10 ms)."""
+    toks = re.findall(r"[\w'.+#-]+", t)
+    if not 2 <= len(toks) <= 7:
+        return None
+    try:
+        from jarvis.tools.general import _apps
+        wins = _apps.list_windows()
+    except Exception:  # noqa: BLE001 - no wmctrl / X
+        return None
+    for n in (3, 2, 1):  # the longest name first ('visual studio code' before 'code')
+        for i in range(1, len(toks) - n + 1):  # never the first word: that is what to do
+            span = " ".join(toks[i:i + n])
+            if span.lower() in ("the", "this", "window", "the window", "my", "all"):
+                continue
+            try:
+                if _apps.match_windows(span, wins)[0]:
+                    return " ".join([*toks[:i], "X", *toks[i + n:]])
+            except Exception:  # noqa: BLE001
+                return None
+    return None
 
 
 def meaning_intent(text: str) -> Intent | None:
@@ -2099,6 +2148,19 @@ def meaning_intent(text: str) -> Intent | None:
         if msg is None:
             return None
         it = Intent("tgmsg", "send_message_telegram", "telegram", {"text": msg}, known=msg)
+        return it if meaning_ok(t, it) else None
+    if label in ("window_minimize", "window_maximize", "window_restore"):  # one window, never all of them
+        if pos and (pos[-1] - pos[0] + 1 != len(pos) or len(pos) > 4):
+            return None  # two separate unknown parts or a long one: more than an app name -> the AI
+        name = " ".join(extra)
+        if name:  # only an app that has a window open (else the AI explains / opens it)
+            from jarvis.tools.general import _apps
+            try:
+                if not _apps.match_windows(name)[0]:
+                    return None
+            except Exception:  # noqa: BLE001 - no wmctrl: the AI path
+                return None
+        it = Intent("window", "window", "windows", {"action": label.split("_")[1], "name": name}, known=name)
         return it if meaning_ok(t, it) else None
     if label in ("save_link", "switch_tab", "close_tab"):  # the words left over ARE the name ("save this website names
         if pos and (pos[-1] - pos[0] + 1 != len(pos) or pos[0] == 0):  # whatsapp" -> whatsapp)

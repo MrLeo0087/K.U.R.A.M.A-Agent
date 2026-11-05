@@ -38,10 +38,23 @@ def _target(window: str) -> tuple[str, str]:
         wins, label = _apps.match_windows(window)
         if not wins:
             raise _sys.SysError(f"no open window matches {window!r}")
+        title, q = str(wins[0].get("title") or ""), window.strip()
+        if q and (i := title.lower().find(q.lower())) >= 0 and q.lower() not in label.lower():
+            label = title[i:i + len(q)]  # 'minimize youtube' = the YouTube tab's window, not "Video Downloader"
         return hex(int(wins[0]["id"], 16)), label
     wid = _sys.run(["xdotool", "getactivewindow"]).strip()
     if not wid.isdigit():
         raise _sys.SysError("no active window")
+    try:  # typed or said in KURAMA's own chat: KURAMA is the active window, but "the window" is the one you were in
+        name = _sys.run(["xdotool", "getwindowname", wid]).strip()
+    except (_sys.SysError, _proc.ProcError):
+        name = ""
+    if name.lower().startswith("kurama") or "127.0.0.1:8000" in name or "localhost:8000" in name:
+        from jarvis.core import rewrite
+        below, _ = rewrite.target_window(skip_hidden=True)
+        if below:
+            title = rewrite._window_name(below, 40) or "the window"
+            return hex(below), title
     return hex(int(wid)), "the active window"
 
 

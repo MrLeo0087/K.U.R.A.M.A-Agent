@@ -1254,3 +1254,19 @@ Phases (one at a time, owner tests after each):
   middle of the screen, edges level, growing towards the middle; above/below only on a too-narrow screen), placed
   by the size it will open at, never the hidden 1 x 1 size (that made it open up / down / left / right at random).
   beside_pos() is pure and tested over a grid of button positions. Dragging the button moves the open chat with it.
+
+## 2026-11-05 (morning): window commands at 0 tokens; Alt after start-up; empty chat box
+- Traces: 'Minimize the window.' showed the desktop (every window), 'Minimized Browser' went to the AI (1.5k tokens).
+  New meaning shortcuts window_minimize / window_maximize / window_restore (X = an app with an open window, none =
+  the window you were in): 0 tokens. An open app's name is now a slot in meaning_label (_mask_open_apps: 'code',
+  'telegram' are words other actions know), and a clear (>= 0.95) window action wins before the word patterns
+  ('restore vs code' was read as a question about the open file). snap_window: when KURAMA's own chat is the
+  active window, "the window" is the visible one below it; 'minimize youtube' says YouTube, not "Video Downloader".
+- Alt right after start-up went to the invisible 1 x 1 preload, which counted as "open": no caption, the ring just
+  spun, and the first click "closed" it. `open` now excludes the shrunk window. Opening: placed before it maps (it
+  appeared near the top first), scrolled to the newest message (laid out at 1 x 1 it opened as an empty box), the
+  chat's rise-in no longer fades its content (only the window fades, 140 ms). Recorded with ffmpeg at 30 fps: the
+  first open after a start shows ~3 frames of empty glass, later opens <= 1 frame.
+- Hold-to-talk: the mic stays open (unused, nothing recorded) 15 s after a hold, so the next hold starts at once
+  (a hold 2 s after another waited 2-5 s for the mic); Mic.start reopens with the right settings for talk mode.
+- Links: a pending "what should I call this link?" no longer takes 'Hi' / 'i' / thanks as the name.

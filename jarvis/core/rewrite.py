@@ -49,7 +49,7 @@ def _is_kurama(name: str, cls: tuple | None) -> bool:
     return n.startswith("kurama") and any(b in c for b in ("brave", "chrome", "chromium", "firefox"))
 
 
-def target_window() -> tuple[int | None, bool]:
+def target_window(skip_hidden: bool = False) -> tuple[int | None, bool]:
     """(window to paste into, it_is_the_active_one). When KURAMA's own window is in front (the request was typed in
     the dashboard), the target is the window right below it in the stacking order = where the user just was."""
     try:
@@ -67,9 +67,15 @@ def target_window() -> tuple[int | None, bool]:
             return (nm.value.decode(errors="replace") if nm else ""), w.get_wm_class()
         if active_id and not _is_kurama(*info(active_id)):
             return active_id, True
+        state_atom, hidden = d.intern_atom("_NET_WM_STATE"), d.intern_atom("_NET_WM_STATE_HIDDEN")
+
+        def minimized(wid: int) -> bool:
+            st = d.create_resource_object("window", wid).get_full_property(state_atom, X.AnyPropertyType)
+            return bool(st and hidden in st.value)
         for wid in reversed(list(stack.value) if stack else []):  # top of the stack first
             name, cls = info(wid)
-            if name and not _is_kurama(name, cls) and cls and cls[0] not in ("gnome-shell", "desktop_window"):
+            if name and not _is_kurama(name, cls) and cls and cls[0] not in ("gnome-shell", "desktop_window") \
+                    and not (skip_hidden and minimized(wid)):  # "minimize the window" = one you can see
                 return wid, False
     except Exception as e:  # noqa: BLE001 - no Xlib/X: treat the front window as the target
         log.info("window lookup failed: %s", e)

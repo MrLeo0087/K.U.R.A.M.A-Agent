@@ -7,6 +7,18 @@ import re
 from jarvis.core.intents.base import I, Intent, URL_RE, _RL_LIST, _nth, yes_no
 
 
+def _small_talk(text: str) -> bool:
+    """A greeting / thanks / okay (the everyday replies) or small talk by meaning: never a name for something."""
+    s = (text or "").strip(" .!,")
+    try:
+        from jarvis.core import fastpath, templates
+        if any(rx.match(s) for rx in (fastpath._HELLO, fastpath._THANKS, fastpath._OKAY, fastpath._BYE)):
+            return True
+        return templates.small_talk(s) is not None
+    except Exception:  # noqa: BLE001 - model not loaded: not small talk
+        return False
+
+
 # --- saved links: 'this is the link for Claude Code, save it', 'give me my Facebook link' (0 tokens) ---
 _L_WORD = r"(?:link|url|page|site|website|address)"
 
@@ -29,7 +41,8 @@ def links_intent(t: str) -> Intent | None:
             return L("cancel")
         if m := re.fullmatch(r"(?:call|name|save|label)\s+it\s+(?:as\s+)?(?P<n>.+)|(?:it'?s|it\s+is|this\s+is)\s+(?:my\s+|the\s+)?(?P<n2>.+)", t.strip(" .!"), I):
             return L("name", name=m.group("n") or m.group("n2"))
-        if len(low.split()) <= 5 and not t.strip().endswith("?"):
+        if len(low.split()) <= 5 and not t.strip().endswith("?") and len(re.sub(r"\W", "", low)) >= 2 \
+                and not _small_talk(t):  # 'i' (a misheard 'hi') and 'hi' were saved as a link's name (11-05)
             return L("name", name=t.strip(" .!"))
     # save with a name
     for rx in (r"(?:this|that|it)\s+is\s+(?:the\s+|my\s+|a\s+)?" + _L_WORD + r"\s+(?:for|of|to)\s+(?:my\s+|the\s+)?(?P<n>[^,.;]+?)"

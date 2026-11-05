@@ -1574,7 +1574,8 @@ body.mini.compact .chips, body.mini.compact .msg.bot .meta { display: none !impo
 body.mini.compact .messages { gap: 10px; }
 body.mini.compact .msg .who { margin-bottom: 4px; }
 /* open: a short rise as the window fades in (one-shot) */
-@keyframes m-enter { from { opacity: 0; transform: translateY(8px) scale(0.985); } to { opacity: 1; transform: none; } }
+/* movement only: the window itself fades in. An opacity 0 -> 1 here too left the frosted glass empty for ~0.3 s */
+@keyframes m-enter { from { transform: translateY(6px) scale(0.99); } to { transform: none; } }
 body.mini .chat.enter { animation: m-enter 0.2s cubic-bezier(0.22, 1, 0.36, 1) both; }
 body.mini .m-lookp label.row { grid-template-columns: 1fr auto; align-items: center; }
 body.mini .m-lookp input[type="color"] { width: 34px; height: 22px; padding: 0; border: 1px solid var(--m-hair); border-radius: 6px; background: none; }

@@ -1315,6 +1315,14 @@ MEANING_SHORTCUTS: dict[str, tuple[str, ...]] = {
                    "create a new folder in X named X", "make a folder called X in X"),
     "show_desktop": ("go to the home screen", "show me the desktop", "minimize all windows", "hide every window",
                      "take me to the home screen"),
+    # one window (X = the app, none = the window you were in): 0 tokens. 11-05: 'Minimize the window.' went to the
+    # home screen (every window), 'Minimized Browser' cost 1.5k tokens
+    "window_minimize": ("minimize the window", "minimize this window", "minimize X", "minimize the X window",
+                        "minimise X", "hide the X window", "minimize the current window", "put X down"),
+    "window_maximize": ("maximize the window", "maximize this window", "maximize X", "maximize the X window",
+                        "make X full screen", "make this window full screen", "make X bigger"),
+    "window_restore": ("restore the window", "restore X", "bring X back", "unminimize X", "show the X window again",
+                       "bring back the X window"),
     "copy_path": ("copy the path of this folder", "copy this file's path", "put the path of the selected folder in "
                   "my clipboard", "copy the full path of the current folder", "copy the location of this file",
                   "path copy gara"),
@@ -1359,7 +1367,7 @@ MEANING_SHORTCUTS: dict[str, tuple[str, ...]] = {
 }
 MEANING_SHORTCUT_AREAS = {"save_link": "links", "list_links": "links", "read_later_add": "links", "copy_path": "clipboard",
                           "open_vscode": "files", "jobs_start": "jobs", "jobs_list": "jobs",
-                          "clean_ram": "system", "clean_kurama": "system", "clean_storage": "system", "show_desktop": "windows", "switch_tab": "windows",
+                          "clean_ram": "system", "clean_kurama": "system", "clean_storage": "system", "show_desktop": "windows", "window_minimize": "windows", "window_maximize": "windows", "window_restore": "windows", "switch_tab": "windows",
                           "list_tabs": "windows", "close_tab": "windows", "close_all_tabs": "windows", "scroll_down": "windows", "scroll_up": "windows", "colab_setup": "watch", "new_folder": "files",
                           "tg_message": "telegram", "time_now": "general", "date_today": "general",
                           "battery": "power", "git_status": "git", "daily_summary": "usage"}  # the router offers it too

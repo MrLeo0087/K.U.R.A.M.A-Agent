@@ -826,7 +826,11 @@ class Mini:
 
     @property
     def open(self) -> bool:
-        return self.panel is not None and self.panel.get_visible() and not self.ghost
+        """The chat is on screen for the owner. The invisible 1 x 1 start-up preload is not (11-05: it counted as open,
+        so after every start Alt went to that invisible chat (no caption, the ring just spun) and the first click
+        on the button "closed" it)."""
+        return self.panel is not None and self.panel.get_visible() and not self.ghost and \
+            not getattr(self, "shrunk", False)
 
     # ---------- messages from the panel's page ----------
     def on_page(self, msg: str) -> None:
@@ -935,7 +939,7 @@ class Mini:
         return True
 
     def fade(self, win, show: bool, then=None) -> None:
-        """A short fade (~180 ms, eased) when the panel opens / closes."""
+        """A short fade (~140 ms, eased) when the panel opens / closes."""
         if self.fader:
             GLib.source_remove(self.fader)
             self.fader = 0
@@ -943,7 +947,8 @@ class Mini:
 
         def tick():
             step[0] += 1
-            t = min(1.0, step[0] / 9)  # ~180 ms, eased out: fast at first, soft at the end
+            t = min(1.0, step[0] / 7)  # ~140 ms, eased out: mostly visible after 2 frames (the glass behind it
+            #                            is drawn at once by the blur extension: a slow fade showed an empty box)
             e = 1 - (1 - t) ** 3
             win.set_opacity(e if show else 1 - e)
             if t >= 1:
@@ -1274,6 +1279,8 @@ class Mini:
                 self.unshrink_ghost()
                 self.panel.input_shape_combine_region(None)
                 self.panel.set_keep_above(True)
+            self.place_panel()  # BEFORE it maps: it appeared at the window manager's spot (a frosted empty box near
+            self.panel.set_opacity(0)  # the top of the screen) and then jumped beside the button (11-05 screenshots)
             self.panel.show_all()
             self.place_panel()
             self.fade(self.panel, True)
