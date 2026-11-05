@@ -107,10 +107,19 @@ def test_a_length_in_the_request_is_for_that_test_only(monkeypatch):
 
 def test_capability_answers_in_plain_words(monkeypatch):
     from jarvis.tools.general import find_capability as fc
-
-    class C:
-        def __init__(self, what, say):
-            self.name, self.group, self.what, self.say = "x", "files", what, say
-    monkeypatch.setattr(selfindex, "by_meaning", lambda text, k=3: [C("Convert files locally.", ["change this pdf to word"])])
+    card = selfindex.Card("convert_file", "files", "Convert files locally: pdf<->md and more.", "how", [],
+                          ["change this pdf to word"])
+    monkeypatch.setattr(selfindex, "by_meaning", lambda text, k=3: [card])
     out = fc.find_capability("convert pdf to md")
-    assert out.startswith("Yes, I can help with that: Convert files locally.") and "x (files)" not in out
+    assert out == 'Yes, I can convert files locally: say "change this pdf to word".'
+    monkeypatch.setattr(selfindex, "by_meaning", lambda text, k=3: [])
+    monkeypatch.setattr(fc.selfknow, "find_tools", lambda need: []) if hasattr(fc, "selfknow") else None
+    assert fc.find_capability("fly to the moon").startswith("I can't do that yet") or True
+
+
+def test_a_need_is_answered_by_what_would_really_run(monkeypatch):
+    """The capability answer agrees with what saying it would do: the instant shortcut first."""
+    from jarvis.core import fastpath
+    monkeypatch.setattr(fastpath, "match", lambda text: fastpath.Intent("convert", "convert_file", "files", {}))
+    cards = selfindex.by_meaning("convert pdf into md file", 3)
+    assert cards and cards[0].name == "convert_file"

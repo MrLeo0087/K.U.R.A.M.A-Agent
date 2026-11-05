@@ -14,12 +14,9 @@ def help_me(topic: str = "") -> str:
         topic: A need or area ("files", "send to my phone", "training"); empty = everything by area.
     """
     from jarvis.core import config, registry, selfindex
-    if topic.strip():
-        cards = selfindex.by_meaning(topic, 4)
-        if not cards:
-            return f"I didn't find a command for '{topic}'. " + _teach()
-        lines = [f"- {c.what}" + (f" Say: \"{c.say[0]}\"" if c.say else "") for c in cards]
-        return f"For '{topic}', try:\n" + "\n".join(lines) + "\n" + _teach()
+    if topic.strip():  # the same short answer as "can you ...?" (a list went to the workspace: "I found For 'x'...")
+        from jarvis.tools.general.find_capability import find_capability
+        return find_capability(topic)
     registry.REGISTRY._ensure()
     by_group: dict[str, list[str]] = {}
     for n, t in registry.REGISTRY.tools.items():

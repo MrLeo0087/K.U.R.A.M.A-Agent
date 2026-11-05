@@ -15,14 +15,15 @@ def find_capability(need: str) -> str:
     """
     from jarvis.core import selfindex, selfknow
     cards = selfindex.by_meaning(need, 4)
-    if cards:  # in the owner's words: what it is and how to ask (no internal names)
-        top, rest = cards[0], cards[1:]
-        out = [f"Yes, I can help with that: {top.what}" + (f' Say: "{top.say[0]}".' if top.say else "")]
-        out += [f"Also: {c.what}" + (f' ("{c.say[0]}")' if c.say else "") for c in rest[:2]]
-        return "\n".join(out)
+    if cards:  # one short answer in the owner's words: what it is and the words to say (no internal names)
+        top = cards[0]
+        if top.direct:  # saying the need runs it: tell exactly that
+            out = f"Yes, I can {top.short()}: just say \"{need.strip(' ?.!')}\"" + (f" (or {top.ask()})." if top.ask() else ".")
+        else:
+            out = f"Yes, I can {top.short()}" + (f": {top.ask()}." if top.ask() else ".")
+        return out  # one clear answer (a second "Or ..." was usually off-topic: 'rename a folder' for sending files)
     hits = selfknow.find_tools(need)
     if not hits:
-        return ("no built-in tool matches; options: search the web for how-to steps, the owner's own command ('when I "
-                "say X, do Y'), or build a small new tool with make_tool (it asks the user itself with a Yes/No box: "
-                "don't ask in chat first)")
+        return ("I can't do that yet. You can teach me your own command (\"when I say X, do Y\"), or I can build a small "
+                "new tool for it: say \"make a tool that ...\" (I ask before I make it).")
     return "\n".join(f"- {name} ({group}): {desc}" for group, name, desc in hits)

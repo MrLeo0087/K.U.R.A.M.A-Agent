@@ -16,6 +16,7 @@ _FIX: list[tuple[str, str]] = [
     (r"\bthne\b", "then"), (r"\b(?:fodler|foldr|floder|folde)\b", "folder"), (r"\bsettign\b", "setting"),
     (r"\b(?:ahve|hvae|hav)\b", "have"), (r"\b(?:abality|abilty|ablity|abiltiy)\b", "ability"),
     (r"\b(?:convery|covert|conevrt|convet)\b", "convert"), (r"\b(?:posible|possibel)\b", "possible"),
+    (r"\b(?:parmanent|permanant|parmanant|permenent|permament)\b", "permanent"),
 ]
 _RX = [(re.compile(a, re.I), b) for a, b in _FIX]
 

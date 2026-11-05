@@ -19,6 +19,17 @@ class Card:
     how: str
     settings: list[str]
     say: list[str]
+    direct: bool = False  # saying the need itself runs this tool (the instant shortcut matched it)
+
+    def short(self) -> str:
+        """What it does in a few words, for the owner ('Send a file or folder to the phone over Wi-Fi')."""
+        import re
+        s = re.split(r"(?<=[a-z)])[:.;](?:\s|$)", self.what.strip(), maxsplit=1)[0].strip()
+        s = re.sub(r"\bthe user's\b", "your", re.sub(r"\b(?:the user|the owner)\b", "you", s))
+        return (s[:1].lower() + s[1:])[:110]
+
+    def ask(self) -> str:
+        return f'say "{self.say[0]}"' if self.say else ""
 
     def text(self, how_chars: int = 600, plain: bool = False) -> str:
         """plain: no internal names (for answers to the owner: 'I look at the get_time tool' sounded like a robot)."""
@@ -97,12 +108,41 @@ def cards_for(names: list[str]) -> list[Card]:
 
 
 def by_meaning(text: str, k: int = 3) -> list[Card]:
-    """The tools whose description is closest to the text (local model, 0 tokens), as cards."""
-    from jarvis.core import registry, semantic
+    """The tools that would really handle this need, best first (0 tokens), decided the SAME way a request is:
+    1. the instant shortcut that would run for it (fastpath.match, nothing is executed);
+    2. else the router's areas for it, and inside them the tools closest in meaning (description + example phrases).
+    Ranking every tool by its description alone answered 'read my screen' with 'lock the screen'."""
+    from jarvis.core import config, registry, semantic
     try:
-        semantic.ensure_ready()  # loads the small local model if it was unloaded (~0.6 s; 0 tokens)
+        semantic.ensure_ready()  # the small local model (~0.6 s if it was unloaded; 0 tokens)
         registry.REGISTRY._ensure()
-        tools = registry.REGISTRY.by_meaning(text, k=k, raw=True)
-    except Exception:  # noqa: BLE001 - model not ready
-        tools = []
-    return cards_for([t.name for t in tools])
+    except Exception:  # noqa: BLE001
+        return []
+    first: list[str] = []
+    try:
+        from jarvis.core import fastpath
+        it = fastpath.match(text)
+        if it is not None and not it.tool.startswith("_") and it.tool not in _SELF_TOOLS:
+            first.append(it.tool)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        from jarvis.core import router
+        groups = [g for g in router.route(text).groups if g != "self"]
+    except Exception:  # noqa: BLE001
+        groups = []
+    scored = []
+    for n, t in registry.REGISTRY.tools.items():
+        if registry.group_of(t) not in groups or n in first or n in _SELF_TOOLS or not t.description:
+            continue
+        exs = (t.description.split(". ")[0], *config.TOOL_EXAMPLES.get(n, ())[:6])
+        if (b := semantic.best_of(text, "toolcard:" + n, {n: exs})) is not None:
+            scored.append((b[1], n))
+    scored.sort(reverse=True)
+    cards = cards_for(first + [n for s, n in scored if s >= 0.5])[:k]
+    if first and cards and cards[0].name == first[0]:
+        cards[0].direct = True
+    return cards
+
+
+_SELF_TOOLS = {"find_capability", "help_me", "explain_self", "kurama_settings", "about_me"}

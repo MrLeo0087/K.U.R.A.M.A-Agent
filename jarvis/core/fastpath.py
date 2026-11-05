@@ -2323,11 +2323,18 @@ def _about_me_intent(label: str, raw: str, t: str, extra: list[str]) -> Intent |
     from jarvis.core import usersettings
     if label == "explain_last":
         return _ok(t, Intent("explain", "explain_self", "self", {"question": raw}))
-    if label == "help_me":
-        return _ok(t, Intent("help", "help_me", "self", {"topic": " ".join(extra)}))
+    if label == "help_me":  # the need in the owner's own words ('sending a file to my phone'), not the leftover words
+        topic = re.sub(r"^.*?\bhelp\s+(?:me\s+)?(?:with\s+|to\s+|for\s+)?", "", raw, count=1, flags=I).strip(" ?.!") \
+            if re.search(r"\bhelp\b", raw, I) else " ".join(extra)
+        if re.fullmatch(r"(?:me\s+)?(?:use|using)\s+(?:you|kurama)|", topic, I):
+            topic = ""
+        return _ok(t, Intent("help", "help_me", "self", {"topic": topic}))
     if label == "capability_ask":  # 'do you have the ability to convert a pdf?': answer it, never do it
         need = re.sub(r"^.*?\b(?:ability|able|possible|support|know how|way|feature|abality)\b\s*(?:for you\s+)?(?:to\s+)?",
                       "", raw, flags=I).strip(" ?.!") or raw
+        need = re.sub(r"^(?:can|could|will)\s+you\s+", "", need, flags=I)
+        if re.fullmatch(r"(?:(?:do|make|run|open|send)\s+)?(?:it|that|this|those|them)(?:\s+or\s+not)?", need.lower()):
+            return _ok(t, Intent("explain", "explain_self", "self", {"question": raw}))  # 'can you do it or not?'
         return _ok(t, Intent("can", "find_capability", "self", {"need": need}))
     if label == "setting_keep":
         return None if extra else _ok(t, Intent("settings", "kurama_settings", "self", {"action": "keep"}))
@@ -2839,6 +2846,8 @@ def render(intent: Intent, ok: bool, output: str, lang: str) -> str:
         from jarvis.core import identity
         return f"I'm {identity.name()}, your personal assistant on this laptop. " + out.split(". ", 2)[-1].split(". ")[0] + "."
     if intent.name == "havetool":
+        if out.startswith(("Yes, I can", "I can't do that yet")):  # find_capability's own plain answer
+            return out
         lines = [ln[2:].split(" (", 1)[0].replace("_", " ") for ln in out.splitlines() if ln.startswith("- ")]
         if not lines:
             return ("I don't have a tool for that yet. I can search the web for the steps, or build a small new "

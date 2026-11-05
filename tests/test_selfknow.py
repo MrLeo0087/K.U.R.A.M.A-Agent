@@ -54,4 +54,4 @@ def test_rename_and_answers_to_new_name():
 
 def test_find_capability_python_project():
     out = fastpath.try_answer("do you have a tool to create a python project").answer
-    assert "scaffold project" in out
+    assert out.startswith("Yes, I can") and "project" in out.lower()

@@ -120,7 +120,8 @@ def switch_intent(t: str) -> Intent | None:
     device = next((name for name, rx in _DEVICES if re.search(r"\b(?:" + rx + r")\b", low)), None)
     question = re.match(r"^(?:is|are|was|check|what(?:'s| is)|tell me|show me|can you (?:tell|check|give))\b", low) \
         or re.search(r"\b(?:status|whether)\b", low)
-    if re.search(r"\b(?:speed|fast|slow|ping|bandwidth|mbps)\b", low) and re.search(r"\b(?:internet|wi[\s-]*fi|wifi|net|connection|network)\b", low):
+    if re.search(r"\bspeed\s*test\b", low) or (re.search(r"\b(?:speed|fast|slow|ping|bandwidth|mbps)\b", low) and
+                                                re.search(r"\b(?:internet|wi[\s-]*fi|wifi|net|connection|network)\b", low)):
         secs = re.search(r"\b(\d{1,3})\s*(s|sec|secs|seconds?|min|mins|minutes?)\b", low)  # 'with 30 seconds': this test
         n = (int(secs.group(1)) * (60 if secs.group(2).startswith("m") else 1)) if secs else 0  # only
         return Intent("netspeed", "internet_doctor", "system", {"action": "speed", **({"seconds": n} if n else {})})

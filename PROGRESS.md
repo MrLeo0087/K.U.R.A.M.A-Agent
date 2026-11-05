@@ -1325,3 +1325,9 @@ Phases (one at a time, owner tests after each):
   seconds=30); 'make it permanent' (setting_keep, 30 min) saves it. 'make the speed test 30 seconds' still saves.
 - 'can you open app?' opened KDE Connect: a generic target asks which app. Folder names match loosely
   ('kurma' -> KURAMA, 'folde' -> folder).
+- (20:25 traces) 'Run the speed test for 20 seconds' (no "internet" word) went to the AI and ran speedtest-cli (3k
+  tokens): "speed test" alone is the speed test. 'make it parmanent' (typo) -> spelling. 'can you do it or not?' is
+  about the last request (explain), not a capability search. Capability / help answers are now ONE plain sentence
+  decided the same way a request is (selfindex.by_meaning: the instant shortcut that would run it, else the router's
+  areas, then meaning inside them; description-only ranking said 'lock the screen' for 'read my screen'); "just say
+  <your words>" only when your words really run it. help_me(topic) = that answer (its list went to the workspace).
