@@ -996,8 +996,32 @@ function swapChat(from, to) {
   }
   scrollDown(true);
 }
+// the coding chat's project box: which folder the coding agent works on (pinned, or the VS Code window used last)
+let projTyping = false;
+$("proj-path").addEventListener("focus", () => { projTyping = true; });
+$("proj-path").addEventListener("blur", () => { setTimeout(() => { projTyping = false; }, 300); });
+$("proj-bar").onsubmit = async (e) => {
+  e.preventDefault();
+  const path = $("proj-path").value.trim();
+  try {
+    const r = await api.request("/api/v1/coding/project", { method: "POST", body: { path } });
+    tip($("proj-path"), r.path ? "Working on " + r.path : "Unpinned: the VS Code window you use decides");
+  } catch (err) { tip($("proj-path"), "That isn't a folder"); }
+  projTyping = false;
+};
+function renderProject(a) {
+  const bar = $("proj-bar");
+  bar.hidden = (a?.name || "general") !== "coding";
+  const pr = a?.project;
+  if (!bar.hidden && pr && !projTyping) {
+    $("proj-path").value = pr.path || "";
+    $("proj-path").title = pr.path ? (pr.pinned ? "Pinned: " : "From the VS Code window you used last: ") + pr.path : "";
+    bar.classList.toggle("pinned", !!pr.pinned);
+  }
+}
 function renderAgent(a) {
   if (!a) return;
+  renderProject(a);
   const before = agentName;
   agentName = a.name || "general";
   if (agentSeen !== null && before !== agentName) swapChat(before === "coding" ? "coding" : "general", agentName === "coding" ? "coding" : "general");
@@ -3008,7 +3032,17 @@ if (MINI && !WSONLY) {
   lang.value = S.lang || "auto";
   lang.onchange = () => { S.lang = lang.value; saveSettings(S); if ($("set-lang")) $("set-lang").value = S.lang; };
   // the Progress section (frontend/progress.js): every running thing with its own bar, the coding agent's steps
-  startProgress(api, $("m-jobs"), { card: $("m-jobs"), max: 4 });
+  // a separate pop-out panel behind its own button (owner 11-06: "the chat stays clean"), like the workspace:
+  // a count on the button while something runs; it opens by itself only when you ask for it
+  const pbox = $("m-jobs"), pbtn = $("m-prog");
+  document.body.appendChild(pbox);
+  let pOpen = false;
+  pbtn.onclick = (e) => { e.stopPropagation(); pOpen = !pOpen; pbox.hidden = !pOpen || !pbox.children.length; pbtn.classList.toggle("on", pOpen); };
+  document.addEventListener("click", (e) => { if (pOpen && !e.target.closest("#m-jobs, #m-prog")) { pOpen = false; pbox.hidden = true; pbtn.classList.remove("on"); } });
+  startProgress(api, pbox, { max: 6, onChange: (n, total) => {
+    const c = pbtn.querySelector(".cnt"); c.textContent = n ? String(n) : ""; c.hidden = !n;
+    pbox.hidden = !pOpen || !total;
+  } });
 }
 
 // the laptop's echo canceller runs only while this page records (voice / talk mode), never in text mode

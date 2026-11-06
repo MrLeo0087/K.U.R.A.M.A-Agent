@@ -18,7 +18,9 @@ Return ONLY a JSON object, no prose:
  "run": "<the exact command to run it>",
  "notes": "<2-4 lines: how the files connect, key design choices>",
  "todo": ["<good next improvements, max 4>"]}
-Pick the best stack for the request when it names none (a simple game or site: HTML/CSS/JS that opens in any
+Keep it as small as the request: "simple"/"basic"/"small" or a classic tiny program (a calculator, a to-do list, a
+guessing game) = ONE file (two at most), no README, no tests, level easy/normal. Pick the best stack for the
+request when it names none (a simple game or site: HTML/CSS/JS that opens in any
 browser; a desktop game: Python + Pygame; an API: FastAPI...). Rules: industry-standard structure and names for the stack; as FEW files as a clean design needs (max %d), no tests
 unless asked, no binary files (images, sounds, fonts: the code draws them with SVG / emoji / CSS / code), no
 package lock files; a plain HTML/CSS/JS project must open by double-clicking index.html: classic <script> tags in

@@ -41,7 +41,10 @@ def test_understand():
     assert understand.stack_of("rock paper scissors in HTML, CSS and JavaScript") == "web"
     assert understand.stack_of("an industry standard react project") == "react"
     assert understand.stack_of("rock paper scissors game in python with a ui") == "pygame"
-    assert understand.question("a rock paper scissors game with a nice ui", "") == ""  # never asks: the plan picks
+    assert understand.question("a rock paper scissors game with a nice ui", "").startswith("How should I make it?")
+    assert understand.question("a calculator in pygame", "pygame") == ""  # named: no question
+    assert understand.question("add a reset button", "", "add") == ""  # an addition: the project decides
+    assert understand.choice("2") == understand.CHOICES["2"] and understand.choice("you choose") == ""
     root, kind, ask = understand.folder("create a snake game in pygame")  # nothing open in VS Code
     assert kind == "new" and root.name.startswith("snake") and ask == ""
 
@@ -140,10 +143,13 @@ def test_a_plan_can_be_changed_and_dropped(monkeypatch, tmp_path):
     assert api.pending() is None
 
 
-def test_no_stack_question_the_plan_picks(monkeypatch):
+def test_kind_question_then_cheapest_choice(monkeypatch):
     fake_ai(monkeypatch)
     monkeypatch.setattr("coder.link.submit", lambda title, fn: 3)
-    assert "Planning it" in api.start("make a rock paper scissors game with a nice ui")
+    assert api.start("make a simple calculator").startswith("How should I make it?")
+    assert "Planning it" in api.start("1")
+    q = api._question_key()
+    assert not q.exists()
 
 
 def test_github_starter_checks(monkeypatch, tmp_path):

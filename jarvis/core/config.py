@@ -428,6 +428,8 @@ TOOL_EXAMPLES: dict[str, tuple[str, ...]] = {
                     "update all my software", "download and set up obs"),
     "wifi_share": ("send this to my phone without internet", "transfer the folder to my mobile on the same network",
                    "share this big file over the local network"),
+    "laptop_doctor": ("which process uses the most ram", "top 5 processes by memory", "what is eating my ram",
+                      "list the apps using the most memory", "why is my laptop slow"),
     "send_message_telegram": ("send the link in my telegram", "send that download link to my telegram",
                               "send this text to my phone", "message me this on telegram"),
     "contacts": ("save my friend's number", "what is ram's number", "add a new contact", "find sita in my contacts"),

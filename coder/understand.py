@@ -84,7 +84,28 @@ def folder(request: str, answer: str = "") -> tuple[Path, str, str]:
     return here, "add", ""
 
 
-def question(request: str, stack: str) -> str:
-    """Never asks about the stack (owner 11-06: "the stacks were examples: build it well"): when the words don't
-    name one, the planner picks the best fit for the request and says which in the plan (change it with 'use X')."""
-    return ""
+CHOICES = {"1": " as a simple Python program in the terminal (one file)",
+           "2": " in Python with a Tkinter window", "3": " as a web page (HTML, CSS and JavaScript)"}
+
+
+def question(request: str, stack: str, kind: str = "new") -> str:
+    """A new program whose kind isn't named: ask, like a developer would (owner 11-06: "it should ask me: should I
+    use this or that?"), with the cheapest choice first. An addition to a project never asks (the project decides)."""
+    if stack or kind != "new" or re.search(r"\b(?:you choose|any|whatever|best)\b", request or "", I):
+        return ""
+    return ("How should I make it?\n1. A simple Python program in the terminal (one file, cheapest)\n"
+            "2. Python with a window (Tkinter)\n3. A web page (HTML, CSS, JavaScript)\nSay 1, 2 or 3, or 'you choose'.")
+
+
+def choice(answer: str) -> str | None:
+    """The words to add for an answer to question() ('2' / 'window' / 'web'); '' = you choose; None = not one."""
+    a = (answer or "").lower()
+    if re.search(r"\b(?:1|one|first|terminal|console|cli|simple)\b", a):
+        return CHOICES["1"]
+    if re.search(r"\b(?:2|two|second|window|tkinter|gui|desktop)\b", a):
+        return CHOICES["2"]
+    if re.search(r"\b(?:3|three|third|web|html|browser|website)\b", a):
+        return CHOICES["3"]
+    if re.search(r"\b(?:you choose|any|whatever|best|yes|ok|okay)\b", a):
+        return ""
+    return None

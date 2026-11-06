@@ -71,15 +71,19 @@ def start(request: str, confirmed: bool = False) -> str:
         return f"Changing the plan ({request}). The new plan comes to the workspace in a few seconds."
     q = _question_key()
     answer = ""
-    if q.exists():  # the answer to "inside the open project, or a new folder?"
+    if q.exists():  # the answer to a question asked a moment ago (where? / which kind?)
         try:
             asked = json.loads(q.read_text(encoding="utf-8"))
             said = request.lower()
             if time.time() - float(asked.get("ts", 0)) < 600 and len(request.split()) <= 6:
-                answer = "new" if re.search(r"\bnew\b|separate|own|another", said) else \
-                    "here" if re.search(r"\bhere\b|this|inside|same|open|current", said) else ""
-                if answer:
-                    request = asked["request"]
+                if asked.get("about") == "kind" and (add := understand.choice(said)) is not None:
+                    request = asked["request"] + add + (" (you choose the best fit)" if add == "" else "")
+                    answer = asked.get("answer", "")
+                elif asked.get("about") != "kind":
+                    answer = "new" if re.search(r"\bnew\b|separate|own|another", said) else \
+                        "here" if re.search(r"\bhere\b|this|inside|same|open|current", said) else ""
+                    if answer:
+                        request = asked["request"]
         except (ValueError, KeyError):
             pass
         q.unlink(missing_ok=True)
@@ -88,12 +92,19 @@ def start(request: str, confirmed: bool = False) -> str:
     stack = understand.stack_of(request)
     root, kind, ask = understand.folder(request, answer)
     if ask:
-        q.write_text(json.dumps({"request": request, "ts": time.time()}), encoding="utf-8")
+        q.write_text(json.dumps({"request": request, "ts": time.time(), "about": "where"}), encoding="utf-8")
         return ask
+    if (ask := understand.question(request, stack, kind)) and "(you choose" not in request:
+        q.write_text(json.dumps({"request": request, "ts": time.time(), "about": "kind", "answer": answer}),
+                     encoding="utf-8")
+        return ask
+    stack = understand.stack_of(request) or stack
     run = new(request, root)
     run.stack, run.kind = stack, kind
     run.channel = link.channel()
     run.save()
+    if kind == "add":
+        link.pin(root)  # the project being worked on stays the same until the owner changes it
     job = link.submit(f"Plan: {root.name}", engine.plan_job(run))
     where = f"in {root.name} (the project open in VS Code)" if kind == "add" else f"in {root}"
     return f"Planning it {where} (job #{job}). The plan comes to the workspace; nothing is written before your yes."
@@ -447,3 +458,16 @@ def setup_project() -> str:
         return None
     n = link.submit(f"Set up {root.name}", job)
     return f"Setting up {root.name} (job #{n}): a .venv, the packages from requirements.txt, then a test run."
+
+
+def which_project(path: str = "") -> str:
+    """'which project are you working on?' / 'work on <path>': the working project, shown or set."""
+    if path.strip():
+        got = link.pin(path.strip())
+        return f"Working on {got.name} ({got}) from now on." if got else f"{path} isn't a folder."
+    root = project_root()
+    pinned = link.pinned() is not None
+    if root is None:
+        return "No project yet: open one in VS Code, or put its path in the box at the top of the coding chat."
+    return (f"I'm working on {root.name} ({root})" + (" (pinned)" if pinned else " (the VS Code window you used last)")
+            + ". To change it, put another path in the box at the top of the coding chat.")

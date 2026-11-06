@@ -67,7 +67,7 @@ def section(text: str, name: str) -> str:
 def readme(run: Run) -> None:
     """A README.md for every new project (0 tokens: from the plan) when the plan didn't write one."""
     p = run.root / "README.md"
-    if run.kind != "new" or p.exists():
+    if run.kind != "new" or p.exists() or len(run.files) <= 2:  # a tiny program needs no README
         return
     files = "\n".join(f"- `{f.path}`: {f.purpose}" for f in run.files)
     p.write_text(f"# {run.plan_name or run.root.name}\n\n{run.request.strip()}\n\n"

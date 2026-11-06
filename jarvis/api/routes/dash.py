@@ -404,6 +404,16 @@ async def agent_set(request: Request):
     return {**agents.status(), "text": text}
 
 
+@router.post("/coding/project", summary="The project the coding agent works on: {'path': '/abs/path'} ('' = unpin)")
+async def coding_project(request: Request):
+    from coder import link
+    d = await request.json()
+    got = await run_in_threadpool(link.pin, str(d.get("path") or "").strip() or None)
+    if d.get("path") and got is None:
+        return JSONResponse({"ok": False, "error": "That isn't a folder."}, status_code=400)
+    return {"ok": True, "path": str(got) if got else ""}
+
+
 @router.post("/coding/prompt", summary="The browser extension: the prompt to paste into ChatGPT/Gemini/Claude (once)")
 async def coding_prompt(request: Request):
     from jarvis.agents.coding import bridge

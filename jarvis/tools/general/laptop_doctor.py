@@ -12,15 +12,24 @@ from jarvis.core.registry import alias, tool
 @tool(group="system", safety="safe",
       description="Laptop doctor: why it's slow (RAM/swap per app, CPU hogs, heat, full disks, updates), free RAM by "
                   "stopping idle Jupyter kernels, what's using a port, stop a process (asks first), KURAMA's own health.")
-def laptop_doctor(action: Literal["check", "free_ram", "port", "stop", "kurama"] = "check", target: str = "") -> str:
+def laptop_doctor(action: Literal["check", "free_ram", "port", "stop", "kurama", "top"] = "check", target: str = "") -> str:
     """Laptop doctor.
 
     Args:
-        action: check = diagnose; free_ram = stop idle Jupyter kernels; port = what is listening (on `target` port,
+        action: top = the top processes by RAM (target = how many); check = diagnose; free_ram = stop idle Jupyter kernels; port = what is listening (on `target` port,
             or all); stop = stop the process `target` (PID or name) or what is on port `target`; kurama = KURAMA's
             own memory and workers.
         target: A port number, PID or process name, depending on the action.
     """
+    if action == "top":  # 'top 5 processes by RAM' (11-06: it answered with the whole health check, 3 times)
+        from jarvis.core import cleanup
+        n = int(target) if target.strip().isdigit() else 5
+        by_ram, by_cpu = cleanup.top_apps(n)
+        out = [f"Top {len(by_ram)} by RAM:"] + [f"{i}. {a}: {b / 1e9:.1f} GB" if b >= 1e9 else f"{i}. {a}: {b / 1e6:.0f} MB"
+                                                for i, (a, b) in enumerate(by_ram, 1)]
+        if by_cpu:
+            out.append("Busiest CPU: " + ", ".join(f"{a} {c:.0f}%" for a, c in by_cpu[:3]))
+        return "\n".join(out)
     if action == "kurama":
         from jarvis.tools.general.resource_status import resource_status
         return resource_status()

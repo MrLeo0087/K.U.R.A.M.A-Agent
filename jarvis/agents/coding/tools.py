@@ -77,6 +77,13 @@ def coding(action: Literal["fix", "bridge", "apply", "project", "undo", "yes", "
         agents.switch("coding")
     agents.touch()
     if action == "fix":
+        said = f"{request} {error}".strip()
+        crashed = terminal.last(1800) is not None or re.search(r"Traceback|Error:|error:|Exception|line \d+", error or "")
+        if not crashed and len(said.split()) >= 4 and not re.fullmatch(r"\s*(?:fix|fix it|fix this|fix the error)\W*", said, re.I):
+            # no crash: a change the owner describes ('the signs don't show', 'keep 9+8 on one screen') ->
+            # planned and made in the project being worked on (11-06: "I can't tell which file this error comes from")
+            import coder as _coder
+            return _coder.start(said)
         return fixer.fix(error, request)
     if action == "bridge":
         return bridge.pack(request, site)

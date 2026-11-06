@@ -201,6 +201,7 @@ def build_job(run: Run):
         g.compile().invoke({"run": run, "ctx": ctx, "job": ctx.job.id, "log": []})
         from coder import run as runmod
         runmod.finish(run)
+        link.pin(run.root)  # the project just built is the one being worked on now ("fix it", "add X" go there)
         link.to_workspace(f"Built: {run.plan_name}", report(run))
         link.open_folder(run.root)
         ok = not run.problems and all(f.path in run.written for f in run.files)

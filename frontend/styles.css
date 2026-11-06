@@ -1679,3 +1679,22 @@ body.mini .pg-list { --pg-text: var(--m-text); --pg-sub: var(--m-dim); --pg-line
 .pg-steps li.doing::before { border-color: var(--pg-acc-2); box-shadow: 0 0 0 3px rgba(255, 179, 71, 0.18); }
 .pg-steps li.failed::before { background: var(--pg-bad); border-color: var(--pg-bad); }
 .pg-list { scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.16) transparent; padding-right: 2px; }
+
+/* the Progress pop-out (mini) and the coding chat's project box */
+body.mini .pg-pop { position: fixed; z-index: 30; top: 52px; right: 10px; width: min(340px, calc(100vw - 20px)); max-height: 60vh;
+  overflow-y: auto; padding: 10px; margin: 0; border-radius: 14px; border: 1px solid var(--m-hair); background: rgba(22, 25, 50, 0.97);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45); }
+body.mini .pg-pop[hidden] { display: none; }
+#m-prog { position: relative; }
+#m-prog .cnt { position: absolute; top: 2px; right: 1px; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 8px; font-size: 10px;
+  line-height: 15px; text-align: center; color: #fff; background: var(--m-acc, #6e7bff); }
+#m-prog .cnt[hidden] { display: none; }
+#m-prog.on { background: var(--m-fill-2, rgba(255,255,255,.12)); }
+body:not(.mini) #m-prog { display: none; }
+.proj-bar { display: flex; align-items: center; gap: 6px; margin: 6px 12px 0; padding: 4px 4px 4px 10px; border-radius: 10px;
+  border: 1px solid var(--m-line, var(--line)); background: rgba(255, 255, 255, 0.05); font-size: 12px; }
+.proj-bar[hidden] { display: none; }
+.proj-bar .pb-l { color: var(--m-dim, var(--muted)); flex: none; }
+.proj-bar input { flex: 1 1 auto; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--m-text, var(--text)); font-size: 12px; }
+.proj-bar .pb-b { flex: none; border: 0; border-radius: 7px; padding: 3px 9px; background: rgba(255, 255, 255, 0.1); color: var(--m-text, var(--text)); }
+.proj-bar.pinned { border-color: rgba(110, 123, 255, 0.5); }

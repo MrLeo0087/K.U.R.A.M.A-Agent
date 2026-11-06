@@ -33,9 +33,39 @@ def steps(job_id: int, items: list[tuple[str, str]]) -> None:
     progress.set_steps(job_id, items)
 
 
+def pinned() -> Path | None:
+    """The project the owner pinned (the path box in the coding chat, or the last project built / chosen)."""
+    import json
+    from coder import settings
+    try:
+        d = json.loads((settings.data_dir() / "project.json").read_text(encoding="utf-8"))
+        p = Path(d.get("path") or "")
+        return p if p.is_dir() else None
+    except (OSError, ValueError):
+        return None
+
+
+def pin(path: str | Path | None) -> Path | None:
+    """Pin the working project (None/'' = unpin: the VS Code window used last decides again)."""
+    import json
+    from coder import settings
+    f = settings.data_dir() / "project.json"
+    if not path:
+        f.unlink(missing_ok=True)
+        return None
+    p = Path(str(path)).expanduser()
+    if not p.is_dir():
+        return None
+    f.write_text(json.dumps({"path": str(p.resolve())}), encoding="utf-8")
+    return p.resolve()
+
+
 def vscode_root() -> Path | None:
-    """The project folder of the VS Code window you used LAST (focused most recently), not the first one listed
+    """The project worked on: the PINNED one when there is one (owner 11-06: "a box for the project path, so it
+    never confuses which project"), else the folder of the VS Code window you used LAST (focused most recently), not the first one listed
     (11-06: new_folder was open and in use, the build went to the KURAMA window's folder)."""
+    if (p := pinned()) is not None:
+        return p
     try:
         from jarvis.core import editor
         states = [x for x in editor.states() if x.get("root")]
