@@ -406,7 +406,7 @@ async def agent_set(request: Request):
 
 @router.post("/coding/project", summary="The project the coding agent works on: {'path': '/abs/path'} ('' = unpin)")
 async def coding_project(request: Request):
-    from coder import link
+    from coder.interfaces import link
     d = await request.json()
     got = await run_in_threadpool(link.pin, str(d.get("path") or "").strip() or None)
     if d.get("path") and got is None:

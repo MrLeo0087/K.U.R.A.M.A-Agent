@@ -5,8 +5,10 @@ import json
 
 import pytest
 
-from coder import link, loop, tools
-from coder.run import new
+from coder.interfaces import link
+from coder.agent import loop
+from coder.tools import builtin as tools
+from coder.core.run import new
 
 
 @pytest.fixture(autouse=True)
@@ -47,7 +49,7 @@ def test_loop_edits_then_the_code_checks_it(monkeypatch, tmp_path):
     ])
     from jarvis.core import llm
     monkeypatch.setattr(llm, "chat", lambda *a, **k: next(replies))
-    monkeypatch.setattr("coder.models.ask", lambda *a, **k: '{"plan": ["edit style.css"], "check": "grey"}')
+    monkeypatch.setattr("coder.llm.models.ask", lambda *a, **k: '{"plan": ["edit style.css"], "check": "grey"}')
     monkeypatch.setattr(tools, "t_run_project", lambda run, seconds=8: "the page opens; no errors")
     monkeypatch.setattr(tools, "t_screenshot", lambda run: "screenshot saved: 01.png")
     monkeypatch.setattr(tools, "t_look", lambda run, q, shot="": "1. grey: done\nALL DONE")
@@ -66,7 +68,7 @@ def test_loop_edits_then_the_code_checks_it(monkeypatch, tmp_path):
     loop.task_job(run, "make the buttons grey")(Ctx())
     assert "background: grey" in (tmp_path / "style.css").read_text()
     assert loop._last_task(tmp_path).startswith("make the buttons grey -> The buttons are grey.")
-    from coder import safety
+    from coder.core import safety
     assert safety.undo(run.dir).startswith("Undone")  # every change can be put back
 
 

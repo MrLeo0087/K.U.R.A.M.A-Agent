@@ -130,8 +130,8 @@ def _other_problems(root: Path) -> list[str]:
     """Problems the coding agent's checks see in the project's Python files (0 tokens): names, imports and calls
     that don't match between files."""
     try:
-        from coder import connect
-        from coder.run import new
+        from coder.builder import connect
+        from coder.core.run import new
         return connect._py_names(new("fix", root))[:8]
     except Exception:  # noqa: BLE001
         return []

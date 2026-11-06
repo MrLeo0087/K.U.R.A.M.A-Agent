@@ -102,7 +102,7 @@ def _status() -> dict:
     from jarvis.agents.coding import terminal
     out: dict = {"events": terminal.events()}
     try:  # the project it works on (the path box at the top of the coding chat)
-        from coder import link
+        from coder.interfaces import link
         root = link.vscode_root()
         out["project"] = {"path": str(root) if root else "", "name": root.name if root else "",
                           "pinned": link.pinned() is not None}

@@ -1880,7 +1880,7 @@ def agent_coding_intent(text: str) -> Intent | None:
     import coder  # the coding agent's own project: a plan / a commit waiting for its yes
     if (changes.waiting() or changes.cost_waiting() or coder.pending() is not None or coder.commit_waiting()) and yn:
         return act("yes" if yn == "yes" else "no")
-    from coder import api as _capi
+    from coder.interfaces import api as _capi
     if _capi._question_key().exists() and len(t.split()) <= 6:  # the answer to its question ('2', 'web', 'here')
         return act("project", request=t)
     if coder.pending() is not None and re.fullmatch(  # 'fine, start build' / 'go ahead and build it' (0 tokens)

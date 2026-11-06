@@ -69,7 +69,7 @@ def coding(action: Literal["fix", "bridge", "apply", "project", "undo", "yes", "
     """
     from jarvis import agents
     import coder  # the coding agent's own project (coder/): plans, builds, the agent loop, checks, memory
-    import coder.api
+    import coder.interfaces.api
     from jarvis.agents.coding import bridge, changes, fixer, project, terminal
     action = {"new": "project", "check": "check_page", "claude": "handoff"}.get(action, action)  # /code words
     if action == "help" and (request or "").strip():  # '/code a snake game in pygame': build it
@@ -79,11 +79,11 @@ def coding(action: Literal["fix", "bridge", "apply", "project", "undo", "yes", "
     if agents.current() != "coding":  # a /code command switches the coding agent on (it stays while you code)
         agents.switch("coding")
     agents.touch()
-    if action in ("yes", "no", "project", "continue") and (got := coder.api.answer_waiting(
+    if action in ("yes", "no", "project", "continue") and (got := coder.interfaces.api.answer_waiting(
             request if action in ("project", "continue") else action)) is not None:
         return got  # the loop asked something / stopped: this reply resumes it
     if action == "run_task":
-        return coder.api.task(request)
+        return coder.interfaces.api.task(request)
     if action == "fix":
         said = f"{request} {error}".strip()
         crashed = terminal.last(1800) is not None or re.search(r"Traceback|Error:|error:|Exception|line \d+", error or "")
@@ -93,7 +93,7 @@ def coding(action: Literal["fix", "bridge", "apply", "project", "undo", "yes", "
             return coder.start(said)
         crash = terminal.last(1800)
         if crash and not error:  # a crash in the VS Code terminal: the loop fixes it and runs the SAME command again
-            return coder.api.task(f"The command `{crash.get('command')}` crashed:\n{str(crash.get('output'))[-1500:]}\n"
+            return coder.interfaces.api.task(f"The command `{crash.get('command')}` crashed:\n{str(crash.get('output'))[-1500:]}\n"
                                   f"Find the real cause (read the files involved), fix it completely, then run the same "
                                   f"command again and repeat until it works. {request}".strip(),
                                   Path(str(crash.get("cwd") or "")) if crash.get("cwd") else None)
@@ -105,7 +105,7 @@ def coding(action: Literal["fix", "bridge", "apply", "project", "undo", "yes", "
     if action == "project":
         return coder.start(request)
     if action == "undo":
-        from coder import run as _runmod
+        from coder.core import run as _runmod
         d = _runmod.last_run()
         recent = d is not None and (d / "undo.json").stat().st_mtime > __import__("time").time() - 3 * 3600
         if recent or re.search(r"\b(?:project|build|built|everything|all of it|whole)\b", request or "", re.I):
@@ -116,7 +116,8 @@ def coding(action: Literal["fix", "bridge", "apply", "project", "undo", "yes", "
     if action == "setup":
         return coder.setup_project()
     if action in ("look", "preview", "check_page"):  # only a web page can be opened / pictured
-        from coder import api as _capi, preview as _pv
+        from coder.interfaces import api as _capi
+        from coder.runtime import preview as _pv
         root = _capi.project_root()
         if root is None or _pv.page_root(root) is None:
             return coder.start(request) if request.strip() else (

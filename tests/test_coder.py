@@ -6,8 +6,16 @@ from pathlib import Path
 
 import pytest
 
-from coder import api, budget, connect, engine, models, safety, settings, understand, verify
-from coder.run import FileSpec, new
+from coder.interfaces import api
+from coder.llm import budget
+from coder.builder import connect
+from coder.builder import engine
+from coder.llm import models
+from coder.core import safety
+from coder.core import settings
+from coder.builder import understand
+from coder.builder import verify
+from coder.core.run import FileSpec, new
 
 
 @pytest.fixture(autouse=True)
@@ -15,12 +23,12 @@ def data(tmp_path, monkeypatch):
     from jarvis.core import config
     monkeypatch.setattr(config, "DATA_DIR", tmp_path / "data")
     monkeypatch.setattr(settings, "PROJECTS_DIR", str(tmp_path / "projects"))
-    monkeypatch.setattr("coder.link.vscode_root", lambda: None)
-    monkeypatch.setattr("coder.link.open_folder", lambda p: None)
-    monkeypatch.setattr("coder.link.to_workspace", lambda t, x: "")
-    monkeypatch.setattr("coder.link.tell", lambda t, x: None)
-    monkeypatch.setattr("coder.link.steps", lambda j, s: None)
-    monkeypatch.setattr("coder.preview.selftest", lambda root, seconds=6: [])  # no headless browser in unit tests
+    monkeypatch.setattr("coder.interfaces.link.vscode_root", lambda: None)
+    monkeypatch.setattr("coder.interfaces.link.open_folder", lambda p: None)
+    monkeypatch.setattr("coder.interfaces.link.to_workspace", lambda t, x: "")
+    monkeypatch.setattr("coder.interfaces.link.tell", lambda t, x: None)
+    monkeypatch.setattr("coder.interfaces.link.steps", lambda j, s: None)
+    monkeypatch.setattr("coder.runtime.preview.selftest", lambda root, seconds=6: [])  # no headless browser in unit tests
 
 
 class Ctx:
@@ -134,7 +142,7 @@ def test_secret_guard_and_budget(tmp_path):
 def test_a_plan_can_be_changed_and_dropped(monkeypatch, tmp_path):
     fake_ai(monkeypatch)
     started = []
-    monkeypatch.setattr("coder.link.submit", lambda title, fn: started.append(title) or fn(Ctx()) or 7)
+    monkeypatch.setattr("coder.interfaces.link.submit", lambda title, fn: started.append(title) or fn(Ctx()) or 7)
     assert "Planning it" in api.start("create a rock paper scissors game in html css and javascript")
     assert api.pending() is not None
     assert api.start("use tailwind instead").startswith("Changing the plan")
@@ -145,7 +153,7 @@ def test_a_plan_can_be_changed_and_dropped(monkeypatch, tmp_path):
 
 def test_kind_question_then_cheapest_choice(monkeypatch):
     fake_ai(monkeypatch)
-    monkeypatch.setattr("coder.link.submit", lambda title, fn: 3)
+    monkeypatch.setattr("coder.interfaces.link.submit", lambda title, fn: 3)
     assert api.start("make a simple calculator").startswith("How should I make it?")
     assert "Planning it" in api.start("1")
     q = api._question_key()
@@ -156,7 +164,7 @@ def test_github_starter_checks(monkeypatch, tmp_path):
     import io
     import tarfile
 
-    from coder import github
+    from coder.builder import github
 
     def tgz(files: dict[str, str]) -> bytes:
         buf = io.BytesIO()
@@ -203,7 +211,7 @@ def test_paths_never_escape(tmp_path):
 
 # ---------------------------------------------------------------- step 2: tests, review, commit, diffs
 def test_make_tests_pass_fixes_the_code(monkeypatch, tmp_path):
-    from coder import testing
+    from coder.runtime import testing
     root = tmp_path / "calc"
     (root / "tests").mkdir(parents=True)
     (root / "calc.py").write_text("def add(a, b):\n    return a - b\n")
@@ -219,7 +227,7 @@ def test_make_tests_pass_fixes_the_code(monkeypatch, tmp_path):
 
 
 def test_write_tests(monkeypatch, tmp_path):
-    from coder import testing
+    from coder.runtime import testing
     root = tmp_path / "p"
     root.mkdir()
     (root / "util.py").write_text("def double(x):\n    return x * 2\n")
@@ -232,7 +240,7 @@ def test_write_tests(monkeypatch, tmp_path):
 def test_reject_one_file_and_commit(monkeypatch, tmp_path):
     import subprocess
 
-    from coder import review
+    from coder.runtime import review
     fake_ai(monkeypatch)
     run = new("rps", tmp_path / "projects" / "rps")
     run.stack = "web"
@@ -243,7 +251,7 @@ def test_reject_one_file_and_commit(monkeypatch, tmp_path):
     subprocess.run(["git", "init", "-q"], cwd=root)
     subprocess.run(["git", "-c", "user.email=a@b", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "init"], cwd=root)
     monkeypatch.setattr(models, "ask", lambda run, role, s, u, m: "Add the game\n\n- page, logic")
-    monkeypatch.setattr("coder.link.vscode_root", lambda: root)
+    monkeypatch.setattr("coder.interfaces.link.vscode_root", lambda: root)
     (root / "x.txt").write_text("x")
     subprocess.run(["git", "add", "-A"], cwd=root)
     assert api.commit_prepare().startswith("Commit message:\nAdd the game")
@@ -256,7 +264,7 @@ def test_reject_one_file_and_commit(monkeypatch, tmp_path):
 
 # ---------------------------------------------------------------- step 3: the page, run for real
 def test_page_errors_become_problems(tmp_path):
-    from coder import preview
+    from coder.runtime import preview
     (tmp_path / "app.js").write_text("x")
     errs = [{"kind": "missing", "msg": "could not load http://127.0.0.1:5/nope.css"},
             {"kind": "missing", "msg": "could not load /favicon.ico"},
@@ -268,7 +276,7 @@ def test_page_errors_become_problems(tmp_path):
 def test_selftest_clicks_through_a_real_page(tmp_path):
     import importlib
 
-    from coder import preview
+    from coder.runtime import preview
     preview = importlib.reload(preview)  # the real one (the fixture replaced selftest)
     if preview.browser() is None:
         pytest.skip("no Chromium-based browser here")
@@ -279,7 +287,7 @@ def test_selftest_clicks_through_a_real_page(tmp_path):
 
 
 def test_look_at_the_page(monkeypatch, tmp_path):
-    from coder import preview
+    from coder.runtime import preview
     from jarvis.core import llm
 
     class R:
@@ -290,7 +298,7 @@ def test_look_at_the_page(monkeypatch, tmp_path):
 
 
 def test_files_are_written_after_what_they_use():
-    from coder import planner
+    from coder.builder import planner
     fs = [FileSpec("app.js", "", ["constants.js", "utils.js"]), FileSpec("index.html", "", ["app.js"]),
           FileSpec("constants.js", ""), FileSpec("utils.js", "", ["constants.js"])]
     assert [f.path for f in planner.order(fs)] == ["constants.js", "utils.js", "app.js", "index.html"]
@@ -307,13 +315,13 @@ def test_queue_runs_after_the_build(monkeypatch):
 
 
 def test_continue_the_project_and_tick(monkeypatch, tmp_path):
-    from coder import memory
+    from coder.memory import card as memory
     root = tmp_path / "p"
     root.mkdir()
     (root / "TODO.md").write_text("# TODO\n\n- [x] old\n- [ ] add sounds\n")
-    monkeypatch.setattr("coder.link.vscode_root", lambda: root)
+    monkeypatch.setattr("coder.interfaces.link.vscode_root", lambda: root)
     got = []
-    monkeypatch.setattr("coder.link.submit", lambda title, fn: got.append(title) or 5)
+    monkeypatch.setattr("coder.interfaces.link.submit", lambda title, fn: got.append(title) or 5)
     assert "'add sounds'" in api.continue_project() and got == ["Plan: add sounds"]
     memory.tick(root, "add sounds")
     assert "- [x] add sounds" in (root / "TODO.md").read_text() and memory.todo(root) == []
@@ -325,7 +333,7 @@ def test_handoff_and_tokens(monkeypatch, tmp_path):
     run.stack = "web"
     engine.plan_job(run)(Ctx())
     sent = {}
-    monkeypatch.setattr("coder.link.claude_code", lambda prompt, folder: sent.update(p=prompt, f=folder) or "Claude Code is building it")
+    monkeypatch.setattr("coder.interfaces.link.claude_code", lambda prompt, folder: sent.update(p=prompt, f=folder) or "Claude Code is building it")
     assert api.handoff() == "Claude Code is building it" and "Follow this plan" in sent["p"] and api.pending() is None
     engine.build_job(new("x", tmp_path / "projects" / "x"))  # (nothing built yet: the report says so)
     assert api.tokens_report().startswith("The coding agent hasn't built anything")
@@ -333,7 +341,8 @@ def test_handoff_and_tokens(monkeypatch, tmp_path):
 
 # ---------------------------------------------------------------- memory: the run's, the project's, learning one
 def test_run_memory_readme_and_card(monkeypatch, tmp_path):
-    from coder import memory, writer
+    from coder.memory import card as memory
+    from coder.builder import writer
     fake_ai(monkeypatch)
     run = new("rps", tmp_path / "projects" / "rps")
     engine.plan_job(run)(Ctx())
@@ -355,7 +364,8 @@ def test_run_memory_readme_and_card(monkeypatch, tmp_path):
 
 
 def test_learning_a_project_it_didnt_build(monkeypatch, tmp_path):
-    from coder import memory, onboard
+    from coder.memory import card as memory
+    from coder.memory import onboard
     root = tmp_path / "theirs"
     (root / "backend").mkdir(parents=True)
     (root / "backend" / "api.py").write_text("from fastapi import FastAPI\napp = FastAPI()\ndef health():\n    return 1\n")
@@ -382,7 +392,7 @@ def test_the_project_open_in_vs_code_is_the_one_worked_on(monkeypatch, tmp_path)
     small = tmp_path / "mygame"
     small.mkdir()
     (small / "main.py").write_text("print(1)\n")
-    monkeypatch.setattr("coder.link.vscode_root", lambda: small)
+    monkeypatch.setattr("coder.interfaces.link.vscode_root", lambda: small)
     assert understand.folder("make a rock paper scissors game") == (small, "add", "")
     assert understand.folder("add a score board") == (small, "add", "")
     root, kind, _ = understand.folder("make a snake game in a new folder")
@@ -391,14 +401,14 @@ def test_the_project_open_in_vs_code_is_the_one_worked_on(monkeypatch, tmp_path)
     big.mkdir()
     for i in range(20):
         (big / f"m{i}.py").write_text("x = 1\n")
-    monkeypatch.setattr("coder.link.vscode_root", lambda: big)
+    monkeypatch.setattr("coder.interfaces.link.vscode_root", lambda: big)
     root, kind, ask = understand.folder("make a rock paper scissors game")
     assert ask.startswith("Should I build it inside big")  # a big, maybe unrelated project: it asks
     assert understand.folder("make a rock paper scissors game", "here") == (big, "add", "")
     assert understand.folder("make a rock paper scissors game", "new")[1] == "new"
     empty = tmp_path / "empty"
     empty.mkdir()
-    monkeypatch.setattr("coder.link.vscode_root", lambda: empty)
+    monkeypatch.setattr("coder.interfaces.link.vscode_root", lambda: empty)
     assert understand.folder("make a rock paper scissors game") == (empty, "new", "")
 
 
@@ -407,9 +417,9 @@ def test_where_question_then_answer(monkeypatch, tmp_path):
     big.mkdir()
     for i in range(20):
         (big / f"m{i}.py").write_text("x = 1\n")
-    monkeypatch.setattr("coder.link.vscode_root", lambda: big)
+    monkeypatch.setattr("coder.interfaces.link.vscode_root", lambda: big)
     started = []
-    monkeypatch.setattr("coder.link.submit", lambda title, fn: started.append(title) or 9)
+    monkeypatch.setattr("coder.interfaces.link.submit", lambda title, fn: started.append(title) or 9)
     assert api.start("make a rock paper scissors game").startswith("Should I build it inside big")
     assert api.start("here").startswith("On it in big")  # a change in the open project: the agent loop
 
@@ -431,7 +441,7 @@ def test_cross_file_calls_and_attributes(tmp_path):
 
 
 def test_smoke_run_catches_a_crash_and_a_missing_package(tmp_path):
-    from coder import runcheck
+    from coder.runtime import runcheck
     run = new("x", tmp_path)
     (tmp_path / "main.py").write_text("import game\ngame.start()\n")
     (tmp_path / "game.py").write_text("def start():\n    raise ValueError('bad size')\n")
@@ -450,6 +460,6 @@ def test_improve_without_a_web_page_is_a_change(monkeypatch, tmp_path):
     import coder
     from jarvis.agents.coding import tools
     (tmp_path / "calculator.py").write_text("import tkinter\n")
-    monkeypatch.setattr("coder.link.vscode_root", lambda: tmp_path)
+    monkeypatch.setattr("coder.interfaces.link.vscode_root", lambda: tmp_path)
     monkeypatch.setattr(coder, "start", lambda r: "planned: " + r)
     assert tools.coding("look", request="make the UI more colourful") == "planned: make the UI more colourful"
