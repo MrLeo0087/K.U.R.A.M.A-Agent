@@ -50,7 +50,8 @@ EXAMPLES: dict[str, tuple[str, ...]] = {
     "handoff": ("send it to claude code", "let claude code build it", "give this to claude code instead"),
     "tokens": ("how many tokens did this project use", "token report for my projects", "what did this project cost"),
     "reject": ("reject app.js", "put back style.css", "i don't want the change in main.py", "reject that file"),
-    "run": ("run it again", "run the project", "run it"),
+    "run": ("run it again", "run the project", "run it", "run this project and tell me what it says",
+            "start the app and show me the output", "what does it print when i run it"),
 }
 
 def _start() -> None:

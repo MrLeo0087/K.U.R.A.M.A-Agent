@@ -1009,9 +1009,13 @@ $("proj-bar").onsubmit = async (e) => {
   } catch (err) { tip($("proj-path"), "That isn't a folder"); }
   projTyping = false;
 };
+for (const b of $("code-acts").querySelectorAll("button")) {
+  b.onclick = () => { if (!S.mute) audioCtx(); sendChat(b.dataset.say, { lang: S.lang, speak: !S.mute }); };
+}
 function renderProject(a) {
   const bar = $("proj-bar");
   bar.hidden = (a?.name || "general") !== "coding";
+  $("code-acts").hidden = bar.hidden;
   const pr = a?.project;
   if (!bar.hidden && pr && !projTyping) {
     $("proj-path").value = pr.path || "";

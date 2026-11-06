@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import Literal
 
 from jarvis.core.registry import tool
@@ -56,7 +57,7 @@ Plain words work too: "create a portfolio website", "add a dark mode to this pro
                   "the coding agent can do. 'after that, <request>' while a build runs = queued.")
 def coding(action: Literal["fix", "bridge", "apply", "project", "undo", "yes", "no", "run", "tests", "pass", "review",
                            "commit", "diffs", "reject", "preview", "check_page", "look", "continue", "handoff",
-                           "tokens", "learn", "help", "new", "check", "claude", "setup"], request: str = "",
+                           "tokens", "learn", "help", "new", "check", "claude", "setup", "run_task"], request: str = "",
            site: str = "", error: str = "") -> str:
     """The coding agent.
 
@@ -67,6 +68,8 @@ def coding(action: Literal["fix", "bridge", "apply", "project", "undo", "yes", "
         error: fix: a pasted error text (empty = the last crash in the VS Code terminal).
     """
     from jarvis import agents
+    import coder  # the coding agent's own project (coder/): plans, builds, the agent loop, checks, memory
+    import coder.api
     from jarvis.agents.coding import bridge, changes, fixer, project, terminal
     action = {"new": "project", "check": "check_page", "claude": "handoff"}.get(action, action)  # /code words
     if action == "help" and (request or "").strip():  # '/code a snake game in pygame': build it
@@ -76,25 +79,37 @@ def coding(action: Literal["fix", "bridge", "apply", "project", "undo", "yes", "
     if agents.current() != "coding":  # a /code command switches the coding agent on (it stays while you code)
         agents.switch("coding")
     agents.touch()
+    if action in ("yes", "no", "project", "continue") and (got := coder.api.answer_waiting(
+            request if action in ("project", "continue") else action)) is not None:
+        return got  # the loop asked something / stopped: this reply resumes it
+    if action == "run_task":
+        return coder.api.task(request)
     if action == "fix":
         said = f"{request} {error}".strip()
         crashed = terminal.last(1800) is not None or re.search(r"Traceback|Error:|error:|Exception|line \d+", error or "")
         if not crashed and len(said.split()) >= 4 and not re.fullmatch(r"\s*(?:fix|fix it|fix this|fix the error)\W*", said, re.I):
             # no crash: a change the owner describes ('the signs don't show', 'keep 9+8 on one screen') ->
             # planned and made in the project being worked on (11-06: "I can't tell which file this error comes from")
-            import coder as _coder
-            return _coder.start(said)
+            return coder.start(said)
+        crash = terminal.last(1800)
+        if crash and not error:  # a crash in the VS Code terminal: the loop fixes it and runs the SAME command again
+            return coder.api.task(f"The command `{crash.get('command')}` crashed:\n{str(crash.get('output'))[-1500:]}\n"
+                                  f"Find the real cause (read the files involved), fix it completely, then run the same "
+                                  f"command again and repeat until it works. {request}".strip(),
+                                  Path(str(crash.get("cwd") or "")) if crash.get("cwd") else None)
         return fixer.fix(error, request)
     if action == "bridge":
         return bridge.pack(request, site)
     if action == "apply":
         return bridge.apply_answer(request)
-    import coder  # the coding agent's own project (coder/): plans, builds, checks, fixes
     if action == "project":
         return coder.start(request)
     if action == "undo":
-        if re.search(r"\b(?:project|build|built|everything|all of it|whole)\b", request or "", re.I):
-            return coder.undo_last()
+        from coder import run as _runmod
+        d = _runmod.last_run()
+        recent = d is not None and (d / "undo.json").stat().st_mtime > __import__("time").time() - 3 * 3600
+        if recent or re.search(r"\b(?:project|build|built|everything|all of it|whole)\b", request or "", re.I):
+            return coder.undo_last()  # the agent's last task / build (all its files)
         return changes.undo()
     if action == "learn":
         return coder.learn_project()

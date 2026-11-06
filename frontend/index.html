@@ -204,6 +204,15 @@
           <input id="proj-path" type="text" spellcheck="false" placeholder="paste the project's folder path (empty = the VS Code window used last)">
           <button type="submit" class="pb-b">Set</button>
         </form>
+        <div id="code-acts" class="code-acts" hidden aria-label="Coding agent quick actions">
+          <button type="button" data-say="Run this project and tell me what it prints" title="Run the project">▶ Run</button>
+          <button type="button" data-say="Take a screenshot of the app and tell me how it looks" title="Screenshot + look">📸 Look</button>
+          <button type="button" data-say="Write tests for this project" title="Write and run tests">✓ Tests</button>
+          <button type="button" data-say="Show me what you changed" title="Diffs in VS Code">⇄ Changes</button>
+          <button type="button" data-say="Undo that" title="Undo the last task">↶ Undo</button>
+          <button type="button" data-say="/code learn" title="Learn this project (writes its card)">🧠 Learn</button>
+          <button type="button" data-say="/code" title="Everything the coding agent can do">☰ All</button>
+        </div>
         <div id="log" class="messages" role="log" aria-live="polite" aria-relevant="additions"></div>
         <section id="mws" class="mws" hidden aria-label="Workspace">
           <div class="mws-head">

@@ -5,7 +5,8 @@ from __future__ import annotations
 
 from coder.run import Run
 
-TIER = {"plan": "smart", "hard": "smart", "normal": "smart", "fix": "smart", "easy": "fast", "review": "fast"}
+TIER = {"plan": "smart", "hard": "smart", "normal": "smart", "fix": "smart", "easy": "fast", "review": "fast",
+        "plan_fast": "fast"}  # (the loop's step plan: a short list, the fast model is enough)
 
 
 def ask(run: Run | None, role: str, system: str, user: str, max_tokens: int) -> str:

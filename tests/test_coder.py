@@ -411,7 +411,7 @@ def test_where_question_then_answer(monkeypatch, tmp_path):
     started = []
     monkeypatch.setattr("coder.link.submit", lambda title, fn: started.append(title) or 9)
     assert api.start("make a rock paper scissors game").startswith("Should I build it inside big")
-    assert "in big (the project open in VS Code)" in api.start("here")
+    assert api.start("here").startswith("On it in big")  # a change in the open project: the agent loop
 
 
 # ---------------------------------------------------------------- 11-06 traces: a game passed every check, then crashed

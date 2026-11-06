@@ -105,9 +105,52 @@ def start(request: str, confirmed: bool = False) -> str:
     run.save()
     if kind == "add":
         link.pin(root)  # the project being worked on stays the same until the owner changes it
+        return task(request, root)  # a change in a project: the agent loop works it out by itself (no plan yes)
     job = link.submit(f"Plan: {root.name}", engine.plan_job(run))
     where = f"in {root.name} (the project open in VS Code)" if kind == "add" else f"in {root}"
     return f"Planning it {where} (job #{job}). The plan comes to the workspace; nothing is written before your yes."
+
+
+def task(goal: str, root: Path | None = None, notes: list[str] | None = None) -> str:
+    """The agent loop on the working project: read, change, run, look, fix, until it's done and checked."""
+    from coder import loop, onboard
+    root = root or project_root()
+    if root is None:
+        return "Which project? Open it in VS Code or put its path in the box at the top of the coding chat."
+    run = new(goal, root)
+    run.kind, run.channel = "add", link.channel()
+    if not onboard.known(root):  # a project it didn't build: learned once (a card), then never re-read
+        try:
+            onboard.learn(root, run)
+        except Exception as e:  # noqa: BLE001
+            run.note(f"learning failed: {e}")
+    full = goal + ("\nEarlier notes on this task:\n" + "\n".join(notes[-10:]) if notes else "")
+    n = link.submit(f"Task: {goal[:50]}", loop.task_job(run, full))
+    return f"On it in {root.name} (job #{n}): I'll read, change, run and check it. Watch the steps in Progress."
+
+
+def answer_waiting(text: str) -> str | None:
+    """The owner's reply to a question the loop stopped on (or to its 'continue?'): resume the task with it."""
+    from coder import loop, tools
+    w = loop.waiting()
+    if w is None:
+        return None
+    loop.drop_waiting()
+    notes = list(w.get("notes") or [])
+    t = (text or "").strip()
+    yes = re.fullmatch(r"(?:yes|yeah|yep|ok|okay|sure|go|do it|go ahead|run it|install it)\W*", t, re.I)
+    if w.get("command") and yes:
+        run = new(w["goal"], Path(w["root"]))
+        cmd = w["command"]
+        if tools.NEVER.search(cmd):
+            notes.append(f"the owner said yes, but `{cmd}` is never run (dangerous)")
+        else:  # the owner said yes: this one command runs even though it isn't on the safe list
+            import subprocess
+            r = subprocess.run(cmd, shell=True, cwd=run.root, capture_output=True, text=True, timeout=900)
+            notes.append(f"owner said yes; ran `{cmd}` -> exit {r.returncode}: {((r.stdout or '') + (r.stderr or ''))[-200:]}")
+    else:
+        notes.append(f"owner answered: {t}")
+    return task(w["goal"], Path(w["root"]), notes)
 
 
 def yes() -> str:

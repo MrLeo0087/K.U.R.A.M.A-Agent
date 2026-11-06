@@ -199,9 +199,9 @@ def screenshot(root: Path) -> bytes | None:
     with tempfile.TemporaryDirectory() as d:
         shot = Path(d) / "s.png"
         try:
-            subprocess.run([b, "--headless=new", "--disable-gpu", "--no-first-run", f"--user-data-dir={d}/p",
-                            "--window-size=1280,860", "--virtual-time-budget=3000", f"--screenshot={shot}", got[0]],
-                           capture_output=True, timeout=40)
+            # (no own --user-data-dir: with a fresh profile Brave's headless screenshot hangs until killed, 11-06)
+            subprocess.run([b, "--headless=new", "--disable-gpu", "--hide-scrollbars", "--window-size=1280,860",
+                            f"--screenshot={shot}", got[0]], capture_output=True, timeout=30)
         except (OSError, subprocess.TimeoutExpired):
             return None
         return shot.read_bytes() if shot.exists() else None

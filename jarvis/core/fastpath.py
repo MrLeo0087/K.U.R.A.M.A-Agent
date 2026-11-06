@@ -1910,7 +1910,9 @@ def agent_coding_intent(text: str) -> Intent | None:
     if label in ("look", "preview", "check_page") and re.search(
             r"\b(?:make|improve|change|better|redesign|update|fix|add|modern|beautiful|nicer|colou?r)\b", t, I):
         label = "project"  # 'make the UI better': a CHANGE to the project, not a look at a web page (11-06)
-    if label in ("fix", "run") and not crash:
+    if label == "run" and not crash:  # 'run this project and tell me what it says': the agent runs it
+        return act("run_task", request=f"Run the project and tell me in plain words what it does / prints: {t}")
+    if label == "fix" and not crash:
         return None  # nothing crashed: 'fix this' is about the selection / the AI
     site = (re.search(r"\b(chatgpt|gemini|claude)\b", t, I) or [None, ""])[1].lower()
     return act(label, request=t, **({"site": site} if label == "bridge" and site else {}))

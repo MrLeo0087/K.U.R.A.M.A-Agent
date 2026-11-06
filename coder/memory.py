@@ -108,3 +108,18 @@ def tick(root: Path, item: str) -> None:
     except OSError:
         return
     p.write_text(t.replace(f"- [ ] {item}", f"- [x] {item}", 1), encoding="utf-8")
+
+
+def note_task(run: Run, goal: str, done: str, notes: list[str]) -> None:
+    """After a task: the card gets a decision line and a fresh map (what each file defines now)."""
+    p = path(run.root)
+    old = read(run.root, 40000, with_map=True)
+    if not old:
+        return
+    from coder import repomap
+    line = f"- {time.strftime('%Y-%m-%d')}: {goal.strip()[:160]}" + (f" -> {done.strip()[:160]}" if done else "")
+    old = re.sub(r"(## Decisions\s*\n)", lambda m: m.group(1) + line + "\n", old, count=1) if "## Decisions" in old \
+        else old.rstrip() + f"\n\n## Decisions\n\n{line}\n"
+    old = re.sub(r"(## Map[^\n]*\n\n).*?(?=^## |\Z)", lambda m: m.group(1) + repomap.text(run.root, 5000) + "\n\n",
+                 old, count=1, flags=re.M | re.S)
+    p.write_text(old, encoding="utf-8")

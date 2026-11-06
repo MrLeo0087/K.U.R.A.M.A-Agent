@@ -128,3 +128,33 @@ def claude_code(prompt: str, folder: Path) -> str:
     if not r.get("ok") or not claudewatch._press_enter(folder.name):
         return "VS Code couldn't start the Claude Code chat. The prompt is in the workspace: paste it there."
     return f"Claude Code is building it in {folder} (a new chat in VS Code). /claude status shows how it's going."
+
+
+def to_workspace_file(src: Path, title: str) -> None:
+    """A picture (a screenshot of the app) into the workspace's images, next to the task's report."""
+    try:
+        import shutil
+        import time as _t
+
+        from jarvis.core import config
+        dst = Path(config.OUTPUTS_DIR) / "images" / f"{_t.strftime('%Y%m%d-%H%M%S')}-{src.stem}-{abs(hash(title)) % 9999}.png"
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(src, dst)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def tell_result(title: str, text: str, picture: Path | None = None, channel: str = "") -> None:
+    """A finished task on the laptop and in Telegram's Jobs section, with its last screenshot."""
+    tell(title, text)
+    if picture is None or not picture.exists():
+        return
+    try:
+        from jarvis.core import notify, tgtopics
+        g, t = tgtopics.where("jobs", "info")
+        from jarvis.core import config
+        notify.telegram_call("sendPhoto", {"chat_id": g or config.TELEGRAM_CHAT_ID, **({"message_thread_id": t} if t else {}),
+                                           "caption": title[:200]},
+                             files={"photo": (picture.name, picture.read_bytes())}, upload=True, timeout=45)
+    except Exception:  # noqa: BLE001
+        pass
