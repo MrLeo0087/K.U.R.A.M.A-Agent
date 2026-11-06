@@ -170,17 +170,10 @@ def test_say_goes_into_the_real_vscode_chat(told, monkeypatch):
     monkeypatch.setattr(editor, "edit", lambda st, op, **kw: calls.append((op, kw)) or {"ok": True})
     monkeypatch.setattr(cw, "_press_enter", lambda ws: calls.append(("enter", ws)) or True)
     out = cw.say("Hello")
-    assert out.startswith("Sent to your Claude Code chat in VS Code")
+    assert out.startswith("Sent to your Claude Code chat (\"build the thing\")")  # the CURRENT conversation
     assert calls == [("claude_say", {"session": "s1", "text": "Hello"}), ("enter", "KURAMA")]
-    monkeypatch.setattr(editor, "states", lambda: [])  # no VS Code: a VISIBLE terminal window, never hidden
-    import subprocess
-    opened = []
-    monkeypatch.setattr(subprocess, "Popen", lambda argv, **kw: opened.append(argv))
-    monkeypatch.setattr(cw, "claude_binary", lambda: Path("/usr/bin/claude"))
-    out = cw.say("Hello")
-    assert out.startswith("Opened Claude Code in a terminal window on your laptop") and opened
-    argv = opened[0]
-    assert "--resume" in argv and "--fork-session" in argv and argv[-1] == "Hello"  # a copy: the open chat is safe
+    monkeypatch.setattr(editor, "states", lambda: [])  # VS Code not linked: it says how, never a hidden copy
+    assert cw.say("Hello").startswith("VS Code isn't linked to KURAMA yet")
     cw.turn_off()
 
 
@@ -191,13 +184,12 @@ def test_go_opens_a_new_chat_and_say_starts_it(told, monkeypatch):
                                                     "port": 1, "token": "t"}])
     monkeypatch.setattr(editor, "edit", lambda st, op, **kw: calls.append((op, kw)) or {"ok": True})
     monkeypatch.setattr(cw, "_press_enter", lambda ws: calls.append(("enter", ws)) or True)
-    assert cw.go().startswith("Claude Code is open in KURAMA and ready") and cw.is_on()
-    assert cw.say("build the login page").startswith("Sent to your Claude Code chat in VS Code")
-    assert calls == [("claude_new", {}), ("claude_say", {"session": None, "text": "build the login page"}),
-                     ("enter", "KURAMA")]
+    assert cw.go().startswith("A new Claude Code chat is open in KURAMA") and cw.is_on()
+    assert cw.say("build the login page").startswith("Started a new Claude Code chat in KURAMA")
+    assert calls == [("claude_new", {}), ("claude_new", {"text": "build the login page"}), ("enter", "KURAMA")]
     cw.event({"hook_event_name": "UserPromptSubmit", "session_id": "new1", "cwd": "/home/leo/KURAMA",
               "prompt": "build the login page"})
-    assert not cw._go  # the new chat has its first message: say follows that conversation now
+    assert not cw._go and cw._current()["id"] == "new1"  # the new chat is the current one: say follows it
     cw.event({"hook_event_name": "Stop", "session_id": "new1", "cwd": "/home/leo/KURAMA",
               "last_assistant_message": "All done. " + "x" * 5000})
     assert told[-1][0] == "✅ Claude Code finished" and told[-1][1].endswith("x" * 5000)  # the WHOLE answer

@@ -505,9 +505,22 @@ def screenshot() -> Path | None:
 
 
 # ---------- a new instruction ----------
-def go(where: str = "") -> str:
-    """'/claude go [project]': watch on + a new, empty Claude Code chat in VS Code for that project (the window you
-    used last when none is named), ready for '/claude say <what to do>'. Everything it does comes to Telegram."""
+_NOT_LINKED = ("VS Code isn't linked to KURAMA yet. On the laptop press Ctrl+Shift+P, type 'Reload Window', Enter "
+               "(once, after an update), then send it again.")
+
+
+def _window(cwd: str = "", min_ext: int = 6) -> dict | None:
+    """The linked VS Code window of that folder (else the one used last), or None."""
+    from jarvis.core import editor
+    wins = [w for w in editor.states() if int(w.get("ext") or 0) >= min_ext]
+    return next((w for w in wins if cwd and str(w.get("root") or "") == cwd), None) or \
+        next((w for w in wins if cwd and cwd.startswith(str(w.get("root") or "~~") + "/")), None) or \
+        (wins[0] if wins else None)
+
+
+def new(text: str = "", where: str = "") -> str:
+    """'/claude new [message]' (or '/claude go [project]'): a NEW Claude Code chat in VS Code. With a message it is
+    sent at once and that chat becomes the current one; without, the next '/claude say' starts it."""
     from jarvis.core import editor
     if not is_on():
         turn_on()
@@ -518,96 +531,66 @@ def go(where: str = "") -> str:
         if p is None:
             return f"I can't find a project folder called '{where}'. Say it like '/claude go kurama'."
         root = str(p)
-    wins = [w for w in editor.states() if int(w.get("ext") or 0) >= 6]
-    st = next((w for w in wins if root and str(w.get("root") or "") == root), None) if root else (wins[0] if wins else None)
-    if st is None and root:  # not open yet: open it in VS Code and wait for its window
-        subprocess.Popen(["code", root], start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        for _ in range(40):
-            time.sleep(0.5)
-            st = next((w for w in editor.states() if int(w.get("ext") or 0) >= 6 and str(w.get("root") or "") == root),
-                      None)
-            if st:
-                break
-    if st is None:  # no VS Code link: the first '/claude say' opens Claude Code in a terminal window instead
-        _go.clear()
-        _go.update(root=root or str(Path.home()), workspace=Path(root).name if root else "home", t=time.time())
-        return (f"Ready in {_go['workspace']}. Send /claude say <your task>: Claude Code opens in a terminal window on "
-                "your laptop (VS Code isn't linked; reload its window once to use the VS Code chat instead).")
+        if _window(root) is None or str(_window(root).get("root") or "") != root:  # open that project first
+            subprocess.Popen(["code", root], start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            for _ in range(40):
+                time.sleep(0.5)
+                if (w := _window(root)) is not None and str(w.get("root") or "") == root:
+                    break
+    st = _window(root)
+    if st is None:
+        return _NOT_LINKED
+    name = str(st.get("workspace") or Path(str(st.get("root") or "")).name)
+    text = " ".join((text or "").split())
+    if text:
+        r = editor.edit(st, "claude_new", text=text)  # a new chat tab with the message in its box
+        if not r.get("ok") or not _press_enter(name):
+            return f"VS Code couldn't start the new chat: {r.get('error') or 'no answer'}."
+        _go.clear()  # (its first event makes it the current conversation)
+        return f"Started a new Claude Code chat in {name}: \"{_short(text, 120)}\". /claude say goes to it now."
     r = editor.edit(st, "claude_new")
     if not r.get("ok"):
-        return f"VS Code couldn't open a Claude Code chat: {r.get('error') or 'no answer'}."
-    name = str(st.get("workspace") or Path(str(st.get("root") or "")).name)
+        return f"VS Code couldn't open a new Claude Code chat: {r.get('error') or 'no answer'}."
     _go.clear()
     _go.update(root=str(st.get("root") or ""), workspace=name, t=time.time())
-    return (f"Claude Code is open in {name} and ready. Tell it what to do: /claude say <your task>. I'm watching: "
-            "you'll get its progress, its questions and its whole answer here.")
+    return f"A new Claude Code chat is open in {name}. Send /claude say <your task> to start it."
+
+
+def go(where: str = "") -> str:
+    return new("", where)
 
 
 def say(text: str) -> str:
-    """Send the owner's message to Claude Code. Into the REAL chat in VS Code when the KURAMA editor link (v5+) is in
-    the window of that task's folder: the chat tab opens with the text and Enter is pressed, so you see it there
-    and Claude Code queues it if it is busy. Without VS Code: Claude Code opens in a terminal WINDOW on the laptop
-    with the message (never hidden in the background); either way the hooks report it to Telegram."""
+    """'/claude say <message>': into the CURRENT Claude Code conversation (the one used last, like this chat), in
+    its VS Code chat: that conversation's tab opens with the message, Enter is pressed, you see it there, and if
+    it is busy Claude Code queues it. Never a hidden copy, never a new session ('/claude new' is for that)."""
     text = " ".join((text or "").split())
     if not text:
         return "What should I tell Claude Code? e.g. '/claude say run the tests and fix them'"
-    if _go and time.time() - _go.get("t", 0) < 6 * 3600:  # the new chat '/claude go' opened: its first message
-        target = {"id": "", "cwd": _go.get("root", ""), "status": "new"}
-        if (sent := _into_vscode(target, text)) is not None:
-            return sent
-        return _in_terminal(target, text)
+    if _go and time.time() - _go.get("t", 0) < 6 * 3600:  # '/claude go' opened an empty chat: this starts it
+        return new(text)
     s = _current()
     if s is None:
-        return "There's no Claude Code conversation to send it to. Send /claude go (in a project) first."
-    if (sent := _into_vscode(s, text)) is not None:
-        return sent
-    return _in_terminal(s, text)
-
-
-def _in_terminal(s: dict, text: str) -> str:
-    """Claude Code in a terminal WINDOW on the laptop screen (never hidden): you see every step and can type too.
-    A conversation that may still be open elsewhere (the VS Code chat) is continued as a copy (--fork-session), so
-    the two never write into each other."""
-    exe = claude_binary()
-    term = shutil.which("gnome-terminal") or shutil.which("x-terminal-emulator")
-    if exe is None or term is None:
-        return "error: I can't open Claude Code on the laptop (no claude program or no terminal)."
-    env = dict(os.environ)
-    tp = str(s.get("transcript") or "")
-    if m := re.match(r"(.*/\.claude[^/]*)/projects/", tp):  # the same Claude Code account as that conversation
-        env["CLAUDE_CONFIG_DIR"] = m.group(1)
-    cmd = [str(exe)]
-    if s.get("id"):
-        cmd += ["--resume", s["id"]]
-        if time.time() - float(s.get("last") or 0) < 3600:  # used in the last hour: maybe still open in VS Code
-            cmd.append("--fork-session")
-    cmd.append(text)
-    cwd = str(s.get("cwd") or Path.home())
-    title = f"Claude Code · {Path(cwd).name} (KURAMA)"
-    argv = [term, "--title", title, "--working-directory", cwd, "--", *cmd] if term.endswith("gnome-terminal") \
-        else [term, "-e", " ".join(cmd)]
-    subprocess.Popen(argv, cwd=cwd, env=env, start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    return (f"Opened Claude Code in a terminal window on your laptop ({Path(cwd).name}) with: \"{_short(text, 120)}\". "
-            "You can watch it work there; its questions and its whole answer come here too.")
+        return "There's no Claude Code conversation yet. Send /claude new <message> to start one."
+    sent = _into_vscode(s, text)
+    return sent if sent is not None else _NOT_LINKED
 
 
 def _into_vscode(s: dict, text: str) -> str | None:
-    """Type the message into the Claude Code chat of the VS Code window of that folder; None when not possible."""
+    """Type the message into that conversation's chat in VS Code; None when VS Code isn't linked."""
     from jarvis.core import editor
-    cwd = str(s.get("cwd") or "")
-    wins = [w for w in editor.states() if int(w.get("ext") or 0) >= 5]
-    st = next((w for w in wins if cwd and str(w.get("root") or "") == cwd), None) or \
-        next((w for w in wins if cwd and cwd.startswith(str(w.get("root") or "~~"))), None) or (wins[0] if wins else None)
+    st = _window(str(s.get("cwd") or ""), min_ext=5)
     if st is None:
         return None
     r = editor.edit(st, "claude_say", session=s["id"] or None, text=text)
     if not r.get("ok"):
         log.info("claude say via VS Code failed: %s", r.get("error"))
-        return None
+        return f"VS Code couldn't open that chat: {r.get('error') or 'no answer'}."
     if not _press_enter(str(st.get("workspace") or Path(str(st.get("root") or "")).name)):
         return (f"I put \"{_short(text, 120)}\" in the Claude Code chat box in VS Code, but couldn't press Enter. "
                 "Press Enter there, or try again.")
-    return f"Sent to your Claude Code chat in VS Code: \"{_short(text, 120)}\". I'll tell you when it answers."
+    where = f"\"{_short(s.get('prompt') or '', 50)}\"" if s.get("prompt") else "the current chat"
+    return f"Sent to your Claude Code chat ({where}): \"{_short(text, 120)}\". I'll tell you when it answers."
 
 
 def _press_enter(workspace: str) -> bool:

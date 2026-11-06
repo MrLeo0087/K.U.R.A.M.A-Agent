@@ -1397,3 +1397,7 @@ Phases (one at a time, owner tests after each):
   09:04 say ran hidden and resumed the owner's live conversation; the stop then hit that conversation too.)
   MONITORING.md: the new data files (Claude Code watch, sections, offers, settings, Nepal documents, metrics) and
   what to check in the next report.
+- (later) /claude say = the CURRENT conversation (the one used last, e.g. the owner's open chat), typed into its VS
+  Code chat and sent; never a terminal or a hidden copy (removed). /claude new <message> = a new chat tab with that
+  message (editor link v7: claude-vscode.editor.open(undefined, text)), which becomes the current one; /claude go
+  [project] = a new empty chat. Without the link (VS Code not reloaded after the update) it says exactly that.
