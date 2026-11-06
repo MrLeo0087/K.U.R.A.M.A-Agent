@@ -70,6 +70,17 @@ def is_code(text: str) -> bool:
     return hits >= 2 or (hits >= 1 and len(lines) <= 3 and bool(re.search(r"[(){}\[\]=]", text)))
 
 
+def detailed() -> bool:
+    """The coding agent is on, or the ask came from VS Code's KURAMA Coder panel: full, careful answers and
+    thorough rewrites (owner 11-07: General mode is quick and basic, coding mode detailed and creative)."""
+    try:
+        from jarvis import agents
+        from jarvis.core import workspace
+        return agents.current() == "coding" or workspace.SURFACE == "vscode"
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _llm(system: str, user: str, smart: bool, max_tokens: int, purpose: str) -> str:
     from jarvis.core import llm
     reply = llm.chat([{"role": "system", "content": system}, {"role": "user", "content": user}],
@@ -494,6 +505,12 @@ def explain_code(code: str, lang: str = "", name: str = "") -> str:
     """Short first (owner): 2-3 sentences in the chat (~150 tokens), then 'Want the full explanation?'; only a yes
     writes the long, step-by-step one (it goes to the workspace). It used to always write the long one."""
     out = LANGS.get(lang or "en", "English")
+    if detailed():  # coding mode: the full explanation at once
+        return _llm(f"Explain this code in clear {out} for a developer: first one line on what it does, then how it "
+                    "works step by step (short headings or bullets), the important functions / variables, edge cases, "
+                    "bugs or risks, and one or two concrete improvements. Use small code snippets where they help.",
+                    (f"File: {name}\n" if name else "") + code[:12000], smart=True, max_tokens=1600,
+                    purpose="assist_code_explain_full")
     reply = _llm(f"In {out}, say in 2-3 short plain sentences what this code does and the one thing worth knowing "
                  f"about it (a bug or risk if there is one). No lists, no headings, no code.",
                  (f"File: {name}\n" if name else "") + code[:12000], smart=False, max_tokens=SHORT_MAX["code"],
@@ -539,8 +556,12 @@ def improve_code(code: str, instruction: str, lang_name: str = "", context: str 
     user = (f"Instruction: {instruction}\n\n" + (f"Surrounding code (for context only, do not return it):\n{context}\n\n"
                                                    if context else "") + f"Selected code ({a} lines):\n{code[:12000]}")
     budget = min(4000, len(code) // 2 + 800)
+    if detailed():  # coding mode: a thorough, high-quality rewrite (still only the selection)
+        system += (" Coding mode: do it thoroughly and well, like a senior engineer: clean structure, good names, "
+                   "helpful comments and docstrings, robust error handling, sensible edge cases.")
+        budget = min(6000, len(code) + 1500)
     new = _strip_fence(_llm(system, user, smart=True, max_tokens=budget, purpose="assist_code_fix"))
-    limit = max(3 * a + 10, 30)
+    limit = max(3 * a + 10, 30) * (2 if detailed() else 1)
     if new.count("\n") + 1 > limit:  # padded with a whole program: ask once more, strictly
         log.info("code improve too long (%d lines for %d), retrying", new.count("\n") + 1, a)
         again = _strip_fence(_llm(system, user + f"\n\nYour answer must be at most {2 * a + 6} lines.", smart=True,
@@ -749,6 +770,9 @@ def start_code_improve(g, instruction: str, mode: str = "improve", note: str = "
 
     _improving.clear()
     _improving.update(since=time.time())
+    from jarvis.core import workspace as _ws
+    if _ws.SURFACE == "vscode":  # asked in VS Code's panel: replace the selection as soon as it's written (Ctrl+Z undoes)
+        _improving["apply"] = True
 
     def run(ctx) -> str | None:
         try:

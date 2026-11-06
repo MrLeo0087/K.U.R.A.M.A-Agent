@@ -27,6 +27,8 @@ class ChatIn(BaseModel):
     lang: str | None = Field(None, description="Language hint: en | ne | hi (omit for auto)")
     ambient: bool = Field(False, description="voice heard while nobody was talking to KURAMA (room talk/TV): "
                                              "answered only when it is clearly a command or names KURAMA")
+    via: str = Field("", description="'vscode' = the KURAMA Coder panel in VS Code (whole answers, changes applied "
+                                     "straight into the editor)")
 
 
 class FeedbackIn(BaseModel):
@@ -60,7 +62,8 @@ async def chat(body: ChatIn, request: Request):
     mode: Literal["text", "voice"] = "voice" if body.mode == "voice" else "text"
     engine = st.engine
     turn = Turn(asyncio.get_running_loop(), asyncio.Queue())
-    threading.Thread(target=engine.run_turn, args=(turn, text, mode, norm_lang(body.lang), body.ambient is True),
+    threading.Thread(target=engine.run_turn, args=(turn, text, mode, norm_lang(body.lang), body.ambient is True,
+                                                   body.via),
                      name="jarvis-turn", daemon=True).start()
 
     async def events():

@@ -24,3 +24,16 @@ def test_the_panel_page_script_parses(tmp_path):
     subprocess.run(["node", "-e", code], check=True, capture_output=True)
     r = subprocess.run(["node", "--check", str(js)], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
+
+
+def test_vscode_gets_whole_answers_and_coding_mode_is_detailed(monkeypatch):
+    """11-07: the panel said "It's in the workspace" (VS Code has no workspace); coding mode = full answers."""
+    from jarvis.core import assist, workspace
+    long = "word " * 900
+    monkeypatch.setattr(workspace, "SURFACE", "vscode")
+    assert workspace.to_workspace("t", long)[0] == long
+    assert assist.detailed()
+    monkeypatch.setattr(workspace, "SURFACE", "")
+    from jarvis import agents
+    monkeypatch.setattr(agents, "current", lambda: "general")
+    assert not assist.detailed()

@@ -235,7 +235,7 @@ class Engine:
                        "ms": t.get("ms", _tool_ms(str(t.get("name")), ts0, used))})
         return max(seen, len(tools))
 
-    def run_turn(self, turn: Turn, text: str, mode: str, lang: str | None, ambient: bool = False) -> None:
+    def run_turn(self, turn: Turn, text: str, mode: str, lang: str | None, ambient: bool = False, via: str = "") -> None:
         t0, ts0 = time.monotonic(), time.time()
         from jarvis.core import dictation
         if mode == "voice" and dictation.active():
@@ -255,6 +255,8 @@ class Engine:
         lock = self._take_turn(turn)
         if lock is None:
             return
+        from jarvis.core import workspace as _ws
+        _ws.SURFACE = via  # the KURAMA Coder panel: whole answers, selection changes applied straight away
         with _held(lock):
             self.current, self.current_text, self.current_t = turn, text, time.monotonic()
             try:
@@ -292,6 +294,7 @@ class Engine:
                 turn.push({"type": "done", "text": "", "route": None, "tier": "", "tokens": _turn_tokens(ts0),
                            "ms": int((time.monotonic() - t0) * 1000), "lang": lang or "en"})
             finally:
+                _ws.SURFACE = ""
                 if self.current is turn:  # (a turn left behind never clears the one after it)
                     self.current, self.current_t = None, 0.0
                 self.deny_pending(turn)

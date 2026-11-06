@@ -36,7 +36,7 @@ function call(method, route, body, timeout = 8000) { // a plain JSON request to 
 let current = null; // the chat request in flight (Stop cuts it)
 function chat(text, onDelta) { // KURAMA's chat stream (Server-Sent Events): deltas as they come, then the done event
   return new Promise((resolve) => {
-    const data = JSON.stringify({ text, mode: "text" });
+    const data = JSON.stringify({ text, mode: "text", via: "vscode" }); // whole answers, edits applied in the editor
     const req = http.request({ host: "127.0.0.1", port: 8000, path: "/api/v1/chat", method: "POST", timeout: 180000,
       headers: headers({ "Content-Length": Buffer.byteLength(data), Accept: "text/event-stream" }) }, (res) => {
       let buf = "", done = null;

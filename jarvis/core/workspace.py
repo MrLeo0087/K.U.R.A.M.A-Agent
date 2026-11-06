@@ -128,9 +128,13 @@ def short_line(text: str, lang: str = "en") -> str:
     return (head.strip() + " " if head.strip() else "") + tail
 
 
+SURFACE = ""  # where the running turn was asked: "vscode" = the KURAMA Coder panel (it has no workspace: whole answers)
+
+
 def to_workspace(title: str, text: str, lang: str = "en") -> tuple[str, Path | None]:
-    """(chat line, saved file) for a long answer; the text itself and None when it is short or saving failed."""
-    if not too_long(text):
+    """(chat line, saved file) for a long answer; the text itself and None when it is short or saving failed.
+    Asked from VS Code's KURAMA Coder panel: always the whole text (VS Code has no KURAMA workspace)."""
+    if not too_long(text) or SURFACE == "vscode":
         return text, None
     path = publish(title or "Answer", text, folder="answers")
     return (short_line(text, lang), path) if path else (text, None)
