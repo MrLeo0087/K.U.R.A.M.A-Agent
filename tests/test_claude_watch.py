@@ -172,8 +172,12 @@ def test_say_goes_into_the_real_vscode_chat(told, monkeypatch):
     out = cw.say("Hello")
     assert out.startswith("Sent to your Claude Code chat (\"build the thing\")")  # the CURRENT conversation
     assert calls == [("claude_say", {"session": "s1", "text": "Hello"}), ("enter", "KURAMA")]
-    monkeypatch.setattr(editor, "states", lambda: [])  # VS Code not linked: it says how, never a hidden copy
-    assert cw.say("Hello").startswith("VS Code isn't linked to KURAMA yet")
+    monkeypatch.setattr(editor, "states", lambda: [])  # no KURAMA link: Claude Code's own vscode:// address
+    used = []
+    monkeypatch.setattr(cw, "_via_uri", lambda sid, text, cwd="": used.append((sid, text)) or "")
+    assert cw.say("Hello").startswith("Sent to your Claude Code chat") and used == [("s1", "Hello")]
+    monkeypatch.setattr(cw, "_via_uri", lambda sid, text, cwd="": None)  # VS Code not running: says so, no copies
+    assert cw.say("Hello").startswith("VS Code isn't open on the laptop")
     cw.turn_off()
 
 

@@ -1401,3 +1401,7 @@ Phases (one at a time, owner tests after each):
   Code chat and sent; never a terminal or a hidden copy (removed). /claude new <message> = a new chat tab with that
   message (editor link v7: claude-vscode.editor.open(undefined, text)), which becomes the current one; /claude go
   [project] = a new empty chat. Without the link (VS Code not reloaded after the update) it says exactly that.
+- (later) The KURAMA editor link isn't activated by this VS Code (no activation in the extension-host log after the
+  reloads), so /claude say no longer depends on it: Claude Code's own address vscode://anthropic.claude-code/open
+  (session + prompt; `code --open-url`) opens that conversation with the message in its box, then Enter. First time,
+  VS Code asks to allow the link: tick "Do not ask me again" once. The link is still used when it is active.

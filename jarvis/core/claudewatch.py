@@ -505,8 +505,7 @@ def screenshot() -> Path | None:
 
 
 # ---------- a new instruction ----------
-_NOT_LINKED = ("VS Code isn't linked to KURAMA yet. On the laptop press Ctrl+Shift+P, type 'Reload Window', Enter "
-               "(once, after an update), then send it again.")
+_NOT_LINKED = "VS Code isn't open on the laptop, so I can't reach the Claude Code chat. Open VS Code and send it again."
 
 
 def _window(cwd: str = "", min_ext: int = 6) -> dict | None:
@@ -539,6 +538,9 @@ def new(text: str = "", where: str = "") -> str:
                     break
     st = _window(root)
     if st is None:
+        text = " ".join((text or "").split())
+        if text and (r := _via_uri("", text, root)) is not None:
+            return r or f"Started a new Claude Code chat: \"{_short(text, 120)}\". /claude say goes to it now."
         return _NOT_LINKED
     name = str(st.get("workspace") or Path(str(st.get("root") or "")).name)
     text = " ".join((text or "").split())
@@ -576,12 +578,44 @@ def say(text: str) -> str:
     return sent if sent is not None else _NOT_LINKED
 
 
+def _via_uri(session: str, text: str, cwd: str = "") -> str | None:
+    """Without the KURAMA link: Claude Code's OWN VS Code address (vscode://anthropic.claude-code/open) opens that
+    conversation (or a new one) with the message in its box, then Enter is pressed. The first time, VS Code asks
+    "Allow 'Claude Code for VS Code' to open this URI?": tick "Do not ask me again" and Open, once."""
+    import urllib.parse
+    if not shutil.which("code") or not _vscode_running():
+        return None
+    q = {"prompt": text, **({"session": session} if session else {})}
+    url = "vscode://anthropic.claude-code/open?" + urllib.parse.urlencode(q, quote_via=urllib.parse.quote)
+    subprocess.run(["code", "--open-url", url], capture_output=True, timeout=15)
+    time.sleep(2.5)  # the chat opens with the text in its box
+    name = Path(cwd).name if cwd else ""
+    if not _press_enter(name):
+        return (f"I put \"{_short(text, 120)}\" in the Claude Code chat box in VS Code, but couldn't press Enter. "
+                "Press Enter there.")
+    return ""
+
+
+def _vscode_running() -> bool:
+    try:
+        return subprocess.run(["pgrep", "-x", "code"], capture_output=True, timeout=5).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
 def _into_vscode(s: dict, text: str) -> str | None:
-    """Type the message into that conversation's chat in VS Code; None when VS Code isn't linked."""
+    """Type the message into that conversation's chat in VS Code; None when VS Code isn't open."""
     from jarvis.core import editor
     st = _window(str(s.get("cwd") or ""), min_ext=5)
-    if st is None:
-        return None
+    if st is None:  # the KURAMA link isn't active in VS Code: Claude Code's own address does it
+        r = _via_uri(str(s.get("id") or ""), text, str(s.get("cwd") or ""))
+        if r is None:
+            return None
+        if r:
+            return r
+        where = f"\"{_short(s.get('prompt') or '', 50)}\"" if s.get("prompt") else "the current chat"
+        return (f"Sent to your Claude Code chat ({where}): \"{_short(text, 120)}\". I'll tell you when it answers. "
+                "(If VS Code asked to allow opening a link on the laptop, tick 'Do not ask me again' and Open, once.)")
     r = editor.edit(st, "claude_say", session=s["id"] or None, text=text)
     if not r.get("ok"):
         log.info("claude say via VS Code failed: %s", r.get("error"))
