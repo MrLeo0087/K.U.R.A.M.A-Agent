@@ -1409,3 +1409,4 @@ Phases (one at a time, owner tests after each):
   the extension only into the default profile. scripts/install_vscode_ext.sh now installs into every profile.
   "Session is already open. Your prompt was not applied": an open conversation refuses a prompt, so the link (v8)
   only opens and focuses it and KURAMA pastes the message into its box (clipboard put back), then Enter.
+- 2026-11-06: /claude say clears the Claude Code box before pasting (VS Code put '@file#line' of the open editor in it on focus), so the message arrives clean.

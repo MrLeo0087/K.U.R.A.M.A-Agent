@@ -639,7 +639,8 @@ def _into_vscode(s: dict, text: str) -> str | None:
 
 
 def _type_text(workspace: str, text: str) -> bool:
-    """Paste the message into the focused Claude Code box of that VS Code window (the clipboard is put back)."""
+    """Paste the message into the focused Claude Code box of that VS Code window, after clearing what is in it (the
+    clipboard is put back)."""
     if not shutil.which("xdotool") or not shutil.which("xclip"):
         return False
     try:
@@ -650,7 +651,9 @@ def _type_text(workspace: str, text: str) -> bool:
         if not out:
             return False
         subprocess.run(["xdotool", "windowactivate", "--sync", out[-1]], capture_output=True, timeout=5)
-        time.sleep(0.3)
+        time.sleep(0.3)  # clear the box first: VS Code adds '@file#line' of the open editor when it gets focus
+        subprocess.run(["xdotool", "key", "--clearmodifiers", "ctrl+a", "BackSpace"], capture_output=True, timeout=5)
+        time.sleep(0.1)
         subprocess.run(["xdotool", "key", "--clearmodifiers", "ctrl+v"], capture_output=True, timeout=5)
         time.sleep(0.4)
         subprocess.run(["xclip", "-selection", "clipboard"], input=old, text=True, timeout=3)  # your clipboard back
