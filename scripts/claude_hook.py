@@ -22,6 +22,9 @@ def call(path, body=None, timeout=4.0):
 
 
 def main():
+    import os
+    if os.environ.get("KURAMA_NO_WATCH"):  # KURAMA's own '/usage' check: not a task
+        return
     try:
         data = json.load(sys.stdin)
     except ValueError:

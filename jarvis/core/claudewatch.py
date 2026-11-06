@@ -285,7 +285,7 @@ def plan_limits() -> list[str]:
         return []
     out = []
     for f in settings_files():
-        env = dict(os.environ, CLAUDE_CONFIG_DIR=str(f.parent))
+        env = dict(os.environ, CLAUDE_CONFIG_DIR=str(f.parent), KURAMA_NO_WATCH="1")  # not a task to watch
         try:
             r = subprocess.run([str(exe), "-p", "/usage", "--output-format", "json"], env=env, cwd=str(Path.home()),
                                capture_output=True, text=True, timeout=30)
@@ -418,8 +418,10 @@ def _finished_text(s: dict) -> str:
 
 
 def _current() -> dict | None:
+    """The newest real conversation (one you gave a prompt), never KURAMA's own '/usage' checks."""
     with _lock:
-        live = sorted(_sessions.values(), key=lambda s: s["last"], reverse=True)
+        live = sorted((s for s in _sessions.values() if s.get("prompt") and not s["id"].startswith("demo-")),
+                      key=lambda s: s["last"], reverse=True)
     return live[0] if live else None
 
 
@@ -500,16 +502,21 @@ def screenshot() -> Path | None:
 
 # ---------- a new instruction ----------
 def say(text: str) -> str:
-    """Send the owner's next instruction to the newest task: Claude Code continues that conversation in the
-    background (headless, in the same folder); the hooks report it like any task."""
+    """Send the owner's message to Claude Code. Into the REAL chat in VS Code when the KURAMA editor link (v5+) is in
+    the window of that task's folder: the chat tab opens with the text and Enter is pressed, so you see it there
+    and Claude Code queues it if it is busy. Without VS Code: Claude Code continues that conversation in the
+    background (`claude -p --resume`); either way the hooks report it and the answer comes to Telegram."""
     text = " ".join((text or "").split())
     if not text:
-        return "What should Claude Code do? e.g. '/claude say run the tests and fix them'"
+        return "What should I tell Claude Code? e.g. '/claude say run the tests and fix them'"
     s = _current()
     if s is None:
-        return "There's no Claude Code task to continue. Start one in Claude Code first (with '/claude on')."
-    if s["status"] not in ("finished", "waiting for you", "closed"):
-        return "Claude Code is still working on its task. I'll tell you when it finishes; then send your next step."
+        return "There's no Claude Code conversation to send it to. Start one in Claude Code first (with '/claude on')."
+    if (sent := _into_vscode(s, text)) is not None:
+        return sent
+    if s["status"] == "working":
+        return ("Claude Code is busy and VS Code isn't reachable, so I can't add a message to its chat now. I'll tell "
+                "you when it finishes; then send it again.")
     exe = claude_binary()
     if exe is None:
         return "error: I can't find the claude program on this laptop."
@@ -522,7 +529,44 @@ def say(text: str) -> str:
     with open(log_file, "a", encoding="utf-8") as fh:
         subprocess.Popen([str(exe), "-p", "--resume", s["id"], text], cwd=s.get("cwd") or None, env=env,
                          stdout=fh, stderr=subprocess.STDOUT, start_new_session=True)
-    return f"Sent to Claude Code: \"{_short(text, 120)}\". I'll message you when it finishes."
+    return (f"VS Code isn't open there, so Claude Code continues that conversation in the background with: "
+            f"\"{_short(text, 120)}\". I'll send you its answer.")
+
+
+def _into_vscode(s: dict, text: str) -> str | None:
+    """Type the message into the Claude Code chat of the VS Code window of that folder; None when not possible."""
+    from jarvis.core import editor
+    cwd = str(s.get("cwd") or "")
+    wins = [w for w in editor.states() if int(w.get("ext") or 0) >= 5]
+    st = next((w for w in wins if cwd and str(w.get("root") or "") == cwd), None) or \
+        next((w for w in wins if cwd and cwd.startswith(str(w.get("root") or "~~"))), None) or (wins[0] if wins else None)
+    if st is None:
+        return None
+    r = editor.edit(st, "claude_say", session=s["id"], text=text)
+    if not r.get("ok"):
+        log.info("claude say via VS Code failed: %s", r.get("error"))
+        return None
+    if not _press_enter(str(st.get("workspace") or Path(str(st.get("root") or "")).name)):
+        return (f"I put \"{_short(text, 120)}\" in the Claude Code chat box in VS Code, but couldn't press Enter. "
+                "Press Enter there, or try again.")
+    return f"Sent to your Claude Code chat in VS Code: \"{_short(text, 120)}\". I'll tell you when it answers."
+
+
+def _press_enter(workspace: str) -> bool:
+    """Bring that VS Code window to the front and press Enter in the Claude Code box it just focused."""
+    if not shutil.which("xdotool"):
+        return False
+    try:
+        out = subprocess.run(["xdotool", "search", "--name", f"{workspace}.*Visual Studio Code" if workspace
+                              else "Visual Studio Code"], capture_output=True, text=True, timeout=5).stdout.split()
+        if not out:
+            return False
+        subprocess.run(["xdotool", "windowactivate", "--sync", out[-1]], capture_output=True, timeout=5)
+        time.sleep(0.4)
+        subprocess.run(["xdotool", "key", "--clearmodifiers", "Return"], capture_output=True, timeout=5)
+        return True
+    except (OSError, subprocess.TimeoutExpired):
+        return False
 
 
 def claude_binary() -> Path | None:

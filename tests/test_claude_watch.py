@@ -158,3 +158,20 @@ def test_plan_limits_from_claude_codes_own_usage(monkeypatch, tmp_path):
     rows = cw.plan_limits()
     assert rows[1] == "5-hour window: ██░░░░░░░░ 23% used, 77% left · resets Nov 6, 6:54am"
     assert rows[2] == "Weekly (all models): █████░░░░░ 58% used, 42% left · resets Nov 9, 3:44pm"
+
+
+def test_say_goes_into_the_real_vscode_chat(told, monkeypatch):
+    from jarvis.core import editor
+    cw.turn_on()
+    ev("UserPromptSubmit", prompt="build the thing")
+    calls = []
+    monkeypatch.setattr(editor, "states", lambda: [{"ext": 5, "root": "/home/leo/KURAMA", "workspace": "KURAMA",
+                                                    "port": 1, "token": "t"}])
+    monkeypatch.setattr(editor, "edit", lambda st, op, **kw: calls.append((op, kw)) or {"ok": True})
+    monkeypatch.setattr(cw, "_press_enter", lambda ws: calls.append(("enter", ws)) or True)
+    out = cw.say("Hello")
+    assert out.startswith("Sent to your Claude Code chat in VS Code")
+    assert calls == [("claude_say", {"session": "s1", "text": "Hello"}), ("enter", "KURAMA")]
+    monkeypatch.setattr(editor, "states", lambda: [])  # no VS Code: busy -> it says so, never a second copy
+    assert cw.say("Hello").startswith("Claude Code is busy and VS Code isn't reachable")
+    cw.turn_off()

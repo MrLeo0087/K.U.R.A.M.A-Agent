@@ -1383,3 +1383,7 @@ Phases (one at a time, owner tests after each):
   whole answer. /topics setup|off: alerts, Claude Code and reminders/jobs go to topics of the owner's group
   (tgtopics.py). /claude usage: the 5-hour and weekly limits (used, left, reset) from Claude Code's own /usage
   (`claude -p /usage`, a local command, 0 tokens) for each account, plus today's use.
+- (later) /claude say now types into the REAL Claude Code chat in VS Code: KURAMA's editor link (v5, vscode_ext
+  1.4.0) opens that conversation's tab with the text (claude-vscode.primaryEditor.open session+prompt), focuses the
+  box, and KURAMA presses Enter (xdotool). Busy Claude Code queues it. No VS Code: the background resume as before
+  (it ran headless, which is why nothing showed in the chat). KURAMA's own /usage checks no longer count as tasks.

@@ -16,7 +16,7 @@ const crypto = require("crypto");
 const DIR = path.join(os.homedir(), ".local", "share", "kurama", "vscode");
 const FILE = path.join(DIR, `${process.pid}.json`);
 const TOKEN = crypto.randomBytes(16).toString("hex");
-const EXT_VERSION = 4; // KURAMA checks it: 3 = watches the terminal for the coding agent
+const EXT_VERSION = 5; // KURAMA checks it: 3 = watches the terminal for the coding agent, 5 = claude_say
 const MAX_SEL = 20000; // characters of selected text written to the state file
 const MAX_BODY = 8 * 1024 * 1024;
 let port = 0;
@@ -178,8 +178,20 @@ function terminalRun(req) { // run a command again (after a fix the user said ye
 }
 
 // one request = one operation: text | replace_all | replace_range | replace_text | insert | terminal_run
+async function claudeSay(req) { // '/claude say <text>' from the phone: into the REAL Claude Code chat of this window
+  try {
+    await vscode.commands.executeCommand("claude-vscode.primaryEditor.open", req.session || undefined, req.text || undefined);
+    await new Promise((r) => setTimeout(r, 1200)); // the chat tab opens (or comes forward) with the text in its box
+    await vscode.commands.executeCommand("claude-vscode.focus"); // the cursor in that box: KURAMA presses Enter
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: String(e && e.message || e) };
+  }
+}
+
 async function handle(req) {
   if (req.op === "terminal_run") return terminalRun(req);
+  if (req.op === "claude_say") return claudeSay(req);
   const doc = await docFor(req.file || "");
   if (!doc) return { ok: false, error: "no file is open" };
   if (req.op === "text") return { ok: true, text: doc.getText(), dirty: doc.isDirty, lines: doc.lineCount };
