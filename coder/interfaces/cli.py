@@ -42,6 +42,8 @@ def main(argv: list[str] | None = None) -> int:
         run = new(a.task, root / understand.slug(a.task))
         run.stack, run.kind = understand.stack_of(a.task), "new"
         engine.plan_job(run)(Console())
+        from coder.interfaces import api
+        api.drop()  # (the plan is answered here, never left waiting for a "yes" in KURAMA's chat)
         from coder.builder import planner
         print(planner.text(run))
         if input("Build it? [y/N] ").strip().lower() not in ("y", "yes"):
