@@ -25,3 +25,15 @@ def test_setup_and_routing(monkeypatch):
     sent = [b for m, b in calls if m == "sendMessage"]
     assert sent and sent[0]["chat_id"] == -1001 and sent[0]["message_thread_id"] == 102
     assert tgtopics.off().startswith("Sections off") and tgtopics.where("claude_code", "info") == (None, None)
+
+
+def test_bot_main_loop_notes_the_group(monkeypatch):
+    """A message in the group reaching the bot's normal loop is remembered for /topics setup (it was not)."""
+    from jarvis.workers import telegram_bot
+    seen = []
+    monkeypatch.setattr(tgtopics, "note_group", seen.append)
+    monkeypatch.setattr(config, "TELEGRAM_CHAT_ID", "42")
+    bot = telegram_bot.TelegramBot()
+    bot.handle({"message": {"chat": {"id": -1009, "type": "supergroup", "title": "KURAMA"}, "text": "/start",
+                            "date": 0}})
+    assert seen and seen[0]["id"] == -1009

@@ -315,6 +315,7 @@ class TelegramBot(Worker):
             self.handle(u)
 
     def handle(self, update: dict, watch: bool = True) -> None:
+        self._note_group(update)  # the main loop too (only the busy-time loop noted groups: /topics never saw yours)
         msg = self._own_message(update)
         if msg is None:
             return
