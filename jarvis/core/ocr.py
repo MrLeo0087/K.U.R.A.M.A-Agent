@@ -246,7 +246,8 @@ def vision(src: Path, focus: bool = False) -> Result:
     """The vision model reads it: one call. Small crops are enlarged (the model reads small letters badly), big
     pictures kept up to 1600 px, dark or tinted photos get their contrast stretched. focus = a window/screen capture:
     only the main content, not the app around it. Text in any language and script is written as it is, with an
-    English line added when it isn't English. If the first read fails, a stronger model reads it once more."""
+    translation is a SEPARATE step (translate(): a text model, line by line, far more accurate than a vision model
+    adding one 'English:' line). If the first read fails, a stronger model reads it once more."""
     from PIL import Image, ImageEnhance, ImageOps
     from jarvis.core import llm
     with Image.open(src) as im:
@@ -269,7 +270,7 @@ def vision(src: Path, focus: bool = False) -> Result:
            "too; ignore drawings and pen marks that are not words. The text can be in ANY language and script "
            "(English, Nepali, Hindi, Tamil, Arabic, Chinese...): write it in its own script, never guess it is "
            "Devanagari. Do not describe the picture, do not split it into parts. '[?]' only for a word you really "
-           "can't read. If the text is not English, add a last line: 'English: <its meaning in English>'.")
+           "can't read. Do NOT translate (that is a separate step).")
     msgs = [{"role": "user", "content": [
         {"type": "text", "text": ask},
         {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}]}]
@@ -387,7 +388,78 @@ def run(source: str = "area", path: str = "") -> str:
             tmp.unlink(missing_ok=True)
     if not r.text.strip():
         return "I couldn't find any text in that picture."
-    copy(r.text)
+    text = re.sub(r"\n\s*English:.*$", "", r.text.strip(), flags=re.S | re.I)  # (an old-style line, if any)
+    copy(text)
     how = " by the AI" if r.engine == "vision" else ""
     unsure = " Some words may be wrong." if r.engine == "tesseract" and looks_poor(r) else ""
-    return f"{r.text}\n\n(Copied{how}.{unsure})"
+    english, lang = "", ""
+    if needs_translation(text):
+        lang, english = translate(text)
+    remember(text, english, lang)
+    if english:
+        return f"{lang + ': ' if lang else ''}{english}\n\n(The original text is copied{how}.{unsure})"
+    return f"{text}\n\n(Copied{how}.{unsure})"
+
+
+# --- the translation step and "what does this mean" right after a read ---
+LAST_KEY = "last_ocr"
+
+
+def needs_translation(text: str) -> bool:
+    """Mostly not English: another script, or Latin letters that aren't English words."""
+    letters = re.findall(r"[^\W\d_]", text)
+    if not letters:
+        return False
+    latin = sum(1 for c in letters if c.isascii())
+    if latin / len(letters) < 0.6:
+        return True
+    return _english_ratio(text) < 0.45
+
+
+def translate(text: str, max_chars: int | None = None) -> tuple[str, str]:
+    """(language, line-by-line English) by the smart TEXT model: every line of the original, then its meaning:
+        நினைவு நல்லது வேண்டும்
+        → Think good thoughts.
+    Natural meaning (not word by word); names kept. Long text: the first max_chars (config.OCR_TRANSLATE_CHARS) here,
+    the whole text is in the workspace job when the owner asks for more."""
+    from jarvis.core import llm
+    limit = max_chars or config.OCR_TRANSLATE_CHARS
+    src = text if len(text) <= limit else text[:limit].rsplit("\n", 1)[0]
+    ask = ("Translate this text into natural, accurate English. First line exactly: 'Language: <the language name>'. "
+           "Then, for EVERY line of the text in order: the original line, and on the next line '→ ' and its English "
+           "meaning (the real meaning, not word by word; keep names and numbers). Nothing else.\n\n" + src)
+    try:
+        out = (llm.chat([{"role": "user", "content": ask}], tier="smart", purpose="ocr_translate",
+                        max_tokens=min(3000, 200 + len(src) * 2)).text or "").strip()
+    except Exception as e:  # noqa: BLE001 - the original text is still there
+        log.info("translation failed: %s", e)
+        return "", ""
+    m = re.match(r"\s*Language:\s*([^\n]+)\n+", out, re.I)
+    lang = m.group(1).strip(" .*") if m else ""
+    body = out[m.end():].strip() if m else out
+    if len(src) < len(text):
+        body += "\n\n(Only the first part is translated here. Say 'translate all of it' for the whole text.)"
+    return lang, body
+
+
+def remember(text: str, english: str = "", lang: str = "") -> None:
+    """The last read, so 'what is the meaning of this?' right after means THIS text (not a highlighted file name)."""
+    import json
+    from jarvis.core import store
+    try:
+        store.kv_set(LAST_KEY, json.dumps({"text": text[:20000], "english": english[:20000], "lang": lang,
+                                           "ts": time.time()}))
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def last(max_age_s: float | None = None) -> dict | None:
+    """The last read if it is recent (config.OCR_THIS_S), else None."""
+    import json
+    from jarvis.core import store
+    try:
+        d = json.loads(store.kv_get(LAST_KEY) or "{}")
+    except (ValueError, TypeError):
+        return None
+    age = config.OCR_THIS_S if max_age_s is None else max_age_s
+    return d if d.get("text") and time.time() - float(d.get("ts") or 0) <= age else None

@@ -34,6 +34,18 @@ def text_assist(action: Literal["explain", "meaning", "translate", "improve", "c
         text: Explain/meaning/translate this typed text instead of the highlighted one.
     """
     from jarvis.core import assist
+    if action in ("explain", "meaning", "translate", "summary", "ask") and not text.strip():
+        read = _just_read(request)
+        if isinstance(read, str):
+            return read
+        if read is not None:
+            import re
+            whole = re.search(r"\b(?:all|whole|full|complete|everything)\b",
+                              f"{request} {safety_text()}", re.I)  # 'translate all of it': the whole text, anew
+            if action in ("meaning", "translate") and read.get("english") and (lang or "en") == "en" and not (
+                    whole and "Only the first part" in read["english"]):
+                return f"{read['lang'] + ': ' if read.get('lang') else ''}{read['english']}"
+            text = read["text"]
     out = assist.run(action, request, lang, replace, path, text)
     if action in ("explain", "code", "use") and not text and str(out).startswith("I couldn't see any highlighted text"):
         # nothing selected: 'how can I use it?' / 'explain this code' is about what KURAMA just gave (11-05: "I
@@ -43,6 +55,31 @@ def text_assist(action: Literal["explain", "meaning", "translate", "improve", "c
         q = request or str((trace.current() or {}).get("text") or "") or "how can I use what you just gave me?"
         return explain_self(q)
     return out
+
+
+def safety_text() -> str:
+    from jarvis.core import safety
+    return str(safety.context().get("user_text") or "")
+
+
+def _just_read(request: str):
+    """'what is the meaning of this?' a moment after 'OCR my screen' = the text just read, not whatever is highlighted
+    (11-06 it explained '04-17311', a highlighted file name). 'the SELECTED text' = the selection. A selection made
+    after the read -> ask which. Returns the read (dict), a question (str) or None (use the selection as before)."""
+    import re
+
+    from jarvis.core import ocr, safety
+    words = f"{safety.context().get('user_text') or ''} {request or ''}"
+    if re.search(r"\b(?:select(?:ed|ion)?|highlight(?:ed)?|copied|clipboard)\b", words, re.I):
+        return None
+    read = ocr.last()
+    if read is None:
+        return None
+    from jarvis.core import browsertab
+    if browsertab.selection() and browsertab._SEL["ts"] > float(read.get("ts") or 0) + 2:
+        return ("Do you mean the text I just read from the screen, or the text you highlighted after it? "
+                "Say 'the screen text' or 'the selected text'.")
+    return read
 
 
 alias("rewrite_text", "text_assist", lambda a: {"action": "improve", "request": a.get("instruction", ""),

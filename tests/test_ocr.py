@@ -100,7 +100,9 @@ def test_screen_with_few_words_is_a_photo_for_the_ai(tmp_path, copied, monkeypat
     monkeypatch.setattr(ocr, "vision", lambda p, focus=False: seen.update(focus=focus) or
                         ocr.Result("१. नेपाली अक्षर", "vision", 100.0))
     monkeypatch.setattr(ocr, "grab_window", lambda: p)
-    assert ocr.run("window").startswith("१. नेपाली अक्षर") and seen["focus"] is True
+    monkeypatch.setattr(ocr, "translate", lambda t: ("Nepali", "१. नेपाली अक्षर\n→ 1. Nepali letters"))
+    out = ocr.run("window")
+    assert out.startswith("Nepali: १. नेपाली अक्षर\n→ 1. Nepali letters") and seen["focus"] is True
     assert ocr.looks_poor(sidebar, focus=True) and not ocr.looks_poor(sidebar, focus=False)
     page = ocr.Result("lots of words " * 50, "tesseract", 85.0, 0.05, 187.0)  # a normal text window stays free
     assert not ocr.looks_poor(page, focus=True)

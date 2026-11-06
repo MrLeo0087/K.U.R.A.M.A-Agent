@@ -47,6 +47,8 @@ CODING_JOBS: dict[str, tuple[str, ...]] = {
                 "make this selected code more advanced", "add comments to the selected code"),
 }
 CODING_JOB_MIN = 0.75
+OCR_TRANSLATE_CHARS = 2500  # a read's translation done at once (more: "translate all of it")
+OCR_THIS_S = 600  # "what does this mean?" this long after a read means the read text (not the selection)
 MODEL_MAX_OUTPUT = {"qwen/qwen3.8-27b": 900}  # Groq's output-tokens-per-minute limit for it is 1000: never ask more
 
 # Gemini (Google, free tier): the fallback AFTER Groq's gpt-oss models and BEFORE qwen (qwen claimed actions it never
