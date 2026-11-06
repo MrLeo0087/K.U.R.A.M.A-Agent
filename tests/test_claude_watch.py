@@ -214,3 +214,12 @@ def test_an_open_chat_gets_the_text_typed_in(told, monkeypatch):
     assert cw.say("hi").startswith("Sent to your Claude Code chat")
     assert calls == ["claude_say", ("type", "hi"), "enter"]
     cw.turn_off()
+
+
+def test_a_long_claude_say_is_one_request():
+    """11-06: '/claude say I suggest one more thing .. treat the agent as a new project .. make it separate...'
+    reached Claude Code as only 'I suggest one more thing' (the planner split it into tasks)."""
+    from jarvis.core import planner
+    msg = ("/claude say i suggest one more thing .. treat agent as whole new project .. make it separate folder and "
+           "backend so that I can upgrade it later. Also open the folder and run the tests")
+    assert planner.is_multi(msg) is False

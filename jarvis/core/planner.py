@@ -394,6 +394,8 @@ _ONE_EDIT = re.compile(r"\b(?:this|the|my)\s+(?:selected|selective|highlighted|w
 def is_multi(text: str) -> bool:
     """Cheap multi-intent flag: a separator plus at least two command-like clauses."""
     from jarvis.core import fastpath
+    if re.match(r"^\s*/[a-z]", text or "", re.I):  # a /command is ONE request: '/claude say <a long message with
+        return False  # "..", "also", "make it...">' was split into tasks and only its first part reached Claude Code
     if fastpath.to_file_intent(text):  # "<code description, with ands> ... write it in this file": ONE request
         return False
     if fastpath.app_name_intent(text):  # "when I say open browser, open Brave": two 'open's, ONE name to keep

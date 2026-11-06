@@ -50,6 +50,8 @@ TABLE = {
     "kill": Act("kill_app", lambda a: {"name": a.get("target"), "force": True}),
     "window": Act("window", lambda a: {"action": a.get("how", "focus"), "name": a.get("target")}),
     "tab": Act("app_control", lambda a: {"action": "shortcut", "text": (  # no tab named: list them (was 'tab:None')
+        f"close_tabs:{t}" if (a.get("how") or "").lower() == "close" and (t := (a.get('target') or a.get('text') or "").strip())
+        else "close_tab:" if (a.get("how") or "").lower() == "close" else
         f"tab:{t}" if (t := (a.get('target') or a.get('text') or "").strip()) else "tabs")}),
     "press": Act("app_control", lambda a: {"action": "press", "text": a.get("text") or a.get("target")}),
     "type": Act("app_control", lambda a: {"action": "type", "text": a.get("text"), "app": a.get("target")}),
@@ -63,7 +65,7 @@ TABLE = {
 
 @tool(group="core", safety="safe",
       description="Open an app, website or folder by name; close or force-kill an app; arrange a window "
-                  "(minimize/maximize/left/right/focus, or the home screen = desktop); switch to a browser tab by name or number (tab); press keys, type or click in the app in front; install an app; "
+                  "(minimize/maximize/left/right/focus, or the home screen = desktop); switch to a browser tab by name or number (tab), or close tabs (tab with how=close: '1,2,3', 'all except 6', 'keep youtube'; never close the browser to close tabs); press keys, type or click in the app in front; install an app; "
                   "name (remember what the user's words mean, forever: 'when I say browser, open Brave', 'when I say good night, "
                   "lock the screen'); rule (a standing rule for every reply: 'from now on keep answers short'), forget_rule.")
 def apps(action: Literal["open", "close", "kill", "window", "tab", "press", "type", "click", "install", "name", "rule", "forget_rule"], target: str = "",
@@ -71,11 +73,12 @@ def apps(action: Literal["open", "close", "kill", "window", "tab", "press", "typ
     """Apps, websites, folders and windows.
 
     Args:
-        action: open, close, kill (force), window, tab (switch to a browser tab: target = its name or number; no target = list the open tabs), press
+        action: open, close, kill (force), window, tab (switch to a browser tab: target = its name or number; no target = list the open tabs;
+            how=close closes tabs: target '3' / '1,2,3' / '1-5' / 'all except 6' / 'keep youtube'), press
             (keys like 'ctrl+v', 'enter'), type, click, install, name (target = the words the user says, text = the
             app or the command they mean: 'brave', 'lock the screen'; empty text forgets them).
         target: App / website / folder name ('brave', 'youtube', 'tara'), or several sites 'youtube, facebook'.
-        how: open: the app to open it IN ('vscode' for a folder/file in VS Code); window: focus, minimize, maximize,
+        how: tab: close (close those tabs); open: the app to open it IN ('vscode' for a folder/file in VS Code); window: focus, minimize, maximize,
             left, right, restore, list, desktop (go to the home screen); install: install, remove, search, update.
         text: What to type, the keys to press, or what to click.
     """

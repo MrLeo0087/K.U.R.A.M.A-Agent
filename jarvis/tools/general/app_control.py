@@ -17,7 +17,8 @@ def app_control(action: Literal["task", "click", "type", "press", "shortcut", "e
     Args:
         action: task (free-form, multi-step), click (a named element), type (text), press (keys like 'ctrl t'),
             shortcut (new_tab, close_tab, back, reload, zoom_in, tab:3, tab:facebook = a browser tab by number or name, tabs = list them,
-            close_tab:facebook, scroll_down / scroll_up (:3 = three pages), top, bottom), enable (one-time setup for browsers).
+            close_tab:facebook, close_tabs:1,2,3 / close_tabs:all except 6 / close_tabs:keep youtube (several tabs;
+            never close the browser for tabs), scroll_down / scroll_up (:3 = three pages), top, bottom), enable (one-time setup for browsers).
         text: The task, element name, text, keys or shortcut name.
         app: Optional app to bring to the front first (brave, files, terminal, code, settings).
     """
@@ -31,8 +32,10 @@ def app_control(action: Literal["task", "click", "type", "press", "shortcut", "e
         name, n = name.strip(), n.strip()
         if name == "tabs":  # 'what tabs are open'
             return ui.list_tabs()
-        if name == "close_tab" and n:  # 'close the facebook tab'
-            return ui.close_tab_named(n)
+        if name == "close_tabs":  # 'close tabs 1-5', 'all except youtube', 'keep only youtube'
+            return ui.close_tabs(n, app)
+        if name == "close_tab" and n:  # 'close the facebook tab' / 'close tab 3'
+            return ui.close_tabs(n, app) if any(c.isdigit() for c in n) else ui.close_tab_named(n)
         if name == "tab" and n and not n.isdigit():  # 'tab:facebook' = by its name
             return ui.tab_named(n, app)
         if name in ("scroll_down", "scroll_up") and n.isdigit():  # 'scroll_down:3' = three pages

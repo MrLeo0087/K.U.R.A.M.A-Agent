@@ -278,6 +278,100 @@ def close_tab_named(name: str) -> str:
     return switched.replace("Switched to", "Closed", 1)
 
 
+def tabs_to_close(spec: str, tabs: list[dict], current: int = 0) -> list[int] | str:
+    """Which tab positions a request means (or why not): '1,2,3' / '1-5' / 'first second and fourth' /
+    'all except 6' / 'all except last' / 'all except youtube' / 'keep youtube' / 'others' (all but the current)."""
+    import re
+    words = {"first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5, "sixth": 6, "seventh": 7, "eighth": 8,
+             "ninth": 9, "tenth": 10, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6}
+    t = " ".join((spec or "").lower().replace("tabs", "").replace("tab", "").split())
+    n = len(tabs)
+    last = max((x["i"] for x in tabs), default=0)
+
+    def nums(s: str) -> list[int]:
+        out: list[int] = []
+        for a, b in re.findall(r"(\d+)\s*(?:-|to)\s*(\d+)", s):
+            out += list(range(int(a), int(b) + 1))
+        s = re.sub(r"\d+\s*(?:-|to)\s*\d+", " ", s)
+        out += [int(x) for x in re.findall(r"\d+", s)]
+        out += [words[w] for w in re.findall(r"[a-z]+", s) if w in words]
+        if re.search(r"\blast\b", s) and last:
+            out.append(last)
+        return out
+    keep: set[int] = set()
+    if m := re.match(r"^(?:all\s+)?(?:except|but|other than|keep(?: only)?|only keep)\s+(.+)$", t) or \
+            re.match(r"^all\s+(?:except|but)\s+(.+)$", t):
+        rest = m.group(1).strip()
+        keep = set(nums(rest))
+        if not keep:  # by name: 'keep youtube', 'all except the github one'
+            if not tabs:
+                return "I can't see the browser's tabs, so I can't tell which ones are " + rest + "."
+            keep = {x["i"] for x in tabs if _tab_is(x, rest)}
+            if not keep:
+                return f"No open tab matches '{rest}', so I closed nothing."
+        if not tabs:
+            return "I can't see the browser's tabs (reload the KURAMA tab link extension), so I closed nothing."
+        return sorted((x["i"] for x in tabs if x["i"] not in keep), reverse=True)
+    if t in ("others", "other", "the others", "all others", "all other"):
+        if not tabs or not current:
+            return "I can't see the browser's tabs, so I closed nothing."
+        return sorted((x["i"] for x in tabs if x["i"] != current), reverse=True)
+    if t in ("all", "every", "all of them"):
+        return "all"
+    picked = sorted(set(nums(t)), reverse=True)
+    if not picked:
+        return ""
+    if n and any(i > last for i in picked):
+        return f"There are only {n} tabs open."
+    return picked
+
+
+def _tab_is(tab: dict, name: str) -> bool:
+    """This tab matches a loose name (site or title), as find_tab does for one tab."""
+    import re
+    from urllib.parse import urlparse
+    key = re.sub(r"[^a-z0-9]+", "", re.sub(r"^(?:the|my)\s+|\s+(?:one|ones|tabs?)$", "", name.lower().strip()))
+    hay = re.sub(r"[^a-z0-9]+", "", urlparse(tab.get("url") or "").netloc.lower() + (tab.get("title") or "").lower())
+    return bool(key) and key in hay
+
+
+def close_tabs(spec: str, app: str = "") -> str:
+    """Close several browser tabs: by numbers, 'all except N', 'keep youtube'. Highest position first, so the
+    numbers don't shift while closing. Never closes the browser itself (11-06: 'close all tabs and keep YouTube'
+    closed the whole Brave window). 0 tokens."""
+    from jarvis.core import browsertab
+    if err := _need():
+        return err
+    tabs = browsertab.tabs()
+    current = next((x["i"] for x in tabs if x.get("url") == (browsertab.get(3600) or ("", ""))[0]), 0)
+    which = tabs_to_close(spec, tabs, current)
+    if which == "all":  # 'close all tabs' = the browser window; never when the request keeps one ('...keep YouTube')
+        import re
+        from jarvis.core import safety
+        whole = str(safety.context().get("request") or safety.context().get("user_text") or "")
+        if re.search(r"\b(?:except|keep|but|only|other than|leave)\b", whole, re.I):
+            return "You want to keep some tabs: say which, e.g. 'close all tabs except YouTube'."
+        from jarvis.tools.general import _apps
+        wins, label = _apps.match_windows(app or browsertab.browser_name() or "browser")
+        for w in wins:
+            _apps.wmctrl(["-i", "-c", w["id"]])
+        return f"Closed all tabs ({label or 'the browser'})." if wins else "No browser window is open."
+    if isinstance(which, str):
+        return which or "Which tabs? Say their numbers ('close tabs 1, 2 and 3') or 'all except YouTube'."
+    if tabs and len(which) >= len(tabs):
+        return "That would close every tab (the whole browser). Say which one to keep, e.g. 'all except YouTube'."
+    if family(active_class()) != "browser" and not focus(app or browsertab.browser_name() or "brave"):
+        return "I couldn't find the browser window."
+    for i in which:
+        shortcut("tab", i)
+        time.sleep(0.15)
+        key("ctrl+w")
+        time.sleep(0.15)
+    left = len(tabs) - len(which) if tabs else None
+    return f"Closed {len(which)} tab{'s' if len(which) != 1 else ''} ({', '.join(map(str, sorted(which)))})." + (
+        f" {left} left open." if left is not None else "")
+
+
 def shortcut(action: str, n: int = 0, app: str = "", times: int = 1) -> str:
     if err := _need():
         return err

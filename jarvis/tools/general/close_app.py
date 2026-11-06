@@ -13,7 +13,13 @@ def close_app(name: str) -> str:
     Args:
         name: The app's name or part of a window title, e.g. "vs code", "files", "firefox".
     """
+    import re
+    from jarvis.core import safety as _s
+    asked = str(_s.context().get("user_text") or _s.context().get("request") or "")
     wins, label = _apps.match_windows(name)
+    if wins and re.search(r"\btabs?\b", asked, re.I) and re.search(r"browser|brave|chrom|firefox", label or "", re.I):
+        return ("error: the request is about TABS: close them with apps(action='tab', how='close', target='1,2,3' / "
+                "'all except 6' / 'keep youtube'), never by closing the browser")
     if not wins:
         return f"no open window matches {name!r}"
     from jarvis.core import safety, taskgraph

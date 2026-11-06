@@ -2260,8 +2260,9 @@ def meaning_intent(text: str) -> Intent | None:
     if label in ("colab_setup", "kaggle_setup"):  # the ready notebook (.ipynb) linked to KURAMA: 0 tokens
         it = Intent("colab", "training", "watch", {"action": "kaggle" if label == "kaggle_setup" else "colab"})
         return it if meaning_ok(t, it) else None
-    if label == "close_all_tabs":  # every tab = the browser window (11-01 'Close all tab.' cost an AI call)
-        it = Intent("close", "close_app", "windows", {"name": "browser"})
+    if label == "close_all_tabs":  # every tab = the browser window (11-01 'Close all tab.' cost an AI call); 'all
+        it = Intent("tabs", "app_control", "windows", {"action": "shortcut", "text": "close_tabs:all"})  # but X'
+        #  is refused by close_tabs (11-06 'close all the tabs and only keep YouTube' closed the whole Brave)
         return it if meaning_ok(t, it) else None
     if label == "list_tabs":
         it = Intent("tabs", "app_control", "windows", {"action": "shortcut", "text": "tabs"})

@@ -49,7 +49,7 @@ def test_key_combos(text, keys):
 @pytest.mark.parametrize("text", ["close all tabs", "Close all tab.", "close every tab in my browser"])
 def test_close_all_tabs_closes_the_browser(model, text):
     it = fastpath.match(text)
-    assert (it.tool, it.args) == ("close_app", {"name": "browser"})
+    assert (it.tool, it.args) == ("app_control", {"action": "shortcut", "text": "close_tabs:all"})
 
 
 @pytest.mark.parametrize("text", ["Give me the list of the tab open in my browser.", "what tabs are open",
