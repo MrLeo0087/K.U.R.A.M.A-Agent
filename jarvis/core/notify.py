@@ -72,10 +72,10 @@ def _route(method: str, payload: dict | None) -> dict | None:
     if not payload or str(payload.get("chat_id")) != str(config.TELEGRAM_CHAT_ID) or payload.get("message_thread_id"):
         return payload
     to = reply_target()
-    if to is None and method in _MEDIA:
-        try:
+    if to is None and (method in _MEDIA or method == "sendDocument"):  # sent from the laptop: pictures -> Images,
+        try:  # files (PDF, MD, zips) -> Share
             from jarvis.core import tgtopics
-            g, t = tgtopics.where("images", "info")
+            g, t = tgtopics.where("images" if method in _MEDIA else "share", "info")
             to = (g, t) if g else None
         except Exception:  # noqa: BLE001
             to = None

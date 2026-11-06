@@ -66,7 +66,7 @@ def test_setup_again_adds_only_the_missing_sections(monkeypatch):
                                           "threads": {"alerts": 1, "claude": 2, "jobs": 3, "other": 4}}))
     assert tgtopics.setup().startswith("Done")
     made = [b["name"] for m, b in calls if m == "createForumTopic"]
-    assert made == ["⚙️ Jobs", "🖼️ Images"]  # no second Alerts / Claude Code / Other
+    assert made == ["⚙️ Jobs", "🖼️ Images", "🔗 Share"]  # no second Alerts / Claude Code / Other
     assert tgtopics.where("scheduler", "info") == (-1001, 3)  # the old "Reminders & jobs" topic is Reminders now
     assert any(m == "editForumTopic" and b["name"] == "⏰ Reminders" for m, b in calls)
 

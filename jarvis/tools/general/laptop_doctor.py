@@ -28,8 +28,9 @@ def laptop_doctor(action: Literal["check", "free_ram", "port", "stop", "kurama"]
         return doctor.text(doctor.check())
     if action == "free_ram":
         ks = doctor.idle_kernels()
-        if not ks:
-            return "No idle Jupyter kernels to stop. " + doctor.check().findings[0]
+        if not ks:  # 'clean ram of my laptop': free what KURAMA can, then say it plainly (11-06 it answered with
+            from jarvis.core import cleanup  # "No idle Jupyter kernels... the kernel is swapping memory")
+            return cleanup.ram()
         mb = sum(k[1] for k in ks)
         if not safety.ask(f"Stop {len(ks)} idle Jupyter kernel(s) to free about {mb:.0f} MB? Their notebook "
                           f"variables are lost (the notebooks stay)."):

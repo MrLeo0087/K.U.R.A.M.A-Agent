@@ -389,7 +389,9 @@ def _bound(model: str, tools: Sequence | None, max_tokens: int | None, temperatu
         if temperature is not None:
             kw["temperature"] = temperature
         return m.bind(**kw)
-    kw: dict[str, Any] = {"max_tokens": max_tokens or config.LLM_MAX_TOKENS, **extra}
+    cap = config.MODEL_MAX_OUTPUT.get(model)  # a model whose per-minute OUTPUT limit is small (qwen: 1000/min):
+    want = max_tokens or config.LLM_MAX_TOKENS  # asking more is refused outright (11-06 'fix it': 429 "request too
+    kw: dict[str, Any] = {"max_tokens": min(want, cap) if cap else want, **extra}  # large", requested 1424)
     if temperature is not None:
         kw["temperature"] = temperature
     return m.bind(**kw)

@@ -75,8 +75,12 @@ def zip_dir(path: str | Path) -> Path:
     hard = config.SHARE_MAX_MB * 1024 * 1024  # over Telegram's 50 MB the zip goes up as a download link (gofile.io,
     #                                            multi-GB): the owner wants that every time, up to this size
     files, total = [], 0
+    mine = Path(config.OUTPUTS_DIR).resolve()  # KURAMA's own outputs (its zips too: a 2nd zip of KURAMA held the 1st)
+    inside_mine = p.resolve().is_relative_to(mine)  # (unless the folder sent IS in there)
     for f in p.rglob("*"):
         if not f.is_file() or any(part in ZIP_SKIP for part in f.relative_to(p).parts):
+            continue
+        if inside_mine is False and f.resolve().is_relative_to(mine):
             continue
         try:
             total += f.stat().st_size
@@ -130,6 +134,20 @@ def too_broad(p: Path) -> str | None:
     return None
 
 
+def folder_mb(p: Path) -> float:
+    """What would be zipped (junk and KURAMA's own outputs skipped), in MB; quick (sizes only)."""
+    mine, total = Path(config.OUTPUTS_DIR).resolve(), 0
+    inside = p.resolve().is_relative_to(mine)
+    try:
+        for f in p.rglob("*"):
+            if f.is_file() and not any(x in ZIP_SKIP for x in f.relative_to(p).parts) and \
+                    (inside or not f.resolve().is_relative_to(mine)):
+                total += f.stat().st_size
+    except OSError:
+        pass
+    return total / (1024 * 1024)
+
+
 def deliver_folder(path: str | Path, caption: str = "") -> str:
     """Zip a folder and send it to Telegram. If the zip is over the limit, split it into numbered parts and send
     each, with instructions to reassemble. (Sending happens inside; returns a status line.)"""
@@ -137,6 +155,12 @@ def deliver_folder(path: str | Path, caption: str = "") -> str:
         return err
     if err := too_broad(Path(path)):
         return err
+    mb = folder_mb(Path(path))
+    if mb > config.SEND_FOLDER_ASK_MB:  # 11-06: a 554 MB project zipped for 3 min with no word first
+        from jarvis.core import safety
+        if not safety.ask(f"“{Path(path).name}” is about {mb:.0f} MB: zipping and uploading it takes a few minutes, "
+                          "and it arrives as a download link. Send it?"):
+            return f"OK, I didn't send “{Path(path).name}”."
     try:
         z = zip_dir(path)
     except ValueError as e:
@@ -161,6 +185,23 @@ def upload_and_link(file_path: Path, name: str, mb: float, is_zip: bool = True) 
     tail = " (tap it, download, then unzip)" if is_zip else " (tap it to download)"
     return (f"“{name}” is {mb:.0f} MB — too big to send through Telegram directly, so I uploaded it. Download link"
             f"{tail}:\n{link}\n(Anyone with this link can download it, and it may expire after a while.)")
+
+
+_KINDS = {"image": (r"\b(?:image|images|photo|photos|picture|pictures|pic|pics|screenshot)\b", PHOTO_EXT),
+          "pdf": (r"\bpdf\b", {".pdf"}), "video": (r"\b(?:video|videos|clip)\b", {".mp4", ".mkv", ".webm", ".mov"})}
+
+
+def _not_what_was_asked(p: Path) -> str:
+    """'send the selected IMAGE' must send an image: a folder or another kind of file is not sent (11-06 it sent the
+    whole KURAMA folder, 1.1 GB, 5 min). '' = fine."""
+    from jarvis.core import safety
+    asked = str(safety.context().get("user_text") or "")
+    for kind, (rx, exts) in _KINDS.items():
+        if re.search(rx, asked, re.I) and not re.search(r"\bfolder\b", asked, re.I) and \
+                (p.is_dir() or p.suffix.lower() not in exts):
+            return (f"error: you asked for {'an' if kind == 'image' else 'a'} {kind}, but what's selected is "
+                    f"“{p.name}”{' (a folder)' if p.is_dir() else ''}. Select the {kind} in Files and say it again.")
+    return ""
 
 
 # safe: it can only ever send to the owner's own chat (TELEGRAM_CHAT_ID), like find_and_send
@@ -190,6 +231,8 @@ def send_file_telegram(path: str = "", caption: str = "", pick: int = 0) -> str:
         raw = str(here / cleaned)
     literal = Path(raw).expanduser()
     if literal.is_absolute() or raw.startswith("~"):  # an explicit path the user/model gave
+        if wrong := _not_what_was_asked(literal):
+            return wrong
         if literal.is_dir():
             return deliver_folder(literal, caption)
         if literal.is_file():

@@ -20,7 +20,12 @@ def _find(path: str) -> Path | None:
             hit = Path(f)
         return hit
     p = Path(raw).expanduser()
-    return p if p.is_absolute() and p.exists() else smart_path(raw)
+    if p.is_absolute() and p.exists():
+        return p
+    from jarvis.core import mywords
+    if (saved := mywords.path_for(raw)) is not None:  # a folder the owner named with a saved command
+        return saved
+    return smart_path(raw)
 
 
 @tool(group="files", safety="safe",

@@ -1029,6 +1029,10 @@ class Agent:
         command = nextstep.take(text)
         if not command:
             return None
+        if command.startswith(CODING_OFFER):  # "yes" to "that's a coding agent job": switch, then do it
+            from jarvis import agents
+            agents.switch("coding")
+            return self._run(command[len(CODING_OFFER):], mode, lang)
         res = self._fast(command, lang, mode)
         if res is None:
             return None
@@ -1066,7 +1070,7 @@ class Agent:
         self.trace_id = tr["id"] if tr else ""  # the page's 👍 / 👎 name this request
         answer, error = "", ""
         try:
-            answer = self._run(user_text, mode, lang)
+            answer = safety.scrub(self._run(user_text, mode, lang))
             return answer
         except Exception as e:
             error = f"{type(e).__name__}: {e}"
@@ -1087,6 +1091,8 @@ class Agent:
             return took
         if (bare := self._bare_answer(user_text)) is not None:
             return bare
+        if (job := coding_job(user_text)) is not None:
+            return job
         if (again := self._unheard(user_text, mode)) is not None:
             return again
         if modes.ai_level() == "off":
@@ -1110,6 +1116,7 @@ class Agent:
         error = ""
         try:
             for chunk in self._stream(user_text, mode, lang):
+                chunk = safety.scrub(chunk) if "Still working after" in chunk else chunk
                 parts.append(chunk)
                 yield chunk
                 trace.resume(tr)
@@ -1134,6 +1141,9 @@ class Agent:
             return
         if (bare := self._bare_answer(user_text)) is not None:
             yield bare
+            return
+        if (job := coding_job(user_text)) is not None:
+            yield job
             return
         if (again := self._unheard(user_text, mode)) is not None:
             yield again
@@ -1373,6 +1383,25 @@ def start_after_job(job_id: int | list[int], texts: list[str], lang: str | None 
     title = "then: " + "; ".join(texts)[:60] + f" (after job #{', #'.join(map(str, ids))})"
     return longjobs.submit(title, after_job, {"wait": ids, "tasks": texts, "lang": lang or ""},
                            kind="follow", max_tokens=config.AGENT_ASK_ABOVE_TOKENS, max_minutes=120)
+
+
+CODING_OFFER = "__coding__:"
+
+
+def coding_job(text: str) -> str | None:
+    """General mode, and the request is coding-agent work (a new project, a new file of code, a requirements file, a
+    diagram of the project): say so, and a "yes" switches the coding agent on and does it (0 tokens). Explaining,
+    upgrading or replacing the SELECTED code stays in General mode."""
+    from jarvis import agents
+    from jarvis.core import nextstep, semantic
+    if agents.current() == "coding" or len((text or "").split()) < 3 or not semantic.ready():
+        return None
+    b = semantic.best_of(text, "coding_jobs", config.CODING_JOBS)
+    if not b or b[0] == "general" or b[1] < config.CODING_JOB_MIN:
+        return None
+    nextstep.offer(CODING_OFFER + text, "")
+    return ("That's a job for the coding agent (it plans, writes every file, connects and checks them). "
+            "Say yes to switch it on and do it.")
 
 
 def after_job(ctx, params: dict) -> str | None:

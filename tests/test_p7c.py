@@ -150,8 +150,8 @@ def test_telegram_call_sends_multipart(monkeypatch):
 
 def test_send_message_telegram(tg):
     res, asked = ex("send_message_telegram", {"text": "A poem"})
-    assert res.ok and tg[0][:2] == ("sendMessage", {"chat_id": "42", "text": "A poem",
-                                                    "disable_web_page_preview": True})
+    assert res.ok and tg[0][:2] == ("sendMessage", {"chat_id": "42", "text": "A poem", "parse_mode": "HTML",
+                                                    "disable_web_page_preview": True})  # send_long: never cut
     assert registry.safety_of(registry.get("send_message_telegram")) == "safe" and asked == []  # own chat only
 
 

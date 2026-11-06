@@ -14,7 +14,8 @@ TIMEOUT_S = 60
 
 @tool(group="core", safety="confirm", max_chars=1500,
       description="Run a short Python program on the laptop and return what it prints; asks the user first, every time. "
-                  "Use when no other tool fits (math on data, file work, quick scripts).")
+                  "Use when no other tool fits (math on data, quick scripts). Never just to READ or list a file: "
+                  "the file tools / the open file already give it.")
 def run_python(code: str, folder: str = "") -> str:
     """Run Python code.
 

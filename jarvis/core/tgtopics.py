@@ -5,6 +5,7 @@
     ⏰ Reminders    reminders, alarms, timers, the morning brief, habits and to-dos
     ⚙️ Jobs         finished background jobs, training, downloads, installs, backups
     🖼️ Images       pictures KURAMA sends by itself (made images, screenshots)
+    🔗 Share        files and links sent from the laptop (PDF, MD, zips, download links, Wi-Fi shares)
     📌 Other        everything else KURAMA sends by itself
 
 Two-way: you can also TALK to KURAMA in any topic (General included); the answer comes back in that same topic
@@ -25,7 +26,7 @@ import logging
 log = logging.getLogger("jarvis.tgtopics")
 
 SECTIONS = {"alerts": "⚠️ Alerts", "claude": "🤖 Claude Code", "reminders": "⏰ Reminders", "jobs": "⚙️ Jobs",
-            "images": "🖼️ Images", "other": "📌 Other"}
+            "images": "🖼️ Images", "share": "🔗 Share", "other": "📌 Other"}
 _KEY, _CAND = "tg_topics", "tg_group_candidate"
 _REMINDER_SOURCES = ("scheduler", "reminders", "timer", "todo", "habits", "goals", "brief", "daily_digest", "study")
 _JOB_SOURCES = ("jobs", "longjobs", "training", "process_watch", "kaggle", "colab", "downloads", "installer", "backup")
@@ -107,8 +108,8 @@ def status() -> str:
 def section_for(source: str, level: str, title: str = "") -> str:
     if source == "claude_code" or "Claude Code" in title:
         return "claude"
-    if source == "images":
-        return "images"
+    if source in ("images", "share"):
+        return source
     if source in _REMINDER_SOURCES:
         return "reminders"
     if source in _JOB_SOURCES:
@@ -137,6 +138,7 @@ TOOL_SECTIONS = {
     "claude": ("claude_code",),
     "reminders": ("add_reminder", "set_alarm", "set_timer", "schedules", "schedule_command", "schedule", "todo",
                   "goals", "habits", "timetable"),
+    "share": ("send_file_telegram", "wifi_share", "send_message_telegram", "saved_links", "read_later"),
     "jobs": ("write_document", "jobs", "run_training", "kaggle_train", "training", "backup", "download_file",
              "video_download"),
 }

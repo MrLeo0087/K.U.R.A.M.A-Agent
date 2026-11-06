@@ -253,6 +253,33 @@ def _target(path: str) -> Path | None:
     return f
 
 
+_SAID_EXT = {".px": ".py", ".pi": ".py", ".pie": ".py", ".jas": ".js", ".htm": ".html"}  # how voice mishears them
+
+
+def named_file(request: str) -> Path | None:
+    """A file NAME in the request ('calculator.py', 'calculator dot py', 'calculator.px' = .py) in the folder in use
+    (the VS Code project / the open file's folder / the Files folder), existing or new."""
+    t = re.sub(r"\s+dot\s+(\w{1,5})\b", r".\1", request or "", flags=re.I)
+    m = re.search(r"\b([\w-]+(\.[a-z]{1,5}))\b", t, re.I)
+    if not m or m.group(2).lower() in (".com", ".org", ".net", ".io"):
+        return None
+    name = m.group(1)
+    ext = _SAID_EXT.get(m.group(2).lower(), m.group(2).lower())
+    name = name[: -len(m.group(2))] + ext
+    if Path(name).suffix not in _CODE_EXT:
+        return None
+    from jarvis.core import context, focus
+    snap = context.snapshot()
+    base = None
+    if snap.get("file"):
+        base = Path(snap["file"]).parent
+    elif snap.get("root"):
+        base = Path(snap["root"])
+    else:
+        base = focus.cwd()
+    return (base / name) if base is not None and base.is_dir() else None
+
+
 @tool(group="clipboard", safety="safe",
       description="Write code into the file open in VS Code (or `path`), like an editor assistant: `request` = what "
                   "the code should do (it reads the file, writes the complete runnable file, replaces it after one "
@@ -266,6 +293,8 @@ def code_to_file(request: str = "", path: str = "", code: str = "") -> str:
         code: Exact code to write instead of generating it.
     """
     from jarvis.core.writer import code_only
+    if not path.strip() and (named := named_file(request)) is not None:  # 'create calculator.py in this folder'
+        path = str(named)  # (11-06 it refused: "the file open in VS Code isn't a code file")
     target = _target(path)
     if target is None:
         return ("error: the file open in VS Code isn't a code file, so I won't put code into it. Say which file "

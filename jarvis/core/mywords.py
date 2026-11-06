@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import re
 import threading
+from pathlib import Path
 
 from jarvis.core import config
 
@@ -84,7 +85,31 @@ def forget(phrase: str) -> str:
     return f"Forgot '{k}'."
 
 
+_WHERE = r"\s+(?:in|with|on|using)\s+(?:the\s+)?(vs\s*code|vscode|code|visual studio code|files?|file manager|nautilus|terminal)$"
+
+
 def expand(text: str) -> str:
-    """The command the owner's words stand for, or the text unchanged (whole request only, never inside one)."""
+    """The command the owner's words stand for, or the text unchanged (whole request only, never inside one).
+    'open kurama project IN VS CODE' is the saved 'open kurama project' too (11-06 it went to the AI, which opened
+    ~/projects/myproject); an app named there replaces the saved one ('... in files')."""
     d = all_words()
-    return d.get(key(text), text) if d else text
+    if not d:
+        return text
+    k = key(text)
+    if k in d:
+        return d[k]
+    if (m := re.search(_WHERE, k)) and (base := k[:m.start()].strip()) in d:
+        cmd, app = d[base], m.group(1)
+        app = "files" if app.startswith(("file", "nautilus")) else "terminal" if app == "terminal" else "vs code"
+        return re.sub(r"\s+in\s+(?:vs\s*code|vscode|files?|file manager|terminal)$", "", cmd, flags=re.I) + f" in {app}"
+    return text
+
+
+def path_for(name: str) -> Path | None:
+    """The folder a saved command opens, by its name ('kurama project' -> /media/.../KURAMA), or None."""
+    k = key("open " + (name or ""))  # (key() drops a leading 'kurama': 'Kurama Project' alone became 'project')
+    for phrase, cmd in all_words().items():
+        if name and k in (phrase, "open " + phrase):
+            if (m := re.match(r"^open\s+(/\S.*?)(?:\s+in\s+[\w ]+)?$", cmd.strip(), re.I)) and Path(m.group(1)).exists():
+                return Path(m.group(1))
+    return None

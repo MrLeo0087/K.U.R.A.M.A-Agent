@@ -193,6 +193,15 @@ def execute(name: str, args: Any = None, confirm: ConfirmFn | None = None,
 
 
 BACKGROUND_SAID = "That's taking a while, so I'm finishing it in the background (job #{id}). I'll tell you when it's done."
+def scrub(text: str) -> str:
+    """The background note is for the AI only: anywhere it reaches a reply, the owner's sentence replaces it
+    (11-06 the reply was "I'm Still working after 8 s ... Tell the user in one short sentence ...")."""
+    import re
+    return re.sub(r"Still working after \d+ s, so this keeps running in the background as job #(\d+)\..*?"
+                  r"(?:don't make up the result\.|$)", lambda m: BACKGROUND_SAID.format(id=m.group(1)), text or "",
+                  flags=re.S)
+
+
 BACKGROUND_NOTE = ("Still working after {s:.0f} s, so this keeps running in the background as job #{id}. Tell the user "
                    "in one short sentence that you're doing it in the background, they can keep talking to you, and "
                    "you'll tell them when it's done. Don't wait for it and don't make up the result.")
@@ -281,6 +290,13 @@ def _call_or_background(reg: registry.Registry, name: str, clean: Any, ctx: dict
         res = box["res"]
         if not res.ok or res.output.lstrip().lower().startswith("error"):  # a tool's "error: ..." is a failure:
             raise RuntimeError(res.output[:300])  # the job must say failed, never "done" (it said "sent" before)
+        if name in ("send_file_telegram", "send_last_result", "send_message_telegram") and \
+                ctx.get("channel") != "telegram" and not re.match(r"(?i)\s*(?:sent|already sent)\b", res.output):
+            try:  # "send this folder to my Telegram" ended as a download link: the link itself goes to Telegram
+                from jarvis.core import notify, tgtopics  # (11-06 it was only shown on the laptop)
+                notify.telegram_send(res.output.strip(), *tgtopics.where("share", "info"))
+            except Exception:  # noqa: BLE001
+                pass
         lang = ctx.get("lang") or "en"
         shelf = list(ctx.get("published") or [])
         if shelf:  # the tool already put its full result in the workspace

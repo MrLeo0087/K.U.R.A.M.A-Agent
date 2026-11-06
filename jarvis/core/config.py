@@ -30,6 +30,24 @@ LLM_FAST = "openai/gpt-oss-20b"  # "fast" tier: chat, routing, summaries
 LLM_VISION = "qwen/qwen3.8-27b"  # screen / image tasks
 # Spoken chat without tools: qwen with thinking off starts in ~0.2 s vs ~0.5 s for gpt-oss.
 LLM_VOICE = os.getenv("JARVIS_LLM_VOICE", "qwen/qwen3.8-27b")
+# coding-agent work asked in General mode -> "say yes to switch the coding agent on" (agent.coding_job, by meaning);
+# "general" = coding help that stays in General mode (the selected code: explain / upgrade / replace; how to run)
+CODING_JOBS: dict[str, tuple[str, ...]] = {
+    "project": ("create a rock paper scissors game in html css and javascript", "make a new react project",
+                "build a pygame snake game", "make a rock paper scissors game in python with a ui", "create a fastapi project for a todo app", "make a new project here",
+                "create a calculator app with a nice ui in this folder", "build me a website for my portfolio",
+                "set up a flask app with login", "create a new python project that scrapes news"),
+    "file": ("create a new file calculator.py with a simple calculator", "make a new file app.js with the game logic",
+             "create a file named utils.py in this folder and write helper functions"),
+    "requirements": ("generate the requirements file", "make requirements.txt for this project",
+                     "create a requirements file for my project"),
+    "diagram": ("make a diagram of this project", "draw the architecture of my project", "call graph of this file"),
+    "general": ("explain the selected code", "upgrade the selected code", "replace the selected code with a better one",
+                "what does this function do", "how can i run this code", "explain this error",
+                "make this selected code more advanced", "add comments to the selected code"),
+}
+CODING_JOB_MIN = 0.75
+MODEL_MAX_OUTPUT = {"qwen/qwen3.8-27b": 900}  # Groq's output-tokens-per-minute limit for it is 1000: never ask more
 
 # Gemini (Google, free tier): the fallback AFTER Groq's gpt-oss models and BEFORE qwen (qwen claimed actions it never
 # did on 11-01 when both gpt-oss hit their daily limit). Only with GEMINI_API_KEY in .env. Free tier: ~10 requests/min.
@@ -405,6 +423,8 @@ TOOL_EXAMPLES: dict[str, tuple[str, ...]] = {
                     "update all my software", "download and set up obs"),
     "wifi_share": ("send this to my phone without internet", "transfer the folder to my mobile on the same network",
                    "share this big file over the local network"),
+    "send_message_telegram": ("send the link in my telegram", "send that download link to my telegram",
+                              "send this text to my phone", "message me this on telegram"),
     "contacts": ("save my friend's number", "what is ram's number", "add a new contact", "find sita in my contacts"),
     "live_search": ("what happened in the match today", "latest price of petrol", "is it raining in pokhara now",
                     "current news about the election", "score of the game right now"),
@@ -1380,7 +1400,8 @@ MEANING_SHORTCUTS: dict[str, tuple[str, ...]] = {
     "claude_usage": ("claude code usage", "how much claude code did i use today", "how many tokens did claude code use"),
     # your own commands ("when I say X, do Y" saves one): list them, forget one (X = its words)
     "my_commands": ("show my commands", "list my custom commands", "what are my own commands",
-                    "show the words i taught you", "list my words", "what commands did i teach you"),
+                    "show the words i taught you", "list my words", "what commands did i teach you",
+                    "give me the list of rules i gave you", "what rules did i give you", "show my rules"),
     "my_command_forget": ("forget my command X", "delete my custom command X", "remove my command X",
                           "forget when i say X"),
     "kaggle_setup": ("set up kaggle", "setup kaggle notebook for training", "give me the kaggle notebook",
@@ -1497,6 +1518,7 @@ READLATER_EXAMPLES = ("save this page for later", "read this later", "save this 
                       "add this link to my reading list", "keep this tab to read later", "watch this later",
                       "save this article to read tonight", "put this website in my read later list")
 QUEUE_NOW_MARGIN = 0.04  # clearly 'do it now' below this (planner.queue_meant)
+SEND_FOLDER_ASK_MB = 100  # a folder bigger than this is sent only after a yes (zipping + uploading takes minutes)
 SHARE_MAX_MB = int(os.getenv("KURAMA_SHARE_MAX_MB", "20000"))  # folders over Telegram's 50 MB: zip + link up to this
 QUEUE_ASK_S = 120  # a job that needs your yes asks on Telegram and waits this long (no answer = no)
 QUEUE_PARALLEL = 2  # while a job waits for your answer, the next one may run (at most this many at once)
