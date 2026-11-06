@@ -29,6 +29,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--new", action="store_true", help="make a new project (plan, then build) instead of a change")
     a = ap.parse_args(argv)
     root = Path(a.project).expanduser().resolve()
+    from coder.interfaces import link
+    link.QUIET = True  # from a terminal: results are printed, no VS Code window is opened
     try:  # KURAMA's store (the Progress checklist, the shared memory) when KURAMA is here
         from jarvis.core import store
         store.init()

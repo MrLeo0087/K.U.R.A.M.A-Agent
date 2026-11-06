@@ -80,7 +80,12 @@ def vscode_root() -> Path | None:
         return None
 
 
+QUIET = False  # the command line / tests: never open VS Code windows (each one costs ~300 MB of RAM)
+
+
 def open_folder(p: Path) -> None:
+    if QUIET:
+        return
     try:
         subprocess.Popen(["code", str(p)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
     except OSError:
