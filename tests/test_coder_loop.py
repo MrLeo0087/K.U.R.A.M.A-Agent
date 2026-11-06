@@ -147,3 +147,16 @@ def test_a_new_request_never_resumes_an_old_question(tmp_path, monkeypatch):
     loop._save_waiting(new("old", tmp_path), "when i click a product it gets stuck", {"ask": "which file?", "notes": []})
     assert api.answer_waiting("make a simple calculator code") is None
     assert loop.waiting() is None  # and the old question is gone
+
+
+def test_forget_and_deleted_files_leave_the_memory(tmp_path, monkeypatch):
+    from coder.core import session
+    from coder.interfaces import api
+    (tmp_path / "app.js").write_text("x")
+    session.task_start(tmp_path, "a", "fix the shop's scrolling")
+    session.task_end(tmp_path, "a", "done", "fixed", ["app.js"], [], 100)
+    assert "shop" in session.recap(tmp_path)
+    (tmp_path / "app.js").unlink()  # the owner deleted it: no longer "it"
+    assert session.recap(tmp_path) == ""
+    monkeypatch.setattr(api, "project_root", lambda: tmp_path)
+    assert api.forget_project().startswith("Forgot everything") and session.recent(tmp_path) == []

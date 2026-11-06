@@ -128,7 +128,7 @@ COMMANDS: tuple[Cmd, ...] = (
         tool=("coding", "coding_agent", {"action": "help"}, "request"),
         actions=("new", "project", "learn", "fix", "tests", "pass", "preview", "check", "look", "review", "commit",
                  "diffs", "reject", "undo", "continue", "claude", "tokens", "yes", "no", "bridge", "apply", "run", "help",
-                 "setup", "log"),
+                 "setup", "log", "forget"),
         aliases=("coder", "coding")),
     Cmd("whereami", "where was I (coding)", "Code", phrase="where was I", aliases=("wherewasi",)),
     Cmd("projects", "my watched coding projects", "Code", phrase="list my coding projects"),

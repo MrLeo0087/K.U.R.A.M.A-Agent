@@ -36,6 +36,7 @@ Safety
 /code undo [project] — undo my last change / the whole last build
 /code setup — make a .venv, install requirements.txt, run it and fix what breaks
 /code log — what I did in the last task (every step)
+/code forget — forget this project's tasks and memory (files untouched); "/clear" in the VS Code panel
 /code tokens — tokens used per project
 /code bridge — a ready prompt for ChatGPT / Gemini / Claude; /code apply — put its answer into the files
 
@@ -58,7 +59,7 @@ Plain words work too: "create a portfolio website", "add a dark mode to this pro
                   "the coding agent can do. 'after that, <request>' while a build runs = queued.")
 def coding(action: Literal["fix", "bridge", "apply", "project", "undo", "yes", "no", "run", "tests", "pass", "review",
                            "commit", "diffs", "reject", "preview", "check_page", "look", "continue", "handoff",
-                           "tokens", "learn", "help", "new", "check", "claude", "setup", "run_task", "log"], request: str = "",
+                           "tokens", "learn", "help", "new", "check", "claude", "setup", "run_task", "log", "forget"], request: str = "",
            site: str = "", error: str = "") -> str:
     """The coding agent.
 
@@ -87,6 +88,8 @@ def coding(action: Literal["fix", "bridge", "apply", "project", "undo", "yes", "
         return coder.interfaces.api.task(request)
     if action == "log":
         return coder.interfaces.api.what_happened()
+    if action == "forget":
+        return coder.interfaces.api.forget_project()
     if action == "fix":
         said = f"{request} {error}".strip()
         crashed = terminal.last(1800) is not None or re.search(r"Traceback|Error:|error:|Exception|line \d+", error or "")

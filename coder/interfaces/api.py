@@ -542,3 +542,20 @@ def what_happened() -> str:
         lines.append("Files changed: " + ", ".join(t["files"]))
     lines.append(f"Tokens: {int(t.get('tokens') or 0) / 1000:.1f}k · this project so far: {session.tokens(root) / 1000:.1f}k")
     return "\n".join(lines)
+
+
+def forget_project() -> str:
+    """Forget everything about the working project: its session (tasks, steps), its card, any waiting question or
+    plan. The files themselves are never touched."""
+    from coder.agent import loop
+    from coder.core import session
+    from coder.memory import card
+    root = project_root()
+    if root is None:
+        return "No project to forget."
+    session.forget(root)
+    card.path(root).unlink(missing_ok=True)
+    loop.drop_waiting()
+    drop()
+    _question_key().unlink(missing_ok=True)
+    return f"Forgot everything about {root.name} (its tasks, steps and card). The files are untouched; I start fresh."

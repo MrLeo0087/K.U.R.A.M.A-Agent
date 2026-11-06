@@ -82,7 +82,8 @@ def recent(root: Path, n: int = 3, max_age_h: float = 24) -> list[dict]:
 
 def recap(root: Path) -> str:
     """The last tasks as a few lines for the agent's context ('it' / 'that' / 'make it grey' refer to these)."""
-    tasks = recent(root)
+    tasks = [t for t in recent(root)  # a task whose files were all deleted since is no longer "it" (11-07)
+             if not t.get("files") or any((root / f).exists() for f in t["files"])]
     lines = []
     for i, t in enumerate(tasks):
         files = ", ".join(t.get("files") or []) or "no files"
@@ -116,3 +117,9 @@ def last_events(root: Path, n: int = 30) -> list[dict]:
         except ValueError:
             continue
     return out
+
+
+def forget(root: Path) -> None:
+    """'/code forget' / '/clear' in the coding chat: this project's tasks and steps are forgotten."""
+    import shutil
+    shutil.rmtree(_dir(root), ignore_errors=True)

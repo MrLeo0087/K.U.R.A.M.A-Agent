@@ -2,7 +2,7 @@
   "name": "kurama-editor-link",
   "displayName": "KURAMA editor link",
   "description": "Tells KURAMA (on this laptop only) which file is open and what is selected, lets it put code into the editor (Ctrl+Z undoes it) and, while the coding agent is on, tells it when a terminal command fails. Also: KURAMA Coder, a chat panel for KURAMA's coding agent in the side bar.",
-  "version": "1.8.2",
+  "version": "1.9.0",
   "publisher": "kurama",
   "license": "UNLICENSED",
   "engines": {
