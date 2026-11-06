@@ -287,6 +287,10 @@ def send_long(text: str, chat_id: str | int | None = None, title: str = "reply",
             if keep:
                 _keep_ids(r)
         except RuntimeError as e:  # (an HTML problem: the same text plain, never lost)
+            if thread and "thread not found" in str(e).lower():  # you deleted that topic: forget it, send privately
+                from jarvis.core import tgtopics
+                tgtopics.forget_thread(thread)
+                return send_long(text, None, title, None, keep)
             log.warning("telegram send failed (%s): sending plain", e)
             try:
                 import html

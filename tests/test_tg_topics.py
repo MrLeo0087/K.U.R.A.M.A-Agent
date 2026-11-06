@@ -135,3 +135,21 @@ def test_a_strangers_group_is_left(monkeypatch):
         "chat": {"id": -1777, "type": "supergroup"}, "from": {"id": 666},
         "new_chat_member": {"status": "member"}}})
     assert ("leaveChat", {"chat_id": -1777}) in calls
+
+
+def test_a_deleted_topic_is_forgotten_and_the_alert_still_arrives(monkeypatch):
+    import json
+    from jarvis.core import store
+    sent = []
+
+    def call(method, body=None, **kw):
+        if body.get("message_thread_id") == 5:
+            raise RuntimeError("telegram sendMessage failed: Bad Request: message thread not found")
+        sent.append(body)
+        return {"message_id": 1}
+    monkeypatch.setattr(notify, "telegram_call", call)
+    monkeypatch.setattr(config, "TELEGRAM_CHAT_ID", "42")
+    store.kv_set("tg_topics", json.dumps({"group": -1001, "threads": {"reminders": 5, "alerts": 6}}))
+    assert notify.send_long("Drink water", -1001, thread=5)
+    assert sent[-1]["chat_id"] == "42"  # the private chat instead
+    assert tgtopics.where("scheduler", "info") == (None, None) and tgtopics.where("guard", "warning") == (-1001, 6)

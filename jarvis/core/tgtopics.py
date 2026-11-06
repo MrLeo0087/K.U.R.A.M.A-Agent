@@ -167,3 +167,13 @@ def file_copy(from_chat, ids: list[int], section: str, asked_thread: int | None 
     except RuntimeError as e:
         log.info("filing in %s failed: %s", section, e)
         return False
+
+
+def forget_thread(thread: int) -> None:
+    """You deleted a section topic in Telegram: forget it (alerts go to the private chat; /topics setup remakes it)."""
+    from jarvis.core import store
+    t = _kv(_KEY)
+    threads = {k: v for k, v in (t.get("threads") or {}).items() if v != thread}
+    if t and threads != t.get("threads"):
+        store.kv_set(_KEY, json.dumps({**t, "threads": threads}))
+        log.info("topic %s is gone: forgotten", thread)
