@@ -25,6 +25,7 @@ from coder.llm import models
 from coder.memory import card as memory
 from coder.memory import repomap
 from coder.tools import builtin as tools
+from coder.tools import registry
 
 MAX_STEPS = 12
 STEP_TOKENS = 1800  # a step's output (an edit can carry code)
@@ -46,7 +47,6 @@ VISUAL = re.compile(r"\b(?:ui|ux|look|looks|design|colou?r|grey|gray|dark|light|
 MAX_VERIFY = 1  # one fix round after a failed check (each costs a screenshot + a look)
 _RUN_GOAL = re.compile(r"\b(?:run|start|launch|execute|screenshot|how (?:does )?it looks?|what (?:does it|it) (?:print|say|show)|output|crash(?:ed|es)?|"
                        r"the command)\b", re.I)
-_CHECK_TOOLS = {"run_project", "screenshot", "look", "page_errors", "run"}  # for a change, the verify step does these
 
 
 class S(TypedDict, total=False):
@@ -184,9 +184,10 @@ def _act(state: S) -> dict:
             ("\n\nResult of your last step:\n" + state["last"] if state.get("last") else ""))
     from jarvis.core import llm
     running = bool(_RUN_GOAL.search(state["goal"]))  # 'run it and tell me': it may run; a change: the code checks it
-    schemas = tools.SCHEMAS if running else [x for x in tools.SCHEMAS if x["function"]["name"] not in _CHECK_TOOLS]
+    perms = {"read", "run", "write"} if running else {"read", "write"}  # (a run may need a fix: "fix it and run it again")
+    schemas = registry.schemas(perms)
     if state.get("fixing"):  # the check found something: the next call must be the fix itself
-        schemas = [x for x in tools.SCHEMAS if x["function"]["name"] in ("edit", "write", "grep", "ask")]
+        schemas = registry.schemas({"read", "write"}, only={"edit", "write", "grep"})
     try:
         r = llm.chat([{"role": "system", "content": _STEP_SYS}, {"role": "user", "content": user}], tier="smart",
                      tools=schemas, tool_choice="required", purpose="coder_step", max_tokens=STEP_TOKENS)
@@ -216,14 +217,14 @@ def _act(state: S) -> dict:
     if name == "ask":
         return {"ask": str(args.get("question") or "")[:400], "command": str(args.get("command") or "")[:300], "steps": step}
     ctx.progress(f"{_icon(name)} {name} {_short_args(args)}"[:120])
-    obs = tools.call(run, name, args)
+    obs = registry.call(run, name, args)
     session.log(run.root, "tool", task=run.id, step=state.get("steps", 0) + 1, tool=name, args=_short_args(args),
                 result=(obs or "")[:300], tokens=run.tokens)
     if name == "read" and not obs.startswith(("tool error", "no ")) and "doesn't exist" not in obs:
         seen[str(args.get("path"))] = obs
     if name in ("edit", "write") and obs.startswith(("edited", "wrote")):  # what it read is now the NEW text
         rel = str(args.get("path"))
-        seen[rel] = tools.call(run, "read", {"path": rel})
+        seen[rel] = registry.call(run, "read", {"path": rel})
     note = f"{step}. {name}({_short_args(args)}): {obs.splitlines()[0][:120] if obs else ''}"
     _steps(state, state.get("plan") or [], min(len(state.get("plan") or []) - 1, step // 2), [*notes, note])
     last = obs if name != "read" else f"(the content of {args.get('path')} is now in 'Files you have read')"

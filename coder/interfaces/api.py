@@ -146,12 +146,8 @@ def answer_waiting(text: str) -> str | None:
     if w.get("command") and yes:
         run = new(w["goal"], Path(w["root"]))
         cmd = w["command"]
-        if tools.NEVER.search(cmd):
-            notes.append(f"the owner said yes, but `{cmd}` is never run (dangerous)")
-        else:  # the owner said yes: this one command runs even though it isn't on the safe list
-            import subprocess
-            r = subprocess.run(cmd, shell=True, cwd=run.root, capture_output=True, text=True, timeout=900)
-            notes.append(f"owner said yes; ran `{cmd}` -> exit {r.returncode}: {((r.stdout or '') + (r.stderr or ''))[-200:]}")
+        out = tools.approved(run, cmd)  # (installs go into the project's .venv; never-list commands never run)
+        notes.append(f"owner said yes; {out.splitlines()[0][:120]} -> {' '.join(out.splitlines()[1:3])[:160]}")
     else:
         notes.append(f"owner answered: {t}")
     return task(w["goal"], Path(w["root"]), notes)

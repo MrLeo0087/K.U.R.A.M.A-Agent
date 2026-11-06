@@ -180,6 +180,25 @@ def t_run(run: Run, command: str, timeout: float = 60) -> str:
     return _cut(f"$ {cmd}\nexit: {code} ({time.monotonic() - t0:.1f} s)\n{out}") + hint
 
 
+def approved(run: Run, command: str, timeout: float = 900) -> str:
+    """A command the owner said yes to (an install, a delete…): run once. A Python install always goes into the
+    project's own .venv (made first when missing), never the system Python; never-list commands still never run."""
+    cmd = (command or "").strip()
+    if not cmd or NEVER.search(cmd):
+        return f"`{cmd}` is never run (it could harm the laptop)"
+    if m := re.match(r"^(?:\S*python3?\s+-m\s+)?pip3?\s+install\s+(.+)$", cmd):
+        py = python_of(run.root)
+        make = "" if py != "python3" else "python3 -m venv .venv && "
+        py = py if py != "python3" else ".venv/bin/python"
+        cmd = f"{make}{py} -m pip install {m.group(1)}"
+    try:
+        r = subprocess.run(cmd, shell=True, cwd=run.root, capture_output=True, text=True, timeout=timeout,
+                           stdin=subprocess.DEVNULL)
+        return _cut(f"$ {cmd}\nexit: {r.returncode}\n{(r.stdout or '') + (r.stderr or '')}")
+    except subprocess.TimeoutExpired:
+        return f"$ {cmd}\n(still running after {timeout:.0f} s)"
+
+
 def t_run_project(run: Run, seconds: float = 8) -> str:
     """Start the project the right way for a few seconds and report what it printed (a web page: its errors)."""
     from coder.runtime import preview, runcheck
@@ -370,3 +389,18 @@ SCHEMAS = [
     _schema("ask", "Ask the owner ONE question (a real choice, or a command that NEEDS_YES).",
             {"question": _S, "command": _S}, ["question"]),
 ]
+
+
+PERMISSION = {"list": "read", "find": "read", "grep": "read", "read": "read", "page_errors": "read", "ports": "read",
+              "history": "read", "docs": "read", "edit": "write", "write": "write", "run": "run",
+              "run_project": "run", "screenshot": "run", "look": "run"}
+
+
+def register_all() -> None:
+    """Put the tools above into the registry (their schemas from SCHEMAS, their permission from PERMISSION)."""
+    from coder.tools import registry
+    for sc in SCHEMAS:
+        f = sc["function"]
+        if f["name"] in TOOLS:
+            registry.register(f["name"], f["description"], PERMISSION.get(f["name"], "run"), TOOLS[f["name"]][0],
+                              f["parameters"]["properties"], tuple(f["parameters"].get("required") or ()))

@@ -101,3 +101,26 @@ def test_a_short_followup_names_the_last_task(tmp_path):
     session.task_end(tmp_path, "a", "done", "The result is green.", ["style.css"], [], 100)
     assert "make the result text green" in loop.resolve_followup(tmp_path, "make it bigger too")
     assert loop.resolve_followup(tmp_path, "add a login page with a form") == "add a login page with a form"
+
+
+def test_registry_permissions_and_kurama_tools(tmp_path, monkeypatch):
+    from coder.tools import registry
+    names = lambda perms: {s["function"]["name"] for s in registry.schemas(perms)}  # noqa: E731
+    change, running = names({"read", "write"}), names({"read", "run"})  # (a run task gets write too, see loop)
+    assert {"edit", "write", "grep", "web_search", "done", "ask"} <= change and "run" not in change
+    assert {"run", "run_project", "screenshot"} <= running and "edit" not in running
+    from jarvis.core import safety
+    seen = {}
+    monkeypatch.setattr(safety, "execute", lambda name, args, confirm=None: seen.update(n=name, a=args) or
+                        type("R", (), {"ok": True, "output": "results…", "error": ""})())
+    assert registry.call(new("x", tmp_path), "web_search", {"query": "flexbox center"}) == "results…"
+    assert seen == {"n": "web_search", "a": {"query": "flexbox center"}}
+
+
+def test_an_approved_install_goes_into_the_venv(tmp_path, monkeypatch):
+    import subprocess
+    ran = []
+    monkeypatch.setattr(subprocess, "run", lambda cmd, **k: ran.append(cmd) or type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})())
+    tools.approved(new("x", tmp_path), "pip install pygame")
+    assert ran[0] == "python3 -m venv .venv && .venv/bin/python -m pip install pygame"
+    assert "never run" in tools.approved(new("x", tmp_path), "sudo rm -rf /")
