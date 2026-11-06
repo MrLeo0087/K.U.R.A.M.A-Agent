@@ -70,7 +70,7 @@ def test_loop_edits_then_the_code_checks_it(monkeypatch, tmp_path):
     from coder.core import session
     assert "make the buttons grey -> The buttons are grey." in session.recap(tmp_path)  # follow-ups know "it"
     assert "Recent tasks in this project" in loop.context(run)
-    assert [e["kind"] for e in session.last_events(tmp_path)][:2] == ["task_start", "plan"]
+    assert [e["kind"] for e in session.last_events(tmp_path)][:2] == ["task_start", "tool"]  # small: no plan call
     from coder.core import safety
     assert safety.undo(run.dir).startswith("Undone")  # every change can be put back
 
