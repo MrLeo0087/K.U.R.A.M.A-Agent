@@ -27,7 +27,7 @@ def test_items(monkeypatch):
     monkeypatch.setattr(progress, "_music", lambda: [])
     progress.set_steps(7, [("Plan", "done"), ("Write index.html", "doing"), ("Run it", "todo")])
     got = progress.items()
-    assert [x["id"] for x in got] == ["job:7", "job:6"]  # the one that ended 10 min ago is gone
+    assert [x["id"] for x in got] == ["job:7", "job:6", "job:5"]  # finished ones stay as a history
     assert got[0]["title"] == "Send file telegram: KURAMA" and got[0]["frac"] == 0.5
     assert [s["state"] for s in got[0]["steps"]] == ["done", "doing", "todo"]
     assert got[1]["detail"] == "done (700 words)" and got[1]["frac"] == 1.0

@@ -41,6 +41,10 @@ def smoke(run: Run) -> tuple[list[str], list[str]]:
     rel = entry(run)
     if rel is None or re.search(r"\b(?:uvicorn|flask|streamlit|gunicorn)\b", run.run_cmd or ""):
         return [], []
+    src = " ".join((run.root / f).read_text(encoding="utf-8", errors="replace") for f in run.written
+                   if f.endswith(".py") and (run.root / f).is_file())
+    if re.search(r"^\s*(?:import|from)\s+(?:tkinter|PyQt\d|PySide\d|wx|kivy)\b", src, re.M):
+        return [], []  # a desktop window would pop up on the owner's screen (no virtual display here): not run
     env = {**os.environ, "SDL_VIDEODRIVER": "dummy", "SDL_AUDIODRIVER": "dummy", "MPLBACKEND": "Agg",
            "PYGAME_HIDE_SUPPORT_PROMPT": "1", "PYTHONDONTWRITEBYTECODE": "1"}
     try:

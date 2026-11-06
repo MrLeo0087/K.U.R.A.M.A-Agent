@@ -1698,3 +1698,6 @@ body:not(.mini) #m-prog { display: none; }
 .proj-bar input { flex: 1 1 auto; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--m-text, var(--text)); font-size: 12px; }
 .proj-bar .pb-b { flex: none; border: 0; border-radius: 7px; padding: 3px 9px; background: rgba(255, 255, 255, 0.1); color: var(--m-text, var(--text)); }
 .proj-bar.pinned { border-color: rgba(110, 123, 255, 0.5); }
+.pg-hist { margin: 6px 2px 0; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--pg-sub); }
+.pg-none { margin: 2px; font-size: 12px; color: var(--pg-sub); }
+.pg-it.done, .pg-it.cancelled, .pg-it.failed { opacity: .8; }

@@ -443,3 +443,13 @@ def test_smoke_run_catches_a_crash_and_a_missing_package(tmp_path):
     assert runcheck.smoke(run) == ([], [])  # waits for typing: not a bug
     (tmp_path / "game.py").write_text("import time\ndef start():\n    time.sleep(30)\n")
     assert runcheck.smoke(run) == ([], [])  # still running: it starts
+
+
+def test_improve_without_a_web_page_is_a_change(monkeypatch, tmp_path):
+    """11-06: 'make the UI better' of a Tkinter calculator -> "I couldn't take a picture of the page"."""
+    import coder
+    from jarvis.agents.coding import tools
+    (tmp_path / "calculator.py").write_text("import tkinter\n")
+    monkeypatch.setattr("coder.link.vscode_root", lambda: tmp_path)
+    monkeypatch.setattr(coder, "start", lambda r: "planned: " + r)
+    assert tools.coding("look", request="make the UI more colourful") == "planned: make the UI more colourful"

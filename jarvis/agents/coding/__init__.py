@@ -76,9 +76,10 @@ def _stop() -> None:
 
 SPEC = AgentSpec(
     name="coding", title="Coding agent", groups=("coding_agent",),
-    prompt=("Coding agent ON: the user is coding. Use the tool named `coding`: action=fix for errors, bridge for a "
-            "prompt for ChatGPT/Gemini, project to create a new project (request = what to build), undo, run. There "
-            "is no other project/fix tool. Never claim a change: changes are shown and wait for the user's yes."),
+    prompt=("Coding agent ON: the user is coding ONE project (the coding agent knows which). Use the tool `coding`: "
+            "action=project for anything to build OR change in it ('improve the UI', 'add a history', 'the signs don't "
+            "show'; request = the user's own words), fix only for a crash, bridge for a ChatGPT/Gemini prompt, undo, "
+            "run. Never claim a change: changes are planned and wait for the user's yes."),
     examples=EXAMPLES, start=_start, stop=_stop, aliases=("code", "coder", "programming"),
     welcome=lambda: _welcome(), status=lambda: _status())
 

@@ -3039,7 +3039,7 @@ if (MINI && !WSONLY) {
   let pOpen = false;
   pbtn.onclick = (e) => { e.stopPropagation(); pOpen = !pOpen; pbox.hidden = !pOpen || !pbox.children.length; pbtn.classList.toggle("on", pOpen); };
   document.addEventListener("click", (e) => { if (pOpen && !e.target.closest("#m-jobs, #m-prog")) { pOpen = false; pbox.hidden = true; pbtn.classList.remove("on"); } });
-  startProgress(api, pbox, { max: 6, onChange: (n, total) => {
+  startProgress(api, pbox, { max: 20, onChange: (n, total) => {
     const c = pbtn.querySelector(".cnt"); c.textContent = n ? String(n) : ""; c.hidden = !n;
     pbox.hidden = !pOpen || !total;
   } });

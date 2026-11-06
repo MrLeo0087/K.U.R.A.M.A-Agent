@@ -1880,6 +1880,12 @@ def agent_coding_intent(text: str) -> Intent | None:
     import coder  # the coding agent's own project: a plan / a commit waiting for its yes
     if (changes.waiting() or changes.cost_waiting() or coder.pending() is not None or coder.commit_waiting()) and yn:
         return act("yes" if yn == "yes" else "no")
+    from coder import api as _capi
+    if _capi._question_key().exists() and len(t.split()) <= 6:  # the answer to its question ('2', 'web', 'here')
+        return act("project", request=t)
+    if coder.pending() is not None and re.fullmatch(  # 'fine, start build' / 'go ahead and build it' (0 tokens)
+            r"(?:\w+\W+){0,3}(?:start|go|build|make|do|begin|proceed)(?:\W+(?:it|the|build|building|now|ahead|please|bro))*\W*", t, I):
+        return act("yes")
     if _assist_waiting(t):  # 'replace it' / 'yes' answer the assist's own question
         return None
     crash = terminal.last(600)
@@ -1901,6 +1907,9 @@ def agent_coding_intent(text: str) -> Intent | None:
     if label != "project" and (sel := semantic.best_of(t, "selection", config.SELECTION_EXAMPLES)) \
             and sel[1] >= score - config.AGENT_OVER_SELECTION:
         return None  # 'add comments to this code', 'clean and complete it': editing, not the agent's actions
+    if label in ("look", "preview", "check_page") and re.search(
+            r"\b(?:make|improve|change|better|redesign|update|fix|add|modern|beautiful|nicer|colou?r)\b", t, I):
+        label = "project"  # 'make the UI better': a CHANGE to the project, not a look at a web page (11-06)
     if label in ("fix", "run") and not crash:
         return None  # nothing crashed: 'fix this' is about the selection / the AI
     site = (re.search(r"\b(chatgpt|gemini|claude)\b", t, I) or [None, ""])[1].lower()

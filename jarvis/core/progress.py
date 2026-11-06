@@ -14,7 +14,8 @@ import time
 
 ACTIVE = ("queued", "running", "paused")
 ENDED = ("done", "failed", "cancelled", "stopped")
-SHOW_ENDED_S = 60  # a finished item stays this long (so the owner sees it end), then leaves the section
+SHOW_ENDED_S = 24 * 3600  # finished items stay as a history (owner 11-06: "which ones completed, which video I
+ENDED_MAX = 15            # downloaded"): the last 24 h, the newest 15
 
 
 def frac_of(progress: str, status: str) -> float | None:
@@ -59,7 +60,7 @@ def _title(t: str) -> str:
 
 def _job_items(now: float) -> list[dict]:
     from jarvis.core import store
-    rows = store.jobs_list(12, ACTIVE) + [r for r in store.jobs_list(8, ENDED)
+    rows = store.jobs_list(12, ACTIVE) + [r for r in store.jobs_list(ENDED_MAX, ENDED)
                                          if r.get("finished") and now - float(r["finished"]) <= SHOW_ENDED_S]
     out = []
     for r in rows:
@@ -100,4 +101,7 @@ def items() -> list[dict]:
     now = time.time()
     order = {"running": 0, "paused": 1, "queued": 2}
     jobs = sorted(_job_items(now), key=lambda x: (order.get(x["status"], 3), -x["ts"]))
+    for j in jobs:  # (the finished ones: shown with when they finished)
+        if j["status"] not in order and j.get("ts"):
+            j["when"] = time.strftime("%H:%M", time.localtime(j["ts"]))
     return _music() + jobs

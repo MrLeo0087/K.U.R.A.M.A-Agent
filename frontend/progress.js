@@ -41,7 +41,7 @@ function row(it) {
   return `<div class="pg-it ${esc(it.status)}" data-id="${esc(it.id)}"${it.job ? ` data-job="${it.job}"` : ""}>
     <div class="pg-top"><span class="pg-ic">${svg(kindIcon(it))}</span>
       <b class="pg-t" title="${esc(it.title)}">${esc(it.title)}</b>
-      <span class="pg-s">${esc(it.status === "running" && pct ? pct : state)}</span>${acts}</div>
+      <span class="pg-s">${esc(it.status === "running" && pct ? pct : state)}${it.when ? " · " + esc(it.when) : ""}</span>${acts}</div>
     <i class="pg-bar${it.frac == null && !ended ? " ind" : ""}" style="--f:${ended ? 1 : it.frac ?? 0.3}"></i>
     ${it.detail ? `<div class="pg-d" title="${esc(it.detail)}">${esc(it.detail)}${it.count ? " · " + esc(it.count) : ""}</div>` : ""}
     ${steps}</div>`;
@@ -49,7 +49,7 @@ function row(it) {
 
 /** Draw and keep up to date. box: the list element; card: shown only while something runs (or null); onChange:
  *  called with the number of items (a count pill). */
-export function startProgress(api, box, { card = null, max = 6, onChange = null } = {}) {
+export function startProgress(api, box, { card = null, max = 20, onChange = null } = {}) {
   let key = "", armed = "", timer = 0;
   const poll = async () => {
     clearTimeout(timer);
@@ -61,7 +61,10 @@ export function startProgress(api, box, { card = null, max = 6, onChange = null 
         const k = JSON.stringify(items);
         if (k !== key) {
           key = k;
-          box.innerHTML = items.map(row).join("");
+          const live = items.filter((x) => !["done", "failed", "cancelled", "stopped"].includes(x.status));
+          const past = items.filter((x) => ["done", "failed", "cancelled", "stopped"].includes(x.status));
+          box.innerHTML = (live.length ? live.map(row).join("") : '<p class="pg-none">Nothing running right now.</p>')
+            + (past.length ? '<div class="pg-hist">Finished</div>' + past.map(row).join("") : "");
           if (card) card.hidden = !items.length;
           onChange?.(n, items.length);
         }

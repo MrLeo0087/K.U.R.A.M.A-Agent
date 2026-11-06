@@ -100,6 +100,12 @@ def coding(action: Literal["fix", "bridge", "apply", "project", "undo", "yes", "
         return coder.learn_project()
     if action == "setup":
         return coder.setup_project()
+    if action in ("look", "preview", "check_page"):  # only a web page can be opened / pictured
+        from coder import api as _capi, preview as _pv
+        root = _capi.project_root()
+        if root is None or _pv.page_root(root) is None:
+            return coder.start(request) if request.strip() else (
+                "This project has no web page to look at. Tell me what to change and I'll do it.")
     if action in ("tests", "pass", "review", "commit", "diffs", "reject", "preview", "check_page", "look", "continue",
                   "handoff", "tokens"):
         return {"tests": lambda: coder.write_tests(request), "pass": coder.make_tests_pass,
