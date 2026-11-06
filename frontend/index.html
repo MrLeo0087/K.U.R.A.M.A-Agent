@@ -210,7 +210,7 @@
           </div>
           <div id="mws-body" class="mws-body"></div>
         </section>
-        <div id="m-jobs" class="m-jobs" hidden aria-label="Background jobs"></div>
+        <div id="m-jobs" class="m-jobs pg-list" hidden aria-label="Progress: everything running now"></div>
         <div id="suggest" class="suggest" aria-label="Suggestions"></div>
         <form id="composer" class="ask" autocomplete="off">
           <div class="seg modes" role="group" aria-label="Input mode">
@@ -251,6 +251,10 @@
         <ul id="todo-items" class="tlist" aria-label="To-do and reminders"></ul>
         <div class="work-sub">Coding <span id="code-snap"></span></div>
         <div id="code-body" class="code-body"><p class="empty">Looking for your project…</p></div>
+      </div>
+      <div class="card pg-card" id="prog" hidden aria-label="Progress: everything running now">
+        <div class="card-title">Progress <span id="prog-count" class="pill"></span></div>
+        <div id="prog-list" class="pg-list" aria-live="polite"></div>
       </div>
       <div class="card ws-card" id="ws" aria-label="Workspace">
         <div class="card-title">Workspace <span id="jobs-count" class="pill"></span>

@@ -65,6 +65,12 @@ async def jobs(limit: int = Query(20, ge=1, le=200), status: str | None = Query(
     return {"jobs": [{k: r.get(k) for k in keys if k in r} for r in rows]}
 
 
+@router.get("/progress", summary="Everything running now (jobs, downloads, the coding agent's steps, music) for the Progress section")
+async def progress_items():
+    from jarvis.core import progress
+    return {"items": await run_in_threadpool(progress.items)}
+
+
 @router.post("/jobs/{job_id}/cancel", summary="Cancel a background job running in this process")
 async def job_cancel(job_id: int):
     from jarvis.core import jobs as jobs_mod

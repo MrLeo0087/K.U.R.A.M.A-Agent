@@ -5,6 +5,7 @@ import { Dust } from "./dust.js";
 import { Orb } from "./orb.js";
 import { attachSlash } from "./slash.js";
 import { openMoney } from "./money.js";
+import { startProgress } from "./progress.js";
 import { Conversation, Mic, Player, Recorder, SentenceSplitter, audioCtx, audioSleepSoon, insertAtCursor, micHooks } from "./voice.js";
 
 const $ = (id) => document.getElementById(id);
@@ -1021,6 +1022,9 @@ for (const b of $("agent-switch").querySelectorAll("button")) {
     } catch (e) { tip($("agent-switch"), "Couldn't switch: " + e.message); }
   };
 }
+
+// the main window's Progress card (frontend/progress.js): shown while something runs or just finished
+if (!MINI) startProgress(api, $("prog-list"), { card: $("prog"), onChange: (n) => { $("prog-count").textContent = n ? `${n} running` : ""; } });
 
 function renderJobs(jb) {
   const items = jb.items || [];
@@ -2974,42 +2978,8 @@ if (MINI && !WSONLY) {
   const lang = $("m-lang");
   lang.value = S.lang || "auto";
   lang.onchange = () => { S.lang = lang.value; saveSettings(S); if ($("set-lang")) $("set-lang").value = S.lang; };
-  const box = $("m-jobs");
-  let jobsKey = "", armed = 0;
-  const frac = (p) => { const m = /(\d+)\s*\/\s*(\d+)/.exec(p || ""); return m && +m[2] ? Math.min(1, +m[1] / +m[2]) : null; };
-  const row = (j) => {
-    const f = frac(j.progress);
-    const paused = j.status === "paused";
-    return `<div class="mj${paused ? " paused" : ""}" data-id="${j.id}">
-      <span class="mj-t" title="${esc(j.title)}">${esc(j.title)}</span>
-      <span class="mj-p">${esc(paused ? (j.progress || "paused") : (j.progress || j.status))}</span>
-      ${j.kind === "long" ? `<button type="button" class="mj-b" data-jact="${paused ? "resume" : "pause"}" title="${paused ? "Continue" : "Pause"}" aria-label="${paused ? "Continue" : "Pause"} job">${paused
-        ? '<svg viewBox="0 0 24 24"><path d="M8 5l11 7-11 7z"/></svg>' : '<svg viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></svg>'}</button>` : ""}
-      <button type="button" class="mj-b x" data-jact="cancel" title="Cancel (click twice)" aria-label="Cancel job"><svg viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></svg></button>
-      <i class="mj-bar${f === null ? " ind" : ""}" style="--f:${f ?? 0.35}"></i></div>`;
-  };
-  const pollJobs = async () => {
-    if (document.hidden) return;
-    try {
-      const items = (await api.activeJobs()).jobs || [];
-      const key = JSON.stringify(items.map((j) => [j.id, j.status, j.progress]));
-      if (key === jobsKey) return;
-      jobsKey = key;
-      box.innerHTML = items.slice(0, 3).map(row).join("");
-      box.hidden = !items.length;
-    } catch { /* offline: keep the last view */ }
-  };
-  box.addEventListener("click", async (e) => {
-    const b = e.target.closest("[data-jact]");
-    if (!b) return;
-    const id = +b.closest(".mj").dataset.id, act = b.dataset.jact;
-    if (act === "cancel" && armed !== id) { armed = id; b.classList.add("armed"); setTimeout(() => { armed = 0; b.classList.remove("armed"); }, 3000); return; }
-    armed = 0;
-    try { await (act === "cancel" ? api.cancelJob(id) : act === "pause" ? api.pauseJob(id) : api.resumeJob(id)); } catch { /* the next poll shows the truth */ }
-    jobsKey = ""; pollJobs();
-  });
-  setInterval(pollJobs, 5000); pollJobs();
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) pollJobs(); });
+  // the Progress section (frontend/progress.js): every running thing with its own bar, the coding agent's steps
+  startProgress(api, $("m-jobs"), { card: $("m-jobs"), max: 4 });
 }
 
 // the laptop's echo canceller runs only while this page records (voice / talk mode), never in text mode

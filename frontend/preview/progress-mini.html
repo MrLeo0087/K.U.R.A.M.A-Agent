@@ -1,0 +1,15 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../styles.css">
+<style>html,body.mini{background:#1b1f3a !important}body{overflow:auto;padding:20px;display:flex;gap:30px}.col{width:340px}</style></head>
+<body class="mini" style="background:#1b1f3a"><div id="prog-list" class="m-jobs pg-list" style="width:360px"></div>
+<script type="module">
+import { startProgress } from "../progress.js";
+const now = Date.now() / 1000;
+const items = [
+ {id:"music",kind:"music",title:"Lofi beats to study",status:"playing",detail:"1:20 / 3:45",frac:0.36,steps:[],count:"2/12"},
+ {id:"job:9",job:9,kind:"coding",title:"Rock paper scissors (HTML, CSS, JS)",status:"running",detail:"writing script.js (3/5)",frac:0.6,
+  steps:[{text:"Plan: 5 files",state:"done"},{text:"index.html",state:"done"},{text:"styles.css",state:"done"},{text:"script.js",state:"doing"},{text:"Run and check",state:"todo"}]},
+ {id:"job:8",job:8,kind:"tool",title:"Download video: Himalaya timelapse",status:"running",detail:"42% · 18 MB of 43 MB",frac:0.42,steps:[]},
+ {id:"job:7",job:7,kind:"tool",title:"Send file telegram: report.pdf",status:"running",detail:"uploading",frac:null,steps:[]},
+ {id:"job:6",job:6,kind:"write",title:"Essay about Nepal",status:"done",detail:"done (1,020 words)",frac:1,steps:[]}];
+startProgress({progress: async () => ({items})}, document.getElementById("prog-list"), {max: 4});
+</script></body></html>

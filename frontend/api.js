@@ -86,6 +86,7 @@ export class Api {
   setShortcuts(key, dismiss) { return this.request("/api/v1/ui/shortcuts", { method: "POST", body: { key, dismiss } }); }
   glass() { return this.request("/api/v1/ui/glass"); }
   setGlass(blur, corner, light) { return this.request("/api/v1/ui/glass", { method: "POST", body: { blur, corner, light } }); }
+  progress() { return this.request("/api/v1/progress"); }
   activeJobs() { return this.request("/api/v1/jobs?limit=4&status=queued,running,paused"); }
   pauseJob(id) { return this.request(`/api/v1/jobs/${encodeURIComponent(id)}/pause`, { method: "POST", body: {} }); }
   resumeJob(id) { return this.request(`/api/v1/jobs/${encodeURIComponent(id)}/resume`, { method: "POST", body: {} }); }
