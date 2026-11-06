@@ -44,6 +44,8 @@ _STEP_SYS = ("You are a careful coding agent working inside the user's project, 
 VISUAL = re.compile(r"\b(?:ui|ux|look|looks|design|colou?r|grey|gray|dark|light|button|layout|left|right|center|centre|"
                     r"top|bottom|align|font|size|bigger|smaller|spacing|margin|padding|style|theme|beautiful|ugly|flat|"
                     r"modern|page|screen|header|footer|card|icon|image|responsive|blue|red|green|black|white|purple|orange|yellow|pink|bold|italic)\b", re.I)
+CORE_TOOLS = {"list", "find", "grep", "read", "edit", "write", "run", "run_project", "screenshot", "look"}
+EXTRA_TOOLS = {"web_search", "read_webpage", "docs", "history", "ports", "page_errors", "screen_text"}  # from step 4
 MAX_VERIFY = 1  # one fix round after a failed check (each costs a screenshot + a look)
 _RUN_GOAL = re.compile(r"\b(?:run|start|launch|execute|screenshot|how (?:does )?it looks?|what (?:does it|it) (?:print|say|show)|output|crash(?:ed|es)?|"
                        r"the command)\b", re.I)
@@ -139,6 +141,10 @@ def small_project(run: Run, limit: int = 9000) -> dict:
 # ---------------------------------------------------------------- the graph
 def _plan(state: S) -> dict:
     run = state["run"]
+    if len(state["goal"].split()) <= 30 and state.get("seen"):  # a short request on a small project: no plan call
+        plan = ["make the change", "check it"] if not _RUN_GOAL.search(state["goal"]) else ["run it", "fix if needed"]
+        _steps(state, plan, 0)
+        return {"plan": plan, "check": ""}
     state["ctx"].progress("planning")
     try:
         out = _json(models.ask(run, "plan", _PLAN_SYS, f"Task: {state['goal']}\n\n{state['context']}", 600))
@@ -156,6 +162,12 @@ def _steps(state: S, plan: list[str], doing: int, notes: list[str] | None = None
     if notes:
         items.append((notes[-1][:90], "doing"))
     link.steps(state["job"] if "job" in state else state["ctx"].job.id, items)
+
+
+def _recap_only(context_text: str) -> str:
+    """Once files are read, only the follow-up recap of the context is still worth its tokens."""
+    i = context_text.find("Recent tasks in this project")
+    return context_text[i:i + 700] if i >= 0 else ""
 
 
 def _seen_text(seen: dict) -> str:
@@ -176,7 +188,7 @@ def _act(state: S) -> dict:
     ctx.check()
     notes, seen = state.get("notes") or [], dict(state.get("seen") or {})
     # the project card + file list only until it has read what it needs (then they are dead weight: tokens)
-    ctx_text = state["context"][:2600] if len(seen) < 2 else state["context"][:500]
+    ctx_text = state["context"][:2600] if not seen else _recap_only(state["context"])
     user = (f"Goal: {state['goal']}\nPlan: " + " | ".join(state.get("plan") or []) +
             (f"\nDone when: {state['check']}" if state.get("check") else "") +
             f"\n\n{ctx_text}" + (f"\n\nFiles you have read (current content):\n{_seen_text(seen)}" if seen else "")
@@ -185,7 +197,7 @@ def _act(state: S) -> dict:
     from jarvis.core import llm
     running = bool(_RUN_GOAL.search(state["goal"]))  # 'run it and tell me': it may run; a change: the code checks it
     perms = {"read", "run", "write"} if running else {"read", "write"}  # (a run may need a fix: "fix it and run it again")
-    schemas = registry.schemas(perms)
+    schemas = registry.schemas(perms, only=CORE_TOOLS | (EXTRA_TOOLS if state.get("steps", 0) >= 3 else set()))
     if state.get("fixing"):  # the check found something: the next call must be the fix itself
         schemas = registry.schemas({"read", "write"}, only={"edit", "write", "grep"})
     try:
@@ -280,7 +292,7 @@ def _route(state: S) -> str:
         return "finish"
     if state.get("done"):
         return "verify"
-    if state.get("steps", 0) >= MAX_STEPS or run.tokens >= settings.ASK_TOKENS * 1.5:
+    if state.get("steps", 0) >= MAX_STEPS or run.tokens >= settings.ASK_TOKENS:
         return "finish"
     return "act"
 
