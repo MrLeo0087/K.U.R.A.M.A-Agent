@@ -124,3 +124,18 @@ def test_an_approved_install_goes_into_the_venv(tmp_path, monkeypatch):
     tools.approved(new("x", tmp_path), "pip install pygame")
     assert ran[0] == "python3 -m venv .venv && .venv/bin/python -m pip install pygame"
     assert "never run" in tools.approved(new("x", tmp_path), "sudo rm -rf /")
+
+
+def test_apply_edits_makes_the_whole_change_at_once(tmp_path):
+    (tmp_path / "a.py").write_text("X = 1\nY = 2\n")
+    run = new("x", tmp_path)
+    out = tools.t_apply_edits(run, [{"path": "a.py", "old": "X = 1", "new": "X = 10"},
+                                    {"path": "b.py", "old": "", "new": "Z = 3\n"}])
+    assert out.splitlines() == ["edited a.py", "wrote b.py (1 lines)"]
+    assert (tmp_path / "a.py").read_text() == "X = 10\nY = 2\n" and (tmp_path / "b.py").exists()
+
+
+def test_the_newest_file_read_is_never_cut(tmp_path):
+    big = {"old.py": "o" * 9000, "new.py": "n" * 13000}
+    text = loop._seen_text(big)
+    assert "n" * 13000 in text and "old.py (read earlier" in text

@@ -135,6 +135,18 @@ def t_edit(run: Run, path: str, old: str, new: str) -> str:
     return f"edited {path}"
 
 
+def t_apply_edits(run: Run, edits: list) -> str:
+    """Several precise edits in one call (the whole change at once: cheapest and most reliable for a small model
+    that already has the files). Each {path, old, new}; old = exact text, '' = a new file with new as content."""
+    out = []
+    for e in edits or []:
+        if not isinstance(e, dict):
+            continue
+        path, old, new = str(e.get("path") or ""), str(e.get("old") or ""), str(e.get("new") or "")
+        out.append(t_write(run, path, new) if not old else t_edit(run, path, old, new))
+    return "\n".join(out) or "no edits given"
+
+
 def t_write(run: Run, path: str, content: str) -> str:
     p = _path(run, path)
     if p.is_file() and len(content) < 0.5 * p.stat().st_size:
@@ -249,6 +261,9 @@ def t_screenshot(run: Run) -> str:
 
 def _window_shot(run: Run, entry: str, out: Path) -> str:
     """Start the app, find its window by process id, take that window's picture, close the app."""
+    def windows() -> list[list[str]]:
+        return [ln.split(None, 4) for ln in subprocess.run(["wmctrl", "-lp"], capture_output=True, text=True).stdout.splitlines()]
+    before = {w[0] for w in windows()}
     p = subprocess.Popen([python_of(run.root), entry], cwd=run.root, stdout=subprocess.DEVNULL,
                          stderr=subprocess.PIPE, stdin=subprocess.DEVNULL, start_new_session=True)
     try:
@@ -258,25 +273,28 @@ def _window_shot(run: Run, entry: str, out: Path) -> str:
             if p.poll() is not None:
                 err = (p.stderr.read() if p.stderr else b"").decode(errors="replace")
                 return _cut(f"the program ended before a window appeared:\n{err}")
-            lines = subprocess.run(["wmctrl", "-lp"], capture_output=True, text=True).stdout.splitlines()
-            wid = next((ln.split()[0] for ln in lines if len(ln.split()) > 2 and ln.split()[2] == str(p.pid)), None)
+            now = windows()  # its window: by its process id, else the window that just appeared (Tk sets no pid)
+            wid = next((w[0] for w in now if len(w) > 2 and w[2] == str(p.pid)), None) or \
+                next((w[0] for w in now if w[0] not in before), None)
             if wid:
                 break
         if not wid:
             return "no window appeared (a terminal program? use run_project)"
         time.sleep(0.8)
-        r = subprocess.run(["import", "-window", wid, str(out)], capture_output=True, timeout=10)
-        if r.returncode or not out.exists():
+        import shutil as _sh
+        if _sh.which("import"):  # ImageMagick, when it is there
+            subprocess.run(["import", "-window", wid, str(out)], capture_output=True, timeout=10)
+        if not out.exists():  # else: KURAMA's screen grab, cropped to the window
             from jarvis.core import ocr
             g = ocr._geometry(int(wid, 16))
-            if g is None:
+            shot = ocr.grab_screen()
+            if g is None or isinstance(shot, str):
                 return "couldn't take the window's picture"
-            import mss
-            import mss.tools
+            from PIL import Image
             x, y, w, h = g[:4]
-            with mss.mss() as m:
-                img = m.grab({"left": x, "top": y, "width": w, "height": h})
-                mss.tools.to_png(img.rgb, img.size, output=str(out))
+            with Image.open(shot) as im:
+                im.crop((max(0, x), max(0, y), min(im.width, x + w), min(im.height, y + h))).save(out)
+            Path(shot).unlink(missing_ok=True)
         return f"screenshot saved: {out.name} (use look to ask about it)"
     finally:
         try:
@@ -337,6 +355,7 @@ TOOLS = {
     "grep": (t_grep, "grep(pattern, path='.'): lines matching a regex, file:line: text"),
     "read": (t_read, "read(path, start=1, end=0): numbered lines of a file (200 at a time)"),
     "edit": (t_edit, "edit(path, old, new): replace the exact old text (unique, copied from read) with new"),
+    "apply_edits": (t_apply_edits, "apply_edits(edits=[{path, old, new}]): several exact edits at once"),
     "write": (t_write, "write(path, content): create a NEW file (or rewrite a small one completely)"),
     "run": (t_run, "run(command, timeout=60): run a safe command in the project folder (python/node/npm run/pytest/git status…)"),
     "run_project": (t_run_project, "run_project(): start the project briefly and see its output / page errors"),
@@ -373,6 +392,9 @@ SCHEMAS = [
     _schema("read", "Numbered lines of a file (200 at a time).", {"path": _S, "start": _I, "end": _I}, ["path"]),
     _schema("edit", "Replace the exact old text (copied from read, unique) with new text.",
             {"path": _S, "old": _S, "new": _S}, ["path", "old", "new"]),
+    _schema("apply_edits", "Make the whole change in ONE call: a list of exact edits {path, old (copied exactly, "
+            "unique; '' for a new file), new}.", {"edits": {"type": "array", "items": {"type": "object", "properties": {
+                "path": _S, "old": _S, "new": _S}, "required": ["path", "old", "new"]}}}, ["edits"]),
     _schema("write", "Create a NEW file with this content (or rewrite a small file completely).",
             {"path": _S, "content": _S}, ["path", "content"]),
     _schema("run", "Run a safe command in the project folder (python, node, npm run/test, pytest, git status...).",
@@ -392,7 +414,7 @@ SCHEMAS = [
 
 
 PERMISSION = {"list": "read", "find": "read", "grep": "read", "read": "read", "page_errors": "read", "ports": "read",
-              "history": "read", "docs": "read", "edit": "write", "write": "write", "run": "run",
+              "history": "read", "docs": "read", "edit": "write", "write": "write", "apply_edits": "write", "run": "run",
               "run_project": "run", "screenshot": "run", "look": "run"}
 
 

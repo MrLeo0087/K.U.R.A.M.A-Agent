@@ -44,7 +44,10 @@ _STEP_SYS = ("You are a careful coding agent working inside the user's project, 
 VISUAL = re.compile(r"\b(?:ui|ux|look|looks|design|colou?r|grey|gray|dark|light|button|layout|left|right|center|centre|"
                     r"top|bottom|align|font|size|bigger|smaller|spacing|margin|padding|style|theme|beautiful|ugly|flat|"
                     r"modern|page|screen|header|footer|card|icon|image|responsive|blue|red|green|black|white|purple|orange|yellow|pink|bold|italic)\b", re.I)
-CORE_TOOLS = {"list", "find", "grep", "read", "edit", "write", "run", "run_project", "screenshot", "look"}
+CORE_TOOLS = {"list", "find", "grep", "read", "edit", "write", "apply_edits", "run", "run_project", "screenshot", "look"}
+ONE_SHOT = ("All the project's files are given above. Make the WHOLE change in ONE call to apply_edits (every edit "
+            "the goal needs, in every file involved; old text copied exactly from the files above). Then I run it, "
+            "take a screenshot if it's visual, and give you anything still wrong.")
 EXTRA_TOOLS = {"web_search", "read_webpage", "docs", "history", "ports", "page_errors", "screen_text"}  # from step 4
 MAX_VERIFY = 1  # one fix round after a failed check (each costs a screenshot + a look)
 _RUN_GOAL = re.compile(r"\b(?:run|start|launch|execute|screenshot|how (?:does )?it looks?|what (?:does it|it) (?:print|say|show)|output|crash(?:ed|es)?|"
@@ -61,6 +64,7 @@ class S(TypedDict, total=False):
     notes: list[str]
     last: str
     seen: dict
+    small: bool
     steps: int
     done: str
     verified: int
@@ -127,7 +131,7 @@ def resolve_followup(root: Path, goal: str) -> str:
     return f"{goal}  [here 'it' / 'that' = what the last task changed: \"{t.get('goal', '')[:160]}\" -> {t.get('result', '')[:160]}]"
 
 
-def small_project(run: Run, limit: int = 9000) -> dict:
+def small_project(run: Run, limit: int = 14000) -> dict:
     """A small project's code given at once (its files as 'read'): no read-steps needed (each step costs ~2.5k
     tokens of context, so 4 reads cost more than the files themselves)."""
     files = [f for f in repomap.files(run.root, 40) if f.suffix in (".py", ".js", ".ts", ".tsx", ".jsx", ".html", ".css",
@@ -170,12 +174,13 @@ def _recap_only(context_text: str) -> str:
     return context_text[i:i + 700] if i >= 0 else ""
 
 
-def _seen_text(seen: dict) -> str:
-    """The files the agent has read, as they are NOW (so it never reads them again; newest first, ~7k characters)."""
+def _seen_text(seen: dict, budget: int = 12000) -> str:
+    """The files the agent has read, as they are NOW, newest first. The newest one is always given whole (a file
+    cut here was read again and again, cut again: a loop, 11-07); older ones while the budget lasts."""
     out, total = [], 0
-    for rel in reversed(list(seen)):
+    for i, rel in enumerate(reversed(list(seen))):
         body = seen[rel]
-        if total + len(body) > 7000:
+        if i > 0 and total + len(body) > budget:
             out.append(f"--- {rel} (read earlier; read it again if you need it)")
             continue
         out.append(f"--- {rel} ---\n{body}")
@@ -198,8 +203,12 @@ def _act(state: S) -> dict:
     running = bool(_RUN_GOAL.search(state["goal"]))  # 'run it and tell me': it may run; a change: the code checks it
     perms = {"read", "run", "write"} if running else {"read", "write"}  # (a run may need a fix: "fix it and run it again")
     schemas = registry.schemas(perms, only=CORE_TOOLS | (EXTRA_TOOLS if state.get("steps", 0) >= 3 else set()))
-    if state.get("fixing"):  # the check found something: the next call must be the fix itself
-        schemas = registry.schemas({"read", "write"}, only={"edit", "write", "grep"})
+    one_shot = state.get("small") and not running and (state.get("steps", 0) == 0 or state.get("fixing"))
+    if one_shot:  # a small project, all its code in view: the whole change in one call (cheap, consistent)
+        schemas = registry.schemas({"write"}, only={"apply_edits"})
+        user += "\n\n" + ONE_SHOT
+    elif state.get("fixing"):  # the check found something: the next call must be the fix itself
+        schemas = registry.schemas({"read", "write"}, only={"edit", "write", "grep", "apply_edits"})
     try:
         r = llm.chat([{"role": "system", "content": _STEP_SYS}, {"role": "user", "content": user}], tier="smart",
                      tools=schemas, tool_choice="required", purpose="coder_step", max_tokens=STEP_TOKENS)
@@ -221,9 +230,9 @@ def _act(state: S) -> dict:
     if step >= 6 and not run.written and not running:  # six steps and nothing changed: it doesn't know what is meant
         return {"ask": "I'm not sure which part you mean. Which file or element should I change (or describe it a bit "
                        "more)?", "steps": step}
-    if name in ("edit", "write"):
+    if name in ("edit", "write", "apply_edits"):
         state["fixing"] = False
-    if run.written and name not in ("edit", "write", "read", "grep", "find", "list") and not running:
+    if run.written and name not in ("edit", "write", "apply_edits", "read", "grep", "find", "list") and not running:
         # the changes are made and it wanders (run / git status / again…): the code checks the work now
         return {"done": "Made the changes: " + ", ".join(sorted(set(run.written))), "steps": step}
     if name == "ask":
@@ -237,6 +246,13 @@ def _act(state: S) -> dict:
     if name in ("edit", "write") and obs.startswith(("edited", "wrote")):  # what it read is now the NEW text
         rel = str(args.get("path"))
         seen[rel] = registry.call(run, "read", {"path": rel})
+    if name == "apply_edits":
+        for e in args.get("edits") or []:
+            if isinstance(e, dict) and e.get("path") and (run.root / str(e["path"])).is_file():
+                seen[str(e["path"])] = registry.call(run, "read", {"path": str(e["path"])})
+        if run.written and "isn't in" not in obs and "times" not in obs:  # all applied: check it now
+            return {"done": "Made the change in " + ", ".join(sorted(set(run.written))), "steps": step, "seen": seen,
+                    "notes": [*notes, f"{step}. apply_edits: {obs.replace(chr(10), '; ')[:150]}"], "fixing": False}
     note = f"{step}. {name}({_short_args(args)}): {obs.splitlines()[0][:120] if obs else ''}"
     _steps(state, state.get("plan") or [], min(len(state.get("plan") or []) - 1, step // 2), [*notes, note])
     last = obs if name != "read" else f"(the content of {args.get('path')} is now in 'Files you have read')"
@@ -245,7 +261,7 @@ def _act(state: S) -> dict:
         last += ("\n(You already did exactly this and got the same result. Don't repeat it: do something different, "
                  "or call done / ask.)")
     return {"last": last, "notes": [*notes, note], "steps": step, "seen": seen,
-            "fixing": bool(state.get("fixing")) and name not in ("edit", "write")}
+            "fixing": bool(state.get("fixing")) and name not in ("edit", "write", "apply_edits")}
 
 
 def _verify(state: S) -> dict:
@@ -330,7 +346,8 @@ def task_job(run: Run, goal: str):
         session.task_start(run.root, run.id, goal)
         ctx.progress("reading the project")
         state = graph().invoke({"run": run, "ctx": ctx, "goal": goal_full, "context": context(run), "notes": [],
-                                "steps": 0, "seen": small_project(run)}, {"recursion_limit": 2 * MAX_STEPS + 10})
+                                "steps": 0, "seen": (whole := small_project(run)), "small": bool(whole)},
+                               {"recursion_limit": 2 * MAX_STEPS + 10})
         line = _report(run, goal, state, ctx.job.id)
         status = "asked" if state.get("ask") else "done" if state.get("done") else "stopped"
         session.task_end(run.root, run.id, status, line, run.written, state.get("notes") or [], run.tokens)
