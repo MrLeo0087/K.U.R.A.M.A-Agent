@@ -17,9 +17,12 @@ from jarvis.core.registry import tool
                   "the code until they pass; review = review the uncommitted changes; commit = write a commit message "
                   "(commits after yes); diffs = show the last build's changes side by side; reject = put one file "
                   "back (request = its name); preview = open the web page with error collection; check_page = fix "
-                  "the errors the page showed; look = the vision model's look at the page's design.")
+                  "the errors the page showed; look = the vision model's look at the page's design; continue = the "
+                  "project's next TODO item; handoff = let Claude Code build the waiting plan; tokens = tokens used "
+                  "per project. 'after that, <request>' while a build runs = queued.")
 def coding(action: Literal["fix", "bridge", "apply", "project", "undo", "yes", "no", "run", "tests", "pass", "review",
-                           "commit", "diffs", "reject", "preview", "check_page", "look"], request: str = "",
+                           "commit", "diffs", "reject", "preview", "check_page", "look", "continue", "handoff",
+                           "tokens"], request: str = "",
            site: str = "", error: str = "") -> str:
     """The coding agent.
 
@@ -45,10 +48,12 @@ def coding(action: Literal["fix", "bridge", "apply", "project", "undo", "yes", "
         if re.search(r"\b(?:project|build|built|everything|all of it|whole)\b", request or "", re.I):
             return coder.undo_last()
         return changes.undo()
-    if action in ("tests", "pass", "review", "commit", "diffs", "reject", "preview", "check_page", "look"):
+    if action in ("tests", "pass", "review", "commit", "diffs", "reject", "preview", "check_page", "look", "continue",
+                  "handoff", "tokens"):
         return {"tests": lambda: coder.write_tests(request), "pass": coder.make_tests_pass,
                 "preview": coder.preview_page, "check_page": coder.check_page,
                 "look": lambda: coder.look_at_page(request),
+                "continue": coder.continue_project, "handoff": coder.handoff, "tokens": coder.tokens_report,
                 "review": coder.review_changes, "commit": coder.commit_prepare, "diffs": coder.diffs,
                 "reject": lambda: coder.reject(request)}[action]()
     if action == "yes":

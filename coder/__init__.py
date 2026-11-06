@@ -29,10 +29,10 @@ KURAMA calls it through jarvis/agents/coding/tools.py: `coder.start(request)`.
 """
 from __future__ import annotations
 
-from coder.api import (check_page, commit_no, commit_prepare, commit_waiting, commit_yes, diffs, look_at_page,
-                       make_tests_pass, no, pending, preview_page, reject, review_changes, start, undo_last,
-                       write_tests, yes)
+from coder.api import (check_page, commit_no, commit_prepare, commit_waiting, commit_yes, continue_project, diffs,
+                       handoff, look_at_page, make_tests_pass, no, pending, preview_page, reject, review_changes, start,
+                       tokens_report, undo_last, write_tests, yes)
 
-__all__ = ["check_page", "commit_no", "commit_prepare", "commit_waiting", "commit_yes", "diffs", "look_at_page",
-           "make_tests_pass", "no", "pending", "preview_page", "reject", "review_changes", "start", "undo_last",
-           "write_tests", "yes"]
+__all__ = ["check_page", "commit_no", "commit_prepare", "commit_waiting", "commit_yes", "continue_project", "diffs",
+           "handoff", "look_at_page", "make_tests_pass", "no", "pending", "preview_page", "reject", "review_changes",
+           "start", "tokens_report", "undo_last", "write_tests", "yes"]

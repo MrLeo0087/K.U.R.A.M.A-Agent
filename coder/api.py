@@ -60,6 +60,8 @@ def start(request: str, confirmed: bool = False) -> str:
     request = " ".join((request or "").split())
     if not request:
         return "Tell me what to build, e.g. 'a rock paper scissors game in HTML, CSS and JavaScript'."
+    if (q := later(request)) is not None:  # 'after that, add dark mode' while a build runs
+        return q
     waiting = pending()
     if waiting is not None and not _NEW_REQUEST.search(request):  # 'use tailwind' / 'drop the scoreboard'
         waiting.request = f"{waiting.request}. Change: {request}"
@@ -88,6 +90,7 @@ def start(request: str, confirmed: bool = False) -> str:
     root, kind = understand.folder(request)
     run = new(request, root)
     run.stack, run.kind = stack, kind
+    run.channel = link.channel()
     run.save()
     job = link.submit(f"Plan: {root.name}", engine.plan_job(run))
     where = "in the open project" if kind == "add" else f"in {root}"
@@ -100,6 +103,7 @@ def yes() -> str:
         return "No plan is waiting. Tell me what to build."
     drop()
     job = link.submit(f"Build: {run.plan_name or run.root.name}", engine.build_job(run))
+    mark_building(job)
     return (f"Building {run.plan_name or run.root.name}: {len(run.files)} files (job #{job}). Watch it in the "
             "Progress section; I'll tell you when it's ready.")
 
@@ -287,3 +291,105 @@ def look_at_page(request: str = "") -> str:
         return None
     n = link.submit(f"Look at {root.name}", job)
     return f"Looking at the page (job #{n})."
+
+
+# ---------------------------------------------------------------- the rest (step 4)
+def _queue_path() -> Path:
+    return settings.data_dir() / "queue.json"
+
+
+def _active_path() -> Path:
+    return settings.data_dir() / "active.json"
+
+
+def building() -> bool:
+    """A build job is running now (queued requests wait for it)."""
+    try:
+        d = json.loads(_active_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    from jarvis.core import jobs
+    j = jobs.get_manager().get(int(d.get("job") or 0))
+    return j is not None and j.status in ("queued", "running")
+
+
+def mark_building(job_id: int) -> None:
+    _active_path().write_text(json.dumps({"job": job_id}), encoding="utf-8")
+
+
+def queue(request: str) -> str:
+    items = queued()
+    items.append(request)
+    _queue_path().write_text(json.dumps(items), encoding="utf-8")
+    return f"Queued (#{len(items)}): I'll plan '{request[:80]}' when the current build is done."
+
+
+def queued() -> list[str]:
+    try:
+        return list(json.loads(_queue_path().read_text(encoding="utf-8")))
+    except (OSError, ValueError):
+        return []
+
+
+def next_queued() -> str:
+    """After a build: the next queued request starts planning (its plan then waits for a yes)."""
+    items = queued()
+    if not items:
+        return ""
+    first, rest = items[0], items[1:]
+    _queue_path().write_text(json.dumps(rest), encoding="utf-8")
+    return start(first)
+
+
+_LATER = re.compile(r"^\s*(?:after\s+(?:that|this|it)|then|next|when\s+(?:you(?:'re| are)|it(?:'s| is))\s+done|"
+                    r"once\s+(?:that|it)(?:'s| is)\s+done)\b[\s,]*", re.I)
+
+
+def later(request: str) -> str | None:
+    """'after that, add dark mode' while a build runs -> queued. None = not a queued request."""
+    if not _LATER.search(request or "") or not building():
+        return None
+    return queue(_LATER.sub("", request).strip() or request)
+
+
+def continue_project() -> str:
+    """'continue the project': its first open TODO.md item, planned as an addition."""
+    from coder import memory
+    root = project_root()
+    if root is None:
+        return "Open the project in VS Code first."
+    items = memory.todo(root)
+    if not items:
+        return f"{root.name} has nothing left in TODO.md. Tell me what to add."
+    run = new(items[0], root)
+    run.kind, run.stack, run.todo_item = "add", understand.stack_of(memory.read(root)), items[0]
+    run.save()
+    n = link.submit(f"Plan: {items[0][:50]}", engine.plan_job(run))
+    return f"Next in {root.name}'s TODO: '{items[0]}'. Planning it (job #{n}); the plan comes to the workspace."
+
+
+def handoff() -> str:
+    """The waiting plan built by Claude Code instead (a big one: uses the Claude Code plan, not Groq tokens)."""
+    from coder import planner
+    run = pending()
+    if run is None:
+        return "No plan is waiting to hand over."
+    drop()
+    prompt = (f"Build this project in this folder ({run.root}). Request: {run.request}. Follow this plan, keep the "
+              f"structure clean and production quality, then run it and fix any errors:\n\n{planner.text(run)}")
+    link.to_workspace(f"Prompt for Claude Code: {run.plan_name}", prompt)
+    return link.claude_code(prompt, run.root)
+
+
+def tokens_report() -> str:
+    p = settings.data_dir() / "projects.json"
+    try:
+        d = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return "The coding agent hasn't built anything yet."
+    root = project_root()
+    if root is not None and str(root) in d:
+        e = d[str(root)]
+        return f"{root.name}: {e['tokens'] / 1000:.1f}k tokens over {e['runs']} run(s) (last {e.get('last', '?')})."
+    rows = sorted(d.items(), key=lambda kv: -kv[1]["tokens"])[:6]
+    return "Tokens per project: " + "; ".join(f"{Path(k).name} {v['tokens'] / 1000:.1f}k ({v['runs']} runs)" for k, v in rows) + "."

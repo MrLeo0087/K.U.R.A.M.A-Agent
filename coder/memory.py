@@ -70,3 +70,13 @@ def add_todo(root: Path, items: list[str]) -> None:
     new = [i for i in items if i not in old]
     if new:
         p.write_text(old.rstrip() + "\n" + "".join(f"- [ ] {i}\n" for i in new), encoding="utf-8")
+
+
+def tick(root: Path, item: str) -> None:
+    """A TODO.md item done: '- [ ]' -> '- [x]'."""
+    p = root / "TODO.md"
+    try:
+        t = p.read_text(encoding="utf-8")
+    except OSError:
+        return
+    p.write_text(t.replace(f"- [ ] {item}", f"- [x] {item}", 1), encoding="utf-8")

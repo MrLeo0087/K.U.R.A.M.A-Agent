@@ -54,6 +54,7 @@ answers to KURAMA's questions and the model per call since the memory + multitas
 | Long jobs | `data/jarvis.db`, tables `jobs`, `job_state`, `job_steps` | background jobs, checkpoints, step log |
 | Server / workers | `data/logs/server.log`, `data/logs/worker_*.log` | yes/no answers, errors |
 | **Claude Code watch** | `data/claude_watch.json` (+ `data/claude_watch.on` = on), `data/logs/claude_say.log` | each watched conversation: prompt, steps, files, to-do, status, final answer; what `/claude say` ran |
+| Coding agent | `data/coder/`: `runs/<id>/` (run.json, undo.json, backups), `pending.json` (a plan waiting), `queue.json`, `projects.json` (tokens per project); in each project `.kurama/project.md` + `TODO.md` | what a build did, how to undo it, what it cost |
 | Telegram sections / offers | `data/jarvis.db` table `kv`: `tg_topics`, `tg_group_candidate`, `next_offer`, `setting_once` | the group topics in use (also `tg_alert_msgs`: alerts sent, deleted by /clear); the "say yes to…" offer waiting; a one-time setting to keep |
 | Owner's settings | `data/user_settings.json` | the safe settings changed by voice (values + history for undo) |
 | Nepal documents service | `KURAMA_RAG_API_URL` in `.env`; jobs `kind = nepal_docs` in `data/jarvis.db` | each question asked of it (a background job), its status, the answer as the job's `» ` progress |

@@ -290,3 +290,38 @@ def test_files_are_written_after_what_they_use():
     fs = [FileSpec("app.js", "", ["constants.js", "utils.js"]), FileSpec("index.html", "", ["app.js"]),
           FileSpec("constants.js", ""), FileSpec("utils.js", "", ["constants.js"])]
     assert [f.path for f in planner.order(fs)] == ["constants.js", "utils.js", "app.js", "index.html"]
+
+
+# ---------------------------------------------------------------- step 4: queue, continue, hand-off, tokens
+def test_queue_runs_after_the_build(monkeypatch):
+    monkeypatch.setattr(api, "building", lambda: True)
+    assert api.start("after that, add a dark mode").startswith("Queued (#1)")
+    assert api.queued() == ["add a dark mode"]
+    planned = []
+    monkeypatch.setattr(api, "start", lambda r: planned.append(r) or "planning")
+    assert api.next_queued() == "planning" and planned == ["add a dark mode"] and api.queued() == []
+
+
+def test_continue_the_project_and_tick(monkeypatch, tmp_path):
+    from coder import memory
+    root = tmp_path / "p"
+    root.mkdir()
+    (root / "TODO.md").write_text("# TODO\n\n- [x] old\n- [ ] add sounds\n")
+    monkeypatch.setattr("coder.link.vscode_root", lambda: root)
+    got = []
+    monkeypatch.setattr("coder.link.submit", lambda title, fn: got.append(title) or 5)
+    assert "'add sounds'" in api.continue_project() and got == ["Plan: add sounds"]
+    memory.tick(root, "add sounds")
+    assert "- [x] add sounds" in (root / "TODO.md").read_text() and memory.todo(root) == []
+
+
+def test_handoff_and_tokens(monkeypatch, tmp_path):
+    fake_ai(monkeypatch)
+    run = new("big app", tmp_path / "projects" / "big")
+    run.stack = "web"
+    engine.plan_job(run)(Ctx())
+    sent = {}
+    monkeypatch.setattr("coder.link.claude_code", lambda prompt, folder: sent.update(p=prompt, f=folder) or "Claude Code is building it")
+    assert api.handoff() == "Claude Code is building it" and "Follow this plan" in sent["p"] and api.pending() is None
+    engine.build_job(new("x", tmp_path / "projects" / "x"))  # (nothing built yet: the report says so)
+    assert api.tokens_report().startswith("The coding agent hasn't built anything")

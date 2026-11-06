@@ -76,10 +76,15 @@ def plan_job(run: Run):
         link.steps(ctx.job.id, [("Understand the request", "done"), ("Plan the files", "done"), ("Your yes", "doing")])
         big = run.estimate > settings.ASK_TOKENS
         link.to_workspace(f"Plan: {run.plan_name}", planner.text(run))
-        ctx.progress(f"» Plan ready: {run.plan_name}, {len(run.files)} files in {run.root}"
-                     + (f", from {run.scaffold}" if run.scaffold else "")
-                     + f". About {run.estimate / 1000:.1f}k tokens" + (" (that's a big one)" if big else "")
-                     + ". It's in the workspace. Say yes to build it, or tell me what to change.")
+        line = (f"Plan ready: {run.plan_name}, {len(run.files)} files in {run.root}"
+                + (f", from {run.scaffold}" if run.scaffold else "")
+                + f". About {run.estimate / 1000:.1f}k tokens"
+                + (f": that's over your {settings.ASK_TOKENS // 1000}k limit. Say yes to build it anyway, 'send it to "
+                   "Claude Code' to let Claude Code build it (no Groq tokens), or tell me what to cut."
+                   if big else ". It's in the workspace. Say yes to build it, or tell me what to change."))
+        ctx.progress("» " + line)
+        if run.channel == "telegram":  # asked from the phone: the plan goes there too (answer yes from the phone)
+            link.tell(f"Coding agent: plan for {run.plan_name}", planner.text(run) + "\n\n" + line)
         return None
     return job
 
@@ -136,6 +141,8 @@ def _finish(state: S) -> dict:
     run = state["run"]
     memory.write(run)
     memory.add_todo(run.root, run.todo)
+    if run.todo_item and not run.problems:
+        memory.tick(run.root, run.todo_item)
     _record_tokens(run)
     _steps(state, _checklist(run, -1, "done"))
     return {}
@@ -194,5 +201,8 @@ def build_job(run: Run):
                 f"{len(run.problems)} problem(s) are left (in the workspace). Say 'fix it' to try again.")
         ctx.progress("» " + line)
         link.tell(f"✅ Coding agent: {run.plan_name}" if ok else f"Coding agent: {run.plan_name} (needs a look)", line)
+        from coder import api
+        if nxt := api.next_queued():  # 'after that, add dark mode': the next one is planned now
+            link.tell("Coding agent: next in the queue", nxt)
         return str(run.root)
     return job

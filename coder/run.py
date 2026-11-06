@@ -36,6 +36,8 @@ class Run:
     problems: list[str] = field(default_factory=list)
     tokens: int = 0
     estimate: int = 0
+    todo_item: str = ""  # the TODO.md line this run does ('continue the project'): ticked when built
+    channel: str = ""  # where it was asked ("telegram": the plan and the result also go to the phone)
     started: float = field(default_factory=time.time)
 
     @property

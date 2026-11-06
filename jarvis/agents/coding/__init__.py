@@ -39,6 +39,10 @@ EXAMPLES: dict[str, tuple[str, ...]] = {
     "check_page": ("check the page", "fix the errors on the page", "the page has errors, fix them",
                    "what errors did the page show"),
     "look": ("how does it look", "check the design of the page", "is the ui good", "look at the page and improve it"),
+    "continue": ("continue the project", "do the next thing in the todo", "keep working on this project",
+                 "what's next, do it"),
+    "handoff": ("send it to claude code", "let claude code build it", "give this to claude code instead"),
+    "tokens": ("how many tokens did this project use", "token report for my projects", "what did this project cost"),
     "reject": ("reject app.js", "put back style.css", "i don't want the change in main.py", "reject that file"),
     "run": ("run it again", "run the project", "run it"),
 }
