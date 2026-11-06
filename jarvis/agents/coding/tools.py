@@ -13,8 +13,12 @@ from jarvis.core.registry import tool
                   "after yes; fix the last crash (or a pasted error) as a reviewed change; bridge = copy a ready "
                   "prompt for ChatGPT/Gemini/Claude; apply = put the copied AI answer's code into the files; undo = "
                   "put back my last change (request 'project' = the last build); yes / no = answer a waiting plan "
-                  "or change.")
-def coding(action: Literal["fix", "bridge", "apply", "project", "undo", "yes", "no", "run"], request: str = "",
+                  "or change; tests = write pytest tests (request: a file name or empty); pass = run the tests and fix "
+                  "the code until they pass; review = review the uncommitted changes; commit = write a commit message "
+                  "(commits after yes); diffs = show the last build's changes side by side; reject = put one file "
+                  "back (request = its name).")
+def coding(action: Literal["fix", "bridge", "apply", "project", "undo", "yes", "no", "run", "tests", "pass", "review",
+                           "commit", "diffs", "reject"], request: str = "",
            site: str = "", error: str = "") -> str:
     """The coding agent.
 
@@ -40,9 +44,15 @@ def coding(action: Literal["fix", "bridge", "apply", "project", "undo", "yes", "
         if re.search(r"\b(?:project|build|built|everything|all of it|whole)\b", request or "", re.I):
             return coder.undo_last()
         return changes.undo()
+    if action in ("tests", "pass", "review", "commit", "diffs", "reject"):
+        return {"tests": lambda: coder.write_tests(request), "pass": coder.make_tests_pass,
+                "review": coder.review_changes, "commit": coder.commit_prepare, "diffs": coder.diffs,
+                "reject": lambda: coder.reject(request)}[action]()
     if action == "yes":
         if coder.pending() is not None:  # "the plan is in the workspace, say yes to build it"
             return coder.yes()
+        if coder.commit_waiting():
+            return coder.commit_yes()
         if (c := changes.take_cost()) is not None:  # "this needs ~6k tokens, go ahead?" -> yes
             return (fixer.fix(**c["kwargs"], confirmed=True) if c["action"] == "fix"
                     else project.start(**c["kwargs"], confirmed=True))
@@ -50,6 +60,8 @@ def coding(action: Literal["fix", "bridge", "apply", "project", "undo", "yes", "
     if action == "no":
         if coder.pending() is not None:
             return coder.no()
+        if coder.commit_waiting():
+            return coder.commit_no()
         if changes.take_cost() is not None:
             return "Okay, I didn't do it (no tokens used)."
         return changes.cancel()

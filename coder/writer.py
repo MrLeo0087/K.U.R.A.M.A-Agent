@@ -58,10 +58,16 @@ def write_one(run: Run, f: FileSpec) -> str:
     for u in related(run, f)[:3]:
         if shown := _show(run, u):
             parts.append(f"--- {u} (already written: use exactly its names, ids and classes) ---\n{shown}")
-    if (run.root / f.path).exists() and (cur := _show(run, f.path)):
-        parts.append(f"--- {f.path} (current content: change it as the plan says, keep what still fits) ---\n{cur}")
+    target, cur_len = run.root / f.path, 0
+    if target.exists():  # an existing file is rewritten from ALL of it (never from a cut view: that loses code)
+        cur = target.read_text(encoding="utf-8", errors="replace")
+        if len(cur) > settings.MAX_REWRITE_CHARS:
+            return (f"{f.path}: too long ({len(cur) // 1000}k characters) to rewrite safely in one go; say 'ask "
+                    "ChatGPT about this' for a big change there")
+        parts.append(f"--- {f.path} (current content: change it as the plan says, keep everything else) ---\n{cur}")
+        cur_len = len(cur)
     parts.append(f"Write the complete file `{f.path}`: {f.purpose}")
-    want = min(4000, settings.TOKENS[f.level] * 2)
+    want = min(6000, max(settings.TOKENS[f.level] * 2, cur_len // 3 + 800))  # room for the whole file
     try:
         reply = models.ask(run, "easy" if f.level == "easy" else "hard" if f.level == "hard" else "normal",
                            _SYS, "\n\n".join(parts), want)

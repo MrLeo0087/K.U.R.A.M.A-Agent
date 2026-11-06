@@ -7,6 +7,7 @@ from pathlib import Path
 ASK_TOKENS = int(os.getenv("KURAMA_CODER_ASK_TOKENS", "20000"))  # owner (11-06): bigger runs ask first
 MAX_FILES = 14  # files written by the AI in one run (a scaffold may hold more)
 MAX_FIX_ROUNDS = 3
+MAX_REWRITE_CHARS = 16000  # an existing file longer than this is never rewritten whole (that could lose code)
 FILE_CONTEXT_CHARS = 3500  # of each file a new file depends on, shown to the writer
 TOKENS = {"easy": 900, "normal": 1600, "hard": 2600}  # rough output per file by difficulty (estimate + max_tokens)
 PLAN_TOKENS = 1400

@@ -123,3 +123,119 @@ def undo_last() -> str:
     from coder import run as runmod, safety
     d = runmod.last_run()
     return safety.undo(d) if d is not None else "I haven't built anything to undo."
+
+
+# ---------------------------------------------------------------- checking and reviewing (step 2)
+def project_root() -> Path | None:
+    """The project these are about: the one open in VS Code, else the last one built."""
+    if (r := link.vscode_root()) is not None:
+        return r
+    from coder import run as runmod
+    d = runmod.last_run()
+    try:
+        return Path(json.loads((d / "undo.json").read_text(encoding="utf-8"))["root"]) if d else None
+    except (OSError, ValueError, KeyError):
+        return None
+
+
+def write_tests(request: str = "") -> str:
+    from coder import testing
+    root = project_root()
+    if root is None:
+        return "Open the project in VS Code first, then ask again."
+    only = (re.search(r"\b([\w-]+)\.py\b", request or "") or [None, ""])[1]
+    mods = [m for m in testing.modules(root) if not only or only in m.name]
+    if not mods:
+        return f"{root.name} has no Python modules to test{' named ' + only if only else ''}."
+
+    def job(ctx) -> str | None:
+        ctx.progress(f"writing tests for {len(mods[:6])} module(s)")
+        run, written = testing.write(root, only)
+        ctx.progress("running them")
+        ok, out = testing.run_tests(root)
+        from coder import run as runmod
+        runmod.finish(run)
+        last = out.strip().splitlines()[-1] if out.strip() else ""
+        ctx.progress("» " + (f"Wrote {len(written)} test file(s) in {root.name}/tests; they all pass ({last})." if ok else
+                             f"Wrote {len(written)} test file(s); some fail ({last}). Say 'make the tests pass' and I'll fix the code."))
+        return str(root / "tests")
+    n = link.submit(f"Tests for {root.name}", job)
+    return f"Writing tests for {len(mods[:6])} module(s) of {root.name} (job #{n}), then I'll run them."
+
+
+def make_tests_pass() -> str:
+    from coder import testing
+    root = project_root()
+    if root is None:
+        return "Open the project in VS Code first, then ask again."
+
+    def job(ctx) -> str | None:
+        ctx.progress("running the tests")
+        ok, out, run = testing.make_pass(root, on_round=lambda n, files: ctx.progress(f"fixing {', '.join(files)} (round {n})"))
+        from coder import run as runmod
+        runmod.finish(run)
+        last = out.strip().splitlines()[-1] if out.strip() else ""
+        ctx.progress("» " + (f"All tests pass in {root.name} ({last})." + (f" I changed {len(run.written) or 'some'} file(s): 'undo the project' puts them back." if run.tokens else "")
+                             if ok else f"Still failing after my fixes ({last}). The details are in the workspace."))
+        if not ok:
+            link.to_workspace(f"Tests: {root.name}", "```\n" + out[-3500:] + "\n```")
+        return None
+    n = link.submit(f"Make the tests pass: {root.name}", job)
+    return f"Running the tests of {root.name} and fixing what fails (job #{n})."
+
+
+def review_changes() -> str:
+    from coder import review
+    root = project_root()
+    if root is None:
+        return "Open the project in VS Code first."
+    text = review.review(root)
+    link.to_workspace(f"Review: {root.name}", text)
+    first = text.strip().splitlines()[0] if text.strip() else ""
+    return first + (" The whole review is in the workspace." if len(text.splitlines()) > 1 else "")
+
+
+def _commit_path() -> Path:
+    return settings.data_dir() / "commit.json"
+
+
+def commit_prepare() -> str:
+    from coder import review
+    root = project_root()
+    if root is None:
+        return "Open the project in VS Code first."
+    msg = review.commit_message(root)
+    if not msg:
+        return "There's nothing to commit."
+    _commit_path().write_text(json.dumps({"root": str(root), "message": msg, "until": time.time() + 900}), encoding="utf-8")
+    return f"Commit message:\n{msg}\n\nSay yes to commit everything in {root.name} with it."
+
+
+def commit_waiting() -> bool:
+    try:
+        d = json.loads(_commit_path().read_text(encoding="utf-8"))
+        return time.time() < float(d.get("until", 0))
+    except (OSError, ValueError):
+        return False
+
+
+def commit_yes() -> str:
+    from coder import review
+    d = json.loads(_commit_path().read_text(encoding="utf-8"))
+    _commit_path().unlink(missing_ok=True)
+    return review.commit(Path(d["root"]), d["message"])
+
+
+def commit_no() -> str:
+    _commit_path().unlink(missing_ok=True)
+    return "Okay, not committed."
+
+
+def diffs() -> str:
+    from coder import review
+    return review.diffs()
+
+
+def reject(name: str) -> str:
+    from coder import review
+    return review.reject(name)

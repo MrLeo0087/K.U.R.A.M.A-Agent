@@ -1877,7 +1877,8 @@ def agent_coding_intent(text: str) -> Intent | None:
     def act(a: str, **kw) -> Intent:
         return Intent("coding", "coding", "coding_agent", {"action": a, **kw})
     yn = yes_no(t)
-    if (changes.waiting() or changes.cost_waiting()) and yn:
+    import coder  # the coding agent's own project: a plan / a commit waiting for its yes
+    if (changes.waiting() or changes.cost_waiting() or coder.pending() is not None or coder.commit_waiting()) and yn:
         return act("yes" if yn == "yes" else "no")
     if _assist_waiting(t):  # 'replace it' / 'yes' answer the assist's own question
         return None

@@ -194,3 +194,56 @@ def test_coding_tool_routes_to_coder(monkeypatch):
 def test_paths_never_escape(tmp_path):
     run = new("x", tmp_path / "p")
     assert Path(safety.write(run, "src/a.js", "x")).is_relative_to(tmp_path / "p")
+
+
+# ---------------------------------------------------------------- step 2: tests, review, commit, diffs
+def test_make_tests_pass_fixes_the_code(monkeypatch, tmp_path):
+    from coder import testing
+    root = tmp_path / "calc"
+    (root / "tests").mkdir(parents=True)
+    (root / "calc.py").write_text("def add(a, b):\n    return a - b\n")
+    (root / "tests" / "test_calc.py").write_text("from calc import add\n\ndef test_add():\n    assert add(2, 3) == 5\n")
+    (root / "conftest.py").write_text("")
+
+    def ask(run, role, system, user, max_tokens):
+        assert "calc.py" in user and "assert" in user  # only the failure and the blamed file
+        return "```python\ndef add(a, b):\n    return a + b\n```"
+    monkeypatch.setattr(models, "ask", ask)
+    ok, out, run = testing.make_pass(root)
+    assert ok and "return a + b" in (root / "calc.py").read_text()
+
+
+def test_write_tests(monkeypatch, tmp_path):
+    from coder import testing
+    root = tmp_path / "p"
+    root.mkdir()
+    (root / "util.py").write_text("def double(x):\n    return x * 2\n")
+    monkeypatch.setattr(models, "ask", lambda run, role, s, u, m:
+                        "```python\nfrom util import double\n\ndef test_double():\n    assert double(2) == 4\n```")
+    run, written = testing.write(root)
+    assert written == ["tests/test_util.py"] and testing.run_tests(root)[0]
+
+
+def test_reject_one_file_and_commit(monkeypatch, tmp_path):
+    import subprocess
+
+    from coder import review
+    fake_ai(monkeypatch)
+    run = new("rps", tmp_path / "projects" / "rps")
+    run.stack = "web"
+    engine.plan_job(run)(Ctx())
+    engine.build_job(api.pending())(Ctx())
+    assert review.reject("I don't want style.css") .endswith("went to the trash.")
+    root = run.root
+    subprocess.run(["git", "init", "-q"], cwd=root)
+    subprocess.run(["git", "-c", "user.email=a@b", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "init"], cwd=root)
+    monkeypatch.setattr(models, "ask", lambda run, role, s, u, m: "Add the game\n\n- page, logic")
+    monkeypatch.setattr("coder.link.vscode_root", lambda: root)
+    (root / "x.txt").write_text("x")
+    subprocess.run(["git", "add", "-A"], cwd=root)
+    assert api.commit_prepare().startswith("Commit message:\nAdd the game")
+    monkeypatch.setenv("GIT_AUTHOR_NAME", "t")
+    monkeypatch.setenv("GIT_AUTHOR_EMAIL", "a@b")
+    monkeypatch.setenv("GIT_COMMITTER_NAME", "t")
+    monkeypatch.setenv("GIT_COMMITTER_EMAIL", "a@b")
+    assert api.commit_waiting() and api.commit_yes() == "Committed: Add the game"

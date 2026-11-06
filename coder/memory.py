@@ -30,9 +30,12 @@ def write(run: Run) -> None:
     decisions = re.findall(r"^- \d{4}-\d\d-\d\d: .+$", old, re.M)
     decisions.append(f"- {time.strftime('%Y-%m-%d')}: {run.request.strip()[:200]}"
                      + (f" ({run.scaffold})" if run.scaffold else ""))
-    files = "\n".join(f"- `{f.path}`: {f.purpose}" for f in run.files)
+    known = dict(re.findall(r"^- `([^`]+)`: (.*)$", old.split("## Decisions")[0], re.M))  # an addition keeps the
+    known.update({f.path: f.purpose for f in run.files})  # files it didn't touch
+    files = "\n".join(f"- `{k}`: {v}" for k, v in known.items())
     p.write_text(
-        f"# {run.plan_name or run.root.name}\n\nStack: {run.stack or 'unknown'}\n\nRun: `{run.run_cmd or '?'}`\n\n"
+        f"# {run.plan_name or run.root.name}\n\nStack: {run.stack or _old(old, 'Stack') or 'unknown'}\n\n"
+        f"Run: `{run.run_cmd or _old(old, 'Run').strip('`') or '?'}`\n\n"
         f"## Files\n\n{files}\n\n## Decisions\n\n" + "\n".join(decisions[-30:]) + "\n"
         + (f"\n## Notes\n\n{run.notes.strip()}\n" if run.notes.strip() else ""), encoding="utf-8")
     if run.kind != "new":  # an existing project's .gitignore is the owner's: never touched
@@ -44,6 +47,11 @@ def write(run: Run) -> None:
                 fh.write("\n.kurama/\n")
     except OSError:
         pass
+
+
+def _old(text: str, field: str) -> str:
+    m = re.search(rf"^{field}: (.+)$", text, re.M)
+    return m.group(1).strip() if m else ""
 
 
 def todo(root: Path) -> list[str]:
