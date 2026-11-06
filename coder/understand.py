@@ -54,19 +54,34 @@ def _free(base: Path, name: str) -> Path:
     return p
 
 
-def folder(request: str) -> tuple[Path, str]:
-    """(project root, 'new' | 'add'). 'here' with an empty folder = build in it; with files = a new sub-folder for
-    a new project, or the folder itself when the request adds to it ('add a scoreboard')."""
-    here = link.vscode_root() if _HERE.search(request or "") else None
-    adding = not _NEW.search(request or "") or bool(re.search(r"\b(?:add|extend|improve|update|upgrade)\b", request or "", I))
-    if here is not None and here.is_dir():
-        if _empty(here):
-            return here, "new"
-        if adding:
-            return here, "add"
-        return _free(here, slug(request)), "new"
+_ELSEWHERE = re.compile(r"\b(?:new|separate|another|own)\s+(?:folder|project|directory|repo)\b|\bin\s+(?:~/|/)\S+|"
+                        r"\bin\s+(?:my\s+)?(?:projects|downloads|documents|desktop)\b", I)
+_NEW_APP = re.compile(r"\b(?:create|make|build|start|generate|set\s*up)\b.{0,40}\b(?:game|app|application|website|site|"
+                      r"page|project|tool|bot|api|dashboard|clone)\b", I)
+BIG_PROJECT_FILES = 15  # an open project this big + a request for a whole new app: ask where (it may be unrelated)
+
+
+def folder(request: str, answer: str = "") -> tuple[Path, str, str]:
+    """(project root, 'new' | 'add', a question or ''). The project open in VS Code is the one being worked on
+    (owner 11-06: "if a project is open in VS Code, work on that project, not a random folder; ask if unsure"):
+      empty open folder                      -> build in it
+      the request adds / changes something   -> into the open project
+      a whole new app while a big project is open -> ask: into it, or a new folder? (answer: 'here' / 'new folder')
+      'in a new folder', 'in ~/x', nothing open -> a new folder (~/projects/<name>)"""
+    here = link.vscode_root()
     base = Path(settings.PROJECTS_DIR).expanduser()
-    return _free(base, slug(request)), "new"
+    elsewhere = bool(_ELSEWHERE.search(request or "")) or answer == "new"
+    if here is None or not here.is_dir() or elsewhere:
+        return _free(base, slug(request)), "new", ""
+    if _empty(here):
+        return here, "new", ""
+    if answer == "here" or _HERE.search(request or ""):
+        return here, "add", ""
+    from coder import repomap
+    if _NEW_APP.search(request or "") and len(repomap.files(here, BIG_PROJECT_FILES + 1)) > BIG_PROJECT_FILES:
+        return here, "add", (f"Should I build it inside {here.name} (the project open in VS Code), or in a new folder "
+                             "of its own? Say 'here' or 'new folder'.")
+    return here, "add", ""
 
 
 def question(request: str, stack: str) -> str:

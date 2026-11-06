@@ -60,6 +60,9 @@ def write(run: Run, rel: str, text: str) -> Path:
     before_write(run, p)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(text, encoding="utf-8")
+    if p.suffix == ".py":  # its old compiled copy must never run instead of the new code
+        for c in (p.parent / "__pycache__").glob(f"{p.stem}.*.pyc"):
+            c.unlink(missing_ok=True)
     return p
 
 

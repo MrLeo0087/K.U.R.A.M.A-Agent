@@ -204,8 +204,10 @@ def build_job(run: Run):
         link.to_workspace(f"Built: {run.plan_name}", report(run))
         link.open_folder(run.root)
         ok = not run.problems and all(f.path in run.written for f in run.files)
+        needs = (f" It needs {', '.join(run.needs)}: say 'set it up' and I'll make a .venv, install requirements.txt, "
+                 "run it and fix anything that breaks." if run.needs else "")
         line = (f"{run.plan_name} is ready in {run.root} ({len(set(run.written))} files, all checks passed, "
-                f"{run.tokens / 1000:.1f}k tokens). Run it with: {run.run_cmd or 'see README'}" if ok else
+                f"{run.tokens / 1000:.1f}k tokens). Run it with: {run.run_cmd or 'see README'}.{needs}" if ok else
                 f"{run.plan_name} is built in {run.root} ({sum(f.path in run.written for f in run.files)}/{len(run.files)} files), but "
                 f"{len(run.problems)} problem(s) are left (in the workspace). Say 'fix it' to try again.")
         ctx.progress("» " + line)

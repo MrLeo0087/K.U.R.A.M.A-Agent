@@ -66,7 +66,8 @@ def test_missing_module_is_installed_without_the_ai(proj, monkeypatch):
     monkeypatch.setattr(llm, "chat", lambda *a, **k: (_ for _ in ()).throw(AssertionError("no AI for this")))
     terminal.record("python app.py", str(root), 1, "Traceback...\nModuleNotFoundError: No module named 'cv2'")
     assert "opencv-python" in fixer.fix()
-    assert "Running" in changes.apply() and ran[-1].endswith("pip install opencv-python && python app.py")
+    assert "Running" in changes.apply() and ran[-1].startswith("python3 -m venv .venv && ") and ran[-1].endswith(
+        "/.venv/bin/python -m pip install opencv-python && " + ran[-1].split(" && ")[1].split(" -m pip")[0] + " app.py")
 
 
 def test_bridge_prompt_and_applying_a_pasted_answer(proj, monkeypatch):
@@ -180,3 +181,18 @@ def test_a_fix_of_only_the_main_block_never_deletes_the_file(proj, monkeypatch):
     assert new.count("\n") == body.count("\n") and "    calculator()" in new and "x49 = 49" in new
     monkeypatch.setattr(llm, "chat", lambda msgs, **k: llm.Reply("CAUSE: x.\n```python\n# file: app.py\nprint(\n```", "m"))
     assert "changed nothing" in fixer.fix() and (root / "app.py").read_text() == new  # unplaceable: untouched
+
+
+def test_fix_never_loops_on_a_missing_package_or_drops_constants(tmp_path):
+    """11-06: pip installed into .venv but `python3 main.py` ran the system Python (pygame missing again, a loop);
+    a 2-line fix to constants.py would have replaced its 86 lines."""
+    from jarvis.agents.coding import blocks
+    from jarvis.agents.coding.fixer import with_python
+    assert with_python("python3 main.py", "/p/.venv/bin/python") == "/p/.venv/bin/python main.py"
+    assert with_python("/p/.venv/bin/python -m pip install pygame && python3 main.py", "/p/.venv/bin/python") == \
+        "/p/.venv/bin/python main.py"
+    old = "\n".join(f"COLOR_{i} = {i}" for i in range(40)) + "\n"
+    (tmp_path / "constants.py").write_text(old)
+    new = blocks.to_files("```python\n# file: constants.py\nFONT_NAME = 'arial'\nCOLOR_3 = 33\n```", tmp_path)
+    text = next(iter(new.values()))
+    assert "COLOR_39 = 39" in text and "FONT_NAME = 'arial'" in text and "COLOR_3 = 33" in text

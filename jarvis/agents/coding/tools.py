@@ -33,6 +33,7 @@ Safety
 /code diffs — what I changed, side by side in VS Code
 /code reject <file> — that one file back
 /code undo [project] — undo my last change / the whole last build
+/code setup — make a .venv, install requirements.txt, run it and fix what breaks
 /code tokens — tokens used per project
 /code bridge — a ready prompt for ChatGPT / Gemini / Claude; /code apply — put its answer into the files
 
@@ -55,7 +56,7 @@ Plain words work too: "create a portfolio website", "add a dark mode to this pro
                   "the coding agent can do. 'after that, <request>' while a build runs = queued.")
 def coding(action: Literal["fix", "bridge", "apply", "project", "undo", "yes", "no", "run", "tests", "pass", "review",
                            "commit", "diffs", "reject", "preview", "check_page", "look", "continue", "handoff",
-                           "tokens", "learn", "help", "new", "check", "claude"], request: str = "",
+                           "tokens", "learn", "help", "new", "check", "claude", "setup"], request: str = "",
            site: str = "", error: str = "") -> str:
     """The coding agent.
 
@@ -90,6 +91,8 @@ def coding(action: Literal["fix", "bridge", "apply", "project", "undo", "yes", "
         return changes.undo()
     if action == "learn":
         return coder.learn_project()
+    if action == "setup":
+        return coder.setup_project()
     if action in ("tests", "pass", "review", "commit", "diffs", "reject", "preview", "check_page", "look", "continue",
                   "handoff", "tokens"):
         return {"tests": lambda: coder.write_tests(request), "pass": coder.make_tests_pass,

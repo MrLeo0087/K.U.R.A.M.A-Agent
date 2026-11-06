@@ -13,7 +13,10 @@ from jarvis.agents.coding import blocks, changes, terminal
 from jarvis.core import config, editor, errmem
 
 _SYS = ("You fix bugs in the user's project. First line: 'CAUSE: <one short sentence>'. Then the fix. "
-        + blocks.FORMAT_RULE + " Change as little as possible; keep names and behaviour; no explanations after the code.")
+        + blocks.FORMAT_RULE + " Understand the whole cause first and fix it COMPLETELY in one go: the crash AND every "
+        "listed problem, in every file involved (callers and callees agree on names and parameters), so the next run "
+        "doesn't crash on the next line. Otherwise change as little as possible; keep names and behaviour; no "
+        "explanations after the code.")
 _MOD = re.compile(r"ModuleNotFoundError: No module named '([\w.]+)'|ImportError: No module named ([\w.]+)")
 PIP_NAMES = {"cv2": "opencv-python", "PIL": "pillow", "sklearn": "scikit-learn", "yaml": "pyyaml", "bs4": "beautifulsoup4",
              "dotenv": "python-dotenv", "docx": "python-docx", "fitz": "pymupdf", "Crypto": "pycryptodome"}
@@ -32,6 +35,15 @@ def _venv_python(root: Path) -> str:
         if (root / d / "bin" / "python").exists():
             return str(root / d / "bin" / "python")
     return "python3"
+
+
+_PIP_CHAIN = re.compile(r"^(?:python3 -m venv \S+ && )?\S*python3?\S* -m pip install [^&]+&&\s*")
+
+
+def with_python(command: str, py: str) -> str:
+    """'python3 main.py' -> '<py> main.py'; an earlier 'pip install X && ' in front is dropped (installed already)."""
+    cmd = _PIP_CHAIN.sub("", (command or "").strip())
+    return re.sub(r"^(?:\S*/)?python3?(?=\s)", py, cmd, count=1)
 
 
 def _snippet(path: Path, line: int) -> str:
@@ -57,7 +69,13 @@ def fix(error_text: str = "", hint: str = "", confirmed: bool = False) -> str:
     if (m := _MOD.search(out)) and fail.get("command"):  # 0 tokens: install the missing package, then run again
         mod = (m.group(1) or m.group(2)).split(".")[0]
         pkg = PIP_NAMES.get(mod, mod)
-        cmd = f"{_venv_python(root)} -m pip install {pkg} && {fail['command']}"
+        py = _venv_python(root)
+        make = ""
+        if py == "python3":  # no venv yet: make one (installing into the system Python fails / is refused)
+            make, py = "python3 -m venv .venv && ", str(root / ".venv" / "bin" / "python")
+        # the SAME python installs and runs it (11-06: installed into .venv, ran with python3: the loop "pygame is
+        # missing" -> install -> missing again)
+        cmd = f"{make}{py} -m pip install {pkg} && {with_python(fail['command'], py)}"
         changes._pending.clear()
         changes._pending.update(files={}, title=f"install {pkg}", then=cmd, cwd=str(root),
                                 until=__import__("time").time() + config.AGENT_PENDING_TTL_S)
@@ -70,12 +88,19 @@ def fix(error_text: str = "", hint: str = "", confirmed: bool = False) -> str:
         files[str(f)] = _snippet(f, 1)
     if not files:
         return f"I can't tell which file this error comes from:\n{p.get('error') or out[-300:]}\nOpen the file in VS Code and say 'fix it' again."
+    more = _other_problems(root)  # fix EVERYTHING that's wrong at once, not one crash per round (11-06: a loop)
+    for line in more:
+        f = root / line.split(":", 1)[0]
+        if f.is_file() and len(files) < config.AGENT_FIX_MAX_FILES + 2:
+            files.setdefault(str(f), _snippet(f, 1))
     known = errmem.lookup(p["error"]) if p.get("error") else None
     rel = {k: (str(Path(k).relative_to(root)) if k.startswith(str(root)) else k) for k in files}
     user = (f"Command: {fail.get('command') or '?'}\nError output (end):\n{out[-2500:]}\n\n"
             + "".join(f"# file: {rel[k]}\n```\n{v}\n```\n" for k, v in files.items())
             + (f"\nLast time this error was fixed by: {known['fix']}" if known and known.get("fix") else "")
-            + (f"\nThe user says: {hint}" if hint else ""))
+            + (f"\nThe user says: {hint}" if hint else "")
+            + ("\nAlso fix these problems found in the project (they would crash next):\n" + "\n".join(
+                f"- {x}" for x in more) if more else ""))
     est = (len(_SYS) + len(user)) // 4 + 1200
     if est > config.AGENT_ASK_ABOVE_TOKENS and not confirmed:
         return changes.ask_cost("fix", {"error_text": error_text, "hint": hint}, est, "Fixing this (big files)")
@@ -94,9 +119,22 @@ def fix(error_text: str = "", hint: str = "", confirmed: bool = False) -> str:
     if p.get("error") and cause:  # remembered (0 tokens): the same error later is explained from memory
         errmem._save(p["error"], p.get("kind", ""), cause, ", ".join(Path(f).name for f in files))
         errmem.remember_fix(f"KURAMA's fix: {cause}", p["error"])
-    msg = changes.stage(new, f"Fix: {p.get('error') or fail.get('command')}"[:80], then=fail.get("command", ""),
+    py = _venv_python(root)
+    then = with_python(fail.get("command", ""), py) if fail.get("command") and py != "python3" else fail.get("command", "")
+    msg = changes.stage(new, f"Fix: {p.get('error') or fail.get('command')}"[:80], then=then,
                         cwd=fail.get("cwd", ""), note=f"Cause: {cause}" if cause else "")
     return (f"Cause: {cause}\n" if cause else "") + msg
+
+
+def _other_problems(root: Path) -> list[str]:
+    """Problems the coding agent's checks see in the project's Python files (0 tokens): names, imports and calls
+    that don't match between files."""
+    try:
+        from coder import connect
+        from coder.run import new
+        return connect._py_names(new("fix", root))[:8]
+    except Exception:  # noqa: BLE001
+        return []
 
 
 def _open_file() -> Path | None:

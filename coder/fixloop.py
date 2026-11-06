@@ -64,6 +64,10 @@ def problems(run: Run) -> list[str]:
         from coder import preview
         if preview.page_root(run.root) is not None:
             found = preview.selftest(run.root) or []
+    if not found and any(f.endswith(".py") for f in run.written):  # a Python program: does it start?
+        from coder import runcheck
+        found, needs = runcheck.smoke(run)
+        run.needs = sorted(set(run.needs) | set(needs))
     return found
 
 

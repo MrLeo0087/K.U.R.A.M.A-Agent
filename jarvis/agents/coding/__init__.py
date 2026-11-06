@@ -41,6 +41,8 @@ EXAMPLES: dict[str, tuple[str, ...]] = {
     "check_page": ("check the page", "fix the errors on the page", "the page has errors, fix them",
                    "what errors did the page show"),
     "look": ("how does it look", "check the design of the page", "is the ui good", "look at the page and improve it"),
+    "setup": ("set it up", "install the requirements and run it", "make the venv and install the packages",
+              "install pygame for this project"),
     "learn": ("learn this project", "understand this project first", "read my project and remember it",
               "study this codebase"),
     "continue": ("continue the project", "do the next thing in the todo", "keep working on this project",

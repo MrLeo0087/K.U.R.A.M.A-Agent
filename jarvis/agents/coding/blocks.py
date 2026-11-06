@@ -102,6 +102,8 @@ def to_files(text: str, root: Path) -> dict[Path, str]:
             files[p] = code
         elif patched := patch_main(old, code):
             files[p] = patched
+        elif merged := merge_assignments(old, code):  # constants only: placed by name, the rest kept
+            files[p] = merged
         else:  # a piece we can't place: NEVER written as the whole file (that once turned 58 lines into 2)
             skipped.append(rel)
     return files
@@ -123,7 +125,64 @@ def _whole(old: str, new: str) -> bool:
             return 0
         return sum(not isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Import, ast.ImportFrom))
                    and not (isinstance(n, ast.Expr) and isinstance(getattr(n, "value", None), ast.Constant)) for n in body)
-    o, n = names(old), names(new)
-    if others(old) and not others(new):
+    o, n = names(old) | assigned(old), names(new) | assigned(new)
+    if others(old) and not others(new) and not assigned(old):
         return False  # only functions came back: a patch
+    if len(new.strip()) < 0.5 * len(old.strip()) and len(o - n) > 2:
+        return False  # far shorter and most names gone: a patch (11-06: constants.py +2 -86 from a 2-line fix)
     return not o or len(o & n) >= max(1, int(len(o) * 0.8))
+
+
+def assigned(src: str) -> set[str]:
+    """Top-level names a file assigns (constants, settings)."""
+    import ast
+    try:
+        body = ast.parse(src).body
+    except SyntaxError:
+        return set()
+    out: set[str] = set()
+    for n in body:
+        targets = n.targets if isinstance(n, ast.Assign) else [n.target] if isinstance(n, ast.AnnAssign) else []
+        for t in targets:
+            out |= {x.id for x in ast.walk(t) if isinstance(x, ast.Name)}
+    return out
+
+
+def merge_assignments(old: str, code: str) -> str | None:
+    """Top-level assignments of a block (FONT_NAME = "arial") put into the file: a name it has is replaced in place,
+    a new one is added after its last assignment; everything else of the file is kept. None = nothing to place."""
+    import ast
+    try:
+        new_body, old_tree = ast.parse(code).body, ast.parse(old)
+    except SyntaxError:
+        return None
+    lines, nlines = old.splitlines(), code.splitlines()
+    adds: list[str] = []
+    placed = False
+    for n in new_body:
+        if not isinstance(n, (ast.Assign, ast.AnnAssign)):
+            continue
+        names = {x.id for t in (n.targets if isinstance(n, ast.Assign) else [n.target]) for x in ast.walk(t)
+                 if isinstance(x, ast.Name)}
+        seg = nlines[n.lineno - 1: n.end_lineno]
+        hit = next((o for o in old_tree.body if isinstance(o, (ast.Assign, ast.AnnAssign)) and names &
+                    {x.id for t in (o.targets if isinstance(o, ast.Assign) else [o.target]) for x in ast.walk(t)
+                     if isinstance(x, ast.Name)}), None)
+        if hit is not None:
+            lines[hit.lineno - 1: hit.end_lineno] = seg + [""] * (hit.end_lineno - hit.lineno + 1 - len(seg)) \
+                if len(seg) <= hit.end_lineno - hit.lineno + 1 else seg
+            old_tree = ast.parse("\n".join(lines))
+        else:
+            adds += seg
+        placed = True
+    if not placed:
+        return None
+    if adds:
+        last = max((o.end_lineno for o in old_tree.body if isinstance(o, (ast.Assign, ast.AnnAssign))), default=0)
+        lines[last:last] = adds
+    out = "\n".join(lines).rstrip("\n") + "\n"
+    try:
+        ast.parse(out)
+    except SyntaxError:
+        return None
+    return out

@@ -34,6 +34,7 @@ class Run:
     scaffold: str = ""  # what made the starting files: "vite-react-ts", "github:owner/repo", ""
     written: list[str] = field(default_factory=list)
     problems: list[str] = field(default_factory=list)
+    needs: list[str] = field(default_factory=list)  # packages the program needs that aren't installed
     tokens: int = 0
     estimate: int = 0
     todo_item: str = ""  # the TODO.md line this run does ('continue the project'): ticked when built

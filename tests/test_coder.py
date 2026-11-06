@@ -42,8 +42,8 @@ def test_understand():
     assert understand.stack_of("an industry standard react project") == "react"
     assert understand.stack_of("rock paper scissors game in python with a ui") == "pygame"
     assert understand.question("a rock paper scissors game with a nice ui", "") == ""  # never asks: the plan picks
-    root, kind = understand.folder("create a snake game in pygame")
-    assert kind == "new" and root.name.startswith("snake")
+    root, kind, ask = understand.folder("create a snake game in pygame")  # nothing open in VS Code
+    assert kind == "new" and root.name.startswith("snake") and ask == ""
 
 
 PLAN = json.dumps({"name": "RPS", "files": [
@@ -209,7 +209,7 @@ def test_make_tests_pass_fixes_the_code(monkeypatch, tmp_path):
         return "```python\ndef add(a, b):\n    return a + b\n```"
     monkeypatch.setattr(models, "ask", ask)
     ok, out, run = testing.make_pass(root)
-    assert ok and "return a + b" in (root / "calc.py").read_text()
+    assert ok and "return a + b" in (root / "calc.py").read_text(), out
 
 
 def test_write_tests(monkeypatch, tmp_path):
@@ -368,3 +368,72 @@ def test_learning_a_project_it_didnt_build(monkeypatch, tmp_path):
     card = memory.path(root).read_text()
     assert "Stack: FastAPI" in card and "Run: `uvicorn backend.api:app`" in card and onboard.known(root)
     assert line.startswith("I learned theirs (FastAPI): A small health API.")
+
+
+
+def test_the_project_open_in_vs_code_is_the_one_worked_on(monkeypatch, tmp_path):
+    """11-06: with a project open in VS Code, 'make a rock paper scissors game' went to a new folder."""
+    small = tmp_path / "mygame"
+    small.mkdir()
+    (small / "main.py").write_text("print(1)\n")
+    monkeypatch.setattr("coder.link.vscode_root", lambda: small)
+    assert understand.folder("make a rock paper scissors game") == (small, "add", "")
+    assert understand.folder("add a score board") == (small, "add", "")
+    root, kind, _ = understand.folder("make a snake game in a new folder")
+    assert kind == "new" and root.parent != small  # asked for elsewhere
+    big = tmp_path / "big"
+    big.mkdir()
+    for i in range(20):
+        (big / f"m{i}.py").write_text("x = 1\n")
+    monkeypatch.setattr("coder.link.vscode_root", lambda: big)
+    root, kind, ask = understand.folder("make a rock paper scissors game")
+    assert ask.startswith("Should I build it inside big")  # a big, maybe unrelated project: it asks
+    assert understand.folder("make a rock paper scissors game", "here") == (big, "add", "")
+    assert understand.folder("make a rock paper scissors game", "new")[1] == "new"
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    monkeypatch.setattr("coder.link.vscode_root", lambda: empty)
+    assert understand.folder("make a rock paper scissors game") == (empty, "new", "")
+
+
+def test_where_question_then_answer(monkeypatch, tmp_path):
+    big = tmp_path / "big"
+    big.mkdir()
+    for i in range(20):
+        (big / f"m{i}.py").write_text("x = 1\n")
+    monkeypatch.setattr("coder.link.vscode_root", lambda: big)
+    started = []
+    monkeypatch.setattr("coder.link.submit", lambda title, fn: started.append(title) or 9)
+    assert api.start("make a rock paper scissors game").startswith("Should I build it inside big")
+    assert "in big (the project open in VS Code)" in api.start("here")
+
+
+# ---------------------------------------------------------------- 11-06 traces: a game passed every check, then crashed
+def test_cross_file_calls_and_attributes(tmp_path):
+    run = new("x", tmp_path)
+    (tmp_path / "constants.py").write_text("WIDTH = 800\n")
+    (tmp_path / "ui.py").write_text("def create_choice_buttons(surface, y):\n    return []\nclass Button:\n"
+                                    "    def __init__(self, rect, text):\n        pass\n")
+    (tmp_path / "main.py").write_text("import constants as C\nfrom ui import create_choice_buttons, Button\n"
+                                      "print(C.WIDTH, C.FONT_NAME)\ncreate_choice_buttons(None, 3, x_center=10)\n"
+                                      "Button((0, 0))\ncreate_choice_buttons(None, 3)\n")
+    probs = connect._py_names(run)
+    assert any("uses C.FONT_NAME" in p for p in probs)
+    assert any("no parameter 'x_center'" in p for p in probs)
+    assert any("calls Button with 1 arguments, but it needs 2" in p for p in probs)
+    assert len(probs) == 3  # the correct call is fine
+
+
+def test_smoke_run_catches_a_crash_and_a_missing_package(tmp_path):
+    from coder import runcheck
+    run = new("x", tmp_path)
+    (tmp_path / "main.py").write_text("import game\ngame.start()\n")
+    (tmp_path / "game.py").write_text("def start():\n    raise ValueError('bad size')\n")
+    probs, needs = runcheck.smoke(run)
+    assert probs and probs[0].startswith("game.py:2: crashes when it starts") and "bad size" in probs[0]
+    (tmp_path / "game.py").write_text("import pygame_not_installed_x\ndef start():\n    pass\n")
+    assert runcheck.smoke(run) == ([], ["pygame_not_installed_x"])
+    (tmp_path / "game.py").write_text("def start():\n    input('name? ')\n")
+    assert runcheck.smoke(run) == ([], [])  # waits for typing: not a bug
+    (tmp_path / "game.py").write_text("import time\ndef start():\n    time.sleep(30)\n")
+    assert runcheck.smoke(run) == ([], [])  # still running: it starts

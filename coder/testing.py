@@ -33,7 +33,9 @@ def run_tests(root: Path, timeout: float = 300) -> tuple[bool, str]:
         cmd = [python_for(root), "-m", "pytest", "-x", "-q", "--no-header", "-p", "no:cacheprovider"]
     try:
         r = subprocess.run(cmd, cwd=root, capture_output=True, text=True, timeout=timeout,
-                           env={**__import__("os").environ, "SDL_VIDEODRIVER": "dummy", "MPLBACKEND": "Agg"})
+                           env={**__import__("os").environ, "SDL_VIDEODRIVER": "dummy", "MPLBACKEND": "Agg",
+                                "PYTHONDONTWRITEBYTECODE": "1"})  # (a stale .pyc of a just-fixed file of the same
+        #                            size, written in the same second, ran the OLD code)
     except (OSError, subprocess.TimeoutExpired) as e:
         return False, f"the tests didn't finish ({e})"
     out = (r.stdout or "") + (r.stderr or "")

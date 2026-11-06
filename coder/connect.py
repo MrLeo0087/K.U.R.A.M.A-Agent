@@ -99,10 +99,21 @@ def _web_selectors(run: Run) -> list[str]:
     return out[:15]
 
 
-def _py_names(run: Run) -> list[str]:
-    """'from game import Game, decide' where game.py has no `decide`: the two files disagree (0 tokens)."""
+def _sig(fn) -> tuple[list[str], bool, bool, int]:
+    """(parameter names, has *args, has **kwargs, how many are required) of a def (self/cls dropped)."""
+    a = fn.args
+    names = [x.arg for x in a.posonlyargs + a.args + a.kwonlyargs]
+    if names[:1] in (["self"], ["cls"]):
+        names = names[1:]
+    pos = [x.arg for x in a.posonlyargs + a.args if x.arg not in ("self", "cls")]
+    required = len(pos) - len(a.defaults)
+    return names, a.vararg is not None, a.kwarg is not None, max(0, required)
+
+
+def _py_modules(run: Run) -> dict[str, tuple[set[str], dict]]:
+    """module name -> (its top-level names, {function / class name: signature})."""
     import ast
-    defined: dict[str, set[str]] = {}
+    out: dict[str, tuple[set[str], dict]] = {}
     for p in repomap.files(run.root):
         if p.suffix != ".py":
             continue
@@ -111,17 +122,53 @@ def _py_names(run: Run) -> list[str]:
         except SyntaxError:
             continue
         names: set[str] = set()
+        sigs: dict = {}
         for n in tree.body:
-            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 names.add(n.name)
+                sigs[n.name] = _sig(n)
+            elif isinstance(n, ast.ClassDef):
+                names.add(n.name)
+                init = next((m for m in n.body if isinstance(m, ast.FunctionDef) and m.name == "__init__"), None)
+                if init is not None and not n.bases:  # (a subclass may take its parent's arguments)
+                    sigs[n.name] = _sig(init)
             elif isinstance(n, (ast.Assign, ast.AnnAssign)):
                 for t in (n.targets if isinstance(n, ast.Assign) else [n.target]):
                     names |= {x.id for x in ast.walk(t) if isinstance(x, ast.Name)}
             elif isinstance(n, (ast.Import, ast.ImportFrom)):
                 names |= {(a.asname or a.name).split(".")[0] for a in n.names}
-        defined[p.relative_to(run.root).with_suffix("").as_posix().replace("/", ".")] = names
-        defined.setdefault(p.stem, names)
-    out = []
+            elif isinstance(n, (ast.If, ast.Try)):  # names defined under `if`/`try` at the top level count too
+                names |= {x.id for x in ast.walk(n) if isinstance(x, ast.Name) and isinstance(x.ctx, ast.Store)}
+                names |= {x.name for x in ast.walk(n) if isinstance(x, (ast.FunctionDef, ast.ClassDef))}
+        key = p.relative_to(run.root).with_suffix("").as_posix().replace("/", ".")
+        out[key] = (names, sigs)
+        out.setdefault(p.stem, (names, sigs))
+    return out
+
+
+def _call_problem(call, name: str, sig, where: str) -> str:
+    params, varargs, varkw, required = sig
+    for kw in call.keywords:
+        if kw.arg and kw.arg not in params and not varkw:
+            return f"{where}: calls {name}({kw.arg}=...), but {name} has no parameter '{kw.arg}' (it takes: {', '.join(params) or 'nothing'})"
+    npos = len(call.args)
+    starred = any(type(a).__name__ == "Starred" for a in call.args)
+    if not varargs and not starred and npos > len(params):
+        return f"{where}: calls {name} with {npos} arguments, but it takes {len(params)}"
+    given = npos + len([k for k in call.keywords if k.arg])
+    if given < required and not starred and not any(k.arg is None for k in call.keywords):
+        return f"{where}: calls {name} with {given} arguments, but it needs {required}"
+    return ""
+
+
+def _py_names(run: Run) -> list[str]:
+    """The Python files agree with each other (0 tokens): 'from game import decide' finds decide;
+    'import constants as C' then C.FONT_NAME finds FONT_NAME; a call to a project function / class passes
+    parameters it really has, and enough of them (11-06: create_choice_buttons(x_center=...) and a missing
+    FONT_NAME passed every check, then crashed on the first run)."""
+    import ast
+    mods = _py_modules(run)
+    out: list[str] = []
     for p in repomap.files(run.root):
         if p.suffix != ".py":
             continue
@@ -129,13 +176,37 @@ def _py_names(run: Run) -> list[str]:
             tree = ast.parse(p.read_text(encoding="utf-8", errors="replace"))
         except SyntaxError:
             continue
+        rel = p.relative_to(run.root).as_posix()
+        alias: dict[str, str] = {}  # local name -> module
+        funcs: dict[str, tuple[str, str]] = {}  # local name -> (module, name there)
         for n in ast.walk(tree):
-            if isinstance(n, ast.ImportFrom) and n.module and not n.level and n.module in defined:
-                missing = [a.name for a in n.names if a.name != "*" and a.name not in defined[n.module]]
-                if missing:
-                    out.append(f"{p.relative_to(run.root)}: imports {', '.join(missing)} from {n.module}, "
-                               f"which {n.module} doesn't define")
-    return out
+            if isinstance(n, ast.ImportFrom) and n.module and not n.level and n.module in mods:
+                for a in n.names:
+                    if a.name == "*":
+                        continue
+                    if a.name not in mods[n.module][0]:
+                        out.append(f"{rel}: imports {a.name} from {n.module}, which {n.module} doesn't define")
+                    else:
+                        funcs[a.asname or a.name] = (n.module, a.name)
+            elif isinstance(n, ast.Import):
+                for a in n.names:
+                    if a.name in mods:
+                        alias[a.asname or a.name] = a.name
+        for n in ast.walk(tree):
+            if isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name) and n.value.id in alias:
+                mod = alias[n.value.id]
+                if n.attr not in mods[mod][0]:
+                    out.append(f"{rel}:{n.lineno}: uses {n.value.id}.{n.attr}, which {mod}.py doesn't define")
+            elif isinstance(n, ast.Call):
+                target = None
+                if isinstance(n.func, ast.Name) and n.func.id in funcs:
+                    target = funcs[n.func.id]
+                elif isinstance(n.func, ast.Attribute) and isinstance(n.func.value, ast.Name) and n.func.value.id in alias:
+                    target = (alias[n.func.value.id], n.func.attr)
+                if target and target[1] in mods[target[0]][1]:
+                    if why := _call_problem(n, target[1], mods[target[0]][1][target[1]], f"{rel}:{n.lineno}"):
+                        out.append(why)
+    return list(dict.fromkeys(out))[:20]
 
 
 def check(run: Run) -> list[str]:

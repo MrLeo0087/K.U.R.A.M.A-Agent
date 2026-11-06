@@ -70,30 +70,32 @@ def start(request: str, confirmed: bool = False) -> str:
         link.submit(f"Plan again: {waiting.plan_name or waiting.root.name}", engine.plan_job(waiting))
         return f"Changing the plan ({request}). The new plan comes to the workspace in a few seconds."
     q = _question_key()
-    if q.exists():  # the answer to 'web or python?': the original request + the answer
+    answer = ""
+    if q.exists():  # the answer to "inside the open project, or a new folder?"
         try:
             asked = json.loads(q.read_text(encoding="utf-8"))
+            said = request.lower()
             if time.time() - float(asked.get("ts", 0)) < 600 and len(request.split()) <= 6:
-                said = request.lower()
-                request = asked["request"] + (" in HTML, CSS and JavaScript" if re.search(r"\bweb|browser|html", said)
-                                              else " in Python with Pygame" if "python" in said or "pygame" in said
-                                              else f" ({request})")
+                answer = "new" if re.search(r"\bnew\b|separate|own|another", said) else \
+                    "here" if re.search(r"\bhere\b|this|inside|same|open|current", said) else ""
+                if answer:
+                    request = asked["request"]
         except (ValueError, KeyError):
             pass
         q.unlink(missing_ok=True)
     if len(request.split()) < 2:
         return "Tell me what to build, e.g. 'a rock paper scissors game in HTML, CSS and JavaScript'."
     stack = understand.stack_of(request)
-    if ask := understand.question(request, stack):
+    root, kind, ask = understand.folder(request, answer)
+    if ask:
         q.write_text(json.dumps({"request": request, "ts": time.time()}), encoding="utf-8")
         return ask
-    root, kind = understand.folder(request)
     run = new(request, root)
     run.stack, run.kind = stack, kind
     run.channel = link.channel()
     run.save()
     job = link.submit(f"Plan: {root.name}", engine.plan_job(run))
-    where = "in the open project" if kind == "add" else f"in {root}"
+    where = f"in {root.name} (the project open in VS Code)" if kind == "add" else f"in {root}"
     return f"Planning it {where} (job #{job}). The plan comes to the workspace; nothing is written before your yes."
 
 
@@ -411,3 +413,37 @@ def learn_project() -> str:
     n = link.submit(f"Learn {root.name}", job)
     again = " (again: the card is rewritten)" if onboard.known(root) else ""
     return f"Learning {root.name}{again} (job #{n}): its map and manifests, one small AI call, no full code read."
+
+
+def setup_project() -> str:
+    """'set it up' (the owner's yes to installing): .venv + requirements.txt, then run it and fix what breaks."""
+    from coder import fixloop, runcheck
+    root = project_root()
+    if root is None:
+        return "Open the project in VS Code first."
+    if not (root / "requirements.txt").is_file():
+        return f"{root.name} has no requirements.txt, so there's nothing to install."
+
+    def job(ctx) -> str | None:
+        ctx.progress("making .venv and installing requirements.txt (a minute or two)")
+        ok, why = runcheck.setup(root)
+        if not ok:
+            ctx.progress("» Installing failed: " + why[-200:])
+            return None
+        run = new(f"run {root.name}", root)
+        run.kind = "add"
+        run.written = [p.relative_to(root).as_posix() for p in root.glob("*.py")]
+        mem = (root / ".kurama" / "project.md")
+        if mem.exists():
+            run.run_cmd = (re.search(r"^Run: `([^`]+)`", mem.read_text(encoding="utf-8"), re.M) or [None, ""])[1]
+        ctx.progress("running it")
+        left = fixloop.loop(run, on_round=lambda n, p: ctx.progress(f"fixing {len(p)} problem(s), round {n}"))
+        from coder import run as runmod
+        runmod.finish(run)
+        py = runcheck.python_of(root)
+        entry = runcheck.entry(run) or "main.py"
+        ctx.progress("» " + (f"Set up: {root.name} starts fine. Run it with: {py} {entry}" if not left else
+                             f"Installed, but it still crashes: {left[0]}. Say 'fix it' to try again."))
+        return None
+    n = link.submit(f"Set up {root.name}", job)
+    return f"Setting up {root.name} (job #{n}): a .venv, the packages from requirements.txt, then a test run."
