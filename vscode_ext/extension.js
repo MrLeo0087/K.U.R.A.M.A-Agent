@@ -16,7 +16,7 @@ const crypto = require("crypto");
 const DIR = path.join(os.homedir(), ".local", "share", "kurama", "vscode");
 const FILE = path.join(DIR, `${process.pid}.json`);
 const TOKEN = crypto.randomBytes(16).toString("hex");
-const EXT_VERSION = 8; // KURAMA checks it: 3 = watches the terminal for the coding agent, 5 = claude_say, 6 = claude_new
+const EXT_VERSION = 9; // KURAMA checks it: 3 = watches the terminal for the coding agent, 5 = claude_say, 6 = claude_new
 const MAX_SEL = 20000; // characters of selected text written to the state file
 const MAX_BODY = 8 * 1024 * 1024;
 let port = 0;
@@ -266,6 +266,7 @@ function serve() {
 
 function activate(context) {
   serve();
+  require("./coder").register(context); // the KURAMA Coder chat panel (side bar)
   watchTerminal(context);
   const sub = (d) => context.subscriptions.push(d);
   sub(vscode.window.onDidChangeActiveTextEditor(() => soon()));

@@ -1861,6 +1861,11 @@ def agent_intent(text: str) -> Intent | None:
     return None
 
 
+_CODE_CHANGE = re.compile(r"^\W*(?:please\s+|can you\s+|could you\s+|now\s+|also\s+|and\s+)*(?:make|change|add|remove|"
+                          r"delete|fix|move|put|use|set|improve|update|create|build|write|rename|replace|turn|increase|"
+                          r"decrease|align|center|centre|show|hide|style|refactor|implement)\b", re.I)
+
+
 def agent_coding_intent(text: str) -> Intent | None:
     """While the coding agent is on, its requests by MEANING (agents.coding.EXAMPLES, 0 tokens); its waiting change
     takes yes / no. Off: nothing here runs. (It was named coding_intent too, which silently replaced the older
@@ -1903,6 +1908,14 @@ def agent_coding_intent(text: str) -> Intent | None:
                                                     *agents.groups())), 0.0)
     need = {"undo": config.AGENT_UNDO_MIN, "project": config.AGENT_PROJECT_MIN}.get(label, config.AGENT_MIN)
     if score < need or score < other - config.SELECTION_MARGIN:
+        # coding mode + a clear instruction to change the project ('make the Reserve button text white'): the agent
+        # takes it directly, 0 tokens (it went through the AI first: ~6k tokens just to pick the tool, 11-07).
+        # Not a vague 'update code', and not about the selected code (that is the editing assistant's).
+        about_selection = re.search(r"\b(?:this|selected|selection|highlighted)\s+(?:code|line|function|part)\b", t, I)
+        if _CODE_CHANGE.match(t) and len(t.split()) >= 4 and not about_selection:
+            sel = semantic.best_of(t, "selection", config.SELECTION_EXAMPLES)
+            if not sel or sel[1] < 0.8:
+                return act("project", request=t)
         return None
     if label != "project" and (sel := semantic.best_of(t, "selection", config.SELECTION_EXAMPLES)) \
             and sel[1] >= score - config.AGENT_OVER_SELECTION:

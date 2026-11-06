@@ -75,3 +75,11 @@ def test_general_and_coding_keep_separate_chats(monkeypatch):
     mode["m"] = "general"
     a._switch_chat()
     assert [m.content for m in a.history] == ["hi", "hello"] and a.summary == "g" and a._chat_channel() == "web"
+
+
+def test_a_clear_change_in_coding_mode_skips_the_ai(monkeypatch):
+    """11-07: 'make the Reserve a Table button text white…' went through the AI (~6k tokens) just to pick the tool."""
+    from jarvis.core import fastpath
+    assert fastpath._CODE_CHANGE.match("make the Reserve a Table button text white so it is readable")
+    assert fastpath._CODE_CHANGE.match("now move the score board to the right")
+    assert not fastpath._CODE_CHANGE.match("what is the capital of nepal")
