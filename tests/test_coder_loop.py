@@ -139,3 +139,11 @@ def test_the_newest_file_read_is_never_cut(tmp_path):
     big = {"old.py": "o" * 9000, "new.py": "n" * 13000}
     text = loop._seen_text(big)
     assert "n" * 13000 in text and "old.py (read earlier" in text
+
+
+def test_a_new_request_never_resumes_an_old_question(tmp_path, monkeypatch):
+    """11-07: 'make a simple calculator code' resumed the old 'page stuck' task that had asked a question."""
+    from coder.interfaces import api
+    loop._save_waiting(new("old", tmp_path), "when i click a product it gets stuck", {"ask": "which file?", "notes": []})
+    assert api.answer_waiting("make a simple calculator code") is None
+    assert loop.waiting() is None  # and the old question is gone

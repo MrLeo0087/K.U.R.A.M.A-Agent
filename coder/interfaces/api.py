@@ -140,8 +140,10 @@ def answer_waiting(text: str) -> str | None:
     if w is None:
         return None
     loop.drop_waiting()
-    notes = list(w.get("notes") or [])
     t = (text or "").strip()
+    if len(t.split()) > 8 or _NEW_REQUEST.search(t) or re.match(r"(?i)\W*(?:make|create|build|write|add|run|explain)\b", t):
+        return None  # a NEW request, not the answer (11-07: 'make a simple calculator code' resumed an old task)
+    notes = list(w.get("notes") or [])
     yes = re.fullmatch(r"(?:yes|yeah|yep|ok|okay|sure|go|do it|go ahead|run it|install it)\W*", t, re.I)
     if w.get("command") and yes:
         run = new(w["goal"], Path(w["root"]))
