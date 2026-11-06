@@ -470,3 +470,25 @@ def test_a_cut_reply_never_leaves_a_fence_in_the_code():
     from coder.builder import writer
     assert writer.code_of("```javascript\nconst a = 1;\n") == "const a = 1;\n"
     assert writer.code_of("```js\nconst b = `x${1}`;\n```") == "const b = `x${1}`;\n"
+
+
+def test_a_fix_never_shrinks_a_file_and_css_is_added(monkeypatch, tmp_path):
+    """11-07: three 'fixes' shrank style.css from 8.3k to 2.6k characters (partial replies written as the file)."""
+    from coder.agent import fixloop
+    (tmp_path / "style.css").write_text(".a { color: red; }\n" * 50)
+    (tmp_path / "app.js").write_text("const x = 1;\n" * 50)
+    run = new("x", tmp_path)
+    monkeypatch.setattr(models, "ask", lambda *a, **k: "```css\n.modal { display: none; }\n```")
+    assert fixloop.fix_round(run, ["style.css: missing styles"]) == 1
+    css = (tmp_path / "style.css").read_text()
+    assert css.count(".a { color: red; }") == 50 and ".modal { display: none; }" in css  # added, nothing lost
+    monkeypatch.setattr(models, "ask", lambda *a, **k: "```js\nconst y = 2;\n```")
+    assert fixloop.fix_round(run, ["app.js: something"]) == 0  # a part of a JS file is never written as the file
+    assert (tmp_path / "app.js").read_text().count("const x = 1;") == 50
+
+
+def test_unstyled_classes(tmp_path):
+    (tmp_path / "index.html").write_text('<div class="card">x</div><link rel="stylesheet" href="s.css">')
+    (tmp_path / "s.css").write_text(".card { color: red; }")
+    (tmp_path / "app.js").write_text("el.className = 'modal-overlay';")
+    assert connect.unstyled_classes(tmp_path) == ["modal-overlay"]

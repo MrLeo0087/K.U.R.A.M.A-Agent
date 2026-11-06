@@ -248,3 +248,13 @@ def check(run: Run) -> list[str]:
     except OSError:
         pass
     return out
+
+
+def unstyled_classes(root: Path) -> list[str]:
+    """Classes the pages / scripts use that no stylesheet styles (0 tokens). A clue, not an error: a modal whose
+    .modal-overlay has no CSS shows nothing, while the script still locks the page's scrolling (11-07)."""
+    css = " ".join(p.read_text(encoding="utf-8", errors="replace") for p in repomap.files(root)
+                   if p.suffix in (".css", ".scss") or p.suffix == ".html")
+    styled = set(re.findall(r"\.([A-Za-z_][\w-]*)", css))
+    _, used = _web_names(root)
+    return sorted(c for c in used if c not in styled and len(c) > 2)[:40]

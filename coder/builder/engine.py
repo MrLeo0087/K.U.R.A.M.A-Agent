@@ -90,6 +90,8 @@ def plan_job(run: Run):
         link.steps(ctx.job.id, [("Understand the request", "done"), ("Plan the files", "done"), ("Your yes", "doing")])
         big = run.estimate > settings.ASK_TOKENS
         link.to_workspace(f"Plan: {run.plan_name}", planner.text(run))
+        from coder.core import session
+        session.log(run.root, "plan_ready", task=run.id, text=planner.text(run))  # (the VS Code panel shows it)
         line = (f"Plan ready: {run.plan_name}, {len(run.files)} files in {run.root}"
                 + (f", from {run.scaffold}" if run.scaffold else "")
                 + f". About {run.estimate / 1000:.1f}k tokens"
@@ -135,6 +137,9 @@ def _write(state: S) -> dict:
         ctx.check()
         _steps(state, _checklist(run, i))
         ctx.progress(f"writing {f.path} ({i + 1}/{len(run.files)})")
+        from coder.core import session
+        session.log(run.root, "tool", task=run.id, step=i + 1, tool="write", args={"path": f.path, "purpose": f.purpose},
+                    result="", tokens=run.tokens)
         if problem := writer.write_one(run, f):
             failed.append(problem)
             run.note(problem)

@@ -109,6 +109,12 @@ def context(run: Run) -> str:
             parts.append(f"Last crash in the VS Code terminal: `{crash.get('command')}`\n{str(crash.get('output'))[-700:]}")
     except Exception:  # noqa: BLE001
         pass
+    try:  # a web project: classes used but never styled (often the cause of 'nothing shows' / 'stuck' bugs)
+        from coder.builder import connect
+        if (bare := connect.unstyled_classes(run.root)):
+            parts.append("Classes used in the HTML/JS that NO stylesheet styles: " + ", ".join(bare))
+    except Exception:  # noqa: BLE001
+        pass
     if style := _style():
         parts.append("The owner's preferences: " + style)
     if last := session.recap(run.root):
@@ -131,7 +137,7 @@ def resolve_followup(root: Path, goal: str) -> str:
     return f"{goal}  [here 'it' / 'that' = what the last task changed: \"{t.get('goal', '')[:160]}\" -> {t.get('result', '')[:160]}]"
 
 
-def small_project(run: Run, limit: int = 14000) -> dict:
+def small_project(run: Run, limit: int = 48000) -> dict:
     """A small project's code given at once (its files as 'read'): no read-steps needed (each step costs ~2.5k
     tokens of context, so 4 reads cost more than the files themselves)."""
     files = [f for f in repomap.files(run.root, 40) if f.suffix in (".py", ".js", ".ts", ".tsx", ".jsx", ".html", ".css",
@@ -139,7 +145,8 @@ def small_project(run: Run, limit: int = 14000) -> dict:
     files = [f for f in files if ".kurama" not in f.parts and f.name not in ("README.md", "TODO.md")]
     if not files or sum(f.stat().st_size for f in files) > limit:
         return {}
-    return {f.relative_to(run.root).as_posix(): tools.t_read(run, f.relative_to(run.root).as_posix()) for f in files}
+    # raw text, no line numbers: the model copies 'old' text for its edits straight from here
+    return {f.relative_to(run.root).as_posix(): f.read_text(encoding="utf-8", errors="replace") for f in files}
 
 
 # ---------------------------------------------------------------- the graph
@@ -196,13 +203,17 @@ def _act(state: S) -> dict:
     ctx_text = state["context"][:2600] if not seen else _recap_only(state["context"])
     user = (f"Goal: {state['goal']}\nPlan: " + " | ".join(state.get("plan") or []) +
             (f"\nDone when: {state['check']}" if state.get("check") else "") +
-            f"\n\n{ctx_text}" + (f"\n\nFiles you have read (current content):\n{_seen_text(seen)}" if seen else "")
+            f"\n\n{ctx_text}" + (f"\n\nFiles you have read (current content):\n{_seen_text(seen, 60000 if state.get('small') else 12000)}" if seen else "")
             + "\n\nYour steps so far:\n" + ("\n".join(notes[-14:]) or "(none)") +
             ("\n\nResult of your last step:\n" + state["last"] if state.get("last") else ""))
     from jarvis.core import llm
     running = bool(_RUN_GOAL.search(state["goal"]))  # 'run it and tell me': it may run; a change: the code checks it
     perms = {"read", "run", "write"} if running else {"read", "write"}  # (a run may need a fix: "fix it and run it again")
     schemas = registry.schemas(perms, only=CORE_TOOLS | (EXTRA_TOOLS if state.get("steps", 0) >= 3 else set()))
+    if state.get("steps", 0) >= 5 and not run.written and not running:  # 5 steps of looking: enough. Finding the
+        user += ("\n\nYou have looked enough. Decide which file(s) cause this from what you have read and make the "
+                 "change NOW (finding the right file is your job, not the owner's).")  # right file is the agent's job
+        state["fixing"] = True
     one_shot = state.get("small") and not running and (state.get("steps", 0) == 0 or state.get("fixing"))
     if one_shot:  # a small project, all its code in view: the whole change in one call (cheap, consistent)
         schemas = registry.schemas({"write"}, only={"apply_edits"})
@@ -227,9 +238,6 @@ def _act(state: S) -> dict:
         args = {}
     if name == "done":
         return {"done": str(args.get("summary") or "Done.")[:500], "steps": step}
-    if step >= 6 and not run.written and not running:  # six steps and nothing changed: it doesn't know what is meant
-        return {"ask": "I'm not sure which part you mean. Which file or element should I change (or describe it a bit "
-                       "more)?", "steps": step}
     if name in ("edit", "write", "apply_edits"):
         state["fixing"] = False
     if run.written and name not in ("edit", "write", "apply_edits", "read", "grep", "find", "list") and not running:
@@ -239,8 +247,8 @@ def _act(state: S) -> dict:
         return {"ask": str(args.get("question") or "")[:400], "command": str(args.get("command") or "")[:300], "steps": step}
     ctx.progress(f"{_icon(name)} {name} {_short_args(args)}"[:120])
     obs = registry.call(run, name, args)
-    session.log(run.root, "tool", task=run.id, step=state.get("steps", 0) + 1, tool=name, args=_short_args(args),
-                result=(obs or "")[:300], tokens=run.tokens)
+    session.log(run.root, "tool", task=run.id, step=state.get("steps", 0) + 1, tool=name, args=_full_args(args),
+                result=(obs or "")[:1500], thought=_thought(r), tokens=run.tokens)
     if name == "read" and not obs.startswith(("tool error", "no ")) and "doesn't exist" not in obs:
         seen[str(args.get("path"))] = obs
     if name in ("edit", "write") and obs.startswith(("edited", "wrote")):  # what it read is now the NEW text
@@ -260,7 +268,8 @@ def _act(state: S) -> dict:
     if sum(1 for n in notes[-3:] if n.split(". ", 1)[-1] == sig) >= 1:  # the same call, the same result again
         last += ("\n(You already did exactly this and got the same result. Don't repeat it: do something different, "
                  "or call done / ask.)")
-    return {"last": last, "notes": [*notes, note], "steps": step, "seen": seen,
+    return {"last": last, "notes": [*notes, note], "steps": step, "seen": seen, "small": False if step >= 1 else
+            state.get("small"),  # (the whole project only for the first, one-shot call: after it, files on demand)
             "fixing": bool(state.get("fixing")) and name not in ("edit", "write", "apply_edits")}
 
 
@@ -382,6 +391,15 @@ def _report(run: Run, goal: str, state: dict, job_id: int) -> str:
 def _icon(name: str) -> str:
     return {"read": "📖", "grep": "🔎", "find": "🔎", "list": "📂", "edit": "✏️", "write": "📝", "run": "▶️",
             "run_project": "▶️", "screenshot": "📸", "look": "👀", "page_errors": "🐞"}.get(name, "•")
+
+
+def _full_args(args: dict) -> dict:
+    """The tool's input as the panel shows it (an edit's old/new text kept, cut at 1500 characters each)."""
+    return {k: (v if not isinstance(v, str) else v[:1500]) for k, v in (args or {}).items()}
+
+
+def _thought(reply) -> str:
+    return (getattr(reply, "text", "") or "").strip()[:300]
 
 
 def _short_args(args: dict) -> str:

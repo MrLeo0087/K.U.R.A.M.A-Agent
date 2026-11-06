@@ -63,7 +63,7 @@ function chat(text, onDelta) { // KURAMA's chat stream (Server-Sent Events): del
 }
 
 class CoderView {
-  constructor(context) { this.context = context; this.view = null; this.watch = new Set(); this.timer = null; }
+  constructor(context) { this.context = context; this.view = null; this.watch = new Set(); this.timer = null; this.since = 0; }
 
   resolveWebviewView(view) {
     this.view = view;
@@ -83,14 +83,17 @@ class CoderView {
     if (root) await call("POST", "/api/v1/coding/project", { path: root }); // this window's folder = the project
     await call("POST", "/api/v1/agent", { name: "coding" });
     this.post({ type: "start" });
+    if (!this.since) this.since = Date.now() / 1000 - 1;
     const done = await chat(m.text, (t) => this.post({ type: "delta", text: t }));
     this.post({ type: "end", text: done.text || "", error: done.error || "" });
     for (const j of done.jobs || []) this.watch.add(j);
     if (this.watch.size) this.poll();
   }
 
-  async poll() { // the jobs this panel started: their checklist, live, until they end
+  async poll() { // the jobs this panel started: every step (input + output) and their checklist, live, until they end
     clearTimeout(this.timer);
+    const ev = await call("GET", `/api/v1/coding/events?path=${encodeURIComponent(this.root())}&since=${this.since}`);
+    for (const e of ev?.events || []) { this.since = Math.max(this.since, e.t); this.post({ type: "event", e }); }
     const r = await call("GET", "/api/v1/progress");
     const items = (r?.items || []).filter((x) => this.watch.has(x.job));
     this.post({ type: "progress", items });
@@ -126,7 +129,17 @@ body { font-family: var(--vscode-font-family); font-size: 13px; color: var(--vsc
 form { display: flex; gap: 6px; padding: 8px 10px 10px; }
 textarea { flex: 1; resize: none; min-height: 36px; max-height: 120px; font: inherit; padding: 6px 8px; border-radius: 6px;
   color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, transparent); }
-button.send { padding: 0 12px; border: 0; border-radius: 6px; color: var(--vscode-button-foreground); background: var(--vscode-button-background); cursor: pointer; }
+button.send { align-self: flex-end; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%; display: grid;
+  place-items: center; color: var(--vscode-button-foreground); background: var(--vscode-button-background); cursor: pointer; }
+button.send svg { width: 14px; height: 14px; }
+.step { margin: 3px 0; font-size: 12px; }
+.step summary { cursor: pointer; list-style: none; opacity: .95; }
+.step summary::-webkit-details-marker { display: none; }
+.step .io { margin: 4px 0 6px 14px; padding: 6px 8px; border-left: 2px solid var(--vscode-panel-border); font-family: var(--vscode-editor-font-family);
+  font-size: 11.5px; white-space: pre-wrap; max-height: 220px; overflow: auto; opacity: .9; }
+.step .lbl { opacity: .6; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; }
+.plan { margin: 8px 0; padding: 8px 10px; border: 1px solid var(--vscode-panel-border); border-radius: 8px; white-space: pre-wrap; font-size: 12.5px; }
+.why { opacity: .7; font-style: italic; }
 .hint { opacity: .6; font-size: 12px; padding: 4px 0; }
 </style></head><body>
 <div id="proj">KURAMA Coder</div>
@@ -142,11 +155,29 @@ button.send { padding: 0 12px; border: 0; border-radius: 6px; color: var(--vscod
   <button data-say="/code learn">🧠 Learn</button>
   <button data-say="/code">☰ All</button>
 </div>
-<form id="f"><textarea id="t" placeholder="Ask the coding agent… (Enter sends, Shift+Enter = new line)"></textarea><button class="send">Send</button></form>
+<form id="f"><textarea id="t" placeholder="Ask the coding agent… (Enter sends, Shift+Enter = new line)"></textarea><button class="send" title="Send" aria-label="Send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></form>
 <script>
 const vs = acquireVsCodeApi(), log = document.getElementById("log"), t = document.getElementById("t");
 let bot = null, steps = null;
 const add = (cls, text) => { const d = document.createElement("div"); d.className = "m " + cls; d.textContent = text; log.append(d); log.scrollTop = log.scrollHeight; return d; };
+const ICON = { read: "📖", grep: "🔎", find: "🔎", list: "📂", edit: "✏️", apply_edits: "✏️", write: "📝", run: "▶️",
+  run_project: "▶️", screenshot: "📸", look: "👀", page_errors: "🐞", web_search: "🌐", read_webpage: "🌐" };
+function step(e) { // one step of the agent, like Claude Code: what it called with what input, and what came back
+  if (e.kind === "plan_ready") { const d = document.createElement("div"); d.className = "plan"; d.textContent = e.text; log.append(d); }
+  else if (e.kind === "plan") { const d = document.createElement("div"); d.className = "plan"; d.textContent = "Plan:\n" + e.plan.map((x, i) => (i + 1) + ". " + x).join("\n"); log.append(d); }
+  else if (e.kind === "tool") {
+    const d = document.createElement("details"); d.className = "step";
+    const target = e.args && (e.args.path || e.args.command || e.args.pattern || e.args.question || e.args.query) || "";
+    const s = document.createElement("summary"); s.textContent = (ICON[e.tool] || "•") + " " + e.tool + (target ? " · " + target : ""); d.append(s);
+    if (e.thought) { const w = document.createElement("div"); w.className = "io why"; w.textContent = e.thought; d.append(w); }
+    const i = document.createElement("div"); i.className = "io"; i.innerHTML = '<div class="lbl">input</div>'; i.append(JSON.stringify(e.args, null, 2)); d.append(i);
+    if (e.result) { const o = document.createElement("div"); o.className = "io"; o.innerHTML = '<div class="lbl">output</div>'; o.append(e.result); d.append(o); }
+    log.append(d);
+  } else if (e.kind === "check") {
+    const d = document.createElement("div"); d.className = "step"; d.textContent = (e.ok ? "✅ checked: it works" : "🔁 check found: " + (e.problems || [""])[0].slice(0, 200)); log.append(d);
+  }
+  log.scrollTop = log.scrollHeight;
+}
 const send = (text) => { if (!text.trim()) return; add("me", text); vs.postMessage({ type: "send", text }); t.value = ""; };
 document.getElementById("f").onsubmit = (e) => { e.preventDefault(); send(t.value); };
 t.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(t.value); } });
@@ -166,6 +197,7 @@ window.addEventListener("message", ({ data: m }) => {
     log.scrollTop = log.scrollHeight;
   }
   if (m.type === "result") { add("bot res " + (m.ok ? "ok" : "bad"), m.text); steps = null; }
+  if (m.type === "event") step(m.e);
 });
 </script></body></html>`;
 }

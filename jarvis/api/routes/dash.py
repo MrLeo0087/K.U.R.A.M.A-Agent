@@ -414,6 +414,19 @@ async def coding_project(request: Request):
     return {"ok": True, "path": str(got) if got else ""}
 
 
+@router.get("/coding/events", summary="The coding agent's steps in a project since a time (the VS Code panel)")
+async def coding_events(path: str = "", since: float = 0.0):
+    from pathlib import Path as _P
+
+    from coder.core import session
+    from coder.interfaces import link
+    root = _P(path) if path else link.vscode_root()
+    if root is None or not root.is_dir():
+        return {"events": []}
+    evs = await run_in_threadpool(session.last_events, root, 120)
+    return {"events": [e for e in evs if float(e.get("t") or 0) > since]}
+
+
 @router.post("/coding/prompt", summary="The browser extension: the prompt to paste into ChatGPT/Gemini/Claude (once)")
 async def coding_prompt(request: Request):
     from jarvis.agents.coding import bridge

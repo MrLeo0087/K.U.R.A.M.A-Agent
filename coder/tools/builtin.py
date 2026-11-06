@@ -120,6 +120,9 @@ def t_edit(run: Run, path: str, old: str, new: str) -> str:
         return f"{path} doesn't exist (use write for a new file)"
     from jarvis.core import editor
     text = editor.read(p)
+    if old and old not in text and re.search(r"^\s*\d+: ", old, re.M):  # copied from a numbered read: drop the numbers
+        old = re.sub(r"^\s*\d+: ?", "", old, flags=re.M)
+        new = re.sub(r"^\s*\d+: ?", "", new, flags=re.M)
     n = text.count(old) if old else 0
     if n == 0:
         loose = re.sub(r"\s+", r"\\s+", re.escape(old.strip())) if old.strip() else ""

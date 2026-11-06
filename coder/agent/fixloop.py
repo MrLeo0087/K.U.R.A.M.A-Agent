@@ -11,7 +11,8 @@ from coder.core import safety, settings
 from coder.core.run import Run
 from coder.llm import models
 
-_SYS = ("You fix bugs in ONE file of a project. Keep everything that works; change only what the problems need; keep "
+_SYS = ("You fix bugs in ONE file of a project. Return the COMPLETE file (every line, also the ones you don't change); "
+        "for a stylesheet that only needs NEW rules you may return just the new rules. Keep everything that works; change only what the problems need; keep "
         "names consistent with the plan and the other files. Reply with ONLY the complete corrected file in one fenced "
         "code block.")
 
@@ -39,13 +40,20 @@ def fix_round(run: Run, problems: list[str]) -> int:
         user = (writer.plan_brief(run) + f"\nProblems in `{rel}`:\n" + "\n".join(f"- {x}" for x in probs)
                 + others + f"\n\n--- {rel} (fix this file) ---\n{src}")
         try:
-            body = writer.code_of(models.ask(run, "fix", _SYS, user, min(4000, len(src) // 3 + 600)))
+            body = writer.code_of(models.ask(run, "fix", _SYS, user, min(8000, len(src) // 3 + 2500)))
         except Exception as e:  # noqa: BLE001
             run.note(f"fix of {rel} failed: {e}")
             continue
-        if body.strip() and body.strip() != src.strip():
-            safety.write(run, rel, body)
-            changed += 1
+        if not body.strip() or body.strip() == src.strip():
+            continue
+        if len(body) < 0.7 * len(src):  # far shorter: a PART came back, not the whole file (11-07: style.css went
+            if p.suffix in (".css", ".scss") and body.strip() not in src:  # 8.3k -> 2.6k over three "fixes")
+                body = src.rstrip() + "\n\n/* added by KURAMA's coding agent */\n" + body.strip() + "\n"  # CSS: added
+            else:
+                run.note(f"fix of {rel} skipped: the reply was much shorter than the file (a part, not the whole)")
+                continue
+        safety.write(run, rel, body)
+        changed += 1
     return changed
 
 
@@ -62,6 +70,12 @@ def problems(run: Run) -> list[str]:
     """Static problems first (0 tokens); a web page with none is then opened headless and clicked through: its
     browser errors count too (a plain HTML/CSS/JS project; a React app needs its packages installed first)."""
     found = connect.check(run) + verify.check(run)
+    css = next((f for f in sorted(run.root.glob("*.css")) if f.is_file()), None)
+    if css is not None and (bare := connect.unstyled_classes(run.root)) and len(bare) >= 5:
+        # the page / script use classes no stylesheet styles (a modal, a cart drawer…): a page that looks broken or
+        # gets stuck (11-07: the shop's quick view locked scrolling with an unstyled, invisible overlay)
+        found.append(f"{css.name}: these classes are used in the HTML/JS but have NO styles yet: {', '.join(bare)}. "
+                     "Add complete, good-looking styles for them (overlays/modals: fixed, hidden until .active).")
     if not found and not (run.root / "package.json").exists():
         from coder.runtime import preview
         if preview.page_root(run.root) is not None:
