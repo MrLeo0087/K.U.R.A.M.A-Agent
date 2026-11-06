@@ -52,3 +52,26 @@ def test_requirements_and_project_diagram_go_to_the_coding_agent(monkeypatch):
     monkeypatch.setattr(agents, "current", lambda: "coding")
     monkeypatch.setattr(fastpath, "match", lambda t: Intent("req", "generate_requirements", "devutils", {}))
     assert agent.coding_only("make requirements.txt") is None  # the coding agent does it itself
+
+
+def test_general_and_coding_keep_separate_chats(monkeypatch):
+    """11-06: the coding agent's chat must not merge with the General chat (memory and tools stay shared)."""
+    from langchain_core.messages import AIMessage, HumanMessage
+
+    from jarvis import agents
+    from jarvis.core.agent import Agent
+    a = Agent.__new__(Agent)
+    a.__dict__.update(history=[HumanMessage(content="hi"), AIMessage(content="hello")], _overflow=[], summary="g",
+                      session_id=1, channel="web")
+    import threading
+    a._lock = threading.Lock()
+    mode = {"m": "general"}
+    monkeypatch.setattr(agents, "current", lambda: mode["m"])
+    a._switch_chat()
+    mode["m"] = "coding"
+    a._switch_chat()
+    assert a.history == [] and a.session_id is None and a._chat_channel() == "web:coding"
+    a.history = [HumanMessage(content="build a game")]
+    mode["m"] = "general"
+    a._switch_chat()
+    assert [m.content for m in a.history] == ["hi", "hello"] and a.summary == "g" and a._chat_channel() == "web"

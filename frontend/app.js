@@ -969,9 +969,38 @@ function renderStatus(s) {
 
 // ---------- agents: General (default) or the coding agent; its news ("Crashed: ... fix it?") is said in the chat
 let agentName = "general", agentSeen = null;
+// General and the coding agent are two chat windows (owner 11-06: "the general window should not merge with the
+// coding window"): switching keeps each one's messages and shows the other's. KURAMA's memory and tools are shared.
+const chats = {};
+const CHAT_KEY = (m) => "kurama.chat." + (MINI ? "mini." : "main.") + m;
+function swapChat(from, to) {
+  try {
+    log.querySelectorAll(".dots").forEach((n) => n.remove());
+    chats[from] = log.innerHTML;
+    localStorage.setItem(CHAT_KEY(from), JSON.stringify({ t: Date.now(), html: log.innerHTML }));
+  } catch { /* storage off */ }
+  let html = chats[to];
+  if (html === undefined) {
+    try { const s = JSON.parse(localStorage.getItem(CHAT_KEY(to)) || "null"); if (s && Date.now() - s.t < 12 * 3600e3) html = s.html; } catch { /* ignore */ }
+  }
+  log.innerHTML = html || "";
+  log.querySelectorAll("#welcome").forEach((n) => n.remove());
+  log.querySelectorAll("button").forEach((b) => { if (b.closest(".confirm")) b.disabled = true; });
+  if (!log.querySelector(".msg")) {
+    if (to !== "coding") log.append(welcome());
+    else { // the coding window says what it is and how to see everything it can do
+      const bb = new BotBubble();
+      bb.append('Coding agent chat. Tell me what to build ("create a portfolio website"), or say /code for everything I can do.');
+      bb.finish();
+    }
+  }
+  scrollDown(true);
+}
 function renderAgent(a) {
   if (!a) return;
+  const before = agentName;
   agentName = a.name || "general";
+  if (agentSeen !== null && before !== agentName) swapChat(before === "coding" ? "coding" : "general", agentName === "coding" ? "coding" : "general");
   const sw = $("agent-switch");
   sw.dataset.on = agentName;
   $("agent-select").value = agentName;

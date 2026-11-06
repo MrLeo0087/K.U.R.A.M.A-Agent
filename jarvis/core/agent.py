@@ -136,6 +136,32 @@ class Agent:
         except Exception:
             pass
 
+    # --- General and the coding agent: two chats (owner 11-06: "the general window should not merge with the coding
+    #     window"). Each keeps its own recent turns, summary and session; memory, facts and tools are shared. ---
+    def _mode(self) -> str:
+        try:
+            from jarvis import agents
+            return "coding" if agents.current() == "coding" else "general"
+        except Exception:  # noqa: BLE001
+            return "general"
+
+    def _chat_channel(self) -> str:
+        """The stored chat this mode continues: 'web' for General, 'web:coding' for the coding agent."""
+        ch = self.channel or ""
+        return f"{ch}:coding" if self._mode() == "coding" else ch
+
+    def _switch_chat(self) -> None:
+        mode = self._mode()
+        was = getattr(self, "_chat_mode", None)
+        if was is None or was == mode:
+            self._chat_mode = mode
+            return
+        chats = self.__dict__.setdefault("_chats", {})
+        with self._lock:
+            chats[was] = (self.history, self._overflow, self.summary, self.session_id)
+            self.history, self._overflow, self.summary, self.session_id = chats.get(mode, ([], [], "", None))
+        self._chat_mode = mode
+
     def clear_conversation(self) -> None:
         """Forget the current chat (history + rolling summary + session), keep learned personal facts."""
         with self._lock:
@@ -826,6 +852,7 @@ class Agent:
                 self._epoch_seen = ep
         except Exception:
             pass
+        self._switch_chat()
         now = time.time()
         if self.session_id is None and not self.history:  # laptop too: a restart kept losing "what we just said"
             self._resume(now)
@@ -898,7 +925,7 @@ class Agent:
         """After a restart, carry on this channel's last chat (if it was within SESSION_IDLE_S): its recent turns
         and summary come back, so "what I asked you before" still works on Telegram."""
         try:
-            sess = store.session_latest(self.channel)
+            sess = store.session_latest(self._chat_channel())
             if not sess or now - (sess.get("end") or 0) > config.SESSION_IDLE_S:
                 return
             rows = store.session_messages(sess["id"], limit=500)[-2 * config.HISTORY_TURNS:]
@@ -916,7 +943,7 @@ class Agent:
             return
         try:
             if self.session_id is None:
-                self.session_id = store.session_start(self.channel)
+                self.session_id = store.session_start(self._chat_channel())
             store.add_message("user", user_text, session=self.session_id)
             store.add_message("assistant", answer, session=self.session_id)
             store.session_touch(self.session_id)
