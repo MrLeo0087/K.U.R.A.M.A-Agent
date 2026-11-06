@@ -164,7 +164,7 @@ const ICON = { read: "📖", grep: "🔎", find: "🔎", list: "📂", edit: "�
   run_project: "▶️", screenshot: "📸", look: "👀", page_errors: "🐞", web_search: "🌐", read_webpage: "🌐" };
 function step(e) { // one step of the agent, like Claude Code: what it called with what input, and what came back
   if (e.kind === "plan_ready") { const d = document.createElement("div"); d.className = "plan"; d.textContent = e.text; log.append(d); }
-  else if (e.kind === "plan") { const d = document.createElement("div"); d.className = "plan"; d.textContent = "Plan:\n" + e.plan.map((x, i) => (i + 1) + ". " + x).join("\n"); log.append(d); }
+  else if (e.kind === "plan") { const d = document.createElement("div"); d.className = "plan"; d.textContent = "Plan:\\n" + e.plan.map((x, i) => (i + 1) + ". " + x).join("\\n"); log.append(d); }
   else if (e.kind === "tool") {
     const d = document.createElement("details"); d.className = "step";
     const target = e.args && (e.args.path || e.args.command || e.args.pattern || e.args.question || e.args.query) || "";
