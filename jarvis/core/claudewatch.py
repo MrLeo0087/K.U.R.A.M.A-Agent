@@ -585,7 +585,15 @@ def _via_uri(session: str, text: str, cwd: str = "") -> str | None:
     import urllib.parse
     if not shutil.which("code") or not _vscode_running():
         return None
-    q = {"prompt": text, **({"session": session} if session else {})}
+    if session:  # an open conversation refuses a prompt from the address: open it, then type into its box
+        url = "vscode://anthropic.claude-code/open?session=" + urllib.parse.quote(session)
+        subprocess.run(["code", "--open-url", url], capture_output=True, timeout=15)
+        time.sleep(2.0)
+        name = Path(cwd).name if cwd else ""
+        if not _type_text(name, text) or not _press_enter(name):
+            return "VS Code opened the chat, but I couldn't type the message there. Type it there, or try again."
+        return ""
+    q = {"prompt": text}
     url = "vscode://anthropic.claude-code/open?" + urllib.parse.urlencode(q, quote_via=urllib.parse.quote)
     subprocess.run(["code", "--open-url", url], capture_output=True, timeout=15)
     time.sleep(2.5)  # the chat opens with the text in its box
@@ -620,11 +628,35 @@ def _into_vscode(s: dict, text: str) -> str | None:
     if not r.get("ok"):
         log.info("claude say via VS Code failed: %s", r.get("error"))
         return f"VS Code couldn't open that chat: {r.get('error') or 'no answer'}."
-    if not _press_enter(str(st.get("workspace") or Path(str(st.get("root") or "")).name)):
+    ws = str(st.get("workspace") or Path(str(st.get("root") or "")).name)
+    if r.get("typed") is False and not _type_text(ws, text):  # the box is focused: KURAMA types the message
+        return "VS Code opened the chat, but I couldn't type the message there."
+    if not _press_enter(ws):
         return (f"I put \"{_short(text, 120)}\" in the Claude Code chat box in VS Code, but couldn't press Enter. "
                 "Press Enter there, or try again.")
     where = f"\"{_short(s.get('prompt') or '', 50)}\"" if s.get("prompt") else "the current chat"
     return f"Sent to your Claude Code chat ({where}): \"{_short(text, 120)}\". I'll tell you when it answers."
+
+
+def _type_text(workspace: str, text: str) -> bool:
+    """Paste the message into the focused Claude Code box of that VS Code window (the clipboard is put back)."""
+    if not shutil.which("xdotool") or not shutil.which("xclip"):
+        return False
+    try:
+        old = subprocess.run(["xclip", "-o", "-selection", "clipboard"], capture_output=True, text=True, timeout=3).stdout
+        subprocess.run(["xclip", "-selection", "clipboard"], input=text, text=True, timeout=3)
+        out = subprocess.run(["xdotool", "search", "--name", f"{workspace}.*Visual Studio Code" if workspace
+                              else "Visual Studio Code"], capture_output=True, text=True, timeout=5).stdout.split()
+        if not out:
+            return False
+        subprocess.run(["xdotool", "windowactivate", "--sync", out[-1]], capture_output=True, timeout=5)
+        time.sleep(0.3)
+        subprocess.run(["xdotool", "key", "--clearmodifiers", "ctrl+v"], capture_output=True, timeout=5)
+        time.sleep(0.4)
+        subprocess.run(["xclip", "-selection", "clipboard"], input=old, text=True, timeout=3)  # your clipboard back
+        return True
+    except (OSError, subprocess.TimeoutExpired):
+        return False
 
 
 def _press_enter(workspace: str) -> bool:

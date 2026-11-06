@@ -1405,3 +1405,7 @@ Phases (one at a time, owner tests after each):
   reloads), so /claude say no longer depends on it: Claude Code's own address vscode://anthropic.claude-code/open
   (session + prompt; `code --open-url`) opens that conversation with the message in its box, then Enter. First time,
   VS Code asks to allow the link: tick "Do not ask me again" once. The link is still used when it is active.
+- (later) Why the KURAMA link never ran: this project opens in the VS Code profile "Claude-1", and the CLI installed
+  the extension only into the default profile. scripts/install_vscode_ext.sh now installs into every profile.
+  "Session is already open. Your prompt was not applied": an open conversation refuses a prompt, so the link (v8)
+  only opens and focuses it and KURAMA pastes the message into its box (clipboard put back), then Enter.

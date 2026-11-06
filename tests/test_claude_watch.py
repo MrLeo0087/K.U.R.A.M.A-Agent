@@ -198,3 +198,19 @@ def test_go_opens_a_new_chat_and_say_starts_it(told, monkeypatch):
               "last_assistant_message": "All done. " + "x" * 5000})
     assert told[-1][0] == "✅ Claude Code finished" and told[-1][1].endswith("x" * 5000)  # the WHOLE answer
     cw.turn_off()
+
+
+def test_an_open_chat_gets_the_text_typed_in(told, monkeypatch):
+    """An open conversation refuses a prompt ('Session is already open. Your prompt was not applied'): VS Code only
+    focuses its box and KURAMA types the message there, then Enter."""
+    from jarvis.core import editor
+    cw.turn_on()
+    ev("UserPromptSubmit", prompt="the open chat")
+    calls = []
+    monkeypatch.setattr(editor, "states", lambda: [{"ext": 8, "root": "/home/leo/KURAMA", "workspace": "KURAMA"}])
+    monkeypatch.setattr(editor, "edit", lambda st, op, **kw: calls.append(op) or {"ok": True, "typed": False})
+    monkeypatch.setattr(cw, "_type_text", lambda ws, text: calls.append(("type", text)) or True)
+    monkeypatch.setattr(cw, "_press_enter", lambda ws: calls.append("enter") or True)
+    assert cw.say("hi").startswith("Sent to your Claude Code chat")
+    assert calls == ["claude_say", ("type", "hi"), "enter"]
+    cw.turn_off()

@@ -16,7 +16,7 @@ const crypto = require("crypto");
 const DIR = path.join(os.homedir(), ".local", "share", "kurama", "vscode");
 const FILE = path.join(DIR, `${process.pid}.json`);
 const TOKEN = crypto.randomBytes(16).toString("hex");
-const EXT_VERSION = 7; // KURAMA checks it: 3 = watches the terminal for the coding agent, 5 = claude_say, 6 = claude_new
+const EXT_VERSION = 8; // KURAMA checks it: 3 = watches the terminal for the coding agent, 5 = claude_say, 6 = claude_new
 const MAX_SEL = 20000; // characters of selected text written to the state file
 const MAX_BODY = 8 * 1024 * 1024;
 let port = 0;
@@ -180,10 +180,13 @@ function terminalRun(req) { // run a command again (after a fix the user said ye
 // one request = one operation: text | replace_all | replace_range | replace_text | insert | terminal_run
 async function claudeSay(req) { // '/claude say <text>' from the phone: into the REAL Claude Code chat of this window
   try {
-    await vscode.commands.executeCommand("claude-vscode.primaryEditor.open", req.session || undefined, req.text || undefined);
-    await new Promise((r) => setTimeout(r, 1200)); // the chat tab opens (or comes forward) with the text in its box
-    await vscode.commands.executeCommand("claude-vscode.focus"); // the cursor in that box: KURAMA presses Enter
-    return { ok: true };
+    // an OPEN conversation refuses a prompt ("Session is already open. Your prompt was not applied"): it is only
+    // brought forward and its box focused, and KURAMA types the text there (typed: false)
+    await vscode.commands.executeCommand("claude-vscode.editor.open", req.session || undefined);
+    await new Promise((r) => setTimeout(r, 900));
+    await vscode.commands.executeCommand("claude-vscode.focus");
+    await new Promise((r) => setTimeout(r, 300));
+    return { ok: true, typed: false };
   } catch (e) {
     return { ok: false, error: String(e && e.message || e) };
   }

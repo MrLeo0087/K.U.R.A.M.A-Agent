@@ -34,4 +34,16 @@ with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
 print(f"built {out} ({ident} {pkg['version']})")
 PY
 code --install-extension "$OUT" --force
+# also into every named VS Code profile (a window of a project tied to a profile, e.g. "Claude-1", only loads the
+# extensions of THAT profile: the default-profile install never ran there, 11-06)
+python3 - <<'PY' | while IFS= read -r prof; do code --profile "$prof" --install-extension "$OUT" --force; done
+import json, os
+p = os.path.expanduser("~/.config/Code/User/globalStorage/storage.json")
+try:
+    for x in json.load(open(p)).get("userDataProfiles") or []:
+        if not str(x.get("location", "")).startswith("builtin"):
+            print(x.get("name"))
+except (OSError, ValueError):
+    pass
+PY
 echo "Installed. In each VS Code window: Ctrl+Shift+P -> Reload Window."
