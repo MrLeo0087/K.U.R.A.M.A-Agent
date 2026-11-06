@@ -9,6 +9,7 @@ Progress section:
 from __future__ import annotations
 
 import json
+import re
 import time
 from typing import Any, TypedDict
 
@@ -150,6 +151,33 @@ def _check(state: S) -> dict:
     return {"log": [*state.get("log", []), *left]}
 
 
+def _look_check(state: S) -> dict:
+    """A new app with a screen (a web page, a Tkinter / Pygame window): started, pictured and compared with the
+    request by the vision model (one call). What looks wrong goes to the report (\"fix it\" picks it up)."""
+    run, ctx = state["run"], state["ctx"]
+    if run.problems:
+        return {}
+    from coder.runtime import preview
+    is_page = preview.page_root(run.root) is not None and not (run.root / "package.json").exists()
+    src = " ".join((run.root / f).read_text(encoding="utf-8", errors="replace")[:3000] for f in run.written
+                   if f.endswith(".py") and (run.root / f).is_file())
+    has_window = bool(re.search(r"^\s*(?:import|from)\s+(?:tkinter|pygame)\b", src, re.M))
+    if not (is_page or has_window):
+        return {}
+    from coder.tools import builtin as tools
+    ctx.progress("📸 a picture of it, compared with what you asked")
+    if not tools.t_screenshot(run).startswith("screenshot saved"):
+        return {}
+    seen = tools.t_look(run, f"This app was just built for the request: \"{run.request[:300]}\". Does it look "
+                             "complete and good? One line per problem (missing parts, broken layout, unreadable "
+                             "text). Last line exactly: LOOKS GOOD or NEEDS WORK.")
+    if "NEEDS WORK" in seen.upper():  # suggestions, not failures: it works, it may look better (offered, not forced)
+        tips = [ln.strip(" -*•") for ln in seen.splitlines() if ln.strip() and "NEEDS WORK" not in ln.upper()][:4]
+        run.todo = [*tips, *run.todo][:6]
+        run.notes = (run.notes + "\nThe look check suggests: " + "; ".join(tips))[:800]
+    return {}
+
+
 def _finish(state: S) -> dict:
     run = state["run"]
     memory.readme(run)
@@ -196,12 +224,14 @@ def build_job(run: Run):
 
     def job(ctx) -> str | None:
         g = StateGraph(S)
-        for name, fn in (("start", _start), ("write", _write), ("check", _check), ("finish", _finish)):
+        for name, fn in (("start", _start), ("write", _write), ("check", _check), ("look", _look_check),
+                         ("finish", _finish)):
             g.add_node(name, fn)
         g.add_edge(START, "start")
         g.add_edge("start", "write")
         g.add_edge("write", "check")
-        g.add_edge("check", "finish")
+        g.add_edge("check", "look")
+        g.add_edge("look", "finish")
         g.add_edge("finish", END)
         g.compile().invoke({"run": run, "ctx": ctx, "job": ctx.job.id, "log": []})
         from coder.core import run as runmod
@@ -212,6 +242,8 @@ def build_job(run: Run):
         ok = not run.problems and all(f.path in run.written for f in run.files)
         needs = (f" It needs {', '.join(run.needs)}: say 'set it up' and I'll make a .venv, install requirements.txt, "
                  "run it and fix anything that breaks." if run.needs else "")
+        if "The look check suggests:" in run.notes:  # it works; it could look better: offered, not forced
+            needs += " " + run.notes[run.notes.index("The look check suggests:"):][:300] + " (say 'do that' to apply)."
         line = (f"{run.plan_name} is ready in {run.root} ({len(set(run.written))} files, all checks passed, "
                 f"{run.tokens / 1000:.1f}k tokens). Run it with: {run.run_cmd or 'see README'}.{needs}" if ok else
                 f"{run.plan_name} is built in {run.root} ({sum(f.path in run.written for f in run.files)}/{len(run.files)} files), but "

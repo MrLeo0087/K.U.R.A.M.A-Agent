@@ -29,6 +29,7 @@ def data(tmp_path, monkeypatch):
     monkeypatch.setattr("coder.interfaces.link.tell", lambda t, x: None)
     monkeypatch.setattr("coder.interfaces.link.steps", lambda j, s: None)
     monkeypatch.setattr("coder.runtime.preview.selftest", lambda root, seconds=6: [])  # no headless browser in unit tests
+    monkeypatch.setattr("coder.tools.builtin.t_screenshot", lambda run: "no screenshot in unit tests")
 
 
 class Ctx:
@@ -463,3 +464,9 @@ def test_improve_without_a_web_page_is_a_change(monkeypatch, tmp_path):
     monkeypatch.setattr("coder.interfaces.link.vscode_root", lambda: tmp_path)
     monkeypatch.setattr(coder, "start", lambda r: "planned: " + r)
     assert tools.coding("look", request="make the UI more colourful") == "planned: make the UI more colourful"
+
+
+def test_a_cut_reply_never_leaves_a_fence_in_the_code():
+    from coder.builder import writer
+    assert writer.code_of("```javascript\nconst a = 1;\n") == "const a = 1;\n"
+    assert writer.code_of("```js\nconst b = `x${1}`;\n```") == "const b = `x${1}`;\n"

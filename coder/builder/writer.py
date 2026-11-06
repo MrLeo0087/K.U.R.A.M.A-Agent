@@ -29,8 +29,15 @@ def plan_brief(run: Run) -> str:
 
 
 def code_of(reply: str) -> str:
-    m = _FENCE.search(reply or "")
-    body = m.group(1) if m else (reply or "")
+    """The code of a reply: the fenced block; a block whose closing fence never came (the reply was cut at its
+    token limit) loses its opening fence line too (11-07: a server.js began with ```javascript)."""
+    text = reply or ""
+    m = _FENCE.search(text)
+    if m:
+        body = m.group(1)
+    else:
+        body = re.sub(r"\A\s*```[^\n]*\n", "", text)
+        body = re.sub(r"\n```\s*\Z", "", body)
     return body.strip("\n") + "\n"
 
 
@@ -92,7 +99,7 @@ def write_one(run: Run, f: FileSpec) -> str:
         parts.append(f"--- {f.path} (current content: change it as the plan says, keep everything else) ---\n{cur}")
         cur_len = len(cur)
     parts.append(f"Write the complete file `{f.path}`: {f.purpose}")
-    want = min(6000, max(settings.TOKENS[f.level] * 2, cur_len // 3 + 800))  # room for the whole file
+    want = min(8000, max(settings.TOKENS[f.level] * 2 + 1500, cur_len // 3 + 800))  # room for the whole file
     try:
         reply = models.ask(run, "easy" if f.level == "easy" else "hard" if f.level == "hard" else "normal",
                            _SYS, "\n\n".join(parts), want)

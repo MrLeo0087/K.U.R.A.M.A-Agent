@@ -200,7 +200,8 @@ def screenshot(root: Path) -> bytes | None:
         shot = Path(d) / "s.png"
         try:
             # (no own --user-data-dir: with a fresh profile Brave's headless screenshot hangs until killed, 11-06)
-            subprocess.run([b, "--headless=new", "--disable-gpu", "--hide-scrollbars", "--window-size=1280,860",
+            subprocess.run([b, "--headless=new", "--disable-gpu", "--hide-scrollbars", "--window-size=1280,2200",  # (the
+                            # whole page, not just the first screen: a check missed the menu and form below it)
                             f"--screenshot={shot}", got[0]], capture_output=True, timeout=30)
         except (OSError, subprocess.TimeoutExpired):
             return None
