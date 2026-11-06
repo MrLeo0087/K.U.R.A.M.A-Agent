@@ -36,9 +36,11 @@ def test_bot_main_loop_notes_the_group(monkeypatch):
     monkeypatch.setattr(tgtopics, "note_group", seen.append)
     monkeypatch.setattr(config, "TELEGRAM_CHAT_ID", "42")
     bot = telegram_bot.TelegramBot()
-    bot.handle({"message": {"chat": {"id": -1009, "type": "supergroup", "title": "KURAMA"}, "text": "/start",
-                            "date": 0}})
+    bot.handle({"message": {"chat": {"id": -1009, "type": "supergroup", "title": "KURAMA"}, "from": {"id": 42},
+                            "text": "/start", "date": 0}})
     assert seen and seen[0]["id"] == -1009
+    bot.handle({"message": {"chat": {"id": -1008, "type": "supergroup"}, "from": {"id": 7}, "text": "hi", "date": 0}})
+    assert len(seen) == 1  # a stranger's message never makes a group yours
 
 
 
@@ -123,3 +125,13 @@ def test_answers_are_also_filed_in_their_section(monkeypatch):
     notify._after_send("sendPhoto", {"chat_id": "42"}, {"message_id": 80})  # a picture in the private chat
     assert calls[-1] == ("copyMessages", {"chat_id": -1001, "message_thread_id": 9, "from_chat_id": "42",
                                           "message_ids": [80]})
+
+
+
+def test_a_strangers_group_is_left(monkeypatch):
+    from jarvis.workers import telegram_bot
+    calls = _calls(monkeypatch)
+    telegram_bot.TelegramBot()._note_group({"my_chat_member": {
+        "chat": {"id": -1777, "type": "supergroup"}, "from": {"id": 666},
+        "new_chat_member": {"status": "member"}}})
+    assert ("leaveChat", {"chat_id": -1777}) in calls

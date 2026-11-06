@@ -274,11 +274,25 @@ class TelegramBot(Worker):
             self.log.warning("reply failed")
 
     def _note_group(self, update: dict) -> None:
-        """A group the bot is in (for /topics setup): remembered, never answered."""
+        """A group the bot is in: remembered for /topics setup only when YOU are the one in it (your message, or you
+        added the bot). A group someone else added the bot to is left at once: KURAMA lives only in your chat and
+        your own group, so a stranger's group can never receive your alerts."""
         m = update.get("message") or update.get("my_chat_member") or {}
-        if (m.get("chat") or {}).get("type") == "supergroup":
-            from jarvis.core import tgtopics
-            tgtopics.note_group(m["chat"])
+        chat = m.get("chat") or {}
+        if chat.get("type") not in ("group", "supergroup"):
+            return
+        from jarvis.core import tgtopics
+        if str((m.get("from") or {}).get("id")) == str(config.TELEGRAM_CHAT_ID):
+            if chat.get("type") == "supergroup":
+                tgtopics.note_group(chat)
+            return
+        joined = ((update.get("my_chat_member") or {}).get("new_chat_member") or {}).get("status")
+        if str(chat.get("id")) != str(tgtopics.group_id() or "") and joined in ("member", "administrator"):
+            self.log.warning("added to a group by someone else (%s): leaving it", chat.get("id"))
+            try:
+                notify.telegram_call("leaveChat", {"chat_id": chat.get("id")})
+            except RuntimeError:
+                pass
 
     @staticmethod
     def _owner_in_group(msg: dict) -> bool:
