@@ -41,8 +41,7 @@ def test_understand():
     assert understand.stack_of("rock paper scissors in HTML, CSS and JavaScript") == "web"
     assert understand.stack_of("an industry standard react project") == "react"
     assert understand.stack_of("rock paper scissors game in python with a ui") == "pygame"
-    assert understand.question("a rock paper scissors game with a nice ui", "").startswith("Should it be a web app")
-    assert understand.question("a todo list in python", "python") == ""
+    assert understand.question("a rock paper scissors game with a nice ui", "") == ""  # never asks: the plan picks
     root, kind = understand.folder("create a snake game in pygame")
     assert kind == "new" and root.name.startswith("snake")
 
@@ -141,11 +140,10 @@ def test_a_plan_can_be_changed_and_dropped(monkeypatch, tmp_path):
     assert api.pending() is None
 
 
-def test_unclear_asks_then_continues(monkeypatch):
+def test_no_stack_question_the_plan_picks(monkeypatch):
     fake_ai(monkeypatch)
     monkeypatch.setattr("coder.link.submit", lambda title, fn: 3)
-    assert api.start("make a rock paper scissors game with a nice ui").startswith("Should it be")
-    assert "Planning it" in api.start("web")
+    assert "Planning it" in api.start("make a rock paper scissors game with a nice ui")
 
 
 def test_github_starter_checks(monkeypatch, tmp_path):
@@ -325,3 +323,48 @@ def test_handoff_and_tokens(monkeypatch, tmp_path):
     assert api.handoff() == "Claude Code is building it" and "Follow this plan" in sent["p"] and api.pending() is None
     engine.build_job(new("x", tmp_path / "projects" / "x"))  # (nothing built yet: the report says so)
     assert api.tokens_report().startswith("The coding agent hasn't built anything")
+
+
+# ---------------------------------------------------------------- memory: the run's, the project's, learning one
+def test_run_memory_readme_and_card(monkeypatch, tmp_path):
+    from coder import memory, writer
+    fake_ai(monkeypatch)
+    run = new("rps", tmp_path / "projects" / "rps")
+    engine.plan_job(run)(Ctx())
+    run = api.pending()
+    seen = []
+    real = models.ask
+
+    def spy(r, role, system, user, max_tokens):
+        seen.append(user)
+        return real(r, role, system, user, max_tokens)
+    monkeypatch.setattr(models, "ask", spy)
+    engine.build_job(run)(Ctx())
+    later = next(u for u in seen if "Write the complete file `app.js`" in u)
+    assert "Written so far in this run" in later and "#result" in later  # the page's ids, without the whole page
+    card = memory.path(run.root).read_text()
+    assert "## Overview" in card and "## Map" in card and "index.html" in card
+    assert (run.root / "README.md").read_text().startswith("# RPS")  # every new project gets a README
+    assert writer.run_memory(run, run.files[0])  # (and the card is what the next request reads)
+
+
+def test_learning_a_project_it_didnt_build(monkeypatch, tmp_path):
+    from coder import memory, onboard
+    root = tmp_path / "theirs"
+    (root / "backend").mkdir(parents=True)
+    (root / "backend" / "api.py").write_text("from fastapi import FastAPI\napp = FastAPI()\ndef health():\n    return 1\n")
+    (root / "requirements.txt").write_text("fastapi\nuvicorn\n")
+    (root / "README.md").write_text("# Theirs\nA small API.")
+    got = {}
+
+    def ask(run, role, system, user, max_tokens):
+        got.update(role=role, user=user)
+        run.tokens += 3000
+        return "# Theirs\n## Overview\nA small health API.\n## How to run\n```bash\nuvicorn backend.api:app\n```\n## Key files\n- `backend/api.py`: the app"
+    monkeypatch.setattr(models, "ask", ask)
+    assert not onboard.known(root)
+    line = onboard.learn(root)
+    assert got["role"] == "review" and "def health()" in got["user"] and "fastapi" in got["user"]  # facts, not code
+    card = memory.path(root).read_text()
+    assert "Stack: FastAPI" in card and "Run: `uvicorn backend.api:app`" in card and onboard.known(root)
+    assert line.startswith("I learned theirs (FastAPI): A small health API.")

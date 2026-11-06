@@ -19,7 +19,7 @@ POOL: dict[str, tuple[str, ...]] = {
         "How can I use this function?", "Check this file",
         "Diagram of this code", "Make a diagram of this project", "Where was I?",
         "What is running on port 8000?", "Show my open ports", "Is port 3000 free?", "List my coding projects", "Explain my whole code", "Help me with this library", "/def", "/args", "/run",
-        "/ports", "/callgraph", "/diagram", "Make a call graph of this file", "Decode this", "/code",
+        "/ports", "/callgraph", "/diagram", "Make a call graph of this file", "Decode this",
         "Explain this error", "What does this error mean?", "Explain this file", "Write a docstring for this function",
         "What inputs break this function?", "What is the time complexity of this code?",
         "Show an example of using this class", "Convert this function to JavaScript", "Add type hints to this function",
@@ -69,6 +69,15 @@ POOL: dict[str, tuple[str, ...]] = {
         "Show the clipboard history", "Token usage", "Scan qr code", "Read the text on the screen",
         "Notification status", "Share wifi", "/status", "/battery", "/screenshot",
         "/where", "/notifications", "/list",
+    ),
+    "agent": (  # the coding agent (mostly while it is on): each starts a PLAN or a look, never a change without a yes;
+        #          answered by its own meaning match (on) or the "switch it on?" offer (off): 0 tokens either way
+        "Create a portfolio website", "Make a snake game in Pygame", "Create a React app for a to-do list",
+        "Build a calculator with a nice UI", "Learn this project", "Continue the project", "Write tests for this project",
+        "Review my changes", "Commit this", "Show me what you changed", "Preview it",
+        "How does it look?", "Add a dark mode to this project",
+        "How many tokens did this project use?", "Create a FastAPI app for notes", "Build a landing page for a cafe",
+        "Make a quiz game in HTML, CSS and JavaScript",
     ),
     "fun": (
         "Hi", "How are you?", "What can you do?", "How is your day going?", "What are you doing?",
@@ -162,8 +171,16 @@ def _mine(now: datetime) -> list[str]:
 def weights(now: datetime, coding: bool) -> dict[str, float]:
     h = now.hour
     w = {k: 1.0 for k in POOL}
+    w["agent"] = 0.3  # the coding agent's own things: a few now and then
     if coding:
         w["code"] = 4.0  # more coding, not only coding
+        w["agent"] = 1.5
+    try:
+        from jarvis import agents
+        if agents.current() == "coding":  # it's on: mostly what it can do
+            w["agent"], w["code"] = 6.0, 2.0
+    except Exception:  # noqa: BLE001
+        pass
     if 5 <= h < 11:
         w["day"] += 1.5
     elif 17 <= h < 23:

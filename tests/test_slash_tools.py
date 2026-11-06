@@ -61,9 +61,14 @@ def test_telegram_splits_a_long_reply(monkeypatch):
     assert "<blockquote expandable>" in sent[0]  # the start shows, the rest folds behind "show more"
     assert "".join(plain).replace("\n", "") == mid.replace("\n", "")
     sent.clear()
-    big = "\n".join(f"line {i} " + "x" * 60 for i in range(400))  # ~27k: the start + the WHOLE text as a file
+    big = "\n".join(f"line {i} " + "x" * 60 for i in range(400))  # ~27k: the start + the WHOLE text as a web page
     bot.send(big)
-    assert len(sent) == 1 and "The whole text is in the file" in sent[0] and files[0].decode() == big
+    page = files[0].decode()
+    assert len(sent) == 2 and "The whole answer is in the page below" in sent[-1]
+    assert page.startswith("<!doctype html>") and "line 399 " in page
+    sent.clear()
+    bot.send("## Result\n\n| file | lines |\n|---|---|\n| app.js | 120 |\n| style.css | 40 |\n\n" + "word " * 200)
+    assert "<b>Result</b>" in sent[0] and "<pre>file" in sent[0] and "app.js     120" in sent[0]  # a table, lined up
     sent.clear()
     bot.send("short <b> & fine")
     assert sent == ["short &lt;b&gt; &amp; fine"]

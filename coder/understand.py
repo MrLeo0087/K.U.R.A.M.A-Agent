@@ -1,6 +1,6 @@
 """What to build and where, without the AI: the stack from the words (react, pygame, html/css/js, fastapi...), the
 folder ("here / this folder / in VS Code" = the project open in VS Code, else ~/projects/<name>), new project or
-an addition to an existing one, and a question when it really can't tell (a "game with a UI": web or Python?)."""
+an addition to an existing one. It never asks which stack: the plan picks the best one and shows it."""
 from __future__ import annotations
 
 import re
@@ -25,7 +25,6 @@ STACKS: list[tuple[str, str]] = [
 _HERE = re.compile(r"\b(?:here|in\s+this\s+(?:project|fold?er|workspace|directory|repo)|this\s+fold?er|"
                    r"in\s+(?:the\s+)?(?:open|current)\s+(?:project|folder)|in\s+vs\s*code)\b", I)
 _NEW = re.compile(r"\b(?:new|create|make|build|start|set\s*up|generate|scaffold)\b", I)
-_UNCLEAR = re.compile(r"\b(?:game|app|application|ui|gui|tool)\b", I)
 _FILLER = {"set", "setup", "up", "a", "an", "the", "make", "create", "new", "project", "build", "me", "start", "for",
            "with", "here", "in", "this", "please", "kurama", "folder", "app", "my", "of", "to", "i", "want", "very",
            "good", "nice", "now", "and", "it", "code", "vs", "using", "industry", "standard", "level", "simple"}
@@ -71,8 +70,6 @@ def folder(request: str) -> tuple[Path, str]:
 
 
 def question(request: str, stack: str) -> str:
-    """One short question when the stack can't be told and it matters ('a game with a nice UI')."""
-    if stack or not _UNCLEAR.search(request or ""):
-        return ""
-    return ("Should it be a web app (HTML, CSS, JavaScript: opens in the browser) or a Python program (Pygame window)? "
-            "Say 'web' or 'python'.")
+    """Never asks about the stack (owner 11-06: "the stacks were examples: build it well"): when the words don't
+    name one, the planner picks the best fit for the request and says which in the plan (change it with 'use X')."""
+    return ""

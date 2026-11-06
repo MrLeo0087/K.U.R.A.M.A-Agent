@@ -7,6 +7,38 @@ from typing import Literal
 from jarvis.core.registry import tool
 
 
+HELP = """CODING AGENT (/code <what> — or just say it while the coding agent is on)
+
+Build
+/code <what to build> — plan it (in the workspace), build it after your yes. e.g. /code a snake game in pygame
+/code new <what> — the same
+/code yes | no — build the waiting plan / drop it ("use Tailwind", "drop X" = a new plan)
+/code continue — the project's next TODO item
+/code claude — let Claude Code build the waiting plan (no Groq tokens)
+
+Understand
+/code learn — read the open project once (map + one small AI call) and write its project card
+
+Check and fix
+/code fix — fix the last crash in the VS Code terminal
+/code tests [file.py] — write tests and run them
+/code pass — make the failing tests pass
+/code preview — open the web page (errors are collected)
+/code check — fix the errors the page showed
+/code look — a design look at the page
+/code review — review your uncommitted changes
+/code commit — a commit message (commits after yes)
+
+Safety
+/code diffs — what I changed, side by side in VS Code
+/code reject <file> — that one file back
+/code undo [project] — undo my last change / the whole last build
+/code tokens — tokens used per project
+/code bridge — a ready prompt for ChatGPT / Gemini / Claude; /code apply — put its answer into the files
+
+Plain words work too: "create a portfolio website", "add a dark mode to this project", "make the tests pass"."""
+
+
 @tool(group="coding_agent", safety="safe", max_chars=2500,
       description="Coding agent: project = build something (a new project, a new file of code, or a feature added to "
                   "the open project: request = what, with the user's words for where/stack) -> a plan, then built "
@@ -19,10 +51,11 @@ from jarvis.core.registry import tool
                   "back (request = its name); preview = open the web page with error collection; check_page = fix "
                   "the errors the page showed; look = the vision model's look at the page's design; continue = the "
                   "project's next TODO item; handoff = let Claude Code build the waiting plan; tokens = tokens used "
-                  "per project. 'after that, <request>' while a build runs = queued.")
+                  "per project; learn = read an existing project once and write its project card; help = everything "
+                  "the coding agent can do. 'after that, <request>' while a build runs = queued.")
 def coding(action: Literal["fix", "bridge", "apply", "project", "undo", "yes", "no", "run", "tests", "pass", "review",
                            "commit", "diffs", "reject", "preview", "check_page", "look", "continue", "handoff",
-                           "tokens"], request: str = "",
+                           "tokens", "learn", "help", "new", "check", "claude"], request: str = "",
            site: str = "", error: str = "") -> str:
     """The coding agent.
 
@@ -32,9 +65,16 @@ def coding(action: Literal["fix", "bridge", "apply", "project", "undo", "yes", "
         site: bridge: chatgpt, gemini or claude to open it too (empty = only copy).
         error: fix: a pasted error text (empty = the last crash in the VS Code terminal).
     """
-    from jarvis.agents import touch
+    from jarvis import agents
     from jarvis.agents.coding import bridge, changes, fixer, project, terminal
-    touch()
+    action = {"new": "project", "check": "check_page", "claude": "handoff"}.get(action, action)  # /code words
+    if action == "help" and (request or "").strip():  # '/code a snake game in pygame': build it
+        action = "project"
+    if action == "help":
+        return HELP
+    if agents.current() != "coding":  # a /code command switches the coding agent on (it stays while you code)
+        agents.switch("coding")
+    agents.touch()
     if action == "fix":
         return fixer.fix(error, request)
     if action == "bridge":
@@ -48,6 +88,8 @@ def coding(action: Literal["fix", "bridge", "apply", "project", "undo", "yes", "
         if re.search(r"\b(?:project|build|built|everything|all of it|whole)\b", request or "", re.I):
             return coder.undo_last()
         return changes.undo()
+    if action == "learn":
+        return coder.learn_project()
     if action in ("tests", "pass", "review", "commit", "diffs", "reject", "preview", "check_page", "look", "continue",
                   "handoff", "tokens"):
         return {"tests": lambda: coder.write_tests(request), "pass": coder.make_tests_pass,

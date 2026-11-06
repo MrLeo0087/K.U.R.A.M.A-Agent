@@ -13,11 +13,13 @@ from coder.run import FileSpec, Run
 _SYS = """You are a senior engineer planning a small, well-organized, runnable project for a laptop (Linux, no GPU).
 Return ONLY a JSON object, no prose:
 {"name": "<short project name>",
+ "stack": "<the stack you chose, e.g. HTML/CSS/JS, React + TypeScript, Python + Pygame, FastAPI>",
  "files": [{"path": "<relative path>", "purpose": "<what it holds, one line>", "uses": ["<other planned files it imports/links>"], "level": "easy|normal|hard"}],
  "run": "<the exact command to run it>",
  "notes": "<2-4 lines: how the files connect, key design choices>",
  "todo": ["<good next improvements, max 4>"]}
-Rules: industry-standard structure and names for the stack; as FEW files as a clean design needs (max %d), no tests
+Pick the best stack for the request when it names none (a simple game or site: HTML/CSS/JS that opens in any
+browser; a desktop game: Python + Pygame; an API: FastAPI...). Rules: industry-standard structure and names for the stack; as FEW files as a clean design needs (max %d), no tests
 unless asked, no binary files (images, sounds, fonts: the code draws them with SVG / emoji / CSS / code), no
 package lock files; a plain HTML/CSS/JS project must open by double-clicking index.html: classic <script> tags in
 dependency order, NO ES modules / import statements (browsers block them on file://); order files so each comes after the files it uses; level:
@@ -89,6 +91,8 @@ def make(run: Run, existing: str = "", memory_text: str = "", scaffold_files: li
         raise ValueError("the plan has no files")
     run.files = order(files[: settings.MAX_FILES])
     run.plan_name = str(d.get("name") or run.root.name)[:60]
+    if not run.stack and d.get("stack"):  # the request named none: the planner's choice, shown in the plan
+        run.stack = str(d["stack"])[:40]
     run.run_cmd = str(d.get("run") or "")[:200]
     run.notes = str(d.get("notes") or "")[:800]
     run.todo = [str(t)[:120] for t in (d.get("todo") or [])][:4]

@@ -393,3 +393,21 @@ def tokens_report() -> str:
         return f"{root.name}: {e['tokens'] / 1000:.1f}k tokens over {e['runs']} run(s) (last {e.get('last', '?')})."
     rows = sorted(d.items(), key=lambda kv: -kv[1]["tokens"])[:6]
     return "Tokens per project: " + "; ".join(f"{Path(k).name} {v['tokens'] / 1000:.1f}k ({v['runs']} runs)" for k, v in rows) + "."
+
+
+def learn_project() -> str:
+    """Read the open project once (facts + one small call) and write its card."""
+    from coder import onboard
+    root = project_root()
+    if root is None:
+        return "Open the project in VS Code first."
+
+    def job(ctx) -> str | None:
+        ctx.progress("reading the project's map, manifests and README")
+        ctx.progress("» " + onboard.learn(root))
+        link.to_workspace(f"Project card: {root.name}", (root / ".kurama" / "project.md").read_text(encoding="utf-8")
+                          if (root / ".kurama" / "project.md").exists() else "")
+        return None
+    n = link.submit(f"Learn {root.name}", job)
+    again = " (again: the card is rewritten)" if onboard.known(root) else ""
+    return f"Learning {root.name}{again} (job #{n}): its map and manifests, one small AI call, no full code read."

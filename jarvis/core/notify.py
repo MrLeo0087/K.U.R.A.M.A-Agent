@@ -250,34 +250,45 @@ def _cut_at(s: str, n: int) -> int:
 
 
 def split_for_telegram(text: str) -> tuple[list[str], str]:
-    """(messages as Telegram HTML, the whole text for a file or ''): nothing is ever cut.
-    Short: as it is. Long: the first lines show, the rest is folded in an expandable quote ("show more" on the
-    phone, like a post). Longer than two messages: the start + "show more", and the WHOLE text as an .md file."""
-    import html
+    """(messages as Telegram HTML, the whole text for a web-page file or ''): nothing is ever cut.
+    Markdown is made readable (tgformat: bold, lists, tables and code as lined-up monospace blocks).
+      short                 as it is
+      prose, long           the start shows, the rest folds behind "show more" (expandable quotes)
+      tables / code         complete messages, nothing folded (a monospace block can't sit in a quote)
+      more than MAX_PARTS   the first messages + the WHOLE answer as a web page file (real tables; opens in the
+                            phone's browser; owner 11-06: a raw .md file was hard to read)"""
+    from jarvis.core import tgformat
     text = (text or "").strip()
     limit = config.TELEGRAM_MAX_REPLY_CHARS
     if len(text) <= config.TELEGRAM_FOLD_CHARS:
-        return [html.escape(text, quote=False)], ""
-
-    def folded(head: str, rest: str) -> str:
-        return html.escape(head.rstrip(), quote=False) + ("\n<blockquote expandable>" + html.escape(rest.strip(), quote=False) + "</blockquote>"
-                                             if rest.strip() else "")
-    c = _cut_at(text, config.TELEGRAM_FOLD_CHARS // 2)
-    head, rest = text[:c], text[c:]
-    if len(text) <= limit:
-        return [folded(head, rest)], ""
-    if len(text) <= 2 * limit - 200:
-        c2 = _cut_at(rest, limit - len(head) - 50)
-        return [folded(head, rest[:c2]), "<blockquote expandable>" + html.escape(rest[c2:].strip(), quote=False) + "</blockquote>"], ""
-    c2 = _cut_at(rest, limit - len(head) - 200)
-    return [folded(head, rest[:c2]) + "\n📎 The whole text is in the file below."], text
+        return [tgformat.to_html(text)], ""
+    structured = bool(re.search(r"^\s*```|^\s*\|.*\|", text, re.M))
+    parts = tgformat.chunks(text, limit - 300)
+    whole = ""
+    if len(parts) > config.TELEGRAM_MAX_PARTS:
+        parts, whole = parts[:2], text
+    if structured:
+        out = [tgformat.to_html(p) for p in parts]
+    else:
+        first = parts[0]
+        c = _cut_at(first, config.TELEGRAM_FOLD_CHARS // 2)
+        head, rest = first[:c], first[c:]
+        out = [tgformat.to_html(head) + ("\n<blockquote expandable>" + tgformat.to_html(rest) + "</blockquote>"
+                                         if rest.strip() else "")]
+        out += ["<blockquote expandable>" + tgformat.to_html(p) + "</blockquote>" for p in parts[1:]]
+    if whole:
+        out[-1] += "\n\n📎 That's the start. The whole answer is in the page below (tap it: it opens in your browser)."
+    return out, whole
 
 
 def send_long(text: str, chat_id: str | int | None = None, title: str = "reply", thread: int | None = None,
-              keep: bool = False) -> bool:
-    """Send any text to Telegram complete: folded "show more" messages, plus an .md file when it is very long.
+              keep: bool = False, ping: bool = False) -> bool:
+    """Send any text to Telegram complete: readable messages (folded "show more" for prose), plus the whole answer
+    as a web page file when it is very long.
     keep: an alert, remembered so /clear can delete it."""
     parts, whole = split_for_telegram(text)
+    if ping and parts:  # a message in a group topic: mention the owner, so the phone rings even when the group is
+        parts[0] = f'<a href="tg://user?id={config.TELEGRAM_CHAT_ID}">🔔</a> ' + parts[0]  # muted (11-06: "no notification")
     ok = True
     for part in parts:
         try:
@@ -294,7 +305,7 @@ def send_long(text: str, chat_id: str | int | None = None, title: str = "reply",
             log.warning("telegram send failed (%s): sending plain", e)
             try:
                 import html
-                plain = re.sub(r"</?blockquote[^>]*>", "", part)
+                plain = re.sub(r"<[^>]+>", "", part)  # every tag off: the text itself, never lost
                 r = telegram_call("sendMessage", {"chat_id": chat_id or config.TELEGRAM_CHAT_ID,
                                                   "text": html.unescape(plain), "disable_web_page_preview": True,
                                                   **({"message_thread_id": thread} if thread else {})})
@@ -305,19 +316,22 @@ def send_long(text: str, chat_id: str | int | None = None, title: str = "reply",
                 return False
     if whole:
         import io
+
+        from jarvis.core import tgformat
         name = re.sub(r"[^\w-]+", "-", title.lower()).strip("-")[:40] or "reply"
         try:
             telegram_call("sendDocument", {"chat_id": chat_id or config.TELEGRAM_CHAT_ID,
                                            **({"message_thread_id": thread} if thread else {})},
-                          files={"document": (f"{name}.md", io.BytesIO(whole.encode("utf-8")))}, upload=True,
-                          timeout=60)
+                          files={"document": (f"{name}.html", io.BytesIO(tgformat.page(whole, title).encode("utf-8")))},
+                          upload=True, timeout=60)
         except RuntimeError as e:
             log.warning("telegram file send failed: %s", e)
             ok = False
     return ok
 
 
-def telegram_send(text: str, chat_id: str | int | None = None, thread: int | None = None, keep: bool = False) -> bool:
+def telegram_send(text: str, chat_id: str | int | None = None, thread: int | None = None, keep: bool = False,
+                  ping: bool = False) -> bool:
     """sendMessage to the configured chat (rate-limited). False when not configured or failed."""
     if not telegram_configured():
         return False
@@ -329,7 +343,7 @@ def telegram_send(text: str, chat_id: str | int | None = None, thread: int | Non
             log.warning("telegram rate limit reached; message dropped")
             return False
         _tg_sent.append(now)
-    return send_long(text, chat_id, title=text.split("\n", 1)[0][:40], thread=thread, keep=keep)  # complete
+    return send_long(text, chat_id, title=text.split("\n", 1)[0][:40], thread=thread, keep=keep, ping=ping)
 
 
 def desktop_send(title: str, text: str, level: str = "info") -> bool:
@@ -480,7 +494,8 @@ def notify(title: str, text: str = "", level: str = "info", source: str = "", de
         group, thread = tgtopics.where(source, level, title)
     except Exception:  # noqa: BLE001 - no sections: the private chat
         pass
-    if telegram and telegram_send(f"{_ICON[level]}{title}\n{text}".strip(), group, thread, keep=True):
+    if telegram and telegram_send(f"{_ICON[level]}**{title}**\n{text}".strip(), group, thread, keep=True,
+                                  ping=group is not None):
         sent.append("telegram")
     if save:
         try:

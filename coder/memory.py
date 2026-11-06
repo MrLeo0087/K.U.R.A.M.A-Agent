@@ -14,30 +14,36 @@ def path(root: Path) -> Path:
     return root / ".kurama" / "project.md"
 
 
-def read(root: Path, limit: int = 2500) -> str:
+def read(root: Path, limit: int = 2500, with_map: bool = False) -> str:
+    """The project card (without its Map section unless asked: the map is sent on its own, fresh)."""
     p = path(root)
     try:
-        return p.read_text(encoding="utf-8")[:limit] if p.is_file() else ""
+        t = p.read_text(encoding="utf-8") if p.is_file() else ""
     except OSError:
         return ""
+    if not with_map:
+        t = re.sub(r"^## Map\b.*?(?=^## |\Z)", "", t, flags=re.M | re.S)
+    return t[:limit]
 
 
 def write(run: Run) -> None:
     """After a run: the project card, merged with what was there (decisions are appended, never lost)."""
     p = path(run.root)
     p.parent.mkdir(parents=True, exist_ok=True)
-    old = read(run.root, 20000)
+    old = read(run.root, 40000, with_map=True)
     decisions = re.findall(r"^- \d{4}-\d\d-\d\d: .+$", old, re.M)
     decisions.append(f"- {time.strftime('%Y-%m-%d')}: {run.request.strip()[:200]}"
                      + (f" ({run.scaffold})" if run.scaffold else ""))
     known = dict(re.findall(r"^- `([^`]+)`: (.*)$", old.split("## Decisions")[0], re.M))  # an addition keeps the
     known.update({f.path: f.purpose for f in run.files})  # files it didn't touch
     files = "\n".join(f"- `{k}`: {v}" for k, v in known.items())
+    overview = section(old, "Overview") or run.notes.strip() or run.request.strip()
+    from coder import repomap
     p.write_text(
-        f"# {run.plan_name or run.root.name}\n\nStack: {run.stack or _old(old, 'Stack') or 'unknown'}\n\n"
-        f"Run: `{run.run_cmd or _old(old, 'Run').strip('`') or '?'}`\n\n"
-        f"## Files\n\n{files}\n\n## Decisions\n\n" + "\n".join(decisions[-30:]) + "\n"
-        + (f"\n## Notes\n\n{run.notes.strip()}\n" if run.notes.strip() else ""), encoding="utf-8")
+        f"# {run.plan_name or run.root.name}\n\n" + HEADER + f"\n\nStack: {run.stack or _old(old, 'Stack') or 'unknown'}\n\n"
+        f"Run: `{run.run_cmd or _old(old, 'Run').strip('`') or '?'}`\n\n## Overview\n\n{overview}\n\n"
+        f"## Files\n\n{files}\n\n## Map (functions, classes, ids per file; refreshed every run)\n\n"
+        f"{repomap.text(run.root, 5000)}\n\n## Decisions\n\n" + "\n".join(decisions[-30:]) + "\n", encoding="utf-8")
     if run.kind != "new":  # an existing project's .gitignore is the owner's: never touched
         return
     try:  # a new project's .gitignore keeps the agent's folder out of git
@@ -47,6 +53,28 @@ def write(run: Run) -> None:
                 fh.write("\n.kurama/\n")
     except OSError:
         pass
+
+
+HEADER = ("_KURAMA's card for this project: what it is, every file's job and what it defines. The coding agent reads "
+          "this instead of the whole code; it is updated after every change it makes._")
+
+
+def section(text: str, name: str) -> str:
+    m = re.search(rf"^## {name}\s*\n(.*?)(?=^## |\Z)", text, re.M | re.S)
+    return m.group(1).strip() if m else ""
+
+
+def readme(run: Run) -> None:
+    """A README.md for every new project (0 tokens: from the plan) when the plan didn't write one."""
+    p = run.root / "README.md"
+    if run.kind != "new" or p.exists():
+        return
+    files = "\n".join(f"- `{f.path}`: {f.purpose}" for f in run.files)
+    p.write_text(f"# {run.plan_name or run.root.name}\n\n{run.request.strip()}\n\n"
+                 + (f"## How it works\n\n{run.notes.strip()}\n\n" if run.notes.strip() else "")
+                 + f"## Files\n\n{files}\n\n"
+                 + (f"## Run\n\n```bash\n{run.run_cmd}\n```\n" if run.run_cmd else ""), encoding="utf-8")
+    run.written.append("README.md")
 
 
 def _old(text: str, field: str) -> str:

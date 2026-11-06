@@ -6,7 +6,8 @@ from jarvis.core import fastpath, phrases, suggest
 
 def test_pool_is_big_and_every_chip_is_a_0_token_answer():
     assert suggest.total() >= 250
-    bad = [q for v in suggest.POOL.values() for q in v if fastpath.match(q) is None]
+    bad = [q for k, v in suggest.POOL.items() if k != "agent" for q in v if fastpath.match(q) is None]
+    # (the coding agent's chips are matched by its own meaning examples while it is on, else offered: 0 tokens)
     assert not bad, bad
     for q in ("Delete the last expense", "Free port 5173", "Lock the screen", "Spent 100 on tea"):
         assert all(q not in v for v in suggest.POOL.values())  # a chip sends at once: nothing that changes things

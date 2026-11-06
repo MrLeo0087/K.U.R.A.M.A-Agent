@@ -9,7 +9,10 @@ from pathlib import Path
 
 from coder import settings
 
-CODE = {".py", ".js", ".mjs", ".jsx", ".ts", ".tsx", ".html", ".css", ".scss", ".vue", ".svelte", ".json", ".md", ".toml"}
+CODE = {".py", ".js", ".mjs", ".jsx", ".ts", ".tsx", ".html", ".css", ".scss", ".vue", ".svelte", ".json", ".md", ".toml",
+        ".go", ".rs", ".java", ".kt", ".php", ".rb", ".c", ".h", ".cpp", ".cs", ".swift", ".dart", ".sql", ".sh", ".yml",
+        ".yaml"}
+_OTHER_DEF = re.compile(r"^\s*(?:pub\s+)?(?:func|fn|def|class|interface|struct|type)\s+(?:\([^)]*\)\s*)?(\w+)", re.M)
 _JS_DEF = re.compile(r"^\s*(?:export\s+(?:default\s+)?)?(?:async\s+)?(?:function\s*\*?\s*(\w+)|class\s+(\w+)|"
                      r"(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s*)?(?:\([^)]*\)|\w+)\s*=>)", re.M)
 _JS_IMPORT = re.compile(r"""(?:import\s[^'"]*?from\s*|import\s*\(\s*|require\s*\(\s*)['"](\.{1,2}/[^'"]+)['"]""")
@@ -48,6 +51,8 @@ def symbols(p: Path) -> list[str]:
         return out[:20]
     if p.suffix in (".js", ".mjs", ".jsx", ".ts", ".tsx", ".vue", ".svelte"):
         return [f"{'class ' if m.group(2) else ''}{m.group(1) or m.group(2) or m.group(3)}" for m in _JS_DEF.finditer(src)][:20]
+    if p.suffix in (".go", ".rs", ".java", ".kt", ".php", ".rb", ".cs", ".swift", ".dart"):
+        return _OTHER_DEF.findall(src)[:20]
     if p.suffix == ".html":
         links = re.findall(r"""(?:src|href)\s*=\s*["']([^"':#?]+\.(?:js|css|mjs))["']""", src)
         return [f"uses {x}" for x in links][:10]

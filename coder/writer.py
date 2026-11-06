@@ -41,6 +41,27 @@ def _show(run: Run, rel: str) -> str:
     return t if len(t) <= settings.FILE_CONTEXT_CHARS else t[: settings.FILE_CONTEXT_CHARS] + "\n… (cut)"
 
 
+def run_memory(run: Run, f: FileSpec) -> str:
+    """The run's own short memory: every file written so far and what it defines (functions, classes, ids), so a
+    long build (a whole website) stays consistent without re-sending whole files. 0 tokens (repomap)."""
+    from coder import repomap
+    lines = []
+    for rel in run.written:
+        if rel == f.path:
+            continue
+        p = run.root / rel
+        syms = repomap.symbols(p)
+        if p.suffix == ".html":
+            try:
+                ids = __import__("re").findall(r"""\bid\s*=\s*["']([\w-]+)""", p.read_text(encoding="utf-8", errors="replace"))
+            except OSError:
+                ids = []
+            syms = syms + [f"#{i}" for i in ids[:25]]
+        purpose = next((x.purpose for x in run.files if x.path == rel), "")
+        lines.append(f"- {rel}: {purpose}" + (f" | defines: {', '.join(syms[:25])}" if syms else ""))
+    return "\n".join(lines)
+
+
 def related(run: Run, f: FileSpec) -> list[str]:
     """The already-written files this one must agree with: the ones it uses, then the ones that use it (script.js
     must use the ids index.html has: 11-06 the first build's script looked for #result-message, the page had
@@ -53,8 +74,10 @@ def related(run: Run, f: FileSpec) -> list[str]:
 def write_one(run: Run, f: FileSpec) -> str:
     """Write one planned file. Returns '' or a problem line."""
     parts = [plan_brief(run)]
-    if mem := memory.read(run.root, 1200):
+    if mem := memory.read(run.root, 1500):
         parts.append("Project memory:\n" + mem)
+    if done := run_memory(run, f):
+        parts.append("Written so far in this run (what each file defines):\n" + done)
     for u in related(run, f)[:3]:
         if shown := _show(run, u):
             parts.append(f"--- {u} (already written: use exactly its names, ids and classes) ---\n{shown}")

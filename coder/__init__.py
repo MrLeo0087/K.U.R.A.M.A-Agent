@@ -13,6 +13,7 @@ upgraded on its own; memory shared, its own working process, a temporary memory 
       verify.py        format + lint + compile / syntax checks (0 tokens)
       fixloop.py       an error -> only it and the lines around it -> a fix -> check again
       repomap.py       a project's map (files, functions, classes, imports) without the AI
+      onboard.py       a project it didn't build: learned ONCE from facts (map, manifests, README; one small call)
       memory.py        .kurama/project.md (stack, run, files, decisions) + TODO.md, per project
       safety.py        a backup of every file before it changes (undo), a secret guard
       models.py        the AI calls (KURAMA's own LLM layer: same keys, same shared rate limit) + token count
@@ -30,9 +31,9 @@ KURAMA calls it through jarvis/agents/coding/tools.py: `coder.start(request)`.
 from __future__ import annotations
 
 from coder.api import (check_page, commit_no, commit_prepare, commit_waiting, commit_yes, continue_project, diffs,
-                       handoff, look_at_page, make_tests_pass, no, pending, preview_page, reject, review_changes, start,
+                       handoff, learn_project, look_at_page, make_tests_pass, no, pending, preview_page, reject, review_changes, start,
                        tokens_report, undo_last, write_tests, yes)
 
 __all__ = ["check_page", "commit_no", "commit_prepare", "commit_waiting", "commit_yes", "continue_project", "diffs",
-           "handoff", "look_at_page", "make_tests_pass", "no", "pending", "preview_page", "reject", "review_changes",
+           "handoff", "learn_project", "look_at_page", "make_tests_pass", "no", "pending", "preview_page", "reject", "review_changes",
            "start", "tokens_report", "undo_last", "write_tests", "yes"]

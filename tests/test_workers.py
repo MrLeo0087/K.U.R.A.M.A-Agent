@@ -144,7 +144,7 @@ def test_notify_desktop_and_telegram_rate_limit(tg, monkeypatch):
     monkeypatch.setattr(config, "NOTIFY_TELEGRAM_PER_MIN", 2)
     assert notify.notify("A", "1", "error") == ["desktop", "telegram", "store"]
     assert popen[0][:3] == ["/usr/bin/notify-send", "-u", "critical"]
-    assert tg["sent"][0].startswith("🛑 A")
+    assert tg["sent"][0].startswith("🛑 <b>A</b>")  # the title in bold
     notify.notify("B", "2")
     assert notify.notify("C", "3") == ["desktop", "store"]  # third Telegram message in a minute dropped
 

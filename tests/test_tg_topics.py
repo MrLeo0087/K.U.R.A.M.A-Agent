@@ -170,3 +170,15 @@ def test_a_picture_goes_where_it_was_asked_and_only_once(monkeypatch, tmp_path):
     assert "Already sent" in second and "Already sent" not in first
     photos = [b for m, b in calls if m == "sendPhoto"]
     assert len(photos) == 1
+
+
+def test_an_alert_in_a_topic_rings_the_phone(monkeypatch):
+    """11-06: 'Claude Code finished' came in its topic without a notification: the owner is mentioned."""
+    import json
+    from jarvis.core import store
+    calls = _calls(monkeypatch)
+    store.kv_set("tg_topics", json.dumps({"group": -1001, "threads": {"claude": 4}}))
+    notify.reset()
+    notify.notify("✅ Claude Code finished", "all done", source="claude_code", desktop=False, telegram=True)
+    sent = [b for m, b in calls if m == "sendMessage"][-1]
+    assert sent["message_thread_id"] == 4 and sent["text"].startswith('<a href="tg://user?id=42">🔔</a> ')

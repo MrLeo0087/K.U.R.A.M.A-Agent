@@ -118,6 +118,15 @@ def install_hooks() -> str:
 
 
 # ---------- events from the hook ----------
+_SYSTEM_PROMPT = re.compile(r"^\s*<(?:task-notification|system-reminder|command-name|local-command-stdout|"
+                            r"user-prompt-submit-hook|bash-notification)\b", re.I)
+
+
+def _not_from_owner(prompt: Any) -> bool:
+    """A 'prompt' Claude Code made itself (a background task's notification, a reminder), not the owner's words."""
+    return bool(_SYSTEM_PROMPT.match(str(prompt or "")))
+
+
 def _short(v: Any, n: int = 90) -> str:
     s = " ".join(str(v or "").split())
     return s if len(s) <= n else s[:n - 1] + "…"
@@ -195,10 +204,13 @@ def event(data: dict) -> dict:
             out, msg = {"stop": "Stopped by the owner from KURAMA."}, ("⏹ Claude Code stopped", _project(s))
         elif ev == "PreToolUse":
             pass  # (only there so a stop can reach it before the next step)
+        elif ev == "UserPromptSubmit" and _not_from_owner(data.get("prompt")):
+            pass  # Claude Code's own wake-ups (a background task finished: "<task-notification>..."): not the owner's
+            #       message, never "started" (11-06: the owner got a "started" message he never sent)
         elif ev == "UserPromptSubmit":
             if s["status"] == "finished" or not s["prompt"]:  # a new task in this conversation
                 s.update(started=time.time(), steps=[], files=[], todos=[], status="working", finished=None, final="")
-            s["prompt"] = _short(data.get("prompt"), 300)
+            s["prompt"] = " ".join(str(data.get("prompt") or "").split())[:4000]  # whole (owner: never cut)
             if _go.get("root") and (s.get("cwd") or "").startswith(_go["root"]):
                 _go.clear()  # the chat '/claude go' opened has its first message: '/claude say' follows it now
             msg = ("▶️ Claude Code started", f"{_project(s)}\n📝 {s['prompt']}")
@@ -232,7 +244,7 @@ def event(data: dict) -> dict:
                    f"{_project(s)}\nIt wants to: {what}\nReply /claude yes or /claude no "
                    f"(I wait {int(config.CLAUDE_ANSWER_WAIT_S // 60)} min, then the laptop asks).")
         elif ev == "Notification":
-            text = _short(data.get("message"), 200)
+            text = _short(data.get("message"), 3000)
             if "waiting for your input" in text.lower() or "idle" in text.lower():
                 s["status"] = "waiting for you"
                 msg = ("⏸ Claude Code is waiting for you", f"{_project(s)}\n{text}\nSend '/claude say <what to do>'.")

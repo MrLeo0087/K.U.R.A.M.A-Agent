@@ -31,6 +31,7 @@ HELP = (
     "/aod on | off — always-on display (keep the screen on); /aod alone = is it on?\n"
     "/jobs — background jobs\n"
     "\n🤖 Claude Code (while you're away)\n"
+    "/code — the coding agent: every /code command; /code <what to build> plans it, /code yes builds it\n"
     "/claude say <message> — into the CURRENT Claude Code chat in VS Code (the one used last)\n"
     "/claude new <message> — a NEW chat with that message; it becomes the current one\n"
     "/claude go [project] — a new empty chat in that project, ready for /claude say\n"
@@ -80,7 +81,8 @@ HELP = (
     "/clear — clear chat + reminders/alarms\n"
     "/reset — wipe everything (keeps password + settings)")
 # the Telegram "/" menu (setMyCommands): the commands you can't remember, one tap away
-MENU = (("list", "all commands"), ("status", "what the laptop is doing"), ("claude", "Claude Code: status / on / off / yes / no"),
+MENU = (("list", "all commands"), ("status", "what the laptop is doing"), ("code", "coding agent: /code = all its commands"),
+        ("claude", "Claude Code: status / on / off / yes / no"),
         ("aod", "always-on display: on / off"), ("battery", "battery level"),
         ("ram", "RAM / CPU / disk"), ("screen", "screenshot"), ("camera", "camera photo"), ("where", "laptop location"),
         ("mute", "pause alerts: /mute ram 20"), ("unmute", "turn alerts back on"), ("notifications", "which alerts are on / paused"),

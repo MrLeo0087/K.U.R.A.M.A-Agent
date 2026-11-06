@@ -223,3 +223,12 @@ def test_a_long_claude_say_is_one_request():
     msg = ("/claude say i suggest one more thing .. treat agent as whole new project .. make it separate folder and "
            "backend so that I can upgrade it later. Also open the folder and run the tests")
     assert planner.is_multi(msg) is False
+
+
+def test_claude_codes_own_wakeups_are_not_the_owners_prompts():
+    """11-06: a background task's notification reached the owner as "▶️ Claude Code started 📝 <task-notification>…",
+    cut off. Those are ignored; the owner's prompt is shown whole."""
+    from jarvis.core import claudewatch as cw
+    assert cw._not_from_owner("<task-notification> <task-id>b1</task-id> ...")
+    assert cw._not_from_owner("  <system-reminder>x")
+    assert not cw._not_from_owner("fix the tests in jarvis/core")

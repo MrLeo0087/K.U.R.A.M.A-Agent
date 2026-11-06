@@ -43,8 +43,16 @@ def _plan(state: S) -> dict:
     run = state["run"]
     _steps(state, [("Understand the request", "done"), ("Plan the files", "doing"), ("Your yes", "todo")])
     state["ctx"].progress("planning the files")
-    from coder import repomap
-    existing = repomap.text(run.root, 3000) if run.kind == "add" else ""
+    from coder import onboard, repomap
+    if run.kind == "add" and not onboard.known(run.root):  # a project I didn't build: learn it once (card)
+        _steps(state, [("Learn the project (first time)", "doing"), ("Plan the files", "todo"), ("Your yes", "todo")])
+        state["ctx"].progress("learning the project (first time, then I keep a card)")
+        try:
+            onboard.learn(run.root, run)
+        except Exception as e:  # noqa: BLE001 - the plan still gets the map
+            run.note(f"learning failed: {e}")
+        _steps(state, [("Learn the project (first time)", "done"), ("Plan the files", "doing"), ("Your yes", "todo")])
+    existing = repomap.text(run.root, 4000) if run.kind == "add" else ""
     try:
         planner.make(run, existing, memory.read(run.root), state.get("scaffold_files"))
     except Exception as e:  # noqa: BLE001
@@ -139,6 +147,7 @@ def _check(state: S) -> dict:
 
 def _finish(state: S) -> dict:
     run = state["run"]
+    memory.readme(run)
     memory.write(run)
     memory.add_todo(run.root, run.todo)
     if run.todo_item and not run.problems:
@@ -162,9 +171,9 @@ def _record_tokens(run: Run) -> None:
 
 
 def report(run: Run) -> str:
-    ok = not run.problems and len(run.written) == len(run.files)
+    ok = not run.problems and all(f.path in run.written for f in run.files)
     lines = [f"# {run.plan_name}", "", f"Folder: `{run.root}`",
-             f"Files written: {len(run.written)}/{len(run.files)}" + (f" (on {run.scaffold})" if run.scaffold else ""),
+             f"Files written: {sum(f.path in run.written for f in run.files)}/{len(run.files)}" + (f" (on {run.scaffold})" if run.scaffold else ""),
              f"Tokens: {run.tokens / 1000:.1f}k"]
     lines += ["", "## Files", *[f"- `{f.path}`: {f.purpose}" for f in run.files]]
     if run.run_cmd:
@@ -194,10 +203,10 @@ def build_job(run: Run):
         runmod.finish(run)
         link.to_workspace(f"Built: {run.plan_name}", report(run))
         link.open_folder(run.root)
-        ok = not run.problems and len(run.written) == len(run.files)
-        line = (f"{run.plan_name} is ready in {run.root} ({len(run.written)} files, all checks passed, "
+        ok = not run.problems and all(f.path in run.written for f in run.files)
+        line = (f"{run.plan_name} is ready in {run.root} ({len(set(run.written))} files, all checks passed, "
                 f"{run.tokens / 1000:.1f}k tokens). Run it with: {run.run_cmd or 'see README'}" if ok else
-                f"{run.plan_name} is built in {run.root} ({len(run.written)}/{len(run.files)} files), but "
+                f"{run.plan_name} is built in {run.root} ({sum(f.path in run.written for f in run.files)}/{len(run.files)} files), but "
                 f"{len(run.problems)} problem(s) are left (in the workspace). Say 'fix it' to try again.")
         ctx.progress("» " + line)
         link.tell(f"✅ Coding agent: {run.plan_name}" if ok else f"Coding agent: {run.plan_name} (needs a look)", line)
