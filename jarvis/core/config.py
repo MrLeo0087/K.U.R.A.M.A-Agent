@@ -366,6 +366,8 @@ TOOLSMITH_OFFER = True  # a refusal on a real task always offers to build a tool
 AGENT_MAX_TOOL_ROUNDS = 4  # llm -> tools loops per request, then the model must answer
 AGENT_MAX_TOKENS = 400
 AGENT_SUMMARY_BATCH_TURNS = 3  # fold this many old turns into the rolling summary at once
+TURN_WAIT_S = 25.0  # a message waits this long for the one before it, then says "still working on it"
+TURN_STUCK_S = 150.0  # a request running longer than this is left behind (its stacks logged) so KURAMA answers again
 CONFIRM_TIMEOUT_S = 20.0  # unanswered confirmations are denied
 ROUTER_MAX_GROUPS = 3
 # Free phrasing for tools: paraphrases embedded by the semantic router (0 tokens), so "enable speech to text

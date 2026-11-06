@@ -137,9 +137,34 @@ class Engine:
         self.turn_lock = threading.Lock()
         self._load_lock = threading.Lock()
         self.current: Turn | None = None
+        self.current_text, self.current_t = "", 0.0
         self.pending: dict[str, Pending] = {}
         self.hooked = False
         self.ready = False  # agent imported + warmed
+
+    # --- one turn at a time, but never stuck behind a dead one (11-06: one request hung inside, every message
+    #     after it waited forever: "Hello" never answered, the page showed the dots) ---
+    def _take_turn(self, turn: Turn):
+        """The turn lock, or None (a 'still busy' reply was sent). A turn that holds it far too long is left behind:
+        its threads' stacks go to data/logs/stuck_turns.log (to find why) and a fresh lock is used."""
+        from jarvis.core import config
+        lock = self.turn_lock
+        if lock.acquire(timeout=config.TURN_WAIT_S):
+            return lock
+        busy_s = time.monotonic() - self.current_t if self.current_t else 0.0
+        if busy_s >= config.TURN_STUCK_S:
+            _dump_threads(f"turn stuck {busy_s:.0f} s: {self.current_text[:120]!r}")
+            log.warning("turn stuck for %.0f s (%r): left behind", busy_s, self.current_text[:60])
+            if self.current is not None:
+                self.current.closed = True
+            self.turn_lock = lock = threading.Lock()
+            lock.acquire()
+            return lock
+        turn.push({"type": "delta", "text": f"I'm still working on your last request (\"{self.current_text[:60]}\"). "
+                                            "Press stop or say /stop to cancel it, then ask again."})
+        turn.push({"type": "done", "text": "", "route": None, "tier": "", "tokens": 0, "ms": 0, "lang": "en"})
+        turn.push(None)
+        return None
 
     # --- confirmations ---
     def web_confirm(self, prompt: str) -> bool:
@@ -227,8 +252,11 @@ class Engine:
                        "lang": lang or "en"})
             turn.push(None)
             return
-        with self.turn_lock:
-            self.current = turn
+        lock = self._take_turn(turn)
+        if lock is None:
+            return
+        with _held(lock):
+            self.current, self.current_text, self.current_t = turn, text, time.monotonic()
             try:
                 ag = self.agent()
                 seen, used, parts = 0, set(), []
@@ -264,6 +292,37 @@ class Engine:
                 turn.push({"type": "done", "text": "", "route": None, "tier": "", "tokens": _turn_tokens(ts0),
                            "ms": int((time.monotonic() - t0) * 1000), "lang": lang or "en"})
             finally:
-                self.current = None
+                if self.current is turn:  # (a turn left behind never clears the one after it)
+                    self.current, self.current_t = None, 0.0
                 self.deny_pending(turn)
                 turn.push(None)
+
+
+class _held:
+    """`with _held(lock):` for a lock that is already acquired: released at the end (whichever lock it was)."""
+    def __init__(self, lock):
+        self.lock = lock
+
+    def __enter__(self):
+        return self.lock
+
+    def __exit__(self, *exc):
+        try:
+            self.lock.release()
+        except RuntimeError:
+            pass
+
+
+def _dump_threads(why: str) -> None:
+    """Every thread's stack into data/logs/stuck_turns.log: the evidence for a hang."""
+    import faulthandler
+    from jarvis.core import config
+    try:
+        p = config.LOG_DIR / "stuck_turns.log"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with p.open("a", encoding="utf-8") as fh:
+            fh.write(time.strftime("\n=== %m-%d %H:%M:%S ") + why + "\n")
+            fh.flush()
+            faulthandler.dump_traceback(file=fh, all_threads=True)
+    except OSError:
+        pass

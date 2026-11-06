@@ -33,6 +33,16 @@ def main(argv: list[str] | None = None) -> int:
     from jarvis.core.privacy import harden
 
     lean_malloc()  # before the server starts its threads
+    try:  # `kill -USR1 <pid>` writes every thread's stack to data/logs/stuck_turns.log (a hang, seen from outside)
+        import faulthandler
+        import signal
+
+        from jarvis.core import config
+        config.LOG_DIR.mkdir(parents=True, exist_ok=True)
+        _stacks = open(config.LOG_DIR / "stuck_turns.log", "a", encoding="utf-8")  # noqa: SIM115 - kept open
+        faulthandler.register(signal.SIGUSR1, file=_stacks, all_threads=True)
+    except (OSError, AttributeError, ValueError):
+        pass
 
     harden()  # data/ files private to this user
     from jarvis.api.app import main as api_main
