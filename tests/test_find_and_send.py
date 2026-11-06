@@ -114,9 +114,9 @@ def test_list_folder_numbers_files_for_picking(monkeypatch, tmp_path):
     for n in ("a.pdf", "b.jpg"):
         (d / n).write_bytes(b"x")
     out = list_folder(str(d))
-    assert "1 folders, 2 files" in out and "Folders: sub" in out and "1. " in out and "2. " in out
+    assert "1 folders, 2 files" in out and "1. 📁 sub" in out and "2. b.jpg" in out  # folders are numbered too
     sent = setup(monkeypatch, tmp_path, [])
-    assert fs.find_and_send(pick=2).startswith("Sent ") and len(sent) == 1
+    assert fs.find_and_send(pick=3).startswith("Sent ") and len(sent) == 1
     assert "a.pdf" in list_folder(str(d), pattern=".pdf") and "b.jpg" not in list_folder(str(d), ".pdf")
 
 

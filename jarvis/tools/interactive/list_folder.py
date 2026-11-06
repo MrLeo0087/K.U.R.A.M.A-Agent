@@ -60,14 +60,23 @@ def _list_one(d: Path, pat: str, hidden: bool, start: int) -> tuple[list[str], l
     files = sorted((p for p in entries if p.is_file()), key=lambda p: p.stat().st_mtime, reverse=True)
     if not dirs and not files:
         return [f"{d} is empty" + (f" (nothing matching {pat!r})" if pat else "")], []
-    shown = files[:MAX_ITEMS]
+    shown_dirs, shown = dirs[:30], files[:MAX_ITEMS]
     lines = [f"{d} : {len(dirs)} folders, {len(files)} files" + (f" (newest {MAX_ITEMS} shown)" if len(files) > MAX_ITEMS else "")]
-    if dirs:
-        lines.append("Folders: " + ", ".join(p.name for p in dirs[:30]) + (" ..." if len(dirs) > 30 else ""))
-    for i, p in enumerate(shown, start):
+    i = start
+    if shown_dirs:  # numbered too: 'open 4 in VS Code' / 'send 4' (11-06: folders had no numbers to say)
+        lines.append("Folders:")
+        for p in shown_dirs:
+            lines.append(f"{i}. 📁 {p.name}")
+            i += 1
+        if len(dirs) > 30:
+            lines.append(f"   … and {len(dirs) - 30} more folders")
+    if shown:
+        lines.append("Files:")
+    for p in shown:
         st = p.stat()
         lines.append(f"{i}. {p.name} ({_size(st.st_size)}, {datetime.fromtimestamp(st.st_mtime):%d %b %Y})")
-    return lines, shown
+        i += 1
+    return lines, shown_dirs + shown
 
 
 @tool(group="filesearch", safety="safe",

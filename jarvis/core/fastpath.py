@@ -2244,12 +2244,19 @@ def meaning_intent(text: str) -> Intent | None:
         else:
             it = Intent("links", "saved_links", "links", {"action": "save", **({"name": " ".join(extra)} if extra else {})})
         return it if meaning_ok(t, it) else None
-    if label == "open_vscode" and extra:  # a folder named in words: only one that really exists, else the AI
-        if (folder := folder_in_words(raw)) is None:
+    if label == "open_vscode":  # a folder NAMED in the request wins over 'this folder' (11-06: 'open that new_folder
+        #   folder in vs code' opened Downloads: 'new_folder' is made of known words, so it wasn't seen as a name)
+        if (picked := listed_pick(raw)) is not None:  # 'open the 4th folder in vs code' after a listing
+            it = Intent("openpath", "open_path", "files", {"path": str(picked), "app": "vscode"}, "VS Code")
+            return it
+        folder = folder_in_words(raw)
+        said = re.sub(r"[\W_]+", "", raw.lower())
+        if folder is not None and (extra or re.sub(r"[\W_]+", "", folder.name.lower()) in said):
+            it = Intent("openpath", "open_path", "files", {"path": str(folder), "app": "vscode"}, "VS Code",
+                        known=" ".join(extra) or folder.name)
+            return it if meaning_ok(t, it) or not extra else None
+        if extra:
             return None
-        it = Intent("openpath", "open_path", "files", {"path": str(folder), "app": "vscode"}, "VS Code",
-                    known=" ".join(extra))
-        return it if meaning_ok(t, it) else None
     if extra:  # something the examples don't cover: a number, a name, a place -> the AI
         return None
     if label == "list_links":
@@ -2347,6 +2354,31 @@ def _about_me_intent(label: str, raw: str, t: str, extra: list[str]) -> Intent |
 
 def _ok(t: str, it: Intent) -> Intent | None:
     return it if meaning_ok(t, it) else None
+
+
+_ORDINAL = {"first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5, "sixth": 6, "seventh": 7, "eighth": 8,
+            "ninth": 9, "tenth": 10, "1st": 1, "2nd": 2, "3rd": 3}
+
+
+def listed_pick(text: str) -> Path | None:
+    """'open the 4th folder' / 'open 4 in vs code' / 'open number 4': item N of the last numbered listing (folders are
+    numbered too), when that listing is recent (10 min). None otherwise."""
+    import json
+    t = (text or "").lower()
+    m = re.search(r"\b(?:number\s+|no\.?\s*|#)?(\d{1,2})(?:st|nd|rd|th)?\b(?!\s*(?:seconds?|minutes?|%|gb|mb))", t)
+    n = int(m.group(1)) if m else next((v for k, v in _ORDINAL.items() if re.search(rf"\b{k}\b", t)), 0)
+    if not n:
+        return None
+    try:
+        from jarvis.core import store
+        d = json.loads(store.kv_get("found_files") or "{}")
+    except (ValueError, TypeError):
+        return None
+    paths = d.get("paths") or []
+    if not paths or time.time() - float(d.get("t") or 0) > 600 or not 1 <= n <= len(paths):
+        return None
+    p = Path(paths[n - 1])
+    return p if p.exists() else None
 
 
 def folder_in_words(text: str) -> Path | None:
@@ -2844,8 +2876,13 @@ def render(intent: Intent, ok: bool, output: str, lang: str) -> str:
 
 
 def _render_listdir(intent: Intent, out: str) -> str:
-    """Short folder listings are said as they are; long ones get a one-line overview and go to the Workspace."""
+    """The numbered list itself, in the chat (11-06: "it's in your workspace" and the owner couldn't see it);
+    only a very long one (over 60 lines) shows its start here and the whole of it in the Workspace."""
     lines = out.splitlines()
+    if len(lines) <= 60:
+        body = "\n".join(re.sub(r"^(/\S.*?) : (\d.*)$", lambda m: f"{Path(m.group(1)).name} has {m.group(2)}:", ln)
+                         for ln in lines)
+        return body + ("\n\nSay 'open 3 in VS Code' or 'send 3'." if re.search(r"^\d+\. ", out, re.M) else "")
     if len(lines) < 8:  # "/media/.../Tara : 6 folders, 0 files" -> "Tara has 6 folders, 0 files."
         return "\n".join(re.sub(r"^(/\S.*?) : (\d.*)$", lambda m: f"{Path(m.group(1)).name} has {m.group(2)}.", ln)
                          for ln in lines)
