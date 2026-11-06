@@ -49,6 +49,7 @@ class Job:
     error: str = ""
     tokens: int = 0
     origin: str = ""  # "telegram" when asked from the phone: the result goes back there
+    reply_to: tuple | None = None  # the Telegram chat / topic it was asked from: what it sends goes there
     created: float = field(default_factory=time.time)
     finished: float | None = None
     durable: bool = False  # a long job (longjobs.py): checkpointed, resumed after a restart
@@ -147,6 +148,11 @@ class JobManager:
                 job.origin = safety.context().get("channel") or ""
             except Exception:
                 pass
+        try:
+            from jarvis.core import notify
+            job.reply_to = notify.reply_target()
+        except Exception:  # noqa: BLE001
+            pass
         if job.origin == "telegram":
             _send_after[jid] = _asked_from()  # asked from the phone: the result goes back where it was asked
         with self._lock:
@@ -181,7 +187,8 @@ class JobManager:
         job.status = "running"
         self._save(job, status="running")
         try:
-            with ratelimit.context(ratelimit.BACKGROUND, job.cancel_event):
+            from jarvis.core import notify
+            with ratelimit.context(ratelimit.BACKGROUND, job.cancel_event), notify.replying_to(job.reply_to):
                 out = fn(ctx)
             if out:
                 job.output_path = str(out)
@@ -353,7 +360,7 @@ def send_output(job: "Job") -> str:
         if len(text) <= config.TELEGRAM_MAX_REPLY_CHARS:
             return "Sent it to your Telegram." if notify.telegram_send(text) else "error: Telegram didn't accept it"
     t0 = time.time()
-    out = deliver(p, caption=job.title[:200])
+    out = deliver(p, caption=job.title[:200], auto=True)
     # evidence for "pictures / videos reach Telegram late" (owner 11-01): how long after the job ended, and the upload
     log.info("telegram: job #%s sent %.0f s after it finished (upload %.1f s, %.1f MB): %s", job.id,
              t0 - float(job.finished or t0), time.time() - t0, p.stat().st_size / 1e6, str(out)[:80])

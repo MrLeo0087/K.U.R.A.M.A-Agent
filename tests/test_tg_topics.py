@@ -153,3 +153,20 @@ def test_a_deleted_topic_is_forgotten_and_the_alert_still_arrives(monkeypatch):
     assert notify.send_long("Drink water", -1001, thread=5)
     assert sent[-1]["chat_id"] == "42"  # the private chat instead
     assert tgtopics.where("scheduler", "info") == (None, None) and tgtopics.where("guard", "warning") == (-1001, 6)
+
+
+def test_a_picture_goes_where_it_was_asked_and_only_once(monkeypatch, tmp_path):
+    """11-06: 'generate an image of Iron Man and send it to Telegram' from General: the job's own send-back and the
+    asked send gave two photos, both in Images only. Now one photo, in General (and a copy in Images)."""
+    from jarvis.tools.general import send_file_telegram as sft
+    calls = _calls(monkeypatch)
+    sft._just_sent.clear()
+    pic = tmp_path / "ironman.jpg"
+    from PIL import Image
+    Image.new("RGB", (40, 40), "red").save(pic)
+    with notify.replying_to((-1001, None)):  # asked in General
+        first = sft.deliver(pic, auto=True)  # the job's own send-back
+        second = sft.deliver(pic, "Here is the generated image.")  # the asked "send it to Telegram"
+    assert "Already sent" in second and "Already sent" not in first
+    photos = [b for m, b in calls if m == "sendPhoto"]
+    assert len(photos) == 1

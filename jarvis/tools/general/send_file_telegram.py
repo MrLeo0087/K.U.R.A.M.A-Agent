@@ -247,10 +247,12 @@ def _bounded(fn, seconds: float):
     upload never timed out: one ran past 2 min, 11-04). The upload keeps going; a late failure is told on Telegram."""
     import threading
     box: dict = {}
+    to = notify.reply_target()  # the topic / chat it was asked from: the upload thread sends there too
 
     def run():
         try:
-            box["r"] = fn()
+            with notify.replying_to(to):
+                box["r"] = fn()
         except Exception as e:  # noqa: BLE001
             box["e"] = e
             if done.is_set():
@@ -267,11 +269,28 @@ def _bounded(fn, seconds: float):
     return box.get("r")
 
 
-def deliver(p: Path, caption: str = "") -> str:
+_just_sent: dict[str, tuple[float, bool]] = {}  # file -> (when, sent by a job's own send-back)
+
+
+def _sent_just_now(p: Path, auto: bool, window_s: float = 90) -> bool:
+    """True when this file was just sent and one of the two sends is a job's automatic send-back (so a job asked
+    from Telegram AND 'send it to Telegram' give one photo). Two sends you ask for yourself both go."""
+    now, key = time.time(), str(p.resolve())
+    for k in [k for k, (t, _) in _just_sent.items() if now - t > window_s]:
+        _just_sent.pop(k, None)
+    if key in _just_sent and (auto or _just_sent[key][1]):
+        return True
+    _just_sent[key] = (now, auto)
+    return False
+
+
+def deliver(p: Path, caption: str = "", auto: bool = False) -> str:
     """Upload one checked file to the user's chat (photos as pictures, the rest as documents).
     A file over Telegram's limit is uploaded to a file host and sent as a download link instead."""
     if p.stat().st_size > config.TELEGRAM_FILE_MAX_MB * 1024 * 1024:
         return upload_and_link(p, p.name, p.stat().st_size / (1024 * 1024), is_zip=False)
+    if _sent_just_now(p, auto):  # the job's own "send it back" and an asked "send it to Telegram" (11-06: Iron Man x2)
+        return f"Already sent {p.stem} to your Telegram."
     photo = p.suffix.lower() in PHOTO_EXT and p.stat().st_size <= PHOTO_MAX
     method, field = ("sendPhoto", "photo") if photo else ("sendDocument", "document")
     payload = {"chat_id": config.TELEGRAM_CHAT_ID, **({"caption": caption[:1000]} if caption else {})}
