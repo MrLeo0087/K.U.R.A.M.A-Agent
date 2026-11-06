@@ -172,8 +172,15 @@ def test_say_goes_into_the_real_vscode_chat(told, monkeypatch):
     out = cw.say("Hello")
     assert out.startswith("Sent to your Claude Code chat in VS Code")
     assert calls == [("claude_say", {"session": "s1", "text": "Hello"}), ("enter", "KURAMA")]
-    monkeypatch.setattr(editor, "states", lambda: [])  # no VS Code: busy -> it says so, never a second copy
-    assert cw.say("Hello").startswith("Claude Code is busy and VS Code isn't reachable")
+    monkeypatch.setattr(editor, "states", lambda: [])  # no VS Code: a VISIBLE terminal window, never hidden
+    import subprocess
+    opened = []
+    monkeypatch.setattr(subprocess, "Popen", lambda argv, **kw: opened.append(argv))
+    monkeypatch.setattr(cw, "claude_binary", lambda: Path("/usr/bin/claude"))
+    out = cw.say("Hello")
+    assert out.startswith("Opened Claude Code in a terminal window on your laptop") and opened
+    argv = opened[0]
+    assert "--resume" in argv and "--fork-session" in argv and argv[-1] == "Hello"  # a copy: the open chat is safe
     cw.turn_off()
 
 

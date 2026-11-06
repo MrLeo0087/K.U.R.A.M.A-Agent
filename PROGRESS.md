@@ -1391,3 +1391,9 @@ Phases (one at a time, owner tests after each):
   (the transcript lagged: it gave the step before the end). /claude go [project]: watch on + a new empty Claude Code
   chat in VS Code for that project (editor link v6 claude_new; opens the folder in VS Code first if needed); the
   next /claude say types the task into that new chat; everything comes back to Telegram (long answers folded).
+- (later) /claude say without the VS Code link no longer runs hidden in the background: it opens Claude Code in a
+  terminal WINDOW on the laptop (title "Claude Code · <project> (KURAMA)"), resuming the conversation as a copy
+  (--fork-session) when it may still be open elsewhere; /claude go without the link readies a terminal start. (The
+  09:04 say ran hidden and resumed the owner's live conversation; the stop then hit that conversation too.)
+  MONITORING.md: the new data files (Claude Code watch, sections, offers, settings, Nepal documents, metrics) and
+  what to check in the next report.

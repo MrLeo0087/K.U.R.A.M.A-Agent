@@ -528,9 +528,11 @@ def go(where: str = "") -> str:
                       None)
             if st:
                 break
-    if st is None:
-        return ("I couldn't reach VS Code: open the project in VS Code (and reload the window once after an update: "
-                "Ctrl+Shift+P > Reload Window), then send /claude go again.")
+    if st is None:  # no VS Code link: the first '/claude say' opens Claude Code in a terminal window instead
+        _go.clear()
+        _go.update(root=root or str(Path.home()), workspace=Path(root).name if root else "home", t=time.time())
+        return (f"Ready in {_go['workspace']}. Send /claude say <your task>: Claude Code opens in a terminal window on "
+                "your laptop (VS Code isn't linked; reload its window once to use the VS Code chat instead).")
     r = editor.edit(st, "claude_new")
     if not r.get("ok"):
         return f"VS Code couldn't open a Claude Code chat: {r.get('error') or 'no answer'}."
@@ -544,8 +546,8 @@ def go(where: str = "") -> str:
 def say(text: str) -> str:
     """Send the owner's message to Claude Code. Into the REAL chat in VS Code when the KURAMA editor link (v5+) is in
     the window of that task's folder: the chat tab opens with the text and Enter is pressed, so you see it there
-    and Claude Code queues it if it is busy. Without VS Code: Claude Code continues that conversation in the
-    background (`claude -p --resume`); either way the hooks report it and the answer comes to Telegram."""
+    and Claude Code queues it if it is busy. Without VS Code: Claude Code opens in a terminal WINDOW on the laptop
+    with the message (never hidden in the background); either way the hooks report it to Telegram."""
     text = " ".join((text or "").split())
     if not text:
         return "What should I tell Claude Code? e.g. '/claude say run the tests and fix them'"
@@ -553,28 +555,40 @@ def say(text: str) -> str:
         target = {"id": "", "cwd": _go.get("root", ""), "status": "new"}
         if (sent := _into_vscode(target, text)) is not None:
             return sent
+        return _in_terminal(target, text)
     s = _current()
     if s is None:
         return "There's no Claude Code conversation to send it to. Send /claude go (in a project) first."
     if (sent := _into_vscode(s, text)) is not None:
         return sent
-    if s["status"] == "working":
-        return ("Claude Code is busy and VS Code isn't reachable, so I can't add a message to its chat now. I'll tell "
-                "you when it finishes; then send it again.")
+    return _in_terminal(s, text)
+
+
+def _in_terminal(s: dict, text: str) -> str:
+    """Claude Code in a terminal WINDOW on the laptop screen (never hidden): you see every step and can type too.
+    A conversation that may still be open elsewhere (the VS Code chat) is continued as a copy (--fork-session), so
+    the two never write into each other."""
     exe = claude_binary()
-    if exe is None:
-        return "error: I can't find the claude program on this laptop."
+    term = shutil.which("gnome-terminal") or shutil.which("x-terminal-emulator")
+    if exe is None or term is None:
+        return "error: I can't open Claude Code on the laptop (no claude program or no terminal)."
     env = dict(os.environ)
     tp = str(s.get("transcript") or "")
-    if m := re.match(r"(.*/\.claude[^/]*)/projects/", tp):  # the same Claude Code account as that task
+    if m := re.match(r"(.*/\.claude[^/]*)/projects/", tp):  # the same Claude Code account as that conversation
         env["CLAUDE_CONFIG_DIR"] = m.group(1)
-    log_file = config.DATA_DIR / "logs" / "claude_say.log"
-    log_file.parent.mkdir(parents=True, exist_ok=True)
-    with open(log_file, "a", encoding="utf-8") as fh:
-        subprocess.Popen([str(exe), "-p", "--resume", s["id"], text], cwd=s.get("cwd") or None, env=env,
-                         stdout=fh, stderr=subprocess.STDOUT, start_new_session=True)
-    return (f"VS Code isn't open there, so Claude Code continues that conversation in the background with: "
-            f"\"{_short(text, 120)}\". I'll send you its answer.")
+    cmd = [str(exe)]
+    if s.get("id"):
+        cmd += ["--resume", s["id"]]
+        if time.time() - float(s.get("last") or 0) < 3600:  # used in the last hour: maybe still open in VS Code
+            cmd.append("--fork-session")
+    cmd.append(text)
+    cwd = str(s.get("cwd") or Path.home())
+    title = f"Claude Code · {Path(cwd).name} (KURAMA)"
+    argv = [term, "--title", title, "--working-directory", cwd, "--", *cmd] if term.endswith("gnome-terminal") \
+        else [term, "-e", " ".join(cmd)]
+    subprocess.Popen(argv, cwd=cwd, env=env, start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return (f"Opened Claude Code in a terminal window on your laptop ({Path(cwd).name}) with: \"{_short(text, 120)}\". "
+            "You can watch it work there; its questions and its whole answer come here too.")
 
 
 def _into_vscode(s: dict, text: str) -> str | None:

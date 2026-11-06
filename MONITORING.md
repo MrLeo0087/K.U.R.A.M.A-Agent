@@ -53,6 +53,11 @@ answers to KURAMA's questions and the model per call since the memory + multitas
 | (all of the learning above) | **docs/LEARNING.md** | the full guide: what is learned, commands, limits, files, settings |
 | Long jobs | `data/jarvis.db`, tables `jobs`, `job_state`, `job_steps` | background jobs, checkpoints, step log |
 | Server / workers | `data/logs/server.log`, `data/logs/worker_*.log` | yes/no answers, errors |
+| **Claude Code watch** | `data/claude_watch.json` (+ `data/claude_watch.on` = on), `data/logs/claude_say.log` | each watched conversation: prompt, steps, files, to-do, status, final answer; what `/claude say` ran |
+| Telegram sections / offers | `data/jarvis.db` table `kv`: `tg_topics`, `tg_group_candidate`, `next_offer`, `setting_once` | the group topics in use; the "say yes to…" offer waiting; a one-time setting to keep |
+| Owner's settings | `data/user_settings.json` | the safe settings changed by voice (values + history for undo) |
+| Nepal documents service | `KURAMA_RAG_API_URL` in `.env`; jobs `kind = nepal_docs` in `data/jarvis.db` | each question asked of it (a background job), its status, the answer as the job's `» ` progress |
+| Live numbers | `GET /api/v1/metrics` (`make metrics`) | tokens per model, tool calls, routing, jobs, RAM, broken plug-ins (last 24 h) |
 | Code that writes them | `jarvis/core/trace.py`, `stt.py`, `wake.py` (`wake_log`), `ptt.py` (`pttlog`) + `scripts/kurama_wallpaper.py`, `filemanager.py`, `jobqueue.py`, `longjobs.py` | |
 
 - Settings: `config.py` `TRACING` (env `KURAMA_TRACING=0` turns it off), `TRACE_DB`, `TRACE_KEEP_DAYS` (90). Side logs
@@ -231,6 +236,22 @@ Older notes (still true):
 - Watch: `path: fastpath` traces with intents tab / tabs / desktop / colab / links / clean (meaning actions taking
   the wrong request), "llm" entries with model qwen (the fallback in use = daily limit reached), hang.log dumps,
   stt.log lines with no trace (speech heard but not sent).
+
+## Watch in the next report (11-06: request kinds, Claude Code watch, Telegram)
+
+- **The request KIND (core/querykind.py)**: help / explain / again / Nepal documents are decided first. In traces:
+  `find_capability` (help), `explain_self`, `nepal_docs` with `path: fastpath`. Wrong kind = a question that DID
+  something (a help question with an action tool), or a command answered with "say ...". Fix by
+  `config.QUERY_OPENINGS` / `LANE_EXAMPLES["nepal"]` examples, never word rules.
+- **Nepal documents**: `nepal_docs` traces should cost 0 tokens and their job finish in 5-15 s. A live-data question
+  (news, prices) going there, or a law question going to the web, is a lane example to add.
+- **Claude Code watch**: `data/claude_watch.json`. `/claude say` must go into the VS Code chat (editor link v5+, after
+  a window reload) or a visible terminal window ("Opened Claude Code in a terminal window"), never hidden. A ❓
+  question that `/claude yes` didn't release: check the hook got `PermissionRequest` (status "waiting for you").
+  The finished message must carry the whole answer (Stop hook `last_assistant_message`).
+- **Telegram**: long replies must arrive whole (folded "show more", .md file when very long); screenshots in ~1-2 s
+  (IPv4 only: `config.TELEGRAM_IPV4`). The bot log `data/logs/worker_telegram_bot.log` has "answered '<cmd>' in N s".
+- **Offers**: "Say yes to send it to your Telegram" / "clean your RAM": a bare "yes" within 3 min must run it at 0 tokens.
 
 ## Watch in the next report (round 2)
 
