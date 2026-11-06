@@ -1082,6 +1082,8 @@ class Agent:
         user_text = mywords.expand(spelling.fix(user_text))  # slips fixed ('remain me' -> remind me), then the
         #                                                       owner's own words ('good night' = 'lock the screen')
         self._begin_turn(user_text)
+        if (job := coding_only(user_text)) is not None:
+            return job
         fast = self._fast(user_text, lang, mode)
         if fast is not None:
             answer = self._with_next(fast)
@@ -1130,6 +1132,9 @@ class Agent:
         user_text = mywords.expand(spelling.fix(user_text))  # slips fixed ('remain me' -> remind me), then the
         #                                                       owner's own words ('good night' = 'lock the screen')
         self._begin_turn(user_text)
+        if (job := coding_only(user_text)) is not None:
+            yield job
+            return
         fast = self._fast(user_text, lang, mode)
         if fast is not None:
             answer = self._with_next(fast)
@@ -1402,6 +1407,26 @@ def coding_job(text: str) -> str | None:
     nextstep.offer(CODING_OFFER + text, "")
     return ("That's a job for the coding agent (it plans, writes every file, connects and checks them). "
             "Say yes to switch it on and do it.")
+
+
+def coding_only(text: str) -> str | None:
+    """General mode, and the instant command for this request is coding-agent work (a requirements file, a diagram
+    of the project / of a code file, a new project): offered to the coding agent instead (owner 11-06: "keep the
+    normal agent free; selected-code explain / upgrade / replace stay in normal mode")."""
+    from jarvis import agents
+    if agents.current() == "coding" or (text or "").lstrip().startswith("/"):
+        return None
+    try:
+        it = fastpath.match(text)
+    except Exception:  # noqa: BLE001
+        return None
+    if it is None or not (it.tool == "generate_requirements" or (it.tool == "make_diagram" and str(
+            (it.args or {}).get("kind") or "project") in ("project", "code")) or (
+            it.tool == "coding" and (it.args or {}).get("action") == "project")):
+        return None
+    from jarvis.core import nextstep
+    nextstep.offer(CODING_OFFER + text, "")
+    return "That's a job for the coding agent. Say yes to switch it on and do it."
 
 
 def after_job(ctx, params: dict) -> str | None:

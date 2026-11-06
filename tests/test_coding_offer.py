@@ -36,3 +36,19 @@ def test_not_offered(model, monkeypatch, text):
     from jarvis import agents
     monkeypatch.setattr(agents, "current", lambda: "general")
     assert agent.coding_job(text) is None
+
+
+def test_requirements_and_project_diagram_go_to_the_coding_agent(monkeypatch):
+    from jarvis import agents
+    from jarvis.core import fastpath
+    from jarvis.core.fastpath import Intent
+    monkeypatch.setattr(agents, "current", lambda: "general")
+    offers = []
+    monkeypatch.setattr(nextstep, "offer", lambda c, line="": offers.append(c))
+    monkeypatch.setattr(fastpath, "match", lambda t: Intent("req", "generate_requirements", "devutils", {}))
+    assert "coding agent" in agent.coding_only("make requirements.txt for this project")
+    monkeypatch.setattr(fastpath, "match", lambda t: Intent("d", "make_diagram", "image", {"kind": "flow"}))
+    assert agent.coding_only("flowchart: wake up, brush, study") is None  # a flowchart stays in General
+    monkeypatch.setattr(agents, "current", lambda: "coding")
+    monkeypatch.setattr(fastpath, "match", lambda t: Intent("req", "generate_requirements", "devutils", {}))
+    assert agent.coding_only("make requirements.txt") is None  # the coding agent does it itself
