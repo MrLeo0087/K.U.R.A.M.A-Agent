@@ -1387,3 +1387,7 @@ Phases (one at a time, owner tests after each):
   1.4.0) opens that conversation's tab with the text (claude-vscode.primaryEditor.open session+prompt), focuses the
   box, and KURAMA presses Enter (xdotool). Busy Claude Code queues it. No VS Code: the background resume as before
   (it ran headless, which is why nothing showed in the chat). KURAMA's own /usage checks no longer count as tasks.
+- (later) The finished message carries Claude Code's whole last answer from the Stop hook's last_assistant_message
+  (the transcript lagged: it gave the step before the end). /claude go [project]: watch on + a new empty Claude Code
+  chat in VS Code for that project (editor link v6 claude_new; opens the folder in VS Code first if needed); the
+  next /claude say types the task into that new chat; everything comes back to Telegram (long answers folded).

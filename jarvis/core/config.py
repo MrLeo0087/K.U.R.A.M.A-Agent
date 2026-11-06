@@ -1374,6 +1374,8 @@ MEANING_SHORTCUTS: dict[str, tuple[str, ...]] = {
                       "is claude code done", "what is happening in claude code", "how much has claude code done"),
     "claude_report": ("give me the claude code report", "claude code report", "what did claude code do",
                       "report of the claude code task"),
+    "claude_go": ("open claude code", "open a new claude code chat", "start claude code here", "launch claude code",
+                  "get claude code ready"),
     "claude_stop": ("stop claude code", "interrupt claude code", "make claude code stop working", "cancel the claude code task"),
     "claude_usage": ("claude code usage", "how much claude code did i use today", "how many tokens did claude code use"),
     # your own commands ("when I say X, do Y" saves one): list them, forget one (X = its words)

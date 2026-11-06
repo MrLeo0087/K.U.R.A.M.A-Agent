@@ -12,12 +12,13 @@ from jarvis.core.registry import tool
       description="Watch Claude Code while the user is away: on/off, status (progress, time, what it does now), "
                   "report, yes/no to its permission question, say (send it the next instruction), stop (interrupt "
                   "it), usage (how much Claude Code was used today).")
-def claude_code(action: Literal["on", "off", "status", "report", "yes", "no", "say", "stop", "usage"] = "status",
+def claude_code(action: Literal["on", "off", "go", "status", "report", "yes", "no", "say", "stop", "usage"] = "status",
                 text: str = "") -> str:
     """Claude Code watch.
 
     Args:
-        action: on, off, status, report, yes (allow its question), no (deny it), say (the next instruction),
+        action: on, off, go (open a new Claude Code chat in VS Code for project `text`, ready for say), status,
+            report, yes (allow its question), no (deny it), say (the next instruction),
             stop (interrupt the task), usage (how much it was used today).
         text: For say: what Claude Code should do next.
     """
@@ -30,6 +31,8 @@ def claude_code(action: Literal["on", "off", "status", "report", "yes", "no", "s
         return claudewatch.answer(action == "yes")
     if action == "say":
         return claudewatch.say(text)
+    if action == "go":
+        return claudewatch.go(text)
     if action == "stop":
         return claudewatch.stop()
     if action == "usage":

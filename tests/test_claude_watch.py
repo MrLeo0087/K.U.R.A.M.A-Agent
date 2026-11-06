@@ -175,3 +175,23 @@ def test_say_goes_into_the_real_vscode_chat(told, monkeypatch):
     monkeypatch.setattr(editor, "states", lambda: [])  # no VS Code: busy -> it says so, never a second copy
     assert cw.say("Hello").startswith("Claude Code is busy and VS Code isn't reachable")
     cw.turn_off()
+
+
+def test_go_opens_a_new_chat_and_say_starts_it(told, monkeypatch):
+    from jarvis.core import editor
+    calls = []
+    monkeypatch.setattr(editor, "states", lambda: [{"ext": 6, "root": "/home/leo/KURAMA", "workspace": "KURAMA",
+                                                    "port": 1, "token": "t"}])
+    monkeypatch.setattr(editor, "edit", lambda st, op, **kw: calls.append((op, kw)) or {"ok": True})
+    monkeypatch.setattr(cw, "_press_enter", lambda ws: calls.append(("enter", ws)) or True)
+    assert cw.go().startswith("Claude Code is open in KURAMA and ready") and cw.is_on()
+    assert cw.say("build the login page").startswith("Sent to your Claude Code chat in VS Code")
+    assert calls == [("claude_new", {}), ("claude_say", {"session": None, "text": "build the login page"}),
+                     ("enter", "KURAMA")]
+    cw.event({"hook_event_name": "UserPromptSubmit", "session_id": "new1", "cwd": "/home/leo/KURAMA",
+              "prompt": "build the login page"})
+    assert not cw._go  # the new chat has its first message: say follows that conversation now
+    cw.event({"hook_event_name": "Stop", "session_id": "new1", "cwd": "/home/leo/KURAMA",
+              "last_assistant_message": "All done. " + "x" * 5000})
+    assert told[-1][0] == "✅ Claude Code finished" and told[-1][1].endswith("x" * 5000)  # the WHOLE answer
+    cw.turn_off()

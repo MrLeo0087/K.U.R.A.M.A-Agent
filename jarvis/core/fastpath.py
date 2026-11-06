@@ -2195,7 +2195,7 @@ def meaning_intent(text: str) -> Intent | None:
     if label in ("settings_list", "setting_undo", "settings_reset", "setting_change", "explain_last", "help_me",
                  "setting_keep", "capability_ask"):
         return _about_me_intent(label, raw, t, extra)
-    if label in ("claude_on", "claude_off", "claude_status", "claude_report", "claude_stop", "claude_usage"):
+    if label in ("claude_on", "claude_off", "claude_go", "claude_status", "claude_report", "claude_stop", "claude_usage"):
         return None if extra else _ok(t, Intent("claude", "claude_code", "dev", {"action": label.split("_")[1]}))
     if label == "my_commands":
         return None if extra else _ok(t, Intent("mywords", "app_name", "apps", {"action": "list"}))

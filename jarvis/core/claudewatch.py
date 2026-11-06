@@ -37,6 +37,7 @@ _sessions: dict[str, dict] = {}  # session id -> its state (kept while the watch
 _questions: dict[str, dict] = {}  # question id -> {"session", "what", "answer", "t"}
 _stuck_thread: threading.Thread | None = None
 _stop_asked: dict[str, float] = {}  # session id -> when the owner asked it to stop
+_go: dict = {}  # '/claude go' opened a new chat here and it has no message yet: {"root", "workspace", "t"}
 
 HOOK_EVENTS = ("SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionRequest",
                "Notification", "Stop", "TaskCreated", "TaskCompleted", "SessionEnd")
@@ -198,6 +199,8 @@ def event(data: dict) -> dict:
             if s["status"] == "finished" or not s["prompt"]:  # a new task in this conversation
                 s.update(started=time.time(), steps=[], files=[], todos=[], status="working", finished=None, final="")
             s["prompt"] = _short(data.get("prompt"), 300)
+            if _go.get("root") and (s.get("cwd") or "").startswith(_go["root"]):
+                _go.clear()  # the chat '/claude go' opened has its first message: '/claude say' follows it now
             msg = ("▶️ Claude Code started", f"{_project(s)}\n📝 {s['prompt']}")
         elif ev in ("PostToolUse", "PostToolUseFailure"):
             tool, inp = str(data.get("tool_name") or ""), data.get("tool_input") or {}
@@ -235,7 +238,8 @@ def event(data: dict) -> dict:
                 msg = ("⏸ Claude Code is waiting for you", f"{_project(s)}\n{text}\nSend '/claude say <what to do>'.")
         elif ev == "Stop":
             s["status"], s["finished"] = "finished", time.time()
-            s["final"] = _last_message(s.get("transcript", ""))
+            # its answer, from Claude Code itself (the transcript can lag behind: it gave the step before the end)
+            s["final"] = str(data.get("last_assistant_message") or "").strip() or _last_message(s.get("transcript", ""))
             msg = ("✅ Claude Code finished", _finished_text(s))
         elif ev == "SessionEnd":
             s["status"] = "closed"
@@ -501,6 +505,42 @@ def screenshot() -> Path | None:
 
 
 # ---------- a new instruction ----------
+def go(where: str = "") -> str:
+    """'/claude go [project]': watch on + a new, empty Claude Code chat in VS Code for that project (the window you
+    used last when none is named), ready for '/claude say <what to do>'. Everything it does comes to Telegram."""
+    from jarvis.core import editor
+    if not is_on():
+        turn_on()
+    root = ""
+    if where.strip():
+        from jarvis.core import fastpath
+        p = fastpath.folder_in_words(f"open {where} in vs code")
+        if p is None:
+            return f"I can't find a project folder called '{where}'. Say it like '/claude go kurama'."
+        root = str(p)
+    wins = [w for w in editor.states() if int(w.get("ext") or 0) >= 6]
+    st = next((w for w in wins if root and str(w.get("root") or "") == root), None) if root else (wins[0] if wins else None)
+    if st is None and root:  # not open yet: open it in VS Code and wait for its window
+        subprocess.Popen(["code", root], start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        for _ in range(40):
+            time.sleep(0.5)
+            st = next((w for w in editor.states() if int(w.get("ext") or 0) >= 6 and str(w.get("root") or "") == root),
+                      None)
+            if st:
+                break
+    if st is None:
+        return ("I couldn't reach VS Code: open the project in VS Code (and reload the window once after an update: "
+                "Ctrl+Shift+P > Reload Window), then send /claude go again.")
+    r = editor.edit(st, "claude_new")
+    if not r.get("ok"):
+        return f"VS Code couldn't open a Claude Code chat: {r.get('error') or 'no answer'}."
+    name = str(st.get("workspace") or Path(str(st.get("root") or "")).name)
+    _go.clear()
+    _go.update(root=str(st.get("root") or ""), workspace=name, t=time.time())
+    return (f"Claude Code is open in {name} and ready. Tell it what to do: /claude say <your task>. I'm watching: "
+            "you'll get its progress, its questions and its whole answer here.")
+
+
 def say(text: str) -> str:
     """Send the owner's message to Claude Code. Into the REAL chat in VS Code when the KURAMA editor link (v5+) is in
     the window of that task's folder: the chat tab opens with the text and Enter is pressed, so you see it there
@@ -509,9 +549,13 @@ def say(text: str) -> str:
     text = " ".join((text or "").split())
     if not text:
         return "What should I tell Claude Code? e.g. '/claude say run the tests and fix them'"
+    if _go and time.time() - _go.get("t", 0) < 6 * 3600:  # the new chat '/claude go' opened: its first message
+        target = {"id": "", "cwd": _go.get("root", ""), "status": "new"}
+        if (sent := _into_vscode(target, text)) is not None:
+            return sent
     s = _current()
     if s is None:
-        return "There's no Claude Code conversation to send it to. Start one in Claude Code first (with '/claude on')."
+        return "There's no Claude Code conversation to send it to. Send /claude go (in a project) first."
     if (sent := _into_vscode(s, text)) is not None:
         return sent
     if s["status"] == "working":
@@ -542,7 +586,7 @@ def _into_vscode(s: dict, text: str) -> str | None:
         next((w for w in wins if cwd and cwd.startswith(str(w.get("root") or "~~"))), None) or (wins[0] if wins else None)
     if st is None:
         return None
-    r = editor.edit(st, "claude_say", session=s["id"], text=text)
+    r = editor.edit(st, "claude_say", session=s["id"] or None, text=text)
     if not r.get("ok"):
         log.info("claude say via VS Code failed: %s", r.get("error"))
         return None
