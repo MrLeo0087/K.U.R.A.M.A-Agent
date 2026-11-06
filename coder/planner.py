@@ -19,7 +19,8 @@ Return ONLY a JSON object, no prose:
  "todo": ["<good next improvements, max 4>"]}
 Rules: industry-standard structure and names for the stack; as FEW files as a clean design needs (max %d), no tests
 unless asked, no binary files (images, sounds, fonts: the code draws them with SVG / emoji / CSS / code), no
-package lock files; order files so each comes after the files it uses; level:
+package lock files; a plain HTML/CSS/JS project must open by double-clicking index.html: classic <script> tags in
+dependency order, NO ES modules / import statements (browsers block them on file://); order files so each comes after the files it uses; level:
 easy = styles/config/README/small helpers, hard = the core logic; never put secrets in code (read them from
 environment variables; .env.example ONLY when the project really needs a key or setting)."""
 
@@ -38,6 +39,27 @@ def _json(text: str) -> dict:
 def _ok_path(p: str) -> bool:
     return bool(p) and not p.startswith(("/", "~")) and ".." not in p.split("/") and len(p) < 120 and \
         not re.search(r"(?:^|/)(?:node_modules|\.git|\.venv|venv)/|package-lock\.json$|\.(?:png|jpg|ico|zip)$", p)
+
+
+def order(files: list[FileSpec]) -> list[FileSpec]:
+    """Each file after the files it uses (the writer sees them), the plan's order otherwise. A page comes before
+    its styles and scripts (they must use the page's ids and classes), whatever the page 'uses'."""
+    by = {f.path: f for f in files}
+    out: list[FileSpec] = []
+    seen: set[str] = set()
+
+    def add(f: FileSpec, stack: tuple[str, ...]) -> None:
+        if f.path in seen or f.path in stack:
+            return
+        for u in ([] if f.path.endswith(".html") else f.uses):
+            if u in by:
+                add(by[u], (*stack, f.path))
+        if f.path not in seen:
+            seen.add(f.path)
+            out.append(f)
+    for f in files:
+        add(f, ())
+    return out
 
 
 def make(run: Run, existing: str = "", memory_text: str = "", scaffold_files: list[str] | None = None) -> None:
@@ -65,7 +87,7 @@ def make(run: Run, existing: str = "", memory_text: str = "", scaffold_files: li
                               level if level in settings.TOKENS else "normal"))
     if not files:
         raise ValueError("the plan has no files")
-    run.files = files[: settings.MAX_FILES]
+    run.files = order(files[: settings.MAX_FILES])
     run.plan_name = str(d.get("name") or run.root.name)[:60]
     run.run_cmd = str(d.get("run") or "")[:200]
     run.notes = str(d.get("notes") or "")[:800]

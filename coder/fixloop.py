@@ -57,7 +57,14 @@ def _partners(run: Run, rel: str) -> list[str]:
 
 
 def problems(run: Run) -> list[str]:
-    return connect.check(run) + verify.check(run)
+    """Static problems first (0 tokens); a web page with none is then opened headless and clicked through: its
+    browser errors count too (a plain HTML/CSS/JS project; a React app needs its packages installed first)."""
+    found = connect.check(run) + verify.check(run)
+    if not found and not (run.root / "package.json").exists():
+        from coder import preview
+        if preview.page_root(run.root) is not None:
+            found = preview.selftest(run.root) or []
+    return found
 
 
 def loop(run: Run, on_round=None) -> list[str]:

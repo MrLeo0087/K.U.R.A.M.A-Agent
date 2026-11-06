@@ -17,6 +17,8 @@ upgraded on its own; memory shared, its own working process, a temporary memory 
       safety.py        a backup of every file before it changes (undo), a secret guard
       models.py        the AI calls (KURAMA's own LLM layer: same keys, same shared rate limit) + token count
       run.py           the run's state and its temporary memory (data/coder/runs/<id>/, deleted after)
+      preview.py       a web page run for real: a local server that collects its JavaScript errors, a headless
+                       click-through after every build, "preview it", "check the page", "how does it look?"
       testing.py       "write tests" and "make the tests pass" (run, send only the failures, fix, again)
       review.py        the last build's diffs in VS Code (reject one file), a review of your changes, commit messages
       link.py          the ONLY place that talks to KURAMA: jobs, the Progress section, notifications
@@ -27,8 +29,10 @@ KURAMA calls it through jarvis/agents/coding/tools.py: `coder.start(request)`.
 """
 from __future__ import annotations
 
-from coder.api import (commit_no, commit_prepare, commit_waiting, commit_yes, diffs, make_tests_pass, no, pending,
-                       reject, review_changes, start, undo_last, write_tests, yes)
+from coder.api import (check_page, commit_no, commit_prepare, commit_waiting, commit_yes, diffs, look_at_page,
+                       make_tests_pass, no, pending, preview_page, reject, review_changes, start, undo_last,
+                       write_tests, yes)
 
-__all__ = ["commit_no", "commit_prepare", "commit_waiting", "commit_yes", "diffs", "make_tests_pass", "no", "pending",
-           "reject", "review_changes", "start", "undo_last", "write_tests", "yes"]
+__all__ = ["check_page", "commit_no", "commit_prepare", "commit_waiting", "commit_yes", "diffs", "look_at_page",
+           "make_tests_pass", "no", "pending", "preview_page", "reject", "review_changes", "start", "undo_last",
+           "write_tests", "yes"]

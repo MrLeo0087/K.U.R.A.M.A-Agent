@@ -20,6 +20,7 @@ def data(tmp_path, monkeypatch):
     monkeypatch.setattr("coder.link.to_workspace", lambda t, x: "")
     monkeypatch.setattr("coder.link.tell", lambda t, x: None)
     monkeypatch.setattr("coder.link.steps", lambda j, s: None)
+    monkeypatch.setattr("coder.preview.selftest", lambda root, seconds=6: [])  # no headless browser in unit tests
 
 
 class Ctx:
@@ -247,3 +248,45 @@ def test_reject_one_file_and_commit(monkeypatch, tmp_path):
     monkeypatch.setenv("GIT_COMMITTER_NAME", "t")
     monkeypatch.setenv("GIT_COMMITTER_EMAIL", "a@b")
     assert api.commit_waiting() and api.commit_yes() == "Committed: Add the game"
+
+
+# ---------------------------------------------------------------- step 3: the page, run for real
+def test_page_errors_become_problems(tmp_path):
+    from coder import preview
+    (tmp_path / "app.js").write_text("x")
+    errs = [{"kind": "missing", "msg": "could not load http://127.0.0.1:5/nope.css"},
+            {"kind": "missing", "msg": "could not load /favicon.ico"},
+            {"kind": "error", "msg": "Uncaught TypeError: x is null", "src": "http://127.0.0.1:5/app.js", "line": 2}]
+    assert preview.problems_of(errs, tmp_path) == ["index.html: asks for nope.css, which is missing",
+                                                   "app.js:2: browser error: Uncaught TypeError: x is null"]
+
+
+def test_selftest_clicks_through_a_real_page(tmp_path):
+    import importlib
+
+    from coder import preview
+    preview = importlib.reload(preview)  # the real one (the fixture replaced selftest)
+    if preview.browser() is None:
+        pytest.skip("no Chromium-based browser here")
+    (tmp_path / "index.html").write_text('<button id="go">Go</button><script src="app.js"></script>')
+    (tmp_path / "app.js").write_text("document.getElementById('go').onclick = () => { null.x = 1; };")
+    probs = preview.selftest(tmp_path)
+    assert probs and probs[0].startswith("app.js:1: browser error")
+
+
+def test_look_at_the_page(monkeypatch, tmp_path):
+    from coder import preview
+    from jarvis.core import llm
+
+    class R:
+        text = "- the title is cut\n- add spacing"
+    monkeypatch.setattr(preview, "screenshot", lambda root: b"png")
+    monkeypatch.setattr(llm, "chat", lambda msgs, **k: R())
+    assert preview.look(tmp_path).startswith("- the title is cut")
+
+
+def test_files_are_written_after_what_they_use():
+    from coder import planner
+    fs = [FileSpec("app.js", "", ["constants.js", "utils.js"]), FileSpec("index.html", "", ["app.js"]),
+          FileSpec("constants.js", ""), FileSpec("utils.js", "", ["constants.js"])]
+    assert [f.path for f in planner.order(fs)] == ["constants.js", "utils.js", "app.js", "index.html"]

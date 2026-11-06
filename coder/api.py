@@ -239,3 +239,51 @@ def diffs() -> str:
 def reject(name: str) -> str:
     from coder import review
     return review.reject(name)
+
+
+# ---------------------------------------------------------------- seeing it run (step 3)
+def preview_page() -> str:
+    from coder import preview
+    root = project_root()
+    return preview.open_page(root) if root else "Open the project in VS Code first."
+
+
+def check_page() -> str:
+    """The errors the page showed while the owner used it -> fixed (a job)."""
+    from coder import fixloop, preview
+    root = project_root()
+    if root is None:
+        return "Open the project in VS Code first."
+    found = preview.seen(root) or preview.selftest(root) or []
+    if not found:
+        return "The page showed no errors. (Say 'how does it look?' for a look at the design.)"
+
+    def job(ctx) -> str | None:
+        run = new(f"fix the page errors in {root.name}", root)
+        run.kind = "add"
+        ctx.progress(f"fixing {len(found)} page error(s)")
+        fixloop.fix_round(run, found)
+        left = fixloop.problems(run)
+        from coder import run as runmod
+        runmod.finish(run)
+        ctx.progress("» " + ("Fixed: the page runs without errors now. Reload it to see." if not left else
+                             f"{len(left)} error(s) are left: " + "; ".join(left[:3])))
+        return None
+    n = link.submit(f"Fix the page: {root.name}", job)
+    return f"The page showed {len(found)} error(s); fixing them (job #{n}): " + "; ".join(found[:2])
+
+
+def look_at_page(request: str = "") -> str:
+    from coder import preview
+    root = project_root()
+    if root is None:
+        return "Open the project in VS Code first."
+
+    def job(ctx) -> str | None:
+        ctx.progress("taking a look at the page")
+        text = preview.look(root, request)
+        link.to_workspace(f"How {root.name} looks", text)
+        ctx.progress("» " + (text.splitlines()[0][:200] if text else "No answer.") + " (the whole look is in the workspace)")
+        return None
+    n = link.submit(f"Look at {root.name}", job)
+    return f"Looking at the page (job #{n})."

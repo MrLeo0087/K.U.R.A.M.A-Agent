@@ -16,9 +16,10 @@ from jarvis.core.registry import tool
                   "or change; tests = write pytest tests (request: a file name or empty); pass = run the tests and fix "
                   "the code until they pass; review = review the uncommitted changes; commit = write a commit message "
                   "(commits after yes); diffs = show the last build's changes side by side; reject = put one file "
-                  "back (request = its name).")
+                  "back (request = its name); preview = open the web page with error collection; check_page = fix "
+                  "the errors the page showed; look = the vision model's look at the page's design.")
 def coding(action: Literal["fix", "bridge", "apply", "project", "undo", "yes", "no", "run", "tests", "pass", "review",
-                           "commit", "diffs", "reject"], request: str = "",
+                           "commit", "diffs", "reject", "preview", "check_page", "look"], request: str = "",
            site: str = "", error: str = "") -> str:
     """The coding agent.
 
@@ -44,8 +45,10 @@ def coding(action: Literal["fix", "bridge", "apply", "project", "undo", "yes", "
         if re.search(r"\b(?:project|build|built|everything|all of it|whole)\b", request or "", re.I):
             return coder.undo_last()
         return changes.undo()
-    if action in ("tests", "pass", "review", "commit", "diffs", "reject"):
+    if action in ("tests", "pass", "review", "commit", "diffs", "reject", "preview", "check_page", "look"):
         return {"tests": lambda: coder.write_tests(request), "pass": coder.make_tests_pass,
+                "preview": coder.preview_page, "check_page": coder.check_page,
+                "look": lambda: coder.look_at_page(request),
                 "review": coder.review_changes, "commit": coder.commit_prepare, "diffs": coder.diffs,
                 "reject": lambda: coder.reject(request)}[action]()
     if action == "yes":

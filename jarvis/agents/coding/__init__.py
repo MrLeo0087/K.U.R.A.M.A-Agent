@@ -35,6 +35,10 @@ EXAMPLES: dict[str, tuple[str, ...]] = {
                "is my change ok before i commit"),
     "commit": ("commit this", "commit my changes", "write a commit message", "make a git commit"),
     "diffs": ("show me what you changed", "show the changes side by side", "open the diff", "what did you change"),
+    "preview": ("preview it", "open the page in the browser", "show me the website running", "run the web page"),
+    "check_page": ("check the page", "fix the errors on the page", "the page has errors, fix them",
+                   "what errors did the page show"),
+    "look": ("how does it look", "check the design of the page", "is the ui good", "look at the page and improve it"),
     "reject": ("reject app.js", "put back style.css", "i don't want the change in main.py", "reject that file"),
     "run": ("run it again", "run the project", "run it"),
 }
