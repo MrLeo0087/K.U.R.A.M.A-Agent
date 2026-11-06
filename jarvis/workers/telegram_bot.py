@@ -1,6 +1,7 @@
 """Telegram remote control (worker "telegram_bot"): long-polling getUpdates over plain httpx.
 
-Only messages from TELEGRAM_CHAT_ID are handled; anything else is ignored silently (and logged).
+Only messages from TELEGRAM_CHAT_ID are handled (the private chat, or the owner writing in a topic of the sections
+group, answered in that topic); anything else is ignored silently (and logged).
 Text goes to agent.run(text, mode="text") with a Telegram confirm hook (safety mode "telegram"):
 confirm-level tools send "Reply yes/no" and wait for the next message (timeout or unclear = no);
 blocked tools never run (safety.execute refuses them). Commands: /status, /jobs, /help. Replies are
@@ -40,7 +41,7 @@ HELP = (
     "/claude stop — stop it now (it stops at its next step)\n"
     "/claude usage — how much Claude Code was used today\n"
     "\n🗂 Sections\n"
-    "/topics setup | off — sort alerts, Claude Code and reminders into topics of your own group\n"
+    "/topics setup | off — your own group with sections (alerts, Claude Code, reminders, jobs, images, other); talk to me in any of them\n"
     "\n📷 Camera & screen\n"
     "/camera — a photo from the laptop camera\n"
     "/video [secs] — a short camera clip (e.g. /video 8)\n"
@@ -279,12 +280,28 @@ class TelegramBot(Worker):
             from jarvis.core import tgtopics
             tgtopics.note_group(m["chat"])
 
+    @staticmethod
+    def _owner_in_group(msg: dict) -> bool:
+        """The owner writing in a topic of the sections group (anyone else there is never answered)."""
+        from jarvis.core import tgtopics
+        g = tgtopics.group_id()
+        return bool(g) and str((msg.get("chat") or {}).get("id")) == str(g) and \
+            str((msg.get("from") or {}).get("id")) == str(config.TELEGRAM_CHAT_ID)
+
+    @staticmethod
+    def _target(msg: dict) -> tuple:
+        """Where the answer goes: the private chat, or the group topic the owner wrote in (General has no thread)."""
+        chat = (msg.get("chat") or {}).get("id")
+        if str(chat) == str(config.TELEGRAM_CHAT_ID):
+            return (config.TELEGRAM_CHAT_ID, None)
+        return (chat, msg.get("message_thread_id") if msg.get("is_topic_message") else None)
+
     def _own_message(self, update: dict) -> dict | None:
         msg = update.get("message") or update.get("edited_message")
         if not msg:
             return None
         chat = str((msg.get("chat") or {}).get("id", ""))
-        if chat != str(config.TELEGRAM_CHAT_ID):
+        if chat != str(config.TELEGRAM_CHAT_ID) and not self._owner_in_group(msg):
             self.log.info("ignored message from chat %s", chat)
             return None
         # never execute stale commands queued while KURAMA was off (e.g. old "hi", old "delete ...")
@@ -319,6 +336,13 @@ class TelegramBot(Worker):
         msg = self._own_message(update)
         if msg is None:
             return
+        notify.set_reply_target(self._target(msg))  # every reply, photo and "typing…" goes back where it was asked
+        try:
+            self._handle(update, msg, watch)
+        finally:
+            notify.set_reply_target(None)
+
+    def _handle(self, update: dict, msg: dict, watch: bool) -> None:
         if (lag := time.time() - int(msg.get("date") or time.time())) > 5:
             self.log.info("message picked up %.0f s after it was sent", lag)
         if msg.get("location"):  # a shared pin or a live-location update from the phone -> the phone's trail
@@ -402,14 +426,18 @@ class TelegramBot(Worker):
         except Exception:  # noqa: BLE001
             pass
 
+        to = notify.reply_target()
+
         def run() -> None:
             t0 = time.monotonic()
             try:
-                out = self._answer(cmd)
+                with notify.replying_to(to):
+                    out = self._answer(cmd)
             except Exception as e:  # noqa: BLE001
                 out = f"Sorry, that failed: {type(e).__name__}: {str(e)[:200]}"
             if out and not out.startswith(("Sent to your Telegram", "Sent the")):
-                self.send(out)
+                with notify.replying_to(to):
+                    self.send(out)
             self.log.info("%s done in %.1f s", cmd, time.monotonic() - t0)
         threading.Thread(target=run, name="tg-upload", daemon=True).start()
         return True

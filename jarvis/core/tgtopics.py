@@ -1,14 +1,17 @@
 """Telegram sections: KURAMA's messages sorted into topics of your own Telegram group instead of one long chat.
 
-    ⚠️ Alerts            RAM / battery / guard warnings, errors
-    🤖 Claude Code       the Claude Code watch
-    ⏰ Reminders & jobs  reminders, finished background jobs, the daily summary, training
-    📌 Other             everything else KURAMA sends by itself
+    ⚠️ Alerts       RAM / battery / guard warnings, errors
+    🤖 Claude Code  the Claude Code watch
+    ⏰ Reminders    reminders, alarms, timers, the morning brief, habits and to-dos
+    ⚙️ Jobs         finished background jobs, training, downloads, installs, backups
+    🖼️ Images       pictures KURAMA sends by itself (made images, screenshots)
+    📌 Other        everything else KURAMA sends by itself
 
-Your conversation with KURAMA (questions, commands, /screen...) stays in the private chat with the bot.
+Two-way: you can also TALK to KURAMA in any topic (General included); the answer comes back in that same topic
+(only your own messages are answered: anyone else in the group is ignored). The private chat works as before.
 Setup, once: make a Telegram group, turn on Topics (group settings), add your KURAMA bot and make it an admin
-that can manage topics, write anything in the group, then send "/topics setup" to the bot in your private chat.
-"/topics off" puts everything back in the private chat. 0 tokens.
+that can manage topics, write anything in the group, then send "/topics setup" to the bot. Running it again only
+adds the sections that are missing. "/topics off" puts everything back in the private chat. 0 tokens.
 """
 from __future__ import annotations
 
@@ -17,10 +20,11 @@ import logging
 
 log = logging.getLogger("jarvis.tgtopics")
 
-SECTIONS = {"alerts": "⚠️ Alerts", "claude": "🤖 Claude Code", "jobs": "⏰ Reminders & jobs", "other": "📌 Other"}
+SECTIONS = {"alerts": "⚠️ Alerts", "claude": "🤖 Claude Code", "reminders": "⏰ Reminders", "jobs": "⚙️ Jobs",
+            "images": "🖼️ Images", "other": "📌 Other"}
 _KEY, _CAND = "tg_topics", "tg_group_candidate"
-_JOB_SOURCES = ("scheduler", "reminders", "jobs", "longjobs", "daily_digest", "brief", "training", "process_watch",
-                "kaggle", "colab", "goals", "habits")
+_REMINDER_SOURCES = ("scheduler", "reminders", "timer", "todo", "habits", "goals", "brief", "daily_digest", "study")
+_JOB_SOURCES = ("jobs", "longjobs", "training", "process_watch", "kaggle", "colab", "downloads", "installer", "backup")
 
 
 def _kv(key: str) -> dict:
@@ -47,23 +51,40 @@ def setup() -> str:
     if not g.get("id"):
         return ("I haven't seen your group yet. Make a Telegram group, turn on Topics in its settings, add me and make "
                 "me an admin that can manage topics, write any message in the group, then send /topics setup again.")
-    threads = {}
+    old = _kv(_KEY)
+    threads = dict(old.get("threads") or {}) if old.get("group") == g["id"] else {}
+    if threads.get("jobs") and "reminders" not in threads:  # the old shared "Reminders & jobs" topic: reminders
+        threads["reminders"] = threads.pop("jobs")
+    made = []
     try:
         for key, name in SECTIONS.items():
+            if key in threads:  # already there: never a second copy
+                continue
             r = notify.telegram_call("createForumTopic", {"chat_id": g["id"], "name": name})
             threads[key] = r["message_thread_id"]
+            made.append(key)
     except RuntimeError as e:
         return (f"I couldn't make the topics in '{g.get('title')}': {e}. Check that Topics are on and that I'm an admin "
                 "who can manage topics, then send /topics setup again.")
     store.kv_set(_KEY, json.dumps({"group": g["id"], "title": g.get("title"), "threads": threads}))
+    if threads.get("reminders") and "reminders" not in made:  # renamed from "Reminders & jobs"
+        try:
+            notify.telegram_call("editForumTopic", {"chat_id": g["id"], "message_thread_id": threads["reminders"],
+                                                    "name": SECTIONS["reminders"]})
+        except RuntimeError:
+            pass
     for key, name in SECTIONS.items():
+        if key not in made:
+            continue
         try:
             notify.telegram_call("sendMessage", {"chat_id": g["id"], "message_thread_id": threads[key],
-                                                 "text": f"{name}: KURAMA's {name.split(' ', 1)[1].lower()} come here."})
+                                                 "text": f"{name}: KURAMA's {name.split(' ', 1)[1].lower()} come here. "
+                                                         "You can talk to me here too."})
         except RuntimeError:
             pass
     return (f"Done: '{g.get('title')}' now has the sections {', '.join(SECTIONS.values())}. Alerts and updates go "
-            "there; our chat stays here. /topics off puts everything back here.")
+            "there, and you can talk to me in any of them (I answer in the same topic). /topics off puts everything "
+            "back here.")
 
 
 def off() -> str:
@@ -82,6 +103,10 @@ def status() -> str:
 def section_for(source: str, level: str, title: str = "") -> str:
     if source == "claude_code" or "Claude Code" in title:
         return "claude"
+    if source == "images":
+        return "images"
+    if source in _REMINDER_SOURCES:
+        return "reminders"
     if source in _JOB_SOURCES:
         return "jobs"
     if level in ("warning", "error"):
@@ -96,3 +121,8 @@ def where(source: str, level: str, title: str = "") -> tuple[int | None, int | N
         return None, None
     thread = (t.get("threads") or {}).get(section_for(source, level, title))
     return (t["group"], thread) if thread else (None, None)
+
+
+def group_id() -> int | None:
+    """The sections group (or the one seen for setup), whose topics the owner may talk in."""
+    return _kv(_KEY).get("group") or _kv(_CAND).get("id")

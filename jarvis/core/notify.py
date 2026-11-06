@@ -34,6 +34,97 @@ _recent: dict[tuple[str, str], float] = {}  # (title, text) -> last sent
 _tg_sent: collections.deque[float] = collections.deque()
 _client = None
 
+# --- where a reply goes: the owner can talk to KURAMA in any topic of the sections group, and the answer (text,
+# photos, files, "typing…") goes back to that topic. Everything addressed to the private chat is redirected while a
+# target is set: per thread (replying_to, e.g. a background job asked from a topic), else the bot's current message.
+_here = threading.local()
+_reply_global: tuple | None = None
+_MEDIA = ("sendPhoto", "sendVideo", "sendMediaGroup", "sendAnimation")
+_ALERT_IDS = "tg_alert_msgs"  # [chat, message_id] of alerts sent, so /clear can remove them from Telegram
+
+
+def reply_target() -> tuple | None:
+    """(chat id, topic thread id or None) the current reply goes to, or None (the private chat)."""
+    return getattr(_here, "to", None) or _reply_global
+
+
+def set_reply_target(to: tuple | None) -> None:
+    """The Telegram bot: the message it is answering came from here (None when done)."""
+    global _reply_global
+    _reply_global = to
+
+
+class replying_to:  # noqa: N801 - used as `with notify.replying_to(target):` in this thread only
+    def __init__(self, to: tuple | None):
+        self.to = to
+
+    def __enter__(self):
+        self.old, _here.to = getattr(_here, "to", None), self.to
+
+    def __exit__(self, *exc):
+        _here.to = self.old
+
+
+def _route(method: str, payload: dict | None) -> dict | None:
+    """A message for the private chat goes to the topic being talked in; a picture KURAMA sends on its own goes to
+    the Images section (when sections are on)."""
+    if not payload or str(payload.get("chat_id")) != str(config.TELEGRAM_CHAT_ID) or payload.get("message_thread_id"):
+        return payload
+    to = reply_target()
+    if to is None and method in _MEDIA:
+        try:
+            from jarvis.core import tgtopics
+            g, t = tgtopics.where("images", "info")
+            to = (g, t) if g else None
+        except Exception:  # noqa: BLE001
+            to = None
+    if not to or to[0] is None:
+        return payload
+    p = dict(payload, chat_id=to[0])
+    if to[1]:
+        p["message_thread_id"] = to[1]
+    return p
+
+
+def _keep_ids(result) -> None:
+    """Remember a sent alert so /clear can delete it later (the newest 500)."""
+    import json
+    if not isinstance(result, dict) or not result.get("message_id"):
+        return
+    try:
+        ids = json.loads(store.kv_get(_ALERT_IDS) or "[]")
+        ids.append([(result.get("chat") or {}).get("id"), result["message_id"]])
+        store.kv_set(_ALERT_IDS, json.dumps(ids[-500:]))
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def delete_alerts() -> int:
+    """Delete the alerts KURAMA sent to Telegram (private chat and sections) — /clear, /clearchat, /reset.
+    Telegram lets a bot delete its messages for 48 hours; older ones are skipped. Returns how many were asked."""
+    import json
+    try:
+        ids = json.loads(store.kv_get(_ALERT_IDS) or "[]")
+    except Exception:  # noqa: BLE001
+        return 0
+    store.kv_delete(_ALERT_IDS)
+    by_chat: dict = collections.defaultdict(list)
+    for chat, mid in ids:
+        if chat:
+            by_chat[chat].append(mid)
+    for chat, mids in by_chat.items():
+        for i in range(0, len(mids), 100):
+            try:
+                telegram_call("deleteMessages", {"chat_id": chat, "message_ids": mids[i:i + 100]})
+            except RuntimeError as e:  # some too old: one by one, skipping those
+                log.info("deleteMessages: %s", e)
+                for m in mids[i:i + 100]:
+                    try:
+                        telegram_call("deleteMessage", {"chat_id": chat, "message_id": m})
+                    except RuntimeError:
+                        pass
+    return len(ids)
+
 
 def redact(text: str) -> str:
     """Remove the bot token from anything that might be logged or shown."""
@@ -95,6 +186,7 @@ def telegram_call(method: str, payload: dict | None = None, timeout: float | Non
     if not config.TELEGRAM_BOT_TOKEN:
         raise RuntimeError("telegram is not configured")
     url = TELEGRAM_API.format(token=config.TELEGRAM_BOT_TOKEN, method=method)
+    payload = _route(method, payload)
     try:
         if files and upload:  # a FRESH connection per upload: a pooled one gone stale behind the router hung the
             r = _upload(url, payload, files, timeout)  # upload for a minute and then failed (11-04)
@@ -142,23 +234,29 @@ def split_for_telegram(text: str) -> tuple[list[str], str]:
     return [folded(head, rest[:c2]) + "\n📎 The whole text is in the file below."], text
 
 
-def send_long(text: str, chat_id: str | int | None = None, title: str = "reply", thread: int | None = None) -> bool:
-    """Send any text to Telegram complete: folded "show more" messages, plus an .md file when it is very long."""
+def send_long(text: str, chat_id: str | int | None = None, title: str = "reply", thread: int | None = None,
+              keep: bool = False) -> bool:
+    """Send any text to Telegram complete: folded "show more" messages, plus an .md file when it is very long.
+    keep: an alert, remembered so /clear can delete it."""
     parts, whole = split_for_telegram(text)
     ok = True
     for part in parts:
         try:
-            telegram_call("sendMessage", {"chat_id": chat_id or config.TELEGRAM_CHAT_ID, "text": part,
-                                          "parse_mode": "HTML", "disable_web_page_preview": True,
-                                          **({"message_thread_id": thread} if thread else {})})
+            r = telegram_call("sendMessage", {"chat_id": chat_id or config.TELEGRAM_CHAT_ID, "text": part,
+                                              "parse_mode": "HTML", "disable_web_page_preview": True,
+                                              **({"message_thread_id": thread} if thread else {})})
+            if keep:
+                _keep_ids(r)
         except RuntimeError as e:  # (an HTML problem: the same text plain, never lost)
             log.warning("telegram send failed (%s): sending plain", e)
             try:
                 import html
                 plain = re.sub(r"</?blockquote[^>]*>", "", part)
-                telegram_call("sendMessage", {"chat_id": chat_id or config.TELEGRAM_CHAT_ID,
-                                              "text": html.unescape(plain), "disable_web_page_preview": True,
-                                              **({"message_thread_id": thread} if thread else {})})
+                r = telegram_call("sendMessage", {"chat_id": chat_id or config.TELEGRAM_CHAT_ID,
+                                                  "text": html.unescape(plain), "disable_web_page_preview": True,
+                                                  **({"message_thread_id": thread} if thread else {})})
+                if keep:
+                    _keep_ids(r)
             except RuntimeError as e2:
                 log.warning("telegram send failed: %s", e2)
                 return False
@@ -176,7 +274,7 @@ def send_long(text: str, chat_id: str | int | None = None, title: str = "reply",
     return ok
 
 
-def telegram_send(text: str, chat_id: str | int | None = None, thread: int | None = None) -> bool:
+def telegram_send(text: str, chat_id: str | int | None = None, thread: int | None = None, keep: bool = False) -> bool:
     """sendMessage to the configured chat (rate-limited). False when not configured or failed."""
     if not telegram_configured():
         return False
@@ -188,7 +286,7 @@ def telegram_send(text: str, chat_id: str | int | None = None, thread: int | Non
             log.warning("telegram rate limit reached; message dropped")
             return False
         _tg_sent.append(now)
-    return send_long(text, chat_id, title=text.split("\n", 1)[0][:40], thread=thread)  # complete, never cut
+    return send_long(text, chat_id, title=text.split("\n", 1)[0][:40], thread=thread, keep=keep)  # complete
 
 
 def desktop_send(title: str, text: str, level: str = "info") -> bool:
@@ -339,7 +437,7 @@ def notify(title: str, text: str = "", level: str = "info", source: str = "", de
         group, thread = tgtopics.where(source, level, title)
     except Exception:  # noqa: BLE001 - no sections: the private chat
         pass
-    if telegram and telegram_send(f"{_ICON[level]}{title}\n{text}".strip(), group, thread):
+    if telegram and telegram_send(f"{_ICON[level]}{title}\n{text}".strip(), group, thread, keep=True):
         sent.append("telegram")
     if save:
         try:

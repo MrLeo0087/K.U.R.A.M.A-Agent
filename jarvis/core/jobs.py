@@ -148,7 +148,7 @@ class JobManager:
             except Exception:
                 pass
         if job.origin == "telegram":
-            _send_after[jid] = True  # asked from the phone: the result itself goes back to the phone
+            _send_after[jid] = _asked_from()  # asked from the phone: the result goes back where it was asked
         with self._lock:
             self._jobs[jid] = job
         try:  # the turn that started it lists it, so the UI watches it and announces / shows the result
@@ -229,8 +229,10 @@ class JobManager:
             store.kv_delete(f"job_resume:{job.id}")
             from jarvis.core import workmem
             workmem.note_job(job)  # the essay / image it made is "it" for the next request
-        if _send_after.pop(job.id, False) and status == "done":
-            send_output(job)
+        if (to := _send_after.pop(job.id, False)) and status == "done":
+            from jarvis.core import notify
+            with notify.replying_to(to if isinstance(to, tuple) else None):  # the topic it was asked in
+                send_output(job)
         for cb in list(self._callbacks):
             try:
                 cb(job)
@@ -317,7 +319,12 @@ def _from_row(row: dict) -> Job:
 
 
 # --- follow-ups: "make X and send it to my Telegram" ---
-_send_after: dict[int, bool] = {}
+_send_after: dict[int, bool | tuple] = {}  # job -> True, or the Telegram (chat, topic) it was asked from
+
+
+def _asked_from() -> bool | tuple:
+    from jarvis.core import notify
+    return notify.reply_target() or True
 
 
 def then_send(job_id: int) -> str:
@@ -328,7 +335,7 @@ def then_send(job_id: int) -> str:
     if job.status == "done":
         return send_output(job)
     if job.status in ACTIVE:
-        _send_after[job.id] = True
+        _send_after[job.id] = _asked_from()
         return f"I'll send it to your Telegram as soon as job #{job.id} is ready."
     return f"error: job #{job.id} {job.status}, so there's nothing to send"
 

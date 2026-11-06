@@ -38,12 +38,23 @@ def _clear_caches() -> None:
             pass
 
 
+def _old_alerts() -> str:
+    """Delete the warnings / alerts KURAMA sent to Telegram (Telegram allows it for 48 hours)."""
+    try:
+        from jarvis.core import notify
+        n = notify.delete_alerts()
+    except Exception:  # noqa: BLE001 - clearing must never fail on Telegram
+        return ""
+    return f" {n} old alert{'s' if n != 1 else ''} removed from Telegram." if n else ""
+
+
 def clear_chat(agent=None) -> str:
-    """Forget the current conversation; keep reminders and personal facts."""
+    """Forget the current conversation; keep reminders and personal facts. Old alerts leave Telegram."""
     if agent is not None:
         agent.clear_conversation()
     bump_epoch()
-    return "Chat cleared — fresh conversation. (Your reminders and what I know about you are kept.)"
+    return ("Chat cleared — fresh conversation. (Your reminders and what I know about you are kept.)"
+            + _old_alerts())
 
 
 def clear_reminders() -> int:
@@ -64,11 +75,13 @@ def clear_recent(agent=None) -> str:
     _clear_caches()
     bump_epoch()
     return (f"Cleared: this chat, {n} reminder/alarm/timer{'s' if n != 1 else ''}, and cached data. "
-            "What I know about you (your name, notes you asked me to remember) is kept — say 'reset KURAMA' to wipe that too.")
+            "What I know about you (your name, notes you asked me to remember) is kept — say 'reset KURAMA' to wipe "
+            "that too." + _old_alerts())
 
 
 # kv rows that are settings or plumbing, not memories: kept by the full reset
-KEEP_KV = frozenset(("power_mode", "semantic_mode", "hear_device_sound", "telegram_offset", "todos_migrated_from_sheet"))
+KEEP_KV = frozenset(("power_mode", "semantic_mode", "hear_device_sound", "telegram_offset", "todos_migrated_from_sheet",
+                     "tg_topics", "tg_group_candidate"))  # the Telegram sections are a setting
 KEEP_TABLES = frozenset(("config_snapshots",))
 SHEETS = ("READ_LATER_FILE", "LINKS_FILE", "GOALS_FILE", "CONTACTS_FILE", "EXPENSES_FILE", "HABITS_FILE", "GOALS_DIR")
 # what KURAMA learned from the owner (docs/LEARNING.md): moved to the backup by the full reset
@@ -173,9 +186,10 @@ def reset_all(agent=None, keep: frozenset[str] = frozenset()) -> str:
     from jarvis.core import config
     if agent is not None:
         agent.clear_conversation()
+    gone = _old_alerts()  # before the wipe: the list of sent alerts is in kv
     stamp = time.strftime("%Y%m%d-%H%M%S")
     saved = _backup(stamp, keep)
     rows = _wipe_db(_db_path(), KEEP_TABLES, KEEP_KV) + _wipe_db(config.MEMORY_DB_PATH)
     bump_epoch()
     return (f"KURAMA is brand new: I forgot every chat, fact, reminder, to-do, alert and result ({rows} records). "
-            f"A backup is in {saved[0]}" + (f" and {saved[1]}" if len(saved) > 1 else "") + ".")
+            f"A backup is in {saved[0]}" + (f" and {saved[1]}" if len(saved) > 1 else "") + "." + gone)
