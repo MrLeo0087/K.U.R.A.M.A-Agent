@@ -32,6 +32,7 @@ GROUPS = [  # (folder, heading)
     ("coder/agent", "Coding agent: the agent loop"),
     ("coder/builder", "Coding agent: making a new project"),
     ("coder/interfaces", "Coding agent: the API, the KURAMA link, the command line"),
+    ("coder/evals", "Coding agent: evaluations from real requests"),
     ("jarvis/workers", "Background helpers"),
     ("frontend", "The window (what you see)"),
     ("scripts", "Scripts (start, stop, the desktop window, reports)"),
