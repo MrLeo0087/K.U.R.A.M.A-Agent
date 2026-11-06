@@ -18,13 +18,13 @@ import time
 from pathlib import Path
 from typing import Any, TypedDict
 
-from coder.interfaces import link
-from coder.memory import card as memory
-from coder.llm import models
-from coder.memory import repomap
-from coder.core import settings
-from coder.tools import builtin as tools
+from coder.core import session, settings
 from coder.core.run import Run
+from coder.interfaces import link
+from coder.llm import models
+from coder.memory import card as memory
+from coder.memory import repomap
+from coder.tools import builtin as tools
 
 MAX_STEPS = 12
 STEP_TOKENS = 1800  # a step's output (an edit can carry code)
@@ -39,14 +39,14 @@ _STEP_SYS = ("You are a careful coding agent working inside the user's project, 
              "goal; if something is still wrong you get it back to fix. To just run something (\"run it and tell me "
              "what it prints\"), use run_project / run, then done with what it printed. Never install or delete by "
              "yourself: call ask. Stay inside the project. Don't read a file again: its current content is in 'Files "
-             "you have read'.")
+             "you have read'. If the goal says 'it' / 'that' and the recent tasks don't make clear what is meant, call ask.")
 VISUAL = re.compile(r"\b(?:ui|ux|look|looks|design|colou?r|grey|gray|dark|light|button|layout|left|right|center|centre|"
                     r"top|bottom|align|font|size|bigger|smaller|spacing|margin|padding|style|theme|beautiful|ugly|flat|"
                     r"modern|page|screen|header|footer|card|icon|image|responsive|blue|red|green|black|white|purple|orange|yellow|pink|bold|italic)\b", re.I)
 MAX_VERIFY = 1  # one fix round after a failed check (each costs a screenshot + a look)
 _RUN_GOAL = re.compile(r"\b(?:run|start|launch|execute|screenshot|how (?:does )?it looks?|what (?:does it|it) (?:print|say|show)|output|crash(?:ed|es)?|"
                        r"the command)\b", re.I)
-_CHECK_TOOLS = {"run_project", "screenshot", "look", "page_errors"}  # for a change, the verify step does these
+_CHECK_TOOLS = {"run_project", "screenshot", "look", "page_errors", "run"}  # for a change, the verify step does these
 
 
 class S(TypedDict, total=False):
@@ -105,9 +105,24 @@ def context(run: Run) -> str:
         pass
     if style := _style():
         parts.append("The owner's preferences: " + style)
-    if last := _last_task(run.root):
-        parts.append("The previous task here (\"it\" / \"that\" may mean this): " + last)
+    if last := session.recap(run.root):
+        parts.append("Recent tasks in this project (\"it\" / \"that\" / \"make it grey\" refer to these):\n" + last)
     return "\n\n".join(parts)
+
+
+_FOLLOWUP = re.compile(r"\b(?:it|that|this|too|more|again|also|same)\b", re.I)
+
+
+def resolve_followup(root: Path, goal: str) -> str:
+    """A short follow-up ('make it bigger too', 'now grey') gets the last task spelled out (a small model guessed
+    the wrong 'it' from older tasks, 11-07): 'make it bigger too [it = the last task: make the result text green]'."""
+    if len(goal.split()) > 12 or not _FOLLOWUP.search(goal):
+        return goal
+    last = session.recent(root, 1)
+    if not last:
+        return goal
+    t = last[-1]
+    return f"{goal}  [here 'it' / 'that' = what the last task changed: \"{t.get('goal', '')[:160]}\" -> {t.get('result', '')[:160]}]"
 
 
 def small_project(run: Run, limit: int = 9000) -> dict:
@@ -132,6 +147,7 @@ def _plan(state: S) -> dict:
     plan = [str(x)[:120] for x in (out.get("plan") or [])][:6] or ["read the relevant files", "make the change",
                                                                      "run / check it"]
     _steps(state, plan, 0)
+    session.log(run.root, "plan", task=run.id, plan=plan)
     return {"plan": plan, "check": str(out.get("check") or "")[:200]}
 
 
@@ -189,6 +205,9 @@ def _act(state: S) -> dict:
         args = {}
     if name == "done":
         return {"done": str(args.get("summary") or "Done.")[:500], "steps": step}
+    if step >= 6 and not run.written and not running:  # six steps and nothing changed: it doesn't know what is meant
+        return {"ask": "I'm not sure which part you mean. Which file or element should I change (or describe it a bit "
+                       "more)?", "steps": step}
     if name in ("edit", "write"):
         state["fixing"] = False
     if run.written and name not in ("edit", "write", "read", "grep", "find", "list") and not running:
@@ -198,6 +217,8 @@ def _act(state: S) -> dict:
         return {"ask": str(args.get("question") or "")[:400], "command": str(args.get("command") or "")[:300], "steps": step}
     ctx.progress(f"{_icon(name)} {name} {_short_args(args)}"[:120])
     obs = tools.call(run, name, args)
+    session.log(run.root, "tool", task=run.id, step=state.get("steps", 0) + 1, tool=name, args=_short_args(args),
+                result=(obs or "")[:300], tokens=run.tokens)
     if name == "read" and not obs.startswith(("tool error", "no ")) and "doesn't exist" not in obs:
         seen[str(args.get("path"))] = obs
     if name in ("edit", "write") and obs.startswith(("edited", "wrote")):  # what it read is now the NEW text
@@ -239,6 +260,7 @@ def _verify(state: S) -> dict:
                 #                                                      point among many done ones is not a redo)
                 problems.append("The screenshot shows it isn't fully done yet:\n" + seen)
     note = f"check {rounds}: " + ("all good" if not problems else problems[0].splitlines()[0][:100])
+    session.log(run.root, "check", task=run.id, round=rounds, ok=not problems, problems=[p[:300] for p in problems])
     notes = [*(state.get("notes") or []), note]
     if problems and rounds <= MAX_VERIFY:
         return {"verified": rounds, "done": "", "notes": notes, "fixing": True,
@@ -267,7 +289,6 @@ def _finish(state: S) -> dict:
     notes = state.get("notes") or []
     if run.written:
         memory.note_task(run, state["goal"], state.get("done") or "", notes)
-    _save_last_task(run.root, state["goal"], state.get("done") or "", notes)
     _learn_style(state["goal"])
     return {}
 
@@ -292,10 +313,14 @@ def task_job(run: Run, goal: str):
     def job(ctx) -> str | None:
         from coder.core import safety
         safety.begin(run)
+        goal_full = resolve_followup(run.root, goal)
+        session.task_start(run.root, run.id, goal)
         ctx.progress("reading the project")
-        state = graph().invoke({"run": run, "ctx": ctx, "goal": goal, "context": context(run), "notes": [],
+        state = graph().invoke({"run": run, "ctx": ctx, "goal": goal_full, "context": context(run), "notes": [],
                                 "steps": 0, "seen": small_project(run)}, {"recursion_limit": 2 * MAX_STEPS + 10})
         line = _report(run, goal, state, ctx.job.id)
+        status = "asked" if state.get("ask") else "done" if state.get("done") else "stopped"
+        session.task_end(run.root, run.id, status, line, run.written, state.get("notes") or [], run.tokens)
         ctx.progress("» " + line)
         return str(run.root)
     return job
@@ -333,25 +358,6 @@ def _short_args(args: dict) -> str:
     keep = {k: (str(v)[:40] + "…" if len(str(v)) > 40 else str(v)) for k, v in (args or {}).items()
             if k not in ("content", "new", "old")}
     return ", ".join(f"{k}={v}" for k, v in keep.items())
-
-
-def _last_path() -> Path:
-    return settings.data_dir() / "last_task.json"
-
-
-def _save_last_task(root: Path, goal: str, done: str, notes: list[str]) -> None:
-    _last_path().write_text(json.dumps({"root": str(root), "goal": goal, "done": done, "notes": notes[-8:],
-                                        "t": time.time()}), encoding="utf-8")
-
-
-def _last_task(root: Path) -> str:
-    try:
-        d = json.loads(_last_path().read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return ""
-    if d.get("root") != str(root) or time.time() - float(d.get("t") or 0) > 6 * 3600:
-        return ""
-    return f"{d['goal']} -> {d.get('done') or 'unfinished'}; " + " / ".join(n[:80] for n in d.get("notes", [])[-4:])
 
 
 def _waiting_path() -> Path:

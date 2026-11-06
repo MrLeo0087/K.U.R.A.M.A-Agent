@@ -6,8 +6,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from coder.interfaces import link
 from coder.core import settings
+from coder.interfaces import link
 
 I = re.I
 # (stack, words that name it): the first that matches wins; order = most specific first

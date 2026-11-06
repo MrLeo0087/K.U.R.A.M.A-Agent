@@ -16,10 +16,10 @@ import subprocess
 from collections import Counter
 from pathlib import Path
 
-from coder.memory import card as memory
-from coder.llm import models
-from coder.memory import repomap
 from coder.core.run import Run, new
+from coder.llm import models
+from coder.memory import card as memory
+from coder.memory import repomap
 
 _SYS = ("You are onboarding onto a codebase from facts about it (not its full code). Write a concise project card in "
         "Markdown with exactly these sections:\n## Overview\n(3-6 lines: what it does, for whom)\n## Architecture\n(how "

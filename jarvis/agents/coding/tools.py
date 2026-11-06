@@ -35,6 +35,7 @@ Safety
 /code reject <file> — that one file back
 /code undo [project] — undo my last change / the whole last build
 /code setup — make a .venv, install requirements.txt, run it and fix what breaks
+/code log — what I did in the last task (every step)
 /code tokens — tokens used per project
 /code bridge — a ready prompt for ChatGPT / Gemini / Claude; /code apply — put its answer into the files
 
@@ -57,7 +58,7 @@ Plain words work too: "create a portfolio website", "add a dark mode to this pro
                   "the coding agent can do. 'after that, <request>' while a build runs = queued.")
 def coding(action: Literal["fix", "bridge", "apply", "project", "undo", "yes", "no", "run", "tests", "pass", "review",
                            "commit", "diffs", "reject", "preview", "check_page", "look", "continue", "handoff",
-                           "tokens", "learn", "help", "new", "check", "claude", "setup", "run_task"], request: str = "",
+                           "tokens", "learn", "help", "new", "check", "claude", "setup", "run_task", "log"], request: str = "",
            site: str = "", error: str = "") -> str:
     """The coding agent.
 
@@ -84,6 +85,8 @@ def coding(action: Literal["fix", "bridge", "apply", "project", "undo", "yes", "
         return got  # the loop asked something / stopped: this reply resumes it
     if action == "run_task":
         return coder.interfaces.api.task(request)
+    if action == "log":
+        return coder.interfaces.api.what_happened()
     if action == "fix":
         said = f"{request} {error}".strip()
         crashed = terminal.last(1800) is not None or re.search(r"Traceback|Error:|error:|Exception|line \d+", error or "")

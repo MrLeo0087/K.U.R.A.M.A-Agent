@@ -5,11 +5,10 @@ from __future__ import annotations
 
 import re
 
-from coder.memory import card as memory
-from coder.llm import models
-from coder.core import safety
-from coder.core import settings
+from coder.core import safety, settings
 from coder.core.run import FileSpec, Run
+from coder.llm import models
+from coder.memory import card as memory
 
 _SYS = ("You are a senior engineer writing ONE file of a project, production quality: correct, complete, clean and "
         "readable, consistent with the plan (same file names, ids, function names and APIs as the other files), short "

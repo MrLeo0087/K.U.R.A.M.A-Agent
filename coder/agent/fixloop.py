@@ -6,13 +6,10 @@ from __future__ import annotations
 import re
 from collections import defaultdict
 
-from coder.builder import connect
-from coder.llm import models
-from coder.core import safety
-from coder.core import settings
-from coder.builder import verify
-from coder.builder import writer
+from coder.builder import connect, verify, writer
+from coder.core import safety, settings
 from coder.core.run import Run
+from coder.llm import models
 
 _SYS = ("You fix bugs in ONE file of a project. Keep everything that works; change only what the problems need; keep "
         "names consistent with the plan and the other files. Reply with ONLY the complete corrected file in one fenced "

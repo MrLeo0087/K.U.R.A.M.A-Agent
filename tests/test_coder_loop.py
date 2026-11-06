@@ -67,7 +67,10 @@ def test_loop_edits_then_the_code_checks_it(monkeypatch, tmp_path):
     run.kind = "add"
     loop.task_job(run, "make the buttons grey")(Ctx())
     assert "background: grey" in (tmp_path / "style.css").read_text()
-    assert loop._last_task(tmp_path).startswith("make the buttons grey -> The buttons are grey.")
+    from coder.core import session
+    assert "make the buttons grey -> The buttons are grey." in session.recap(tmp_path)  # follow-ups know "it"
+    assert "Recent tasks in this project" in loop.context(run)
+    assert [e["kind"] for e in session.last_events(tmp_path)][:2] == ["task_start", "plan"]
     from coder.core import safety
     assert safety.undo(run.dir).startswith("Undone")  # every change can be put back
 
@@ -76,3 +79,25 @@ def test_a_small_project_is_given_whole(tmp_path):
     (tmp_path / "app.js").write_text("console.log(1)\n")
     got = loop.small_project(new("x", tmp_path))
     assert "app.js" in got and "console.log" in got["app.js"]
+
+
+def test_session_unfinished_and_continue(tmp_path, monkeypatch):
+    from coder.core import session
+    from coder.interfaces import api
+    session.task_start(tmp_path, "t1", "add a dark mode")  # then KURAMA restarted: still 'running'
+    assert session.unfinished(tmp_path)["goal"] == "add a dark mode"
+    monkeypatch.setattr(api, "project_root", lambda: tmp_path)
+    got = {}
+    monkeypatch.setattr(api, "task", lambda goal, root=None, notes=None: got.update(goal=goal, notes=notes) or "on it")
+    assert api.continue_project() == "on it" and got["goal"] == "add a dark mode"
+    session.task_end(tmp_path, "t1", "done", "dark mode added", ["style.css"], ["1. edit"], 4000)
+    assert session.unfinished(tmp_path) is None and session.tokens(tmp_path) == 4000
+    assert "dark mode added" in api.what_happened()
+
+
+def test_a_short_followup_names_the_last_task(tmp_path):
+    from coder.core import session
+    session.task_start(tmp_path, "a", "make the result text green")
+    session.task_end(tmp_path, "a", "done", "The result is green.", ["style.css"], [], 100)
+    assert "make the result text green" in loop.resolve_followup(tmp_path, "make it bigger too")
+    assert loop.resolve_followup(tmp_path, "add a login page with a form") == "add a login page with a form"

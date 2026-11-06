@@ -24,9 +24,9 @@ import subprocess
 import time
 from pathlib import Path
 
-from coder.memory import repomap
 from coder.core import safety
 from coder.core.run import Run
+from coder.memory import repomap
 
 OUT_MAX = 1800
 # commands that run by themselves (the first word, or the first two): read, build, test, run the project
@@ -182,8 +182,7 @@ def t_run(run: Run, command: str, timeout: float = 60) -> str:
 
 def t_run_project(run: Run, seconds: float = 8) -> str:
     """Start the project the right way for a few seconds and report what it printed (a web page: its errors)."""
-    from coder.runtime import preview
-    from coder.runtime import runcheck
+    from coder.runtime import preview, runcheck
     if preview.page_root(run.root) is not None and not (run.root / "package.json").exists():
         probs = preview.selftest(run.root) or []
         return "the page opens; buttons clicked; " + ("errors:\n" + "\n".join(probs) if probs else "no errors")

@@ -10,9 +10,9 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from coder.memory import repomap
 from coder.core import settings  # noqa: F401
 from coder.core.run import Run
+from coder.memory import repomap
 
 GENERATORS = {"react": "vite-react-ts"}
 _WANTS_GITHUB = re.compile(r"\b(?:github|git\s*hub|starter|boilerplate|template)\b", re.I)

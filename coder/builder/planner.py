@@ -7,9 +7,9 @@ from __future__ import annotations
 import json
 import re
 
-from coder.llm import models
 from coder.core import settings
 from coder.core.run import FileSpec, Run
+from coder.llm import models
 
 _SYS = """You are a senior engineer planning a small, well-organized, runnable project for a laptop (Linux, no GPU).
 Return ONLY a JSON object, no prose:

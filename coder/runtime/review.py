@@ -10,8 +10,8 @@ import json
 import subprocess
 from pathlib import Path
 
-from coder.llm import models
 from coder.core import run as runmod
+from coder.llm import models
 
 
 def _undo_record() -> tuple[Path, dict] | None:

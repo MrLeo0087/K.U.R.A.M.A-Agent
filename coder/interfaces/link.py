@@ -36,6 +36,7 @@ def steps(job_id: int, items: list[tuple[str, str]]) -> None:
 def pinned() -> Path | None:
     """The project the owner pinned (the path box in the coding chat, or the last project built / chosen)."""
     import json
+
     from coder.core import settings
     try:
         d = json.loads((settings.data_dir() / "project.json").read_text(encoding="utf-8"))
@@ -48,6 +49,7 @@ def pinned() -> Path | None:
 def pin(path: str | Path | None) -> Path | None:
     """Pin the working project (None/'' = unpin: the VS Code window used last decides again)."""
     import json
+
     from coder.core import settings
     f = settings.data_dir() / "project.json"
     if not path:

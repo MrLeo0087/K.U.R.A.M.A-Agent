@@ -12,15 +12,13 @@ import json
 import time
 from typing import Any, TypedDict
 
-from coder.llm import budget
 from coder.agent import fixloop
-from coder.interfaces import link
-from coder.memory import card as memory
-from coder.builder import planner
-from coder.builder import scaffold
+from coder.builder import planner, scaffold, writer
 from coder.core import settings
-from coder.builder import writer
 from coder.core.run import Run
+from coder.interfaces import link
+from coder.llm import budget
+from coder.memory import card as memory
 
 
 class S(TypedDict, total=False):
@@ -50,8 +48,7 @@ def _plan(state: S) -> dict:
     run = state["run"]
     _steps(state, [("Understand the request", "done"), ("Plan the files", "doing"), ("Your yes", "todo")])
     state["ctx"].progress("planning the files")
-    from coder.memory import onboard
-    from coder.memory import repomap
+    from coder.memory import onboard, repomap
     if run.kind == "add" and not onboard.known(run.root):  # a project I didn't build: learn it once (card)
         _steps(state, [("Learn the project (first time)", "doing"), ("Plan the files", "todo"), ("Your yes", "todo")])
         state["ctx"].progress("learning the project (first time, then I keep a card)")

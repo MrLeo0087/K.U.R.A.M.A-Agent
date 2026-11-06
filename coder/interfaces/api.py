@@ -14,11 +14,10 @@ import re
 import time
 from pathlib import Path
 
-from coder.builder import engine
-from coder.interfaces import link
+from coder.builder import engine, understand
 from coder.core import settings
-from coder.builder import understand
 from coder.core.run import FileSpec, Run, new
+from coder.interfaces import link
 
 PENDING_TTL_S = 1800
 _NEW_REQUEST = re.compile(r"\b(?:new|another)\s+(?:project|app|game|website|file)\b|\b(?:create|build|make|start)\s+(?:a|an|the)\b", re.I)
@@ -416,11 +415,14 @@ def later(request: str) -> str | None:
 
 
 def continue_project() -> str:
-    """'continue the project': its first open TODO.md item, planned as an addition."""
+    """'continue': the last task when it didn't finish (the step budget, a restart), else the next TODO.md item."""
+    from coder.core import session
     from coder.memory import card as memory
     root = project_root()
     if root is None:
         return "Open the project in VS Code first."
+    if (last := session.unfinished(root)) is not None:
+        return task(last["goal"], root, list(last.get("notes") or []) + ["(continuing: it stopped before finishing)"])
     items = memory.todo(root)
     if not items:
         return f"{root.name} has nothing left in TODO.md. Tell me what to add."
@@ -522,3 +524,23 @@ def which_project(path: str = "") -> str:
         return "No project yet: open one in VS Code, or put its path in the box at the top of the coding chat."
     return (f"I'm working on {root.name} ({root})" + (" (pinned)" if pinned else " (the VS Code window you used last)")
             + ". To change it, put another path in the box at the top of the coding chat.")
+
+
+def what_happened() -> str:
+    """'what did you do?': the last task's steps, from the session's event log (0 tokens)."""
+    from coder.core import session
+    root = project_root()
+    if root is None:
+        return "No project yet."
+    tasks = session.recent(root, 1, 24 * 7)
+    if not tasks:
+        return f"I haven't worked on {root.name} yet."
+    t = tasks[-1]
+    lines = [f"Last task in {root.name}: {t.get('goal', '')[:160]} [{t.get('status')}]"]
+    if t.get("result"):
+        lines.append(f"Result: {t['result'][:300]}")
+    lines += [f"  {n}" for n in (t.get("notes") or [])[-10:]]
+    if t.get("files"):
+        lines.append("Files changed: " + ", ".join(t["files"]))
+    lines.append(f"Tokens: {int(t.get('tokens') or 0) / 1000:.1f}k · this project so far: {session.tokens(root) / 1000:.1f}k")
+    return "\n".join(lines)

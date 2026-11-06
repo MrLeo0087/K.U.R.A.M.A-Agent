@@ -7,8 +7,7 @@ import io
 import re
 import tarfile
 
-from coder.core import safety
-from coder.core import settings
+from coder.core import safety, settings
 from coder.core.run import Run
 
 OPEN = {"mit", "apache-2.0", "bsd-2-clause", "bsd-3-clause", "isc", "unlicense", "0bsd"}

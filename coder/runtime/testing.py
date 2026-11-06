@@ -9,12 +9,11 @@ import sys
 from pathlib import Path
 
 from coder.agent import fixloop
+from coder.builder import writer
+from coder.core import safety, settings
+from coder.core.run import FileSpec, Run, new
 from coder.llm import models
 from coder.memory import repomap
-from coder.core import safety
-from coder.core import settings
-from coder.builder import writer
-from coder.core.run import FileSpec, Run, new
 
 _SYS = ("You write pytest tests for ONE module of a project: real behaviour (normal cases, edge cases, errors), no "
         "network, no GUI windows (mock pygame / tkinter / input()), fast. Import the module the way the project "
