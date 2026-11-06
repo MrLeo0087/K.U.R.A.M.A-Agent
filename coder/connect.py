@@ -142,7 +142,8 @@ def _py_modules(run: Run) -> dict[str, tuple[set[str], dict]]:
                 names |= {x.name for x in ast.walk(n) if isinstance(x, (ast.FunctionDef, ast.ClassDef))}
         key = p.relative_to(run.root).with_suffix("").as_posix().replace("/", ".")
         out[key] = (names, sigs)
-        out.setdefault(p.stem, (names, sigs))
+        if p.parent == run.root:
+            out[p.stem] = (names, sigs)
     return out
 
 
@@ -161,15 +162,34 @@ def _call_problem(call, name: str, sig, where: str) -> str:
     return ""
 
 
+def _mine(run: Run) -> list[Path]:
+    """The files to check: this run's own (an addition to a big project must not 'fix' the rest of it; 11-06 a
+    build inside KURAMA found 21 problems in files it never wrote, and spent tokens on 3 rounds of them)."""
+    if run.written:
+        return [run.root / w for w in dict.fromkeys(run.written) if (run.root / w).is_file()]
+    return repomap.files(run.root)
+
+
+def _near(mods: dict, p: Path, root: Path) -> dict:
+    """Module names as THIS file sees them: a module in its own folder wins over one with the same name elsewhere
+    ('from constants import X' in games/rps/ui.py is games/rps/constants.py)."""
+    near = dict(mods)
+    pre = p.parent.relative_to(root).as_posix().replace("/", ".")
+    for key, v in mods.items():
+        if pre != "." and key.startswith(pre + ".") and "." not in key[len(pre) + 1:]:
+            near[key[len(pre) + 1:]] = v
+    return near
+
+
 def _py_names(run: Run) -> list[str]:
     """The Python files agree with each other (0 tokens): 'from game import decide' finds decide;
     'import constants as C' then C.FONT_NAME finds FONT_NAME; a call to a project function / class passes
     parameters it really has, and enough of them (11-06: create_choice_buttons(x_center=...) and a missing
     FONT_NAME passed every check, then crashed on the first run)."""
     import ast
-    mods = _py_modules(run)
+    mods_all = _py_modules(run)
     out: list[str] = []
-    for p in repomap.files(run.root):
+    for p in _mine(run):
         if p.suffix != ".py":
             continue
         try:
@@ -177,6 +197,7 @@ def _py_names(run: Run) -> list[str]:
         except SyntaxError:
             continue
         rel = p.relative_to(run.root).as_posix()
+        mods = _near(mods_all, p, run.root)
         alias: dict[str, str] = {}  # local name -> module
         funcs: dict[str, tuple[str, str]] = {}  # local name -> (module, name there)
         for n in ast.walk(tree):
@@ -212,7 +233,7 @@ def _py_names(run: Run) -> list[str]:
 def check(run: Run) -> list[str]:
     out: list[str] = []
     planned = {Path(f.path).stem for f in run.files} | {Path(f.path).parts[0] for f in run.files if "/" in f.path}
-    for p in repomap.files(run.root):
+    for p in _mine(run):
         try:
             if p.suffix == ".html":
                 out += _html(p, run.root)

@@ -21,7 +21,8 @@ _JS_IMPORT = re.compile(r"""(?:import\s[^'"]*?from\s*|import\s*\(\s*|require\s*\
 def files(root: Path, limit: int = 300) -> list[Path]:
     out: list[Path] = []
     for d, dirs, names in os.walk(root):
-        dirs[:] = sorted(x for x in dirs if x not in settings.SKIP_DIRS and not x.startswith("."))
+        dirs[:] = sorted(x for x in dirs if x not in settings.SKIP_DIRS and not x.startswith(".")
+                         and not (x == "coder" and Path(d).name == "data"))  # (KURAMA's own run backups)
         for n in sorted(names):
             p = Path(d) / n
             if p.suffix.lower() in CODE and p.stat().st_size < 400_000:
