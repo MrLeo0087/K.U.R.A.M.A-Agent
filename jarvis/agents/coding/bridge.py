@@ -21,8 +21,8 @@ def project_root() -> Path | None:
     s = context.snapshot()
     if s.get("root"):
         return Path(s["root"])
-    st = editor.states()
-    return Path(st[0]["root"]) if st and st[0].get("root") else None
+    st = [x for x in editor.states() if x.get("root")]  # the window used last, not the first listed
+    return Path(max(st, key=lambda x: float(x.get("focused_at") or 0))["root"]) if st else None
 
 
 def tree(root: Path, limit: int = 120) -> str:

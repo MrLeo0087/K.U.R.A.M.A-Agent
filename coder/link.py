@@ -34,8 +34,14 @@ def steps(job_id: int, items: list[tuple[str, str]]) -> None:
 
 
 def vscode_root() -> Path | None:
-    """The project folder open in VS Code (the window in use)."""
+    """The project folder of the VS Code window you used LAST (focused most recently), not the first one listed
+    (11-06: new_folder was open and in use, the build went to the KURAMA window's folder)."""
     try:
+        from jarvis.core import editor
+        states = [x for x in editor.states() if x.get("root")]
+        if states:
+            best = max(states, key=lambda x: (float(x.get("focused_at") or 0), bool(x.get("focused"))))
+            return Path(best["root"])
         from jarvis.agents.coding.bridge import project_root
         return project_root()
     except Exception:  # noqa: BLE001
