@@ -167,6 +167,11 @@ def _exec(sql: str, params: tuple = ()) -> list[sqlite3.Row]:
         return _conn.execute(sql, params).fetchall()
 
 
+def tools_since(ts: float) -> list[str]:
+    """The tools that ran (ok) since ts, oldest first."""
+    return [r[0] for r in _exec("SELECT tool FROM tool_calls WHERE ts >= ? AND ok = 1 ORDER BY ts", (ts,))]
+
+
 def _today_start() -> float:
     return datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
 

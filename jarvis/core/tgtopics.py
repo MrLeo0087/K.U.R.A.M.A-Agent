@@ -9,6 +9,10 @@
 
 Two-way: you can also TALK to KURAMA in any topic (General included); the answer comes back in that same topic
 (only your own messages are answered: anyone else in the group is ignored). The private chat works as before.
+Filed automatically: whatever you ask (in the private chat, General or any topic), the answer stays where you asked
+AND a copy is filed in its section: a picture in Images (notify), a reminder / Claude Code / job request with its
+answer in Reminders / Claude Code / Jobs (file_copy, by the tools that ran). Copies are made by Telegram
+(copyMessages): no upload again, 0 tokens.
 Setup, once: make a Telegram group, turn on Topics (group settings), add your KURAMA bot and make it an admin
 that can manage topics, write anything in the group, then send "/topics setup" to the bot. Running it again only
 adds the sections that are missing. "/topics off" puts everything back in the private chat. 0 tokens.
@@ -126,3 +130,40 @@ def where(source: str, level: str, title: str = "") -> tuple[int | None, int | N
 def group_id() -> int | None:
     """The sections group (or the one seen for setup), whose topics the owner may talk in."""
     return _kv(_KEY).get("group") or _kv(_CAND).get("id")
+
+
+# the tools whose request + answer is also filed in a section (pictures are filed by notify, by what is sent)
+TOOL_SECTIONS = {
+    "claude": ("claude_code",),
+    "reminders": ("add_reminder", "set_alarm", "set_timer", "schedules", "schedule_command", "schedule", "todo",
+                  "goals", "habits", "timetable"),
+    "jobs": ("write_document", "jobs", "run_training", "kaggle_train", "training", "backup", "download_file",
+             "video_download"),
+}
+
+
+def section_for_tools(tools: list[str]) -> str | None:
+    """The section a request belongs to, by the first tool it ran that has one ('set a reminder' -> reminders)."""
+    for t in tools:
+        for key, names in TOOL_SECTIONS.items():
+            if t in names:
+                return key
+    return None
+
+
+def file_copy(from_chat, ids: list[int], section: str, asked_thread: int | None = None) -> bool:
+    """Copy messages (the question and its answer) into a section, unless they were already in it."""
+    from jarvis.core import notify
+    t = _kv(_KEY)
+    thread = (t.get("threads") or {}).get(section)
+    if not t.get("group") or not thread or not ids:
+        return False
+    if str(from_chat) == str(t["group"]) and asked_thread == thread:
+        return False  # asked in that very section
+    try:
+        notify.telegram_call("copyMessages", {"chat_id": t["group"], "message_thread_id": thread,
+                                              "from_chat_id": from_chat, "message_ids": sorted(set(ids))})
+        return True
+    except RuntimeError as e:
+        log.info("filing in %s failed: %s", section, e)
+        return False

@@ -101,3 +101,25 @@ def test_clear_removes_old_alerts_from_telegram(monkeypatch):
     assert "1 old alert removed" in out
     assert [b["message_ids"] for m, b in calls if m == "deleteMessages"] == [[1]]
     assert notify.delete_alerts() == 0  # forgotten once deleted
+
+
+def test_answers_are_also_filed_in_their_section(monkeypatch):
+    """Asked in the private chat (or General): the answer stays there, and a copy goes to its section."""
+    import json
+    from jarvis.core import store
+    from jarvis.workers import telegram_bot
+    calls = _calls(monkeypatch)
+    store.kv_set("tg_topics", json.dumps({"group": -1001, "threads": {"reminders": 5, "images": 9}}))
+    assert tgtopics.section_for_tools(["get_time", "add_reminder"]) == "reminders"
+    assert tgtopics.section_for_tools(["weather"]) is None
+    bot = telegram_bot.TelegramBot()
+    monkeypatch.setattr(store, "tools_since", lambda ts: ["add_reminder"])
+    bot._file_copy({"message_id": 70}, ("42", None), [71], 0)
+    copy = [b for m, b in calls if m == "copyMessages"][-1]
+    assert copy == {"chat_id": -1001, "message_thread_id": 5, "from_chat_id": "42", "message_ids": [70, 71]}
+    calls.clear()
+    bot._file_copy({"message_id": 70}, (-1001, 5), [71], 0)  # asked in Reminders itself: no copy
+    assert not calls
+    notify._after_send("sendPhoto", {"chat_id": "42"}, {"message_id": 80})  # a picture in the private chat
+    assert calls[-1] == ("copyMessages", {"chat_id": -1001, "message_thread_id": 9, "from_chat_id": "42",
+                                          "message_ids": [80]})

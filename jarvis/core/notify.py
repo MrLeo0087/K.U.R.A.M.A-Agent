@@ -40,6 +40,7 @@ _client = None
 _here = threading.local()
 _reply_global: tuple | None = None
 _MEDIA = ("sendPhoto", "sendVideo", "sendMediaGroup", "sendAnimation")
+_collect: list[int] | None = None  # ids of the messages sent while the bot answers one message (collecting())
 _ALERT_IDS = "tg_alert_msgs"  # [chat, message_id] of alerts sent, so /clear can remove them from Telegram
 
 
@@ -84,6 +85,43 @@ def _route(method: str, payload: dict | None) -> dict | None:
     if to[1]:
         p["message_thread_id"] = to[1]
     return p
+
+
+def collecting() -> None:
+    """The bot starts answering a message: remember the ids of what is sent to its chat (for filing a copy)."""
+    global _collect
+    _collect = []
+
+
+def collected() -> list[int]:
+    global _collect
+    ids, _collect = _collect or [], None
+    return ids
+
+
+def _ids(result) -> list[int]:
+    rows = result if isinstance(result, list) else [result]
+    return [r["message_id"] for r in rows if isinstance(r, dict) and r.get("message_id")]
+
+
+def _after_send(method: str, payload: dict | None, result) -> None:
+    """Note what the current answer sent; file a copy of a picture in the Images section (if it isn't there)."""
+    if not payload or not method.startswith("send") or method == "sendChatAction":
+        return
+    to = reply_target()
+    if _collect is not None and to and str(payload.get("chat_id")) == str(to[0]):
+        _collect.extend(_ids(result))
+    if method not in _MEDIA:
+        return
+    try:
+        from jarvis.core import tgtopics
+        g, t = tgtopics.where("images", "info")
+        if not g or (str(payload.get("chat_id")) == str(g) and payload.get("message_thread_id") == t):
+            return
+        telegram_call("copyMessages", {"chat_id": g, "message_thread_id": t, "from_chat_id": payload["chat_id"],
+                                       "message_ids": _ids(result)})
+    except Exception as e:  # noqa: BLE001 - filing a copy must never break sending
+        log.info("filing the picture failed: %s", e)
 
 
 def _keep_ids(result) -> None:
@@ -199,6 +237,7 @@ def telegram_call(method: str, payload: dict | None = None, timeout: float | Non
         raise RuntimeError(redact(f"{type(e).__name__}: {e}")) from None
     if not data.get("ok"):
         raise RuntimeError(redact(f"telegram {method} failed: {data.get('description', r.status_code)}"))
+    _after_send(method, payload, data.get("result"))
     return data.get("result")
 
 

@@ -139,8 +139,7 @@ def _coding_now() -> bool:
         pass
     try:
         from jarvis.core import store
-        with store.connect() as c:
-            rows = c.execute("SELECT text FROM messages WHERE role='user' ORDER BY id DESC LIMIT 8").fetchall()
+        rows = store._exec("SELECT text FROM messages WHERE role='user' ORDER BY id DESC LIMIT 8")
         talk = " ".join(r[0] for r in rows).lower()
         return len(re.findall(r"\b(?:code|function|python|bug|error|test|vs code|class|script|git|port)\b", talk)) >= 3
     except Exception:

@@ -336,11 +336,28 @@ class TelegramBot(Worker):
         msg = self._own_message(update)
         if msg is None:
             return
-        notify.set_reply_target(self._target(msg))  # every reply, photo and "typing…" goes back where it was asked
+        to = self._target(msg)
+        notify.set_reply_target(to)  # every reply, photo and "typing…" goes back where it was asked
+        notify.collecting()
+        t0 = time.time()
         try:
             self._handle(update, msg, watch)
         finally:
+            sent = notify.collected()
             notify.set_reply_target(None)
+            self._file_copy(msg, to, sent, t0)
+
+    def _file_copy(self, msg: dict, to: tuple, sent: list[int], since: float) -> None:
+        """The answer stays where it was asked; a copy of question + answer is also filed in its section
+        (a reminder in Reminders, Claude Code in Claude Code, a job in Jobs), by the tools that ran."""
+        if not sent or not msg.get("message_id"):
+            return
+        try:
+            from jarvis.core import store, tgtopics
+            if section := tgtopics.section_for_tools(store.tools_since(since)):
+                tgtopics.file_copy(to[0], [msg["message_id"], *sent], section, to[1])
+        except Exception as e:  # noqa: BLE001 - filing must never break the chat
+            self.log.info("filing a copy failed: %s", e)
 
     def _handle(self, update: dict, msg: dict, watch: bool) -> None:
         if (lag := time.time() - int(msg.get("date") or time.time())) > 5:
