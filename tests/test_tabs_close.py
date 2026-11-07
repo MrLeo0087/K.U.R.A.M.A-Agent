@@ -41,3 +41,21 @@ def test_close_tabs_presses_keys_and_never_closes_everything(monkeypatch):
     from jarvis.core import safety
     monkeypatch.setattr(safety, "context", lambda: {"request": "close all the tabs and only keep YouTube"})
     assert "keep some tabs" in ui.close_tabs("all") and keys == []
+
+
+def test_chromium_name_finds_the_brave_window(monkeypatch):
+    """Brave's tab extension reports 'chromium': focus must still find the Brave window (traces 11-07)."""
+    import subprocess
+    from types import SimpleNamespace
+
+    from jarvis.core import uiagent
+    calls = []
+
+    def fake_run(cmd, **kw):
+        calls.append(cmd)
+        out = "0x01 0 brave-browser.Brave-browser  host Gemini - Brave\n" if cmd[:2] == ["wmctrl", "-lx"] else ""
+        return SimpleNamespace(stdout=out, returncode=0)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(uiagent.time, "sleep", lambda s: None)
+    assert uiagent.focus("chromium")
+    assert ["wmctrl", "-i", "-a", "0x01"] in calls

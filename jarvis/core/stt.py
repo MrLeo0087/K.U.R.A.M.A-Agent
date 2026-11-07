@@ -225,18 +225,18 @@ def transcribe(wav: bytes, language: str | None = None) -> Transcript:
     """Transcribe WAV bytes. language=None: auto-detect, plus (STT_DUAL) a parallel Nepali-forced
     large-v3 pass so Nepali is not lost to Whisper's language mislabels (no extra latency)."""
     language = language or config.STT_LANGUAGE_HINT
-    turbo_first = [config.STT_MODEL, config.STT_FALLBACK]
+    best_first = [config.STT_MODEL, config.STT_FALLBACK]
     if language:
-        models = turbo_first[::-1] if language in config.STT_PREFER_FALLBACK_LANGS else turbo_first
+        models = best_first[::-1] if language in config.STT_PREFER_FALLBACK_LANGS else best_first
         return _one(wav, language, models)
     if not config.STT_DUAL:
-        t = _one(wav, None, turbo_first)
+        t = _one(wav, None, best_first)
         return _gate(t, t)
     from concurrent.futures import ThreadPoolExecutor
 
     with ThreadPoolExecutor(max_workers=2) as ex:
-        f_auto = ex.submit(_one, wav, None, turbo_first)
-        f_ne = ex.submit(_one, wav, "ne", turbo_first[::-1])
+        f_auto = ex.submit(_one, wav, None, best_first)
+        f_ne = ex.submit(_one, wav, "ne", best_first)
         try:
             auto = f_auto.result()
         except STTError:
@@ -247,7 +247,7 @@ def transcribe(wav: bytes, language: str | None = None) -> Transcript:
             ne = None
     if auto.raw_lang.strip().lower() not in LANG_MAP and not (ne and ne.text):
         try:  # Whisper guessed a language we don't speak (Portuguese, Slovak...) on accented English
-            en = _one(wav, "en", turbo_first)
+            en = _one(wav, "en", best_first)
             if en.text:
                 return _gate(en, auto)
         except STTError:

@@ -1866,6 +1866,15 @@ _CODE_CHANGE = re.compile(r"^\W*(?:please\s+|can you\s+|could you\s+|now\s+|also
                           r"decrease|align|center|centre|show|hide|style|refactor|implement)\b", re.I)
 
 
+def _coder_asked() -> bool:
+    """The coding agent stopped on a question to the owner (its loop's waiting file, < 30 min old)."""
+    try:
+        from coder.agent import loop
+        return loop.waiting() is not None
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def agent_coding_intent(text: str) -> Intent | None:
     """While the coding agent is on, its requests by MEANING (agents.coding.EXAMPLES, 0 tokens); its waiting change
     takes yes / no. Off: nothing here runs. (It was named coding_intent too, which silently replaced the older
@@ -1875,7 +1884,11 @@ def agent_coding_intent(text: str) -> Intent | None:
     (it once undid fixes for 'update code', 'add comments', 'clean and complete this code')."""
     from jarvis import agents
     t = " ".join((text or "").split())
-    if not t or t.startswith("/") or agents.current() != "coding":
+    if not t or t.startswith("/"):
+        return None
+    if (yn0 := yes_no(t)) and _coder_asked():  # its question ('Should I remove TODO.md?') takes the yes / no in any
+        return Intent("coding", "coding", "coding_agent", {"action": yn0})  # mode (11-07: "nothing waiting for a yes")
+    if agents.current() != "coding":
         return None
     from jarvis.agents.coding import EXAMPLES, changes, terminal
 

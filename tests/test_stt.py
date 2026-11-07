@@ -56,7 +56,7 @@ def test_nepali_hint_prefers_large_v3(monkeypatch):
     client.audio.transcriptions.create.return_value = {"text": "नमस्ते", "language": "nepali", "duration": 1.0}
     monkeypatch.setattr(llm, "get_client", lambda: client)
     r = stt.transcribe(b"x", language="ne")
-    assert r.model == config.STT_FALLBACK and r.lang == "ne"
+    assert r.model == "whisper-large-v3" and r.lang == "ne"
 
 
 def test_mishearing_fixes_and_prompt(monkeypatch):

@@ -83,3 +83,16 @@ def test_a_clear_change_in_coding_mode_skips_the_ai(monkeypatch):
     assert fastpath._CODE_CHANGE.match("make the Reserve a Table button text white so it is readable")
     assert fastpath._CODE_CHANGE.match("now move the score board to the right")
     assert not fastpath._CODE_CHANGE.match("what is the capital of nepal")
+
+
+def test_yes_answers_the_coding_agents_question_in_any_mode(monkeypatch):
+    """The agent asked 'Should I remove TODO.md?': a bare yes goes to it, even in general mode (traces 11-07)."""
+    from jarvis import agents
+    from jarvis.core import fastpath
+    from coder.agent import loop
+    monkeypatch.setattr(agents, "current", lambda: "general")
+    monkeypatch.setattr(loop, "waiting", lambda: {"goal": "clean", "root": "/tmp", "t": 0})
+    it = fastpath.agent_coding_intent("yes")
+    assert it is not None and it.args == {"action": "yes"}
+    monkeypatch.setattr(loop, "waiting", lambda: None)
+    assert fastpath.agent_coding_intent("yes") is None

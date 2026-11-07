@@ -186,7 +186,7 @@ def recognize(pcm: bytes, lang: str | None) -> tuple[str, str]:
             log.info("google %s failed: %s", lang, e)
     models = [config.STT_MODEL, config.STT_FALLBACK]
     if lang in config.STT_PREFER_FALLBACK_LANGS:
-        models.reverse()  # large-v3 is much better than turbo at Nepali
+        models.reverse()
     tr = stt._one(audio.pcm_to_wav(pcm, RATE), lang, models)
     text, raw = (tr.text or "").strip(), (tr.raw_lang or lang or "english")
     spoken = stt.LANG_MAP.get(raw.strip().lower())

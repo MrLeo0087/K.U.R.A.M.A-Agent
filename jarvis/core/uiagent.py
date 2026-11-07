@@ -39,7 +39,10 @@ _FAMILY = (("browser", ("brave", "chrome", "chromium", "firefox", "msedge", "ope
            ("files", ("nautilus", "nemo", "thunar", "caja", "dolphin")),
            ("code", ("code", "vscodium", "cursor")),
            ("terminal", ("terminal", "konsole", "tilix", "kitty", "alacritty", "xterm")))
-_APP_WORDS = {"brave": "brave", "chrome": "chrome", "browser": "brave|chrome|firefox", "firefox": "firefox",
+# Brave's tab extension reports itself as "chromium": that must still find the Brave window (traces 11-07: every
+# 'close tabs 1, 2…' / 'keep only Gemini' said "I couldn't find the browser window")
+_APP_WORDS = {"brave": "brave", "chrome": "chrome", "chromium": "brave|chromium|chrome",
+              "browser": "brave|chrome|chromium|firefox", "firefox": "firefox",
               "files": "nautilus", "file manager": "nautilus", "nautilus": "nautilus", "terminal": "terminal",
               "vs code": "code", "vscode": "code", "code": "code", "settings": "gnome-control-center"}
 

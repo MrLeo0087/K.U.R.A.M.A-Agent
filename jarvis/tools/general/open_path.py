@@ -41,6 +41,16 @@ def open_path(path: str = "", app: str = "vscode") -> str:
     from jarvis.core import focus
     from jarvis.tools.general import _sys
     from jarvis.tools.general.open_url import _open
+    said = " ".join((path or "").lower().replace(".", " ").split())
+    if said in _VSCODE[:-1] or said in ("the vs code", "the vscode"):  # 'go to VS Code': the app itself, never a
+        from jarvis.core import uiagent                              # folder named like it (11-07: vscode_ext opened)
+        if uiagent.focus("vs code"):
+            return "Switched to VS Code."
+        try:
+            _sys.run(["code"], timeout=15)
+        except _sys.SysError as e:
+            return f"error: {e}"
+        return "Opened VS Code."
     p = _find(path)
     if p is None or not p.exists():
         return f"error: I couldn't find {path or 'that'} — say its name or full path"

@@ -37,3 +37,15 @@ def test_numbered_folders_and_open_by_number(downloads):
         assert it is not None and it.args["path"] == str(downloads / "new_folder"), said
     shown = fastpath._render_listdir(fastpath.Intent("listdir", "list_folder", "filesearch", {}), out)
     assert "4. 📁 new_folder" in shown and "workspace" not in shown  # the list itself, in the chat
+
+
+def test_go_to_vs_code_focuses_the_app_not_a_folder(monkeypatch):
+    """'Go to the VS Code' -> open_path(path='vscode'): the VS Code window, never the vscode_ext folder (11-07)."""
+    from jarvis.core import uiagent
+    from jarvis.tools.general import open_path as op
+    seen = []
+    monkeypatch.setattr(uiagent, "focus", lambda app: seen.append(app) or True)
+    monkeypatch.setattr(op, "_find", lambda p: (_ for _ in ()).throw(AssertionError("searched a folder")))
+    fn = getattr(op.open_path, "func", op.open_path)
+    assert fn(path="vscode", app="vscode") == "Switched to VS Code."
+    assert seen == ["vs code"]

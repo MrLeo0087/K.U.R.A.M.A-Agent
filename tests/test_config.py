@@ -7,7 +7,7 @@ from jarvis.core import config
 def test_models_and_voices():
     for m in (config.LLM_DEFAULT, config.LLM_FAST, config.LLM_VISION, config.STT_MODEL, config.STT_FALLBACK):
         assert isinstance(m, str) and m
-    assert config.STT_MODEL == "whisper-large-v3-turbo" and config.STT_FALLBACK == "whisper-large-v3"
+    assert config.STT_MODEL == "whisper-large-v3" and config.STT_FALLBACK == "whisper-large-v3-turbo"
     assert config.VOICES == {"en": "en-GB-RyanNeural", "en_multi": "en-US-AvaMultilingualNeural",
                              "hi": "hi-IN-MadhurNeural", "ne": "ne-NP-SagarNeural"}
     assert config.TIER_CHAIN["smart"] == [config.LLM_DEFAULT, config.LLM_FAST, config.LLM_VISION]  # qwen last (11-01)

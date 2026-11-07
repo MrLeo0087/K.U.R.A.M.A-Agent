@@ -88,12 +88,13 @@ MODEL_PARAMS: dict[str, dict] = {
 }
 
 # --- STT (Groq Whisper) ---
-STT_MODEL = "whisper-large-v3-turbo"
-STT_FALLBACK = "whisper-large-v3"
+# the most accurate free model first; turbo (faster, a little less accurate) only when it fails / hits a limit (11-07)
+STT_MODEL = "whisper-large-v3"
+STT_FALLBACK = "whisper-large-v3-turbo"
 STT_LANGUAGES = ("en", "ne", "hi")
 # Whisper auto-detect mislabels Nepali as Hindi. Set JARVIS_STT_LANG=ne to pin it.
 STT_LANGUAGE_HINT = os.getenv("JARVIS_STT_LANG") or None
-STT_PREFER_FALLBACK_LANGS = ("ne",)  # use large-v3 first for these
+STT_PREFER_FALLBACK_LANGS: tuple[str, ...] = ()  # languages that try STT_FALLBACK first (none: large-v3 is best)
 # Run a Nepali-forced large-v3 pass in parallel with auto-detect and pick the trustworthy one
 # (Whisper mislabels Nepali as English/Slovak/Hindi). Doubles STT calls, adds no latency.
 STT_DUAL = os.getenv("JARVIS_STT_DUAL", "1").lower() not in ("0", "false", "no", "off")
@@ -1409,7 +1410,10 @@ MEANING_SHORTCUTS: dict[str, tuple[str, ...]] = {
     # your own commands ("when I say X, do Y" saves one): list them, forget one (X = its words)
     "my_commands": ("show my commands", "list my custom commands", "what are my own commands",
                     "show the words i taught you", "list my words", "what commands did i teach you",
-                    "give me the list of rules i gave you", "what rules did i give you", "show my rules"),
+                    "give me the list of rules i gave you", "what rules did i give you", "show my rules",
+                    "what are the rules that i set", "give me the list of rules that i set", "which rules did i set",
+                    "the commands i set", "what did i teach you to do when i say something",
+                    "give me list of rules set by me", "list of commands made by me", "rules created by me"),
     "my_command_forget": ("forget my command X", "delete my custom command X", "remove my command X",
                           "forget when i say X"),
     "kaggle_setup": ("set up kaggle", "setup kaggle notebook for training", "give me the kaggle notebook",

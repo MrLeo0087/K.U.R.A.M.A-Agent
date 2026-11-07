@@ -56,16 +56,13 @@ EXAMPLES: dict[str, tuple[str, ...]] = {
 }
 
 def _start() -> None:
-    """While on, the meaning model stays loaded (its requests are understood by meaning, never a cold wait)."""
+    """Load the meaning model now so the first coding request is fast. It still frees itself after the normal idle
+    time (it used to be pinned while the agent was on: 250 MB at idle all day, 11-07)."""
     import threading
 
     from jarvis.core import semantic
 
-    def warm() -> None:
-        semantic.scores("fix it")
-        if semantic._embedder is not None:
-            semantic._embedder.idle_s = 0.0  # 0 = never unload
-    threading.Thread(target=warm, daemon=True, name="coding-agent-warm").start()
+    threading.Thread(target=lambda: semantic.scores("fix it"), daemon=True, name="coding-agent-warm").start()
 
 
 def _stop() -> None:
