@@ -16,7 +16,7 @@ const crypto = require("crypto");
 const DIR = path.join(os.homedir(), ".local", "share", "kurama", "vscode");
 const FILE = path.join(DIR, `${process.pid}.json`);
 const TOKEN = crypto.randomBytes(16).toString("hex");
-const EXT_VERSION = 9; // KURAMA checks it: 3 = watches the terminal for the coding agent, 5 = claude_say, 6 = claude_new
+const EXT_VERSION = 10; // KURAMA checks it: 3 = watches the terminal for the coding agent, 5 = claude_say, 6 = claude_new
 const MAX_SEL = 20000; // characters of selected text written to the state file
 const MAX_BODY = 8 * 1024 * 1024;
 let port = 0;
@@ -178,12 +178,34 @@ function terminalRun(req) { // run a command again (after a fix the user said ye
 }
 
 // one request = one operation: text | replace_all | replace_range | replace_text | insert | terminal_run
+function claudeTabs() { // Claude Code chats open as editor tabs (the side bar one is a view, not a tab)
+  return vscode.window.tabGroups.all.flatMap((g) => g.tabs)
+    .filter((t) => t.input instanceof vscode.TabInputWebview && /claude/i.test(t.input.viewType || ""));
+}
+
+async function focusSidebarChat() { // the conversation shown in the (secondary) side bar
+  for (const view of ["claudeVSCodeSidebarSecondary.focus", "claudeVSCodeSidebar.focus"]) {
+    try { await vscode.commands.executeCommand(view); return true; } catch { /* that side bar isn't used */ }
+  }
+  return false;
+}
+
 async function claudeSay(req) { // '/claude say <text>' from the phone: into the REAL Claude Code chat of this window
   try {
     // an OPEN conversation refuses a prompt ("Session is already open. Your prompt was not applied"): it is only
-    // brought forward and its box focused, and KURAMA types the text there (typed: false)
+    // brought forward and its box focused, and KURAMA types the text there (typed: false).
+    // 11-09: when that conversation lives in the SIDE BAR, 'editor.open' made a blank copy tab and the message was
+    // lost in it: a new tab for the conversation in use is closed again and the side bar chat gets the message.
+    const before = claudeTabs().length;
     await vscode.commands.executeCommand("claude-vscode.editor.open", req.session || undefined);
     await new Promise((r) => setTimeout(r, 900));
+    const tabs = claudeTabs();
+    if (req.current !== false && tabs.length > before) {
+      const made = vscode.window.tabGroups.activeTabGroup.activeTab;
+      if (made && tabs.includes(made)) await vscode.window.tabGroups.close(made);
+      await focusSidebarChat();
+      await new Promise((r) => setTimeout(r, 400));
+    }
     await vscode.commands.executeCommand("claude-vscode.focus");
     await new Promise((r) => setTimeout(r, 300));
     return { ok: true, typed: false };

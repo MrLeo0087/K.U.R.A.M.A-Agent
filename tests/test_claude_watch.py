@@ -171,7 +171,7 @@ def test_say_goes_into_the_real_vscode_chat(told, monkeypatch):
     monkeypatch.setattr(cw, "_press_enter", lambda ws: calls.append(("enter", ws)) or True)
     out = cw.say("Hello")
     assert out.startswith("Sent to your Claude Code chat (\"build the thing\")")  # the CURRENT conversation
-    assert calls == [("claude_say", {"session": "s1", "text": "Hello"}), ("enter", "KURAMA")]
+    assert calls == [("claude_say", {"session": "s1", "text": "Hello", "current": True}), ("enter", "KURAMA")]
     monkeypatch.setattr(editor, "states", lambda: [])  # no KURAMA link: Claude Code's own vscode:// address
     used = []
     monkeypatch.setattr(cw, "_via_uri", lambda sid, text, cwd="": used.append((sid, text)) or "")

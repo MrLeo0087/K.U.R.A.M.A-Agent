@@ -2544,11 +2544,11 @@ def _match(text: str) -> Intent | None:
     t = normalize(text)
     if not t:  # "Hi" / "ok" are stripped as lead-in filler: answer them without the LLM
         return everyday_intent(" ".join((text or "").split()).strip(" ,"))
+    raw = " ".join((text or "").split())  # a command's words are kept as typed: normalize() drops a trailing
+    if raw.startswith("/") and (sl := slash_intent(raw)):  # "KURAMA" ('/clear KURAMA' became '/clear'); before the
+        return sl  # length limit: a long '/claude say ...' went to KURAMA's AI instead of Claude Code (11-09)
     if len(t) > 200:
         return None
-    raw = " ".join((text or "").split())  # a command's words are kept as typed: normalize() drops a trailing
-    if raw.startswith("/") and (sl := slash_intent(raw)):  # "KURAMA" ('/clear KURAMA' became '/clear')
-        return sl
     if si := _self_intent(t):
         return si
     if wr := workspace_read_intent(t):

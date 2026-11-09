@@ -11,8 +11,10 @@ from jarvis.core.registry import tool
 @tool(group="dev", safety="safe", max_chars=3500,
       description="Watch Claude Code while the user is away: on/off, status (progress, time, what it does now), "
                   "report, yes/no to its permission question, say (send it the next instruction), stop (interrupt "
-                  "it), usage (how much Claude Code was used today).")
-def claude_code(action: Literal["on", "off", "new", "go", "status", "report", "yes", "no", "say", "stop", "usage"] = "status",
+                  "it), usage (how much Claude Code was used today), sessions (list the conversations), open (go "
+                  "to conversation number `text`).")
+def claude_code(action: Literal["on", "off", "new", "go", "status", "report", "yes", "no", "say", "stop", "usage",
+                                "sessions", "open"] = "status",
                 text: str = "") -> str:
     """Claude Code watch.
 
@@ -20,7 +22,8 @@ def claude_code(action: Literal["on", "off", "new", "go", "status", "report", "y
         action: on, off, new (a new Claude Code chat; `text` = its first message), go (a new chat in project
             `text`, ready for say), status,
             report, yes (allow its question), no (deny it), say (the next instruction),
-            stop (interrupt the task), usage (how much it was used today).
+            stop (interrupt the task), usage (how much it was used today), sessions (your conversations,
+            numbered), open (switch to conversation `text`: its number or words of its title).
         text: For say: what Claude Code should do next.
     """
     from jarvis.core import claudewatch, safety
@@ -40,6 +43,10 @@ def claude_code(action: Literal["on", "off", "new", "go", "status", "report", "y
         return claudewatch.stop()
     if action == "usage":
         return claudewatch.usage()
+    if action == "sessions":
+        return claudewatch.sessions_text()
+    if action == "open":
+        return claudewatch.open_session(text)
     if action == "report":
         return claudewatch.report()
     card = claudewatch.status()

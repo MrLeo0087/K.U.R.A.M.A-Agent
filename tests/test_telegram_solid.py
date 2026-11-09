@@ -14,7 +14,9 @@ def test_an_important_alert_rings_in_the_private_chat_and_a_silent_copy_goes_to_
     monkeypatch.setattr(config, "TELEGRAM_CHAT_ID", "42")
     monkeypatch.setattr(tgtopics, "where", lambda source, level, title="": (-100, 7))
     monkeypatch.setattr(notify, "telegram_call", lambda method, body, **k: sent.append(body) or {"message_id": 1})
-    notify.notify("✅ Claude Code finished", "done", source="claude_code", telegram=True, desktop=False, save=False)
+    notify.reset()  # (the duplicate filter remembers alerts across tests)
+    notify.notify("✅ Claude Code finished", "ring test", source="claude_code", telegram=True, desktop=False, save=False)
+    notify.reset()
     private = [b for b in sent if str(b.get("chat_id")) == "42"]
     topic = [b for b in sent if b.get("message_thread_id") == 7]
     assert private and not private[0].get("disable_notification")

@@ -184,8 +184,9 @@ COMMANDS: tuple[Cmd, ...] = (
         template="song lyrics about {a}"),
     Cmd("offline", "the commands that work without internet", "KURAMA"),
     Cmd("claude", "Claude Code from anywhere: say <msg> / new <msg> / go [project] / status / report / yes / no / stop / usage",
-        "Code", "[say|new|go|status|report|yes|no|stop|usage|on|off]", tool=("claude_code", "dev", {"action": "status"}, "text"),
-        actions=("on", "off", "new", "go", "status", "report", "yes", "no", "say", "stop", "usage"), aliases=("claudecode", "cc")),
+        "Code", "[say|new|go|status|report|sessions|open|yes|no|stop|usage|on|off]", tool=("claude_code", "dev", {"action": "status"}, "text"),
+        actions=("on", "off", "new", "go", "status", "report", "yes", "no", "say", "stop", "usage", "sessions", "open"),
+        aliases=("claudecode", "cc")),
     Cmd("alerts", "recent alerts / which are muted", "KURAMA", phrase="notification status"),
 )
 _BY_NAME: dict[str, Cmd] = {}

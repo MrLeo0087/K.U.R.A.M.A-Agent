@@ -609,6 +609,92 @@ def go(where: str = "") -> str:
     return new("", where)
 
 
+_PICK_KEY = "claude_sessions_listed"
+
+
+def _transcript_info(f: Path) -> dict | None:
+    """{id, title, cwd, last} of one Claude Code conversation file (title: Claude's own summary, else your first
+    prompt). None for KURAMA's own '/usage' checks and empty ones."""
+    title = first = cwd = ""
+    named = False
+    try:
+        with f.open("r", encoding="utf-8", errors="replace") as fh:
+            for i, line in enumerate(fh):
+                if i > 4000 and first and title:
+                    break
+                try:
+                    d = json.loads(line)
+                except ValueError:
+                    continue
+                if d.get("type") == "custom-title" and d.get("customTitle"):  # the name you gave it wins
+                    title, named = str(d["customTitle"]), True
+                elif d.get("type") == "ai-title" and d.get("aiTitle") and not named:  # the title VS Code shows
+                    title = str(d["aiTitle"])
+                elif d.get("type") == "summary" and d.get("summary") and not title:
+                    title = str(d["summary"])
+                cwd = cwd or str(d.get("cwd") or "")
+                if not first and d.get("type") == "user":
+                    c = (d.get("message") or {}).get("content")
+                    c = c if isinstance(c, str) else " ".join(x.get("text", "") for x in c or [] if isinstance(x, dict))
+                    if c.strip() and not c.lstrip().startswith(("<", "/usage", "Caveat:")):
+                        first = " ".join(c.split())
+    except OSError:
+        return None
+    if not first:
+        return None
+    return {"id": f.stem, "title": _short(title or first, 70), "cwd": cwd, "last": f.stat().st_mtime}
+
+
+def sessions(limit: int = 8) -> list[dict]:
+    """Your recent Claude Code conversations (every account), newest first."""
+    files = sorted((f for sf in settings_files() for f in (sf.parent / "projects").glob("*/*.jsonl")),
+                   key=lambda f: f.stat().st_mtime, reverse=True)[:limit * 3]
+    out = [i for f in files if (i := _transcript_info(f)) is not None][:limit]
+    from jarvis.core import store
+    store.kv_set(_PICK_KEY, json.dumps([{"id": i["id"], "cwd": i["cwd"], "title": i["title"]} for i in out]))
+    return out
+
+
+def sessions_text() -> str:
+    """'/claude sessions': the list, numbered: '/claude open 2' switches to one."""
+    rows = sessions()
+    if not rows:
+        return "No Claude Code conversations found on this laptop."
+    lines = ["🗂 Your Claude Code conversations (newest first):"]
+    for n, r in enumerate(rows, 1):
+        lines.append(f"{n}. {r['title']} — {Path(r['cwd']).name or '?'} · {_mins(time.time() - r['last'])} ago")
+    return "\n".join(lines) + "\n\nSay '/claude open <number>' to go to one; '/claude say ...' then talks to it."
+
+
+def open_session(which: str) -> str:
+    """'/claude open 2' (a number from /claude sessions, or words of its title): that conversation opens in VS Code
+    and becomes the one /claude say talks to."""
+    from jarvis.core import editor, store
+    try:
+        rows = json.loads(store.kv_get(_PICK_KEY) or "[]")
+    except ValueError:
+        rows = []
+    if not rows:
+        rows = [{"id": r["id"], "cwd": r["cwd"], "title": r["title"]} for r in sessions()]
+    w = (which or "").strip().lower()
+    num = re.search(r"\d+", w)
+    pick = rows[int(num.group()) - 1] if num and 0 < int(num.group()) <= len(rows) else next(
+        (r for r in rows if w and w in r["title"].lower()), None)
+    if pick is None:
+        return "Which one? Send /claude sessions for the numbered list, then /claude open <number>."
+    st = _window(pick["cwd"], min_ext=5)
+    if st is None:
+        return "VS Code with the KURAMA link isn't open for that project. Open it, or use /claude go <project>."
+    r = editor.edit(st, "claude_say", session=pick["id"], current=False)
+    if not r.get("ok"):
+        return f"VS Code couldn't open that conversation: {r.get('error') or 'no answer'}."
+    with _lock:  # it is now the conversation '/claude say' talks to
+        s = _session(pick["id"], {"cwd": pick["cwd"]})
+        s.update(prompt=s.get("prompt") or pick["title"], last=time.time(), cwd=pick["cwd"])
+    _go.clear()
+    return f"Opened “{pick['title']}” in VS Code. /claude say <message> now talks to it."
+
+
 def say(text: str) -> str:
     """'/claude say <message>': into the CURRENT Claude Code conversation (the one used last, like this chat), in
     its VS Code chat: that conversation's tab opens with the message, Enter is pressed, you see it there, and if
@@ -671,7 +757,7 @@ def _into_vscode(s: dict, text: str) -> str | None:
         where = f"\"{_short(s.get('prompt') or '', 50)}\"" if s.get("prompt") else "the current chat"
         return (f"Sent to your Claude Code chat ({where}): \"{_short(text, 120)}\". I'll tell you when it answers. "
                 "(If VS Code asked to allow opening a link on the laptop, tick 'Do not ask me again' and Open, once.)")
-    r = editor.edit(st, "claude_say", session=s["id"] or None, text=text)
+    r = editor.edit(st, "claude_say", session=s["id"] or None, text=text, current=True)
     if not r.get("ok"):
         log.info("claude say via VS Code failed: %s", r.get("error"))
         return f"VS Code couldn't open that chat: {r.get('error') or 'no answer'}."

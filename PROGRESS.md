@@ -1462,3 +1462,13 @@ Phases (one at a time, owner tests after each):
       Tests: test_telegram_solid.py (9), test_tg_topics / test_workers updated. Suite: only the 2 topic tests
       failed (expected: new behaviour), updated. Scorecard 74% / 99% / 98%: #137 (a Nepali news line) fails
       without these changes too; cases 275/276 now expect 'close all tabs' = close the tabs (the 11-06 change).
+- [x] 2026-11-09 Claude Code from Telegram (owner: "/claude say continue next phase" did nothing). Proven: (1)
+      trace a667f680 said "Sent", but Claude Code's 'editor.open <session>' makes a BLANK new tab when that
+      conversation lives in the side bar (the owner's screenshot: an empty Claude Code tab), and the message was
+      typed into nothing -> the extension (1.9.2, EXT_VERSION 10) closes a new tab made for the conversation in
+      use and types into the side-bar chat (claudeVSCodeSidebarSecondary / claudeVSCodeSidebar focus); (2) trace
+      72ebd0b6: a /command over 200 characters skipped the /command check and KURAMA's AI answered -> /commands are
+      checked before the length limit; (3) new: '/claude sessions' (your conversations by Claude Code's own title,
+      every account, numbered) and '/claude open <n|title words>' (opens it in VS Code; /claude say then talks to
+      it). Tests: test_claude_remote.py (5), test_claude_watch updated; suite 1 order flake fixed (the alert
+      duplicate filter); scorecard 74% / 100% / 98%. Needs a VS Code "Reload Window" once for the extension.
