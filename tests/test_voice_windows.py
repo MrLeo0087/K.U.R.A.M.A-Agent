@@ -35,3 +35,12 @@ def test_a_turn_from_one_window_is_shown_in_the_others():
     r = c.get("/api/v1/chat/feed", params={"after": 0, "origin": "main1"}).json()
     assert [t["user"] for t in r["turns"]] == ["what time is it"] and r["last"] >= 2  # not its own turn
     assert c.get("/api/v1/chat/feed", params={"after": r["last"], "origin": "main1"}).json()["turns"] == []
+
+
+def test_the_progress_buttons_are_not_caught_by_the_dashboard_button_handler():
+    """11-09: Next / Pause in the Progress list answered "Bad Request": the page's catch-all [data-act] handler took
+    them as dashboard actions (/api/v1/action 400) before progress.js saw the click."""
+    from pathlib import Path
+    src = (Path(__file__).resolve().parent.parent / "frontend" / "app.js").read_text()
+    i = src.index('const b = e.target.closest("[data-act], [data-ask]");')
+    assert 'b.closest(".pg-it")' in src[i:i + 200]

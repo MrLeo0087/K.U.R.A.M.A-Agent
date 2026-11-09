@@ -1481,3 +1481,12 @@ Phases (one at a time, owner tests after each):
       window shows the other windows' turns (frontend app.js pollFeed every 4 s while visible / not covered).
       (c) Music card: a silent test player answered position / pause / resume 25 of 25 -> the stuck bar needs one
       live look while a real song plays. Tests: test_voice_windows.py (2); suite passes.
+- [x] 2026-11-09 Owner's screenshots: (1) Next / Pause / Stop in the mini chat's Progress list said "Bad Request":
+      the page's catch-all [data-act] click handler (capture phase) took them as dashboard actions ("m-next" ->
+      /api/v1/action 400) before progress.js saw the click; the server's music control itself worked (live: next,
+      pause = HTTP 200, position moving) -> the catch-all ignores buttons inside a Progress item. (2) Telegram said
+      "⏳ Claude Code is waiting" after a finished answer: the background-task check matched the words "Command
+      running in background with ID" inside code / tests written in that chat -> only Claude Code's own records
+      count (the result's toolUseResult.backgroundTaskId, the '<task-notification>' message). (3) That notice cut
+      the answer at 300 characters -> the whole answer, like "finished". Tests: test_voice_windows (+1),
+      test_telegram_solid (decoy case); suite passes.

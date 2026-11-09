@@ -29,7 +29,13 @@ def _transcript(tmp_path, done: bool):
                                   "input": {"command": "ffmpeg -i a.mp4 b.mp4", "description": "Render the video",
                                             "run_in_background": True}}]}},
         {"message": {"content": [{"type": "tool_result", "tool_use_id": "tu1",
-                                  "content": "Command running in background with ID: bxyz1"}]}},
+                                  "content": "Command running in background with ID: bxyz1"}]},
+         "toolUseResult": {"backgroundTaskId": "bxyz1"}},
+        # the same words inside code written in the chat are not a task (11-09: a false "waiting")
+        {"message": {"content": [{"type": "tool_use", "id": "tu2", "name": "Write",
+                                  "input": {"content": 'r"Command running in background with ID: (\\w+)" bfake'}}]}},
+        {"message": {"content": [{"type": "tool_result", "tool_use_id": "tu2",
+                                  "content": "Command running in background with ID: bfake2"}]}},
     ]
     if done:
         rows.append({"message": {"content": "<task-notification>\n<task-id>bxyz1</task-id>\n<status>completed</status>"

@@ -254,7 +254,7 @@ def event(data: dict) -> dict:
             s["status"] = "waiting for " + running[0]
             last = str(data.get("last_assistant_message") or "").strip()
             msg = ("⏳ Claude Code is waiting", f"{_project(s)}\nFor: " + "; ".join(running[:3])
-                   + ("\n\n" + _short(last, 300) if last else "") + "\nIt goes on by itself when that ends.")
+                   + ("\n\n💬 " + last if last else "") + "\nIt goes on by itself when that ends.")  # whole, never cut
         elif ev == "Stop":
             s["status"], s["finished"] = "finished", time.time()
             # its answer, from Claude Code itself (the transcript can lag behind: it gave the step before the end)
@@ -841,12 +841,17 @@ def still_running(transcript: str) -> list[str]:
     started: dict[str, str] = {}  # task id -> description
     done: set[str] = set()
     for line in lines:
-        if "run_in_background" not in line and "in background with ID" not in line and "<task-id>" not in line:
+        if "run_in_background" not in line and "backgroundTaskId" not in line and "<task-id>" not in line:
             continue
         try:
-            msg = (json.loads(line).get("message") or {})
+            row = json.loads(line)
         except ValueError:
             continue
+        msg = row.get("message") or {}
+        bg = (row.get("toolUseResult") or {}) if isinstance(row.get("toolUseResult"), dict) else {}
+        if bg.get("backgroundTaskId"):  # Claude Code's own record of a background start (never text in the chat)
+            tu = next((x.get("tool_use_id") for x in msg.get("content") or [] if isinstance(x, dict)), "")
+            started[str(bg["backgroundTaskId"])] = desc.get(tu, "a background task")
         content = msg.get("content")
         for part in content if isinstance(content, list) else [{"type": "text", "text": str(content or "")}]:
             if not isinstance(part, dict):
@@ -855,11 +860,15 @@ def still_running(transcript: str) -> list[str]:
                 inp = part["input"]
                 desc[part.get("id", "")] = str(inp.get("description") or inp.get("command") or "a background task")[:80]
             text = part.get("text") or part.get("content") or ""
+            if isinstance(text, list):  # a tool result's content blocks
+                text = " ".join(str(x.get("text") or "") for x in text if isinstance(x, dict))
             text = text if isinstance(text, str) else json.dumps(text)
-            for m in _BG_ID.finditer(text):
-                started[m.group(1)] = desc.get(part.get("tool_use_id", ""), "a background task")
-            for m in _BG_DONE.finditer(text):
-                done.add(m.group(1))
+            # only Claude Code's own records count (backgroundTaskId above, its task notification here): the same
+            # words inside code or a test in the chat are not tasks (11-09: this chat's own code made two "tasks"
+            # that never existed -> a false "waiting")
+            if text.lstrip().startswith("<task-notification>"):
+                for m in _BG_DONE.finditer(text):
+                    done.add(m.group(1))
     return [d for tid, d in started.items() if tid not in done]
 
 
