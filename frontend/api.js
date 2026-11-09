@@ -1,3 +1,5 @@
+// one id per open window: the server tells the other windows about this window's turns
+export const PAGE_ID = Math.random().toString(36).slice(2, 10);
 // Thin client for the KURAMA API (/api/v1/*). Everything the UI does goes through here.
 
 export class ApiError extends Error {
@@ -94,6 +96,7 @@ export class Api {
   alertsRead() { return this.request("/api/v1/alerts/read", { method: "POST", body: {} }); }
   moneyRange(start, end = "", category = "") { return this.request(`/api/v1/money/range?start=${start}&end=${end}&category=${encodeURIComponent(category)}`); }
   feedback(trace, vote, note = "") { return this.request("/api/v1/feedback", { method: "POST", body: { trace, vote, note } }); }
+  chatFeed(after) { return this.request(`/api/v1/chat/feed?after=${after}&origin=${PAGE_ID}`); }
   musicState() { return this.request("/api/v1/music/state"); }
   musicControl(action, value = "") { return this.request("/api/v1/music/control", { method: "POST", body: { action, value } }); }
   musicDuck(on) { return this.request("/api/v1/music/duck", { method: "POST", body: { on } }); }
@@ -124,7 +127,7 @@ export class Api {
 
   // POST /chat and yield the parsed SSE events.
   async *chat(text, { mode = "text", lang = null, signal, ambient = false } = {}) {
-    const body = { text, mode };
+    const body = { text, mode, origin: PAGE_ID };
     if (ambient) body.ambient = true;
     if (lang && lang !== "auto") body.lang = lang;
     const r = await this.request("/api/v1/chat", { method: "POST", body, signal, raw: true });

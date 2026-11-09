@@ -225,6 +225,8 @@ def transcribe(wav: bytes, language: str | None = None) -> Transcript:
     """Transcribe WAV bytes. language=None: auto-detect, plus (STT_DUAL) a parallel Nepali-forced
     large-v3 pass so Nepali is not lost to Whisper's language mislabels (no extra latency)."""
     language = language or config.STT_LANGUAGE_HINT
+    _local.level = level_of(wav)  # how loud the recording was: stt.log (11-09: holds came back as silence)
+    _local.wav = wav
     best_first = [config.STT_MODEL, config.STT_FALLBACK]
     if language:
         models = best_first[::-1] if language in config.STT_PREFER_FALLBACK_LANGS else best_first
@@ -333,9 +335,31 @@ def _trail(best: Transcript, auto: Transcript, heard: str) -> None:
         if path.exists() and path.stat().st_size > 256_000:
             path.write_text("".join(path.read_text(encoding="utf-8").splitlines(True)[-500:]), encoding="utf-8")
         f = lambda v: "-" if v is None else f"{v:.2f}"  # noqa: E731
+        lv = getattr(_local, "level", None)
         with path.open("a", encoding="utf-8") as fh:
             fh.write(f"{time.strftime('%m-%d %H:%M:%S')} {best.duration_s:4.1f}s {best.model[8:]:>14} "
                      f"{auto.raw_lang or '-'}->{best.lang} lp={f(best.logprob)} ns={f(auto.no_speech)} "
-                     f"{'DROPPED ' if heard and not best.text else ''}{heard!r}\n")
+                     + (f"peak={lv[0]} rms={lv[1]} " if lv else "")
+                     + f"{'DROPPED ' if heard and not best.text else ''}{heard!r}\n")
+        if not best.text and getattr(_local, "wav", None):  # nothing heard: keep the recording (last 5) to listen to
+            keep = path.parent / "stt_failed"
+            keep.mkdir(exist_ok=True)
+            (keep / f"{time.strftime('%m%d-%H%M%S')}.wav").write_bytes(_local.wav)
+            for old in sorted(keep.glob("*.wav"))[:-5]:
+                old.unlink(missing_ok=True)
     except OSError:
         pass
+
+
+def level_of(wav: bytes) -> tuple[int, int] | None:
+    """(peak, rms) of 16-bit PCM WAV bytes (0-32767): about 300-1500 is a quiet room, speech peaks 5000+."""
+    import array
+    import math
+    try:
+        data = wav[44:] if wav[:4] == b"RIFF" else wav
+        a = array.array("h", data[: len(data) // 2 * 2])
+        if not a:
+            return None
+        return max(abs(x) for x in a), int(math.sqrt(sum(x * x for x in a) / len(a)))
+    except (ValueError, OverflowError):
+        return None

@@ -2219,6 +2219,27 @@ function saveMiniLog() {
     else localStorage.removeItem(MINI_LOG);
   } catch { /* storage off: the chat just starts fresh */ }
 }
+// ---------- one chat across windows: a turn made in another KURAMA window (hold Alt runs in the hidden mini chat)
+// shows here too (11-09: Alt turns never reached the main window's chat) ----------
+let feedAfter = -1;
+async function pollFeed() {
+  try {
+    const r = await api.chatFeed(Math.max(feedAfter, 0));
+    if (feedAfter >= 0) {
+      for (const t of r.turns || []) {
+        addUser(t.user, t.voice);
+        const b = new BotBubble();
+        b.append(t.reply || "");
+        b.finish();
+      }
+      if ((r.turns || []).length) { scrollDown(true); if (MINI) saveMiniLog(); }
+    }
+    feedAfter = r.last || 0; // first call: only where the feed is now (old turns are not replayed)
+  } catch { /* API busy: next time */ }
+}
+setInterval(() => { if (!document.hidden && !paused) pollFeed(); }, 4000);
+pollFeed();
+
 function restoreMiniLog() {
   try {
     const s = JSON.parse(localStorage.getItem(MINI_LOG) || "null");

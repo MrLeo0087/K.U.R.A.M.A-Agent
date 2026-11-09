@@ -1472,3 +1472,12 @@ Phases (one at a time, owner tests after each):
       every account, numbered) and '/claude open <n|title words>' (opens it in VS Code; /claude say then talks to
       it). Tests: test_claude_remote.py (5), test_claude_watch updated; suite 1 order flake fixed (the alert
       duplicate filter); scorecard 74% / 100% / 98%. Needs a VS Code "Reload Window" once for the extension.
+- [~] 2026-11-09 Plan 11-09 phase 2 (voice + windows), part 1. (a) Mic: every recording's loudness is in stt.log
+      ("peak=.. rms=..", stt.level_of) and the last 5 recordings Whisper heard nothing in are kept in
+      data/logs/stt_failed/ (evidence: 11-09 09:13-16:17 holds came back as silence while 18:21-18:28 worked; the
+      mic gives signal; cause not proven yet). (b) One chat across windows (proven: each window's chat lived only in
+      its own page; a hold-to-talk turn runs in the hidden mini chat, so the main window never showed it): the
+      server keeps the last 40 laptop turns (GET /api/v1/chat/feed, the sending window's id = origin) and every
+      window shows the other windows' turns (frontend app.js pollFeed every 4 s while visible / not covered).
+      (c) Music card: a silent test player answered position / pause / resume 25 of 25 -> the stuck bar needs one
+      live look while a real song plays. Tests: test_voice_windows.py (2); suite passes.

@@ -7,8 +7,11 @@ those tool groups must be forwarded to a small "laptop agent" instead.
 from __future__ import annotations
 
 import asyncio
+import collections
+import itertools
 import json
 import threading
+import time
 from typing import Literal
 
 from fastapi import APIRouter, Request
@@ -29,6 +32,7 @@ class ChatIn(BaseModel):
                                              "answered only when it is clearly a command or names KURAMA")
     via: str = Field("", description="'vscode' = the KURAMA Coder panel in VS Code (whole answers, changes applied "
                                      "straight into the editor)")
+    origin: str = Field("", description="which window sent it (the other windows show this turn too)")
 
 
 class FeedbackIn(BaseModel):
@@ -72,6 +76,8 @@ async def chat(body: ChatIn, request: Request):
                 ev = await turn.queue.get()
                 if ev is None:
                     break
+                if ev.get("type") == "done" and not ev.get("ignored") and body.via != "vscode":
+                    _feed_add(body.origin, text, str(ev.get("text") or ""), mode)
                 yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
                 if ev.get("type") in ("confirm", "confirm_timeout"):  # WebKit holds back small chunks of a stream
                     yield _FLUSH  # that then waits (a yes/no): an SSE comment pushes the question out at once
@@ -80,6 +86,23 @@ async def chat(body: ChatIn, request: Request):
             engine.deny_pending(turn)
 
     return StreamingResponse(events(), media_type="text/event-stream", headers=SSE_HEADERS)
+
+
+# The laptop's recent turns, so every KURAMA window shows the same chat (11-09: a hold-to-talk turn ran in the
+# hidden mini chat and never showed in the main window). In memory, last 40 turns.
+_FEED: "collections.deque[dict]" = collections.deque(maxlen=40)
+_feed_id = itertools.count(1)
+
+
+def _feed_add(origin: str, user: str, reply: str, mode: str) -> None:
+    _FEED.append({"id": next(_feed_id), "ts": time.time(), "origin": origin, "user": user, "reply": reply,
+                  "voice": mode == "voice"})
+
+
+@router.get("/chat/feed", summary="Recent laptop turns after `after` (every window shows the other windows' turns)")
+async def chat_feed(after: int = 0, origin: str = ""):
+    items = [t for t in list(_FEED) if t["id"] > after]
+    return {"last": _FEED[-1]["id"] if _FEED else 0, "turns": [t for t in items if not origin or t["origin"] != origin]}
 
 
 @router.get("/confirm/pending", summary="Yes/no questions waiting for an answer (the page asks when its stream is quiet)")
