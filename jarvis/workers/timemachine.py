@@ -17,7 +17,8 @@ class TimeMachine(Worker):
         for line in timemachine.auto_snapshots():
             self.log.info("%s", line)
         from jarvis.core import automation  # daily Downloads sorting / weekly backups (slow ones live here)
-        for job in (automation.sort_auto_tick, automation.backup_tick):
+        from jarvis.core import health  # laptop health, quietly: a message only when it needs you
+        for job in (automation.sort_auto_tick, automation.backup_tick, health.tick):
             try:
                 if msg := job():
                     self.log.info("%s", msg)

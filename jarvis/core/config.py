@@ -1411,6 +1411,8 @@ MEANING_SHORTCUTS: dict[str, tuple[str, ...]] = {
     "claude_go": ("open claude code", "open a new claude code chat", "start claude code here", "launch claude code",
                   "get claude code ready", "go to claude code", "switch to claude code", "take me to claude code",
                   "open claude code in vs code"),
+    "laptop_health": ("how is my laptop health", "check my battery health", "laptop health report",
+                      "how healthy is my battery", "is my laptop healthy"),
     "day_start": ("start my day", "good morning let's start work", "open my work from yesterday",
                   "set up my work like yesterday", "begin my work day"),
     "day_done": ("done for today", "i'm done for the day", "end my day", "close my work for today",

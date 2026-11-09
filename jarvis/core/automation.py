@@ -264,11 +264,49 @@ def sort_run() -> str:
     return f"Sorted {moved} files into folders" + (f" and moved {dupes} duplicate(s) to the Trash" if dupes else "") + "."
 
 
+def old_installers(days: int = 30) -> list[Path]:
+    """Installers (.deb, .AppImage, ...) in Downloads (or its Installers folder) not touched for `days`."""
+    d = Path.home() / "Downloads"
+    cut = time.time() - days * 86400
+    out = []
+    for folder in (d, d / "Installers"):
+        if folder.is_dir():
+            out += [f for f in folder.iterdir() if f.is_file() and f.suffix.lower() in SORT["Installers"]
+                    and f.stat().st_mtime < cut]
+    return out
+
+
+def trash_old_installers() -> str:
+    files = old_installers()
+    if not files:
+        return "No old installers in Downloads."
+    n = 0
+    for f in files:
+        try:
+            subprocess.run(["gio", "trash", str(f)], check=True, capture_output=True, timeout=30)
+            n += f.stat().st_size if f.exists() else 0
+        except (OSError, subprocess.SubprocessError):
+            continue
+    return f"Moved {len(files)} old installer(s) to the Trash."
+
+
 def sort_auto_tick() -> str | None:
-    """Daily, when the user turned auto-sorting on."""
+    """Daily, when the user turned auto-sorting on: sorts, then tells what it did (and old installers, as a button)
+    only when it did something."""
     if store.kv_get("sort_auto") != "1" or time.time() - float(store.kv_get("sort_last") or 0) < 86400:
         return None
-    return sort_run()
+    out = sort_run()
+    olds = old_installers()
+    if out.startswith("Sorted 0 ") and not olds:
+        return out
+    from jarvis.core import notify
+    mb = sum(f.stat().st_size for f in olds if f.exists()) / 1e6
+    text = out + (f"\n{len(olds)} installer(s) not used for a month ({mb:.0f} MB): "
+                  + ", ".join(f.name for f in olds[:5]) if olds else "")
+    notify.notify("🗂 Downloads tidied", text, source="downloads",
+                  markup={"inline_keyboard": [[{"text": "🗑 Trash old installers", "callback_data": "/oldinstallers"}]]}
+                  if olds else None)
+    return out
 
 
 # ---------------------------------------------------------------- backup

@@ -2237,6 +2237,8 @@ def meaning_intent(text: str) -> Intent | None:
         return _about_me_intent(label, raw, t, extra)
     if label in ("claude_on", "claude_off", "claude_go", "claude_status", "claude_report", "claude_stop", "claude_usage"):
         return None if extra else _ok(t, Intent("claude", "claude_code", "dev", {"action": label.split("_")[1]}))
+    if label == "laptop_health":
+        return None if extra else _ok(t, Intent("health", "laptop_health", "system", {}))
     if label in ("day_start", "day_done"):
         return None if extra else _ok(t, Intent("day", "my_day", "system", {"action": label.split("_")[1]}))
     if label == "my_commands":

@@ -11,12 +11,20 @@ from jarvis.core.registry import tool
 @tool(group="automation", safety="safe",
       description="Tidy the Downloads folder: preview or sort files into Documents/Images/Videos/Audio/Archives/Code/"
                   "Data/Installers (screenshots apart, exact duplicates to Trash); auto_on sorts daily.")
-def tidy_downloads(action: Literal["preview", "run", "auto_on", "auto_off"] = "preview") -> str:
+def tidy_downloads(action: Literal["preview", "run", "auto_on", "auto_off", "installers"] = "preview") -> str:
     """Downloads sorter.
 
     Args:
-        action: preview = what would move; run = do it (asks); auto_on / auto_off = sort by itself once a day.
+        action: preview = what would move; run = do it (asks); auto_on / auto_off = sort by itself once a day;
+            installers = move installers not used for a month to the Trash (asks).
     """
+    if action == "installers":
+        olds = automation.old_installers()
+        if not olds:
+            return "No old installers in Downloads."
+        if not safety.ask(f"Move {len(olds)} old installer(s) to the Trash? " + ", ".join(f.name for f in olds[:8])):
+            return "The user said no, so nothing was moved."
+        return automation.trash_old_installers()
     if action == "preview":
         return automation.sort_preview()
     if action == "auto_off":

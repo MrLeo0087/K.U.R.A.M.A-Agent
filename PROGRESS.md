@@ -1530,3 +1530,12 @@ Phases (one at a time, owner tests after each):
       queue rows / "[SYSTEM NOTIFICATION ...]" text), not as a message starting with "<task-notification>" -> those
       rows count too; a task's description now comes from any tool call (not only run_in_background ones).
       Test: test_telegram_solid (+1).
+    - 11-09 Phase 3 part 3 (done): (1) Downloads: the daily auto-sort (tidy_downloads auto_on, already there, off
+      until the owner says "tidy my downloads every day") now TELLS what it did (only when it moved something) and
+      lists installers not used for a month with a "🗑 Trash old installers" button (/oldinstallers, asks first);
+      /tidy. (2) Laptop health quietly (core/health.py, run by the timemachine worker every 10 min): disk free
+      sampled daily -> "full in ~N days" with buttons when it would fill within 21 days (once a week); plugged in at
+      100% for 3 h -> one unplug tip a day (this laptop has no charge-limit setting); battery health (full / design)
+      checked monthly, told on a 5-point drop. "how is my laptop health" / /health -> battery 75% of new, 551
+      cycles, disk + trend, RAM (tool laptop_health). The weekly backup already exists (needs a drive: "set up
+      backup of X to <drive>"). Tests: test_laptop_health (4).
