@@ -279,8 +279,11 @@ class TelegramBot(Worker):
                     "(A big job like writing or a scan keeps running in the background and I'll tell you when it's done.)")
         return box.get("out") or "(no answer)"
 
+    _markup: dict | None = None  # a keyboard the next reply carries (/buttons, /buttons off)
+
     def send(self, text: str, markup: dict | None = None) -> None:
         """The whole reply, never cut: split into messages, plus an .md file when it is very long."""
+        markup, self._markup = markup or self._markup, None
         if not notify.send_long((text or "(no answer)").strip(), config.TELEGRAM_CHAT_ID, markup=markup):
             self.log.warning("reply failed")
 
@@ -600,8 +603,14 @@ class TelegramBot(Worker):
             if cmd in ("/all", "/commands", "/command", "/kurama", "/list", "/help", "/menu"):
                 from jarvis.core import slash  # the phone's own commands, then every KURAMA command + tool (the same
                 return HELP + "\n\n" + slash.help_text()  # list as the laptop chat): nothing is ever left out
-            if cmd in ("/start", "/?", "/buttons"):
-                self.send("Buttons are under the typing box now: tap instead of typing.", markup=KEYBOARD)
+            if cmd in ("/buttons", "/button"):  # the one-tap bar: on, or 'off' hides it
+                if text.split()[1:2] == ["off"]:
+                    self._markup = {"remove_keyboard": True}
+                    return "Buttons hidden. Send /buttons to bring them back."
+                self._markup = KEYBOARD
+                return "Buttons are under the typing box now: tap instead of typing. /buttons off hides them."
+            if cmd in ("/start", "/?"):
+                self._markup = KEYBOARD
                 return HELP
             if cmd in ("/battery", "/bat"):
                 from jarvis.tools.general.battery_status import battery_status

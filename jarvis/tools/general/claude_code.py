@@ -43,10 +43,10 @@ def claude_code(action: Literal["on", "off", "new", "go", "status", "report", "y
         return claudewatch.stop()
     if action == "usage":
         return claudewatch.usage()
-    if action == "sessions":
-        return claudewatch.sessions_text()
-    if action == "open":
-        return claudewatch.open_session(text)
+    if action == "sessions" or (action == "status" and text.strip().lower() in ("session", "sessions", "list")):
+        return claudewatch.sessions_text()  # ('/claude session': the list too)
+    if action == "open":  # a number / title: that conversation; nothing: Claude Code in the VS Code window in use
+        return claudewatch.open_session(text) if text.strip() else claudewatch.go("")
     if action == "report":
         return claudewatch.report()
     card = claudewatch.status()

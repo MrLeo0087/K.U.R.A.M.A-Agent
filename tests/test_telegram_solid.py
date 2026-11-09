@@ -99,3 +99,31 @@ def test_a_message_from_the_laptop_goes_to_the_private_chat_and_the_groups_gener
     sent.clear()
     send_message_telegram("https://example.com")
     assert sent[1]["message_thread_id"] == 9  # a link: 🔗 Share
+
+
+def test_buttons_off_hides_the_bar(monkeypatch):
+    from jarvis.workers import telegram_bot as tb
+    monkeypatch.setattr(config, "TELEGRAM_BOT_TOKEN", "1:x")
+    monkeypatch.setattr(config, "TELEGRAM_CHAT_ID", "42")
+    sent = []
+    monkeypatch.setattr(notify, "telegram_call", lambda method, body, **k: sent.append(body) or {"message_id": 1})
+    bot = tb.TelegramBot()
+    bot.send(bot.answer("/buttons off"))
+    assert sent[-1]["reply_markup"] == {"remove_keyboard": True} and "hidden" in sent[-1]["text"]
+    bot.send(bot.answer("/buttons"))
+    assert sent[-1]["reply_markup"] == tb.KEYBOARD
+
+
+def test_go_to_claude_code_opens_it(monkeypatch):
+    from jarvis.core import semantic
+    monkeypatch.setattr(config, "FASTPATH", True)
+    monkeypatch.setattr(config, "SEMANTIC_ROUTER", True)
+    if not semantic.ensure_ready(30):
+        pytest.skip("meaning model not available")
+    semantic._tables.clear()
+    try:
+        for text in ("go to claude code", "switch to claude code", "open claude code"):
+            it = fastpath.match(text)
+            assert (it.tool, it.args) == ("claude_code", {"action": "go"}), text
+    finally:
+        semantic._tables.clear()
