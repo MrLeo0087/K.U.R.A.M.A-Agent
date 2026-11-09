@@ -2225,6 +2225,8 @@ def meaning_intent(text: str) -> Intent | None:
                     known=raw[m.start():m.end()].strip() if said != raw else "")
         return it if meaning_ok(t, it) else None
     if label == "tg_message":  # "send hello to telegram", "message me on telegram saying I'm late": the message
+        if (cmd := _command_named(raw)) is not None:  # "send morning brief to telegram": KURAMA's brief, not the
+            return Intent("tgcmd", "_tgcmd", "telegram", {"cmd": cmd}, known=cmd)  # words (11-04, sent the words)
         msg = tg_message_text(raw)
         if msg is None:
             return None
@@ -2961,8 +2963,31 @@ def merge_opens(answers: list[str]) -> list[str]:
     return out
 
 
+def _command_named(raw: str) -> str | None:
+    """The KURAMA command a 'send X to telegram' names (brief, status, screen, where, battery, jobs...), or None:
+    its result is sent, never the words."""
+    from jarvis.core import slash
+    m = _TG_TO.search(" ".join((raw or "").split()).strip(" .!?")) or _TG_SAYING.search(raw or "")
+    words = re.findall(r"[a-z]+", (m.group("m") if m else raw or "").lower())
+    if not words or len(words) > 4:
+        return None
+    for w in words:
+        c = slash._BY_NAME.get(w)
+        if c is not None and c.name not in ("list", "offline", "clear", "clearchat", "reset", "stop", "shutdown",
+                                            "restart", "lock", "unlock", "changepass") and (c.phrase or c.tool):
+            return c.name
+    return None
+
+
 def _internal(intent: Intent) -> tuple[bool, str]:
     """Intents handled without a registered tool (P7 profile acknowledgement)."""
+    if intent.tool == "_tgcmd":  # run the command, send what it gives to Telegram
+        from jarvis.core import notify
+        got = try_answer(f"/{intent.args['cmd']}", ctx={"channel": "telegram"})
+        if got is None or not got.answer:
+            return False, f"error: /{intent.args['cmd']} gave nothing to send"
+        return (True, f"Sent your {intent.args['cmd']} to Telegram.") if notify.telegram_send(got.answer) \
+            else (False, "error: Telegram didn't accept it")
     if intent.tool == "_unlock":
         from jarvis.core import selfknow
         return True, selfknow.try_unlock(intent.args["text"])

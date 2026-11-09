@@ -19,6 +19,14 @@ from jarvis.core import config, notify, store
 from jarvis.workers.base import Worker
 
 OFFSET_KEY = "telegram_offset"
+# one-tap buttons under the typing box (owner 11-09: tap instead of type); each sends the command next to it
+BUTTONS = {"📸 Screen": "/screen", "🔒 Lock": "/lockscreen", "🔋 Status": "/status",
+           "🤖 Claude": "/claude status", "📊 Claude usage": "/claude usage", "📷 Camera": "/camera",
+           "📍 Where": "/where", "☀️ Keep screen on": "/aod on", "🌙 Let screen sleep": "/aod off",
+           "📋 Commands": "/list"}
+KEYBOARD = {"keyboard": [[{"text": t} for t in list(BUTTONS)[i:i + 3]] for i in range(0, len(BUTTONS), 3)],
+            "resize_keyboard": True, "is_persistent": True}
+YES_NO = {"inline_keyboard": [[{"text": "✅ Yes", "callback_data": "yes"}, {"text": "❌ No", "callback_data": "no"}]]}
 HELP = (
     "🤖 KURAMA — all commands (/list any time)\n"
     "Or just write / send a voice note in your own words.\n"
@@ -199,7 +207,8 @@ class TelegramBot(Worker):
     def poll(self, timeout: int | None = None) -> list[dict]:
         timeout = config.TELEGRAM_POLL_TIMEOUT_S if timeout is None else timeout
         updates = notify.telegram_call("getUpdates", {"offset": self.offset, "timeout": timeout,
-                                                      "allowed_updates": ["message", "edited_message", "my_chat_member"]},
+                                                      "allowed_updates": ["message", "edited_message", "my_chat_member",
+                                                                          "callback_query"]},
                                        timeout=timeout + 10) or []
         if updates:
             self.offset = max(int(u.get("update_id", 0)) for u in updates) + 1
@@ -270,9 +279,9 @@ class TelegramBot(Worker):
                     "(A big job like writing or a scan keeps running in the background and I'll tell you when it's done.)")
         return box.get("out") or "(no answer)"
 
-    def send(self, text: str) -> None:
+    def send(self, text: str, markup: dict | None = None) -> None:
         """The whole reply, never cut: split into messages, plus an .md file when it is very long."""
-        if not notify.send_long((text or "(no answer)").strip(), config.TELEGRAM_CHAT_ID):
+        if not notify.send_long((text or "(no answer)").strip(), config.TELEGRAM_CHAT_ID, markup=markup):
             self.log.warning("reply failed")
 
     def _note_group(self, update: dict) -> None:
@@ -394,6 +403,7 @@ class TelegramBot(Worker):
             return
         self.typing()  # at once: "typing…" shows even while a voice note transcribes or a file saves
         text = (msg.get("text") or "").strip()
+        text = BUTTONS.get(text, text)  # a tapped button = its command
         if not text:
             from jarvis.core import phone
             if msg.get("voice"):  # a voice note: Whisper turns it into text, then it's a normal message
@@ -590,7 +600,8 @@ class TelegramBot(Worker):
             if cmd in ("/all", "/commands", "/command", "/kurama", "/list", "/help", "/menu"):
                 from jarvis.core import slash  # the phone's own commands, then every KURAMA command + tool (the same
                 return HELP + "\n\n" + slash.help_text()  # list as the laptop chat): nothing is ever left out
-            if cmd in ("/start", "/?"):
+            if cmd in ("/start", "/?", "/buttons"):
+                self.send("Buttons are under the typing box now: tap instead of typing.", markup=KEYBOARD)
                 return HELP
             if cmd in ("/battery", "/bat"):
                 from jarvis.tools.general.battery_status import battery_status
@@ -666,11 +677,22 @@ class TelegramBot(Worker):
         return self._agent
 
     # --- confirm hook (safety mode "telegram") ---
+    def _tapped(self, update: dict) -> str | None:
+        """The owner tapped an inline button ('yes' / 'no'): its data, after telling Telegram it was seen."""
+        cq = update.get("callback_query") or {}
+        if not cq or str((cq.get("from") or {}).get("id", "")) != str(config.TELEGRAM_CHAT_ID):
+            return None
+        try:
+            notify.telegram_call("answerCallbackQuery", {"callback_query_id": cq.get("id")})
+        except RuntimeError:
+            pass
+        return str(cq.get("data") or "")
+
     def confirm(self, prompt: str, timeout: float | None = None) -> bool:
         from jarvis.core.safety import parse_yes_no
 
         with self._confirm_lock:
-            self.send(f"{prompt}\nReply yes/no")
+            self.send(f"{prompt}\nTap Yes or No (or type it).", markup=YES_NO)
             deadline = time.monotonic() + (timeout or config.TELEGRAM_CONFIRM_TIMEOUT_S)
             while not self.stopping:
                 left = deadline - time.monotonic()
@@ -679,11 +701,12 @@ class TelegramBot(Worker):
                 updates = self.poll(timeout=int(min(config.TELEGRAM_POLL_TIMEOUT_S, max(1, left))))
                 for i, u in enumerate(updates):
                     self._note_group(u)
+                    tapped = self._tapped(u)
                     msg = self._own_message(u)
-                    if msg is None:
+                    if msg is None and tapped is None:
                         continue
                     self._backlog.extend(updates[i + 1:])  # later messages are handled afterwards
-                    ok = parse_yes_no(msg.get("text") or "") is True
+                    ok = tapped == "yes" if tapped is not None else parse_yes_no(msg.get("text") or "") is True
                     self.send("OK, doing it." if ok else "OK, not doing it.")
                     return ok
             self.send("No answer, so I did not do it.")

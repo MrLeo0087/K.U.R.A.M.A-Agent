@@ -254,6 +254,8 @@ def _call_or_background(reg: registry.Registry, name: str, clean: Any, ctx: dict
     """Run the tool; if it is still busy after config.TOOL_BACKGROUND_AFTER_S, hand it to a background job so the
     turn (and the voice loop) is free again. The job saves the result (Workspace) and announces it when done."""
     wait = _wait_for(name)
+    if wait and ctx.get("channel") == "telegram":  # on the phone you wait for the answer anyway: "taking a while...
+        wait = max(wait, config.TELEGRAM_TOOL_WAIT_S)  # job #110" for a 7-10 s /claude status only split one reply in two
     if (not wait or name in config.TOOL_NO_BACKGROUND or "jobs" not in ctx
             or threading.current_thread().name.startswith(("job", "tool-"))):
         return reg.call(name, clean)

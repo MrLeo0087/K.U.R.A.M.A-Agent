@@ -1444,3 +1444,21 @@ Phases (one at a time, owner tests after each):
 - 2026-11-07 (owner's shop test): KURAMA Coder panel shows the plan and every step (input, output, the model's thought) like Claude Code, a small round send arrow; the agent never asks 'which file?' (after 5 steps of looking it must decide and change); a project up to ~48k characters is given whole (raw, no line numbers) for the first one-shot change, then files on demand; edits copied with line numbers still match; web context lists classes no stylesheet styles; builds/fixes check unstyled classes (the shop's quick view was an unstyled overlay that locked scrolling) and a fix never shrinks a file (CSS replies are added; a partial JS reply is refused: style.css had shrunk 8.3k -> 2.6k). The shop's quick view and checkout pop-ups now have styles.
 - 2026-11-07: The VS Code panel's turns carry via='vscode': whole answers in the panel (never 'it's in the workspace'), a selection improve/complete is applied straight into the editor (Ctrl+Z undoes); coding mode (or the panel) = detailed answers: the full step-by-step code explanation at once, thorough senior-engineer rewrites with more room; General mode stays short and basic.
 - [x] 2026-11-07: owner fixes. Rules list: "give me list of rules set by me" / "what are the rules that I set" -> your words and rules (meaning examples). STT: whisper-large-v3 (most accurate) first, turbo only when it fails or hits a limit (also the Nepali pass). RAM: the coding agent no longer pins the 250 MB understanding model (it frees after the normal idle); the "Full" power mode keeps it loaded, so the owner's mode went to Normal (same workers, model frees after 10 min). Traces: Brave's tab extension says "chromium" -> tab close/keep-only found no browser window (fixed); a bare "yes" now answers the coding agent's question in any mode; "go to VS Code" focuses VS Code (it opened the vscode_ext folder, then a shop was built into it and the extension's files were missing: restored from git).
+- [x] 2026-11-09 Plan 11-09 (docs/AGENTS_PLAN.md) phase 1, Telegram solid. Proven: (1) alerts filed in the group's
+      topics follow the group's mute setting, the 🔔 mention of 11-06 wasn't enough -> notify: RING_SOURCES
+      (Claude Code, reminders, timers, guard, jobs, downloads, Kaggle, web watch, backups, brief) and every
+      warning/error go to the private chat (rings), the topic gets a silent copy (disable_notification). (2) Every
+      Claude Code Stop said "finished", also when it only paused for its own background task (a render) ->
+      claudewatch.still_running reads the transcript (a 'running in background with ID: X' without a later
+      task-notification for X) -> "⏳ Claude Code is waiting: For: <task>". (3) "/claude status|usage" from the phone
+      became "taking a while... job #110" 7 times in 14 days (status 6.5-9.8 s with the screen, usage ~6.5 s:
+      'claude -p /usage' per account) -> a Telegram request waits up to 25 s for its tool (TELEGRAM_TOOL_WAIT_S),
+      usage asks every account at once, answers the last numbers at once and refreshes them in the background.
+      (4) "send morning brief to telegram" sent the words (11-04 👎) -> a KURAMA command named in the message
+      (brief, battery, status, where...) runs and its result is sent (fastpath._command_named, intent _tgcmd).
+      (5) One-tap buttons under the typing box (/start, /buttons): Screen, Lock, Status, Claude, Claude usage,
+      Camera, Where, Keep screen on, Let screen sleep, Commands; yes/no questions get ✅ Yes / ❌ No buttons
+      (callback_query). "always on display": the wrong answers were all on 11-04 (before /aod); /aod works since.
+      Tests: test_telegram_solid.py (9), test_tg_topics / test_workers updated. Suite: only the 2 topic tests
+      failed (expected: new behaviour), updated. Scorecard 74% / 99% / 98%: #137 (a Nepali news line) fails
+      without these changes too; cases 275/276 now expect 'close all tabs' = close the tabs (the 11-06 change).

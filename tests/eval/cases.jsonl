@@ -272,8 +272,8 @@
 {"id": 272, "text": "make volume to 130%", "expect": "volume", "args": {}, "channel": "laptop", "source": "traces 2026-11-01"}
 {"id": 273, "text": "Increase the more volume.", "expect": "volume", "args": {}, "channel": "laptop", "source": "traces 2026-11-01"}
 {"id": 274, "text": "increase the volume more", "expect": "volume", "args": {}, "channel": "laptop", "source": "traces 2026-11-01"}
-{"id": 275, "text": "close all tabs", "expect": "close.app", "args": {}, "channel": "laptop", "source": "traces 2026-11-01"}
-{"id": 276, "text": "Close all tab.", "expect": "close.app", "args": {}, "channel": "laptop", "source": "traces 2026-11-01"}
+{"id": 275, "text": "close all tabs", "expect": "ui.control", "args": {}, "channel": "laptop", "source": "traces 2026-11-01"}
+{"id": 276, "text": "Close all tab.", "expect": "ui.control", "args": {}, "channel": "laptop", "source": "traces 2026-11-01"}
 {"id": 277, "text": "Give me the list of the tab open in my browser.", "expect": "ui.control", "args": {}, "channel": "laptop", "source": "traces 2026-11-01"}
 {"id": 278, "text": "Press Alt and Tab key together.", "expect": "ui.control", "args": {}, "channel": "laptop", "source": "traces 2026-11-01"}
 {"id": 279, "text": "generate a random image and send to telegram", "expect": "image.generate", "args": {}, "channel": "laptop", "source": "traces 2026-11-01"}

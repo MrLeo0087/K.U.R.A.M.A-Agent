@@ -25,7 +25,8 @@ def test_setup_and_routing(monkeypatch):
     calls.clear()
     notify.notify("✅ Claude Code finished", "done", source="claude_code", desktop=False, telegram=True)
     sent = [b for m, b in calls if m == "sendMessage"]
-    assert sent and sent[0]["chat_id"] == -1001 and sent[0]["message_thread_id"] == 102
+    topic = [b for b in sent if b.get("chat_id") == -1001]  # 11-09: rings in the private chat + a silent topic copy
+    assert topic and topic[0]["message_thread_id"] == 102 and topic[0].get("disable_notification") is True
     assert tgtopics.off().startswith("Sections off") and tgtopics.where("claude_code", "info") == (None, None)
 
 
@@ -173,12 +174,14 @@ def test_a_picture_goes_where_it_was_asked_and_only_once(monkeypatch, tmp_path):
 
 
 def test_an_alert_in_a_topic_rings_the_phone(monkeypatch):
-    """11-06: 'Claude Code finished' came in its topic without a notification: the owner is mentioned."""
+    """11-06: 'Claude Code finished' came in its topic without a notification (the 🔔 mention wasn't enough, 11-09):
+    it goes to the private chat, which rings; the topic keeps a silent copy. A plain alert keeps the mention."""
     import json
     from jarvis.core import store
     calls = _calls(monkeypatch)
     store.kv_set("tg_topics", json.dumps({"group": -1001, "threads": {"claude": 4}}))
     notify.reset()
     notify.notify("✅ Claude Code finished", "all done", source="claude_code", desktop=False, telegram=True)
-    sent = [b for m, b in calls if m == "sendMessage"][-1]
-    assert sent["message_thread_id"] == 4 and sent["text"].startswith('<a href="tg://user?id=42">🔔</a> ')
+    sent = [b for m, b in calls if m == "sendMessage"]
+    assert str(sent[0]["chat_id"]) == "42" and "message_thread_id" not in sent[0]
+    assert sent[1]["message_thread_id"] == 4 and sent[1].get("disable_notification") is True

@@ -359,7 +359,8 @@ TOOL_BACKGROUND_AFTER_S = float(os.getenv("KURAMA_TOOL_BG_AFTER_S", "3"))
 TOOL_BACKGROUND_MIN_S = {"music": 12.0, "media": 12.0, "web": 8.0, "web_search": 8.0, "wikipedia": 8.0}  # finding a song takes 2-6 s: music never "goes to the
 # background" with a job number (11-03 f28ec8c6: 'Play some Hindi song' -> job #64 at 3.0 s); a web lookup is 3-6 s
 # (11-03 6282db24: "Searching in the background" for a Wikipedia summary)
-TOOL_BACKGROUND_MAX_S = 8.0  # a tool's own usual run time decides the wait (safety._wait_for), never longer than this
+TOOL_BACKGROUND_MAX_S = 8.0
+TELEGRAM_TOOL_WAIT_S = 25.0  # a Telegram request waits this long for its tool before it becomes a job  # a tool's own usual run time decides the wait (safety._wait_for), never longer than this
 TOOL_NO_BACKGROUND = ("start_job", "generate_image", "write_document", "jobs", "make_tool",
                       "focus_mode", "gesture_control", "power_off", "suspend_computer",
                       "read_text", "scan_qr")  # these wait for the user to drag a box: never "still working"
@@ -1165,6 +1166,10 @@ TELEGRAM_POLL_TIMEOUT_S = 6  # long-poll seconds (short so Ctrl+C stops the work
 TELEGRAM_CONFIRM_TIMEOUT_S = 60.0  # "Reply yes/no": no answer in time means no
 TELEGRAM_ANSWER_TIMEOUT_S = 90.0  # a reply that takes longer than this is given up on (no "typing" forever)
 TELEGRAM_MAX_REPLY_CHARS = 3500
+# alerts that must ring on the phone: sent to the private chat (its own sound) even when sections (group topics) are
+# on; the topic gets a silent copy. Warnings and errors always ring.
+RING_SOURCES = frozenset({"claude_code", "scheduler", "timer", "todo", "guard", "jobs", "downloads", "kaggle",
+                          "webwatch", "cmdalerts", "power", "backup", "brief"})
 TELEGRAM_MAX_PARTS = 4  # a longer answer: its first 2 messages + the whole of it as a web page file
 TELEGRAM_FOLD_CHARS = 700  # a longer reply shows its start; the rest folds behind "show more"
 # --- Telegram security: a PIN for risky actions, and a /lock switch (PINs live in .env, change anytime) ---

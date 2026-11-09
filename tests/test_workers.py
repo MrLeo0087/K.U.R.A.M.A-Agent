@@ -361,7 +361,7 @@ def test_telegram_confirm_yes_no_timeout_and_blocked(tg, monkeypatch, tmp_path):
     (tmp_path / "x").write_text("x")
     tg["updates"] = [[upd(1, "yes", chat=7), upd(2, "yes")]]
     res = safety.execute("delete_to_trash", {"path": str(tmp_path / "x")}, confirm=bot.confirm)
-    assert res.ok and "trash" in res.output and "Reply yes/no" in tg["sent"][0]
+    assert res.ok and "trash" in res.output and "Tap Yes or No" in tg["sent"][0]
     tg["updates"] = [[upd(3, "no"), upd(4, "/jobs")]]
     res = safety.execute("delete_to_trash", {"path": str(tmp_path / "x")}, confirm=bot.confirm)
     assert not res.ok and "declined" in res.output

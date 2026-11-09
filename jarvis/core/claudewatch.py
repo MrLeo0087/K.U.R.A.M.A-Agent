@@ -248,6 +248,13 @@ def event(data: dict) -> dict:
             if "waiting for your input" in text.lower() or "idle" in text.lower():
                 s["status"] = "waiting for you"
                 msg = ("⏸ Claude Code is waiting for you", f"{_project(s)}\n{text}\nSend '/claude say <what to do>'.")
+        elif ev == "Stop" and (running := still_running(s.get("transcript", ""))):
+            # it stopped its turn to wait for its own background work (a video render): a pause, not the end (11-09:
+            # Telegram said "finished" while the render still ran); its wake-up when that ends goes on as before
+            s["status"] = "waiting for " + running[0]
+            last = str(data.get("last_assistant_message") or "").strip()
+            msg = ("⏳ Claude Code is waiting", f"{_project(s)}\nFor: " + "; ".join(running[:3])
+                   + ("\n\n" + _short(last, 300) if last else "") + "\nIt goes on by itself when that ends.")
         elif ev == "Stop":
             s["status"], s["finished"] = "finished", time.time()
             # its answer, from Claude Code itself (the transcript can lag behind: it gave the step before the end)
@@ -299,14 +306,29 @@ def plan_limits() -> list[str]:
     exe = claude_binary()
     if exe is None:
         return []
-    out = []
-    for f in settings_files():
+    age = time.time() - _limits_cache[0]
+    if age < 60:  # asked again within a minute (the /claude card + /claude usage)
+        return list(_limits_cache[1])
+    if _limits_cache[1] and age < 3600 and not _refreshing.is_set():  # the last numbers at once (each 'claude -p
+        _refreshing.set()  # /usage' takes ~3-6 s: Telegram said "taking a while... background job"), fresh ones for
+        threading.Thread(target=_refresh_limits, daemon=True, name="claude-usage").start()  # the next ask
+        return [*_limits_cache[1][:1], *_limits_cache[1][1:]] + [f"(as of {int(age // 60)} min ago)"]
+
+    def ask(f: Path) -> dict:
         env = dict(os.environ, CLAUDE_CONFIG_DIR=str(f.parent), KURAMA_NO_WATCH="1")  # not a task to watch
         try:
             r = subprocess.run([str(exe), "-p", "/usage", "--output-format", "json"], env=env, cwd=str(Path.home()),
                                capture_output=True, text=True, timeout=30)
-            res = json.loads(r.stdout or "{}")
+            return json.loads(r.stdout or "{}")
         except (OSError, subprocess.TimeoutExpired, ValueError):
+            return {}
+    from concurrent.futures import ThreadPoolExecutor
+    files = settings_files()
+    with ThreadPoolExecutor(max(1, len(files))) as ex:  # every account at once: one after another took ~3 s each,
+        answers = list(ex.map(ask, files))  # and /claude usage on Telegram went "taking a while... background job"
+    out = []
+    for f, res in zip(files, answers):
+        if not res:
             continue
         text = str(res.get("result") or "")
         rows = re.findall(r"^(Current [^:]+):\s*(\d+)%\s*used\s*[·•-]\s*resets\s*(.+)$", text, re.M)
@@ -320,7 +342,20 @@ def plan_limits() -> list[str]:
             used = int(pct)
             bar = "█" * (used // 10) + "░" * (10 - used // 10)
             out.append(f"{label}: {bar} {used}% used, {100 - used}% left · resets {reset}")
+    _limits_cache[:] = [time.time(), list(out)]
     return out
+
+
+_limits_cache: list = [0.0, []]
+_refreshing = threading.Event()
+
+
+def _refresh_limits() -> None:
+    try:
+        _limits_cache[0] = 0.0
+        plan_limits()
+    finally:
+        _refreshing.clear()
 
 
 def usage() -> str:
@@ -699,6 +734,49 @@ def claude_binary() -> Path | None:
 
 
 # ---------- helpers ----------
+_BG_ID = re.compile(r"Command running in background with ID: (\w+)")
+_BG_DONE = re.compile(r"<task-id>(\w+)</task-id>.*?<status>(\w+)</status>", re.S)
+
+
+def still_running(transcript: str) -> list[str]:
+    """Claude Code's own background tasks in this conversation that started and have not reported back yet
+    (its transcript: a Bash run_in_background result 'Command running in background with ID: X', and later a
+    '<task-notification>' with that task id and a status). Their descriptions, oldest first."""
+    try:
+        p = Path(transcript)
+        if not p.is_file():
+            return []
+        with p.open("rb") as fh:
+            fh.seek(max(0, p.stat().st_size - 8_000_000))  # the recent part: a task started hours ago is in there
+            lines = fh.read().decode("utf-8", errors="replace").splitlines()
+    except OSError:
+        return []
+    desc: dict[str, str] = {}  # tool_use id -> what it runs
+    started: dict[str, str] = {}  # task id -> description
+    done: set[str] = set()
+    for line in lines:
+        if "run_in_background" not in line and "in background with ID" not in line and "<task-id>" not in line:
+            continue
+        try:
+            msg = (json.loads(line).get("message") or {})
+        except ValueError:
+            continue
+        content = msg.get("content")
+        for part in content if isinstance(content, list) else [{"type": "text", "text": str(content or "")}]:
+            if not isinstance(part, dict):
+                continue
+            if part.get("type") == "tool_use" and (part.get("input") or {}).get("run_in_background"):
+                inp = part["input"]
+                desc[part.get("id", "")] = str(inp.get("description") or inp.get("command") or "a background task")[:80]
+            text = part.get("text") or part.get("content") or ""
+            text = text if isinstance(text, str) else json.dumps(text)
+            for m in _BG_ID.finditer(text):
+                started[m.group(1)] = desc.get(part.get("tool_use_id", ""), "a background task")
+            for m in _BG_DONE.finditer(text):
+                done.add(m.group(1))
+    return [d for tid, d in started.items() if tid not in done]
+
+
 def _last_message(transcript: str) -> str:
     """Claude Code's final words in that conversation (the end of its transcript file)."""
     try:

@@ -282,7 +282,7 @@ def split_for_telegram(text: str) -> tuple[list[str], str]:
 
 
 def send_long(text: str, chat_id: str | int | None = None, title: str = "reply", thread: int | None = None,
-              keep: bool = False, ping: bool = False) -> bool:
+              keep: bool = False, ping: bool = False, silent: bool = False, markup: dict | None = None) -> bool:
     """Send any text to Telegram complete: readable messages (folded "show more" for prose), plus the whole answer
     as a web page file when it is very long.
     keep: an alert, remembered so /clear can delete it."""
@@ -294,7 +294,9 @@ def send_long(text: str, chat_id: str | int | None = None, title: str = "reply",
         try:
             r = telegram_call("sendMessage", {"chat_id": chat_id or config.TELEGRAM_CHAT_ID, "text": part,
                                               "parse_mode": "HTML", "disable_web_page_preview": True,
-                                              **({"message_thread_id": thread} if thread else {})})
+                                              **({"message_thread_id": thread} if thread else {}),
+                                              **({"disable_notification": True} if silent else {}),
+                                              **({"reply_markup": markup} if markup and part is parts[-1] else {})})
             if keep:
                 _keep_ids(r)
         except RuntimeError as e:  # (an HTML problem: the same text plain, never lost)
@@ -331,7 +333,7 @@ def send_long(text: str, chat_id: str | int | None = None, title: str = "reply",
 
 
 def telegram_send(text: str, chat_id: str | int | None = None, thread: int | None = None, keep: bool = False,
-                  ping: bool = False) -> bool:
+                  ping: bool = False, silent: bool = False) -> bool:
     """sendMessage to the configured chat (rate-limited). False when not configured or failed."""
     if not telegram_configured():
         return False
@@ -343,7 +345,8 @@ def telegram_send(text: str, chat_id: str | int | None = None, thread: int | Non
             log.warning("telegram rate limit reached; message dropped")
             return False
         _tg_sent.append(now)
-    return send_long(text, chat_id, title=text.split("\n", 1)[0][:40], thread=thread, keep=keep, ping=ping)
+    return send_long(text, chat_id, title=text.split("\n", 1)[0][:40], thread=thread, keep=keep, ping=ping,
+                     silent=silent)
 
 
 def desktop_send(title: str, text: str, level: str = "info") -> bool:
@@ -494,8 +497,14 @@ def notify(title: str, text: str = "", level: str = "info", source: str = "", de
         group, thread = tgtopics.where(source, level, title)
     except Exception:  # noqa: BLE001 - no sections: the private chat
         pass
-    if telegram and telegram_send(f"{_ICON[level]}**{title}**\n{text}".strip(), group, thread, keep=True,
-                                  ping=group is not None):
+    body = f"{_ICON[level]}**{title}**\n{text}".strip()
+    if telegram and group is not None and (source in config.RING_SOURCES or level in ("warning", "error")):
+        # must reach you: the private chat rings with its own sound; a group / topic follows the group's mute
+        # setting (11-09: Claude Code's "finished" came late or silent from the topic, even with the 🔔 mention)
+        if telegram_send(body, keep=True):
+            sent.append("telegram")
+        telegram_send(body, group, thread, keep=True, silent=True)  # the copy filed in its section, no sound
+    elif telegram and telegram_send(body, group, thread, keep=True, ping=group is not None):
         sent.append("telegram")
     if save:
         try:
