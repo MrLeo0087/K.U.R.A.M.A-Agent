@@ -79,3 +79,21 @@ def test_a_phone_request_waits_for_its_tool(monkeypatch):
     monkeypatch.setattr(config, "TELEGRAM_TOOL_WAIT_S", 25.0)
     out = safety._call_or_background(Reg(), "claude_code", {}, {"jobs": [], "channel": "telegram"})
     assert out.ok and out.output == "ok"
+
+
+def test_a_message_from_the_laptop_goes_to_the_private_chat_and_the_groups_general(monkeypatch):
+    from jarvis.core import store
+    from jarvis.tools.general import _tg
+    from jarvis.tools.general.send_message_telegram import send_message_telegram
+    sent = []
+    monkeypatch.setattr(config, "TELEGRAM_BOT_TOKEN", "1:x")
+    monkeypatch.setattr(config, "TELEGRAM_CHAT_ID", "42")
+    monkeypatch.setattr(_tg, "ready", lambda: None)
+    monkeypatch.setattr(notify, "telegram_call", lambda method, body, **k: sent.append(body) or {"message_id": 1})
+    store.kv_set("tg_topics", json.dumps({"group": -1001, "threads": {"share": 9}}))
+    assert send_message_telegram("hello").startswith("Sent")
+    assert str(sent[0]["chat_id"]) == "42" and "disable_notification" not in sent[0]
+    assert sent[1]["chat_id"] == -1001 and "message_thread_id" not in sent[1]  # General
+    sent.clear()
+    send_message_telegram("https://example.com")
+    assert sent[1]["message_thread_id"] == 9  # a link: 🔗 Share

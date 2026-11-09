@@ -20,10 +20,16 @@ def send_message_telegram(text: str) -> str:
         return "error: nothing to send"
     if err := _tg.ready():
         return err
-    group, thread = None, None
-    if notify.reply_target() is None and len(text) < 600 and re.search(r"https?://", text):
-        from jarvis.core import tgtopics  # a link sent from the laptop: the 🔗 Share section (when sections are on)
-        group, thread = tgtopics.where("share", "info")
-    if not notify.send_long(text, group, title="message", thread=thread):  # complete, never cut at 5 parts
+    if notify.reply_target() is not None:  # asked on Telegram: the answer goes back where it was asked
+        if not notify.send_long(text, None, title="message"):
+            return "error: Telegram didn't accept the message (check the bot token/chat id or your internet)"
+        return f"Sent to Telegram ({len(text)} characters)."
+    # sent from the laptop: your private chat (it rings) AND your group, when sections are on: a link in 🔗 Share,
+    # anything else in General (11-09: 'send hello to telegram' reached only the private chat)
+    if not notify.send_long(text, config.TELEGRAM_CHAT_ID, title="message"):  # complete, never cut at 5 parts
         return "error: Telegram didn't accept the message (check the bot token/chat id or your internet)"
+    from jarvis.core import tgtopics
+    if group := tgtopics._kv(tgtopics._KEY).get("group"):  # sections on
+        thread = tgtopics.where("share", "info")[1] if len(text) < 600 and re.search(r"https?://", text) else None
+        notify.send_long(text, group, title="message", thread=thread, silent=True)  # (no second ring)
     return f"Sent to Telegram ({len(text)} characters)."
