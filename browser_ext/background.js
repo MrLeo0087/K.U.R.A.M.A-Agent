@@ -44,3 +44,30 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
     body: JSON.stringify({ id: msg.id }) }).then((r) => r.json()).then((d) => reply(d.text || "")).catch(() => reply(""));
   return true; // the reply comes later
 });
+
+// "ask it simpler" (a follow-up): KURAMA opens <site>#kurama=<id>&same=1 -> the chat tab of that site already open
+// gets the prompt (the conversation continues there) and the new tab closes; no open chat -> the new tab gets it.
+const followed = new Set();
+const waiting = {}; // tab id -> prompt id (no chat open: this new tab gets it once it has loaded)
+chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
+  if (waiting[tabId] && info.status === "complete") {
+    chrome.tabs.sendMessage(tabId, { kind: "kurama_fill", id: waiting[tabId] });
+    delete waiting[tabId];
+    return;
+  }
+  const m = (tab.url || "").match(/#kurama=([\w-]+)&same=1/);
+  if (!m || followed.has(m[1])) return;
+  followed.add(m[1]);
+  const origin = new URL(tab.url).origin;
+  const others = (await chrome.tabs.query({})).filter((t) => t.id !== tabId && (t.url || "").startsWith(origin));
+  if (!others.length) {
+    if (tab.status === "complete") chrome.tabs.sendMessage(tabId, { kind: "kurama_fill", id: m[1] });
+    else waiting[tabId] = m[1];
+    return;
+  }
+  const old = others.sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0))[0];
+  await chrome.tabs.update(old.id, { active: true });
+  await chrome.windows.update(old.windowId, { focused: true });
+  chrome.tabs.remove(tabId);
+  chrome.tabs.sendMessage(old.id, { kind: "kurama_fill", id: m[1] });
+});

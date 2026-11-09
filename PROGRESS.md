@@ -1539,3 +1539,14 @@ Phases (one at a time, owner tests after each):
       checked monthly, told on a 5-point drop. "how is my laptop health" / /health -> battery 75% of new, 551
       cycles, disk + trend, RAM (tool laptop_health). The weekly backup already exists (needs a drive: "set up
       backup of X to <drive>"). Tests: test_laptop_health (4).
+    - 11-09 Phase 5 (Ask Gemini / ChatGPT, 0 KURAMA tokens): "ask gemini why this works", "ask chatgpt how to fix
+      this error", "ask claude to explain this function in nepali", "send this to chatgpt", "ask it simpler"
+      (core/askai.py, tool ask_ai). The prompt = the question + the selection + where it is (VS Code: file, lines and
+      8 lines around; browser: page title + URL; any other app: the highlighted text). A question with no
+      "this / that / it / selected" doesn't carry an old highlight. Brave opens the site with #kurama=<id>; the
+      extension (1.4, reload it in brave://extensions) pastes and sends; a follow-up within 30 min (nothing new
+      selected) goes to the chat tab already open (&same=1: background.js finds it, closes the new tab). The prompt
+      is also on the clipboard. No site named -> the default (Gemini; "use chatgpt by default" changes it).
+      Routing by meaning: a request addressed to a web AI ("ask <site> ...") is checked as "ask <site> X" (the
+      question is free text); "how does chatgpt work" / "open gemini" / "ask claude code ..." are not sent.
+      Tests: test_ask_ai (6).

@@ -1795,7 +1795,7 @@ def match(text: str) -> Intent | None:
         return win
     it = app_name_intent(text) or style_intent(text) or new_project_intent(text) or ranked_files_intent(text) \
         or agent_intent(text) or agent_coding_intent(text) or link_play_intent(text) or clean_intent(text) \
-        or shutdown_later_intent(text) or to_file_intent(text) or selection_intent(text) \
+        or shutdown_later_intent(text) or to_file_intent(text) or askai_intent(text) or selection_intent(text) \
         or _code_not_file(_match(text)) or daily_intent(text)
     if it is not None and it.tool == "read_later" and semantic_ensure():  # "add a job for later: write a poem" is
         from jarvis.core import semantic  # KURAMA's job list, not the reading list: by meaning, job wins -> the AI
@@ -2170,6 +2170,27 @@ def _mask_open_apps(t: str) -> str | None:
     return None
 
 
+def askai_intent(text: str) -> Intent | None:
+    """'ask gemini what is backpropagation' / 'ask claude to explain this function in nepali': a request FOR a web AI.
+    Its question is free text that pulls the meaning anywhere (chat, the selection tools), so the MEANING is checked
+    on the addressing part with the question as X ('ask gemini X'); it must still mean ask_ai."""
+    from jarvis.core import askai, semantic
+    raw = " ".join((text or "").split()).strip(" .!?")
+    m = askai._LEAD.match(raw)
+    if not m or not askai.addressed(raw) or not semantic.ready():
+        return None
+    lead = re.sub(r"(?:\s+(?:to|and|about|that|if|whether|for|me))+\s*$", "", raw[:m.end()].strip(), flags=I)
+    best = meaning_label(router_fix(lead + " X"))
+    if best is None or best[0] != "ask_ai" or best[1] < config.MEANING_SHORTCUT_MIN_BY.get("ask_ai", config.MEANING_SHORTCUT_MIN):
+        return None
+    return Intent("askai", "ask_ai", "web", {"question": askai.question_of(raw), "site": askai.site_of(raw)}, known=raw)
+
+
+def router_fix(t: str) -> str:
+    from jarvis.core import router
+    return router.fix_typos(t)
+
+
 def meaning_intent(text: str) -> Intent | None:
     """0-token actions picked by MEANING (config.MEANING_SHORTCUTS), not by word patterns: the request must be close to
     one action's examples (MEANING_SHORTCUT_MIN, and nearer than plain chat) AND name nothing those examples don't —
@@ -2237,6 +2258,13 @@ def meaning_intent(text: str) -> Intent | None:
         return _about_me_intent(label, raw, t, extra)
     if label in ("claude_on", "claude_off", "claude_go", "claude_status", "claude_report", "claude_stop", "claude_usage"):
         return None if extra else _ok(t, Intent("claude", "claude_code", "dev", {"action": label.split("_")[1]}))
+    if label == "ask_ai":  # the rest of the request is the question (free text, like a Telegram message)
+        from jarvis.core import askai
+        if not askai.addressed(raw):
+            return None  # a question ABOUT ChatGPT ('how does chatgpt work'), not one for it: KURAMA answers
+        it = Intent("askai", "ask_ai", "web", {"question": askai.question_of(raw), "site": askai.site_of(raw)},
+                    known=raw)
+        return it if meaning_ok(t, it) else None
     if label == "laptop_health":
         return None if extra else _ok(t, Intent("health", "laptop_health", "system", {}))
     if label in ("day_start", "day_done"):

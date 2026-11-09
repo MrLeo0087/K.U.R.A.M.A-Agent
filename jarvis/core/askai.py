@@ -1,0 +1,148 @@
+""""Ask Gemini / ask ChatGPT" (plan 11-09 phase 5, 0 KURAMA tokens): your question + what you selected + where it
+is (the page's title and address, or the file and the lines around it in VS Code) -> one prompt; Brave opens the
+site and the KURAMA browser extension pastes it and presses send (browser_ext/bridge.js).
+
+- "ask gemini why this works" / "ask chatgpt what this means" / "ask claude ...": that site.
+- "ask the AI ..." / no site named: your default (kv askai_default, Gemini at first; "use chatgpt by default").
+- A follow-up within FOLLOW_S with nothing new selected ("ask it simpler") goes to the SAME tab (the extension
+  finds it), so the conversation there continues; otherwise a new chat.
+"""
+from __future__ import annotations
+
+import json
+import re
+import time
+import uuid
+from pathlib import Path
+
+from jarvis.core import store
+
+SITES = {"gemini": "https://gemini.google.com/app", "chatgpt": "https://chatgpt.com/", "claude": "https://claude.ai/new"}
+NAMES = {"gemini": "Gemini", "chatgpt": "ChatGPT", "claude": "Claude"}
+DEFAULT_KEY, LAST_KEY = "askai_default", "askai_last"
+FOLLOW_S = 30 * 60
+MAX_SEL = 6000
+_SITE_RE = re.compile(r"\b(gemini|bard|chat\s*gpt|chatgpt|gpt|open\s*ai|claude)\b", re.I)
+# the request's own words that only say "ask <site>" (the rest is the question)
+_LEAD = re.compile(r"^\s*(?:(?:hey|ok|please|can\s+you|could\s+you)\s+)*(?:go\s+and\s+)?(?:ask|send\s+(?:this|it|that)\s+to)"
+                   r"\s+(?:the\s+)?(?:gemini|bard|chat\s*gpt|chatgpt|gpt|open\s*ai|claude|ai|it)\b[\s,:-]*(?:and\s+ask\s+)?",
+                   re.I)
+
+
+def site_of(text: str) -> str:
+    m = _SITE_RE.search(text or "")
+    if not m:
+        return ""
+    w = re.sub(r"\s+", "", m.group(1).lower())
+    return {"bard": "gemini", "gpt": "chatgpt", "openai": "chatgpt"}.get(w, w)
+
+
+def default_site() -> str:
+    s = (store.kv_get(DEFAULT_KEY) or "").strip()
+    return s if s in SITES else "gemini"
+
+
+def set_default(site: str) -> str:
+    s = site_of(site) or site.strip().lower()
+    if s not in SITES:
+        return "Say Gemini, ChatGPT or Claude."
+    store.kv_set(DEFAULT_KEY, s)
+    return f"'Ask the AI' now goes to {NAMES[s]}."
+
+
+def addressed(text: str) -> bool:
+    """The request is FOR a web AI ('ask gemini ...', 'send this to chatgpt', 'ask it simpler'), not about one."""
+    return bool(_LEAD.match(text or "")) and not re.search(r"\bclaude\s+code\b", text or "", re.I)  # (KURAMA's link)
+
+
+def question_of(text: str) -> str:
+    q = re.sub(r"^(?:to|about)\s+", "", _LEAD.sub("", text or "", count=1).strip(), flags=re.I)
+    return q[:1].upper() + q[1:] if q else ""
+
+
+def _around(file: Path, sel: str, lines: tuple[int, int] | None, pad: int = 8) -> str:
+    """The lines around the selection in its file (for the AI to see where it sits)."""
+    try:
+        rows = file.read_text(errors="replace").splitlines()
+    except OSError:
+        return ""
+    if lines is None:
+        i = file.read_text(errors="replace").find(sel)
+        if i < 0:
+            return ""
+        a = file.read_text(errors="replace")[:i].count("\n") + 1
+        lines = (a, a + sel.count("\n"))
+    a, b = max(1, lines[0] - pad), min(len(rows), lines[1] + pad)
+    return "\n".join(rows[a - 1:b])
+
+
+def context() -> dict:
+    """{'selection', 'where', 'around', 'lang'}: what is selected and where (VS Code file / browser page / any app)."""
+    from jarvis.core import context as ctx
+    s = ctx.snapshot()
+    out = {"selection": "", "where": "", "around": "", "lang": ""}
+    if s.get("file") is not None and s.get("selection"):
+        f = Path(s["file"])
+        out.update(selection=s["selection"], lang=f.suffix.lstrip("."),
+                   where=f"the file `{f.name}`" + (f" (lines {s['lines'][0]}-{s['lines'][1]})" if s.get("lines") else "")
+                   + (f" in the project `{Path(s['root']).name}`" if s.get("root") else ""))
+        if len(s["selection"]) < 3000:
+            out["around"] = _around(f, s["selection"], s.get("lines"))
+    elif s.get("page_selection"):
+        url, title = s.get("tab") or ("", "")
+        out.update(selection=s["page_selection"], where=f'the web page "{title}" ({url})' if url else "a web page")
+    elif not s.get("private"):
+        sel = ctx._primary().strip()  # any other app (a PDF viewer, a terminal): the highlighted text
+        if sel and len(sel) < 20000:
+            out["selection"] = sel
+    out["selection"] = out["selection"][:MAX_SEL]
+    return out
+
+
+def build(question: str, c: dict) -> str:
+    q = question.strip() or ("Explain this simply, with one example." if c["selection"] else "")
+    if not c["selection"]:
+        return q
+    parts = [q, ""]
+    parts.append(f"Here is what I selected{(' in ' + c['where']) if c['where'] else ''}:")
+    fence = c["lang"] or ""
+    parts.append(f"```{fence}\n{c['selection']}\n```")
+    if c["around"] and c["around"].strip() != c["selection"].strip():
+        parts.append(f"The lines around it:\n```{fence}\n{c['around']}\n```")
+    return "\n".join(parts).strip()
+
+
+def ask(text: str, site: str = "") -> str:
+    """Build the prompt and send it to the site through the browser. Returns what was done."""
+    from jarvis.agents.coding import bridge
+    from jarvis.tools.general.open_url import _open
+    s = site_of(site) or site_of(text)
+    c = context()
+    q = question_of(text)
+    if q and not re.search(r"\b(?:this|that|it|these|those|here|above|selected|selection|highlighted)\b", q, re.I):
+        c["selection"] = ""  # 'ask gemini what is backpropagation': a question of its own, not about an old highlight
+    last = json.loads(store.kv_get(LAST_KEY) or "{}")
+    follow = (time.time() - float(last.get("t") or 0) < FOLLOW_S
+              and (not c["selection"] or c["selection"] == last.get("selection"))
+              and (not s or s == last.get("site")))
+    s = s or (last.get("site") if follow else "") or default_site()
+    if follow:
+        c["selection"] = ""  # the site already has it
+    prompt = build(q, c)
+    if not prompt:
+        return f"What should I ask {NAMES[s]}? Select some text or say the question ('ask {s} why this works')."
+    try:  # also on the clipboard: Ctrl+V if the site changed its page and the extension can't paste
+        from jarvis.core.rewrite import _xclip
+        _xclip(["-selection", "clipboard"], prompt)
+    except Exception:  # noqa: BLE001
+        pass
+    pid = uuid.uuid4().hex[:12]
+    bridge._prompts.clear()  # one waiting prompt at a time (the extension fetches it once)
+    bridge._prompts[pid] = prompt
+    _open(f"{SITES[s]}#kurama={pid}" + ("&same=1" if follow else ""))
+    store.kv_set(LAST_KEY, json.dumps({"t": time.time(), "site": s,
+                                       "selection": c["selection"] or last.get("selection", "") if follow else c["selection"]}))
+    what = "your follow-up" if follow else (f"your question + the selected text ({len(c['selection'])} characters)"
+                                           if c["selection"] else "your question")
+    return (f"Sent {what} to {NAMES[s]} in Brave{' (same chat)' if follow else ''}; the answer is there. "
+            f"If it didn't send by itself: sign in there, or press Ctrl+V and Enter.")
