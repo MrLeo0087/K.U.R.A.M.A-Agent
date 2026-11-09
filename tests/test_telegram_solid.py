@@ -133,3 +133,18 @@ def test_go_to_claude_code_opens_it(monkeypatch):
             assert (it.tool, it.args) == ("claude_code", {"action": "go"}), text
     finally:
         semantic._tables.clear()
+
+
+def test_a_task_moved_to_the_background_and_finished_by_a_queued_notice_is_done(tmp_path):
+    """11-09: the finish notice came as a queued-command attachment row (not a chat message) -> a false 'waiting'."""
+    note = "<task-notification>\n<task-id>bq1</task-id>\n<status>completed</status>\n</task-notification>"
+    rows = [{"message": {"content": [{"type": "tool_use", "id": "tu9", "name": "Bash",
+                                      "input": {"command": "pytest", "description": "Full suite"}}]}},
+            {"message": {"content": [{"type": "tool_result", "tool_use_id": "tu9", "content": "moved to the background"}]},
+             "toolUseResult": {"backgroundTaskId": "bq1", "timedOutAfterMs": 600000}}]
+    p = tmp_path / "t.jsonl"
+    p.write_text("\n".join(json.dumps(r) for r in rows))
+    assert claudewatch.still_running(str(p)) == ["Full suite"]
+    rows.append({"type": "attachment", "attachment": {"type": "queued_command", "prompt": note}})
+    p.write_text("\n".join(json.dumps(r) for r in rows))
+    assert claudewatch.still_running(str(p)) == []

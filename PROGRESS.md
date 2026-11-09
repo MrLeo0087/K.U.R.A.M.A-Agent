@@ -1524,3 +1524,9 @@ Phases (one at a time, owner tests after each):
       the tabs in Brave, the project in VS Code and the song again (core/day.py, tool my_day, meaning shortcuts
       day_start / day_done; their examples also in the system group so a highlighted text doesn't turn "done for
       today" into a selection request). Phone inbox skipped: already works (Downloads/Phone). Tests: test_my_day (3).
+    - 11-09 Telegram said "⏳ Claude Code is waiting — for: a background task; a background task" after a finished
+      answer. Proven from the transcript: both tasks (commands moved to the background after their 10-min time
+      limit) had finished, but Claude Code filed their finish notices as queued-command rows ("attachment".prompt /
+      queue rows / "[SYSTEM NOTIFICATION ...]" text), not as a message starting with "<task-notification>" -> those
+      rows count too; a task's description now comes from any tool call (not only run_in_background ones).
+      Test: test_telegram_solid (+1).

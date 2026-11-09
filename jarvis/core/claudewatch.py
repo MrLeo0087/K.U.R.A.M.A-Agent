@@ -841,7 +841,7 @@ def still_running(transcript: str) -> list[str]:
     started: dict[str, str] = {}  # task id -> description
     done: set[str] = set()
     for line in lines:
-        if "run_in_background" not in line and "backgroundTaskId" not in line and "<task-id>" not in line:
+        if "backgroundTaskId" not in line and "<task-id>" not in line and "\"tool_use\"" not in line:
             continue
         try:
             row = json.loads(line)
@@ -853,12 +853,18 @@ def still_running(transcript: str) -> list[str]:
             tu = next((x.get("tool_use_id") for x in msg.get("content") or [] if isinstance(x, dict)), "")
             started[str(bg["backgroundTaskId"])] = desc.get(tu, "a background task")
         content = msg.get("content")
-        for part in content if isinstance(content, list) else [{"type": "text", "text": str(content or "")}]:
+        parts = list(content) if isinstance(content, list) else [{"type": "text", "text": str(content or "")}]
+        att = row.get("attachment") if isinstance(row.get("attachment"), dict) else {}
+        # the finish notice is filed as a queued command (attachment / queue row), not always as a chat message
+        # (11-09: two finished tasks still read as "waiting")
+        parts += [{"type": "text", "text": str(x)} for x in (att.get("prompt"), row.get("content")) if isinstance(x, str)]
+        for part in parts:
             if not isinstance(part, dict):
                 continue
-            if part.get("type") == "tool_use" and (part.get("input") or {}).get("run_in_background"):
-                inp = part["input"]
+            if part.get("type") == "tool_use":  # (also a command moved to the background after its time limit)
+                inp = part.get("input") or {}
                 desc[part.get("id", "")] = str(inp.get("description") or inp.get("command") or "a background task")[:80]
+                continue
             text = part.get("text") or part.get("content") or ""
             if isinstance(text, list):  # a tool result's content blocks
                 text = " ".join(str(x.get("text") or "") for x in text if isinstance(x, dict))
@@ -866,7 +872,8 @@ def still_running(transcript: str) -> list[str]:
             # only Claude Code's own records count (backgroundTaskId above, its task notification here): the same
             # words inside code or a test in the chat are not tasks (11-09: this chat's own code made two "tasks"
             # that never existed -> a false "waiting")
-            if text.lstrip().startswith("<task-notification>"):
+            head = text.lstrip()
+            if head.startswith("<task-notification>") or head.startswith("[SYSTEM NOTIFICATION") and "<task-notification>" in head:
                 for m in _BG_DONE.finditer(text):
                     done.add(m.group(1))
     return [d for tid, d in started.items() if tid not in done]
