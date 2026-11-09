@@ -1502,3 +1502,5 @@ Phases (one at a time, owner tests after each):
       to 150% (a boost past the file), the saved level set back to 100, and the Progress music row has its own
       volume slider (0-150, like YouTube's own, separate from the laptop volume). Tests: test_music_radio (+1),
       test_music cap 150.
+    - 11-09 Progress: finished items stayed for 24 h with no way to remove them -> a ✕ on each finished item and
+      "Clear all" on the Finished header (POST /api/v1/progress/hide; kept in kv progress_hidden). Test +1.

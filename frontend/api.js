@@ -89,6 +89,7 @@ export class Api {
   glass() { return this.request("/api/v1/ui/glass"); }
   setGlass(blur, corner, light) { return this.request("/api/v1/ui/glass", { method: "POST", body: { blur, corner, light } }); }
   progress() { return this.request("/api/v1/progress"); }
+  progressHide(job = null) { return this.request("/api/v1/progress/hide", { method: "POST", body: { job } }); }
   activeJobs() { return this.request("/api/v1/jobs?limit=4&status=queued,running,paused"); }
   pauseJob(id) { return this.request(`/api/v1/jobs/${encodeURIComponent(id)}/pause`, { method: "POST", body: {} }); }
   resumeJob(id) { return this.request(`/api/v1/jobs/${encodeURIComponent(id)}/resume`, { method: "POST", body: {} }); }

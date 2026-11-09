@@ -43,4 +43,4 @@ def test_the_progress_buttons_are_not_caught_by_the_dashboard_button_handler():
     from pathlib import Path
     src = (Path(__file__).resolve().parent.parent / "frontend" / "app.js").read_text()
     i = src.index('const b = e.target.closest("[data-act], [data-ask]");')
-    assert 'b.closest(".pg-it")' in src[i:i + 200]
+    assert 'b.closest(".pg-it, .pg-hist")' in src[i:i + 200]

@@ -58,10 +58,36 @@ def _title(t: str) -> str:
     return (t[:1].upper() + t[1:])[:90] if t else "Working"
 
 
+HIDE_KEY = "progress_hidden"  # {"ids": [job ids removed one by one], "before": time: all finished before it cleared}
+
+
+def _hidden() -> dict:
+    from jarvis.core import store
+    try:
+        v = json.loads(store.kv_get(HIDE_KEY) or "{}")
+        return v if isinstance(v, dict) else {}
+    except (ValueError, TypeError):
+        return {}
+
+
+def hide(job: int | None = None) -> None:
+    """The ✕ on a finished item removes it; job=None clears every finished item (the 'Clear' of the history)."""
+    from jarvis.core import store
+    h = _hidden()
+    if job is None:
+        h = {"ids": [], "before": time.time()}
+    else:
+        h["ids"] = ([i for i in h.get("ids", []) if i != int(job)] + [int(job)])[-200:]
+    store.kv_set(HIDE_KEY, json.dumps(h))
+
+
 def _job_items(now: float) -> list[dict]:
     from jarvis.core import store
+    h = _hidden()
+    ids, before = set(h.get("ids") or []), float(h.get("before") or 0)
     rows = store.jobs_list(12, ACTIVE) + [r for r in store.jobs_list(ENDED_MAX, ENDED)
-                                         if r.get("finished") and now - float(r["finished"]) <= SHOW_ENDED_S]
+                                         if r.get("finished") and now - float(r["finished"]) <= SHOW_ENDED_S
+                                         and float(r["finished"]) > before and int(r["id"]) not in ids]
     out = []
     for r in rows:
         status = str(r.get("status") or "")

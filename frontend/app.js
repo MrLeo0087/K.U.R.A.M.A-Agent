@@ -1686,7 +1686,7 @@ function ask(text) {
 }
 document.addEventListener("click", (e) => {
   const b = e.target.closest("[data-act], [data-ask]");
-  if (!b || b.closest(".pg-it")) return; // the Progress list's own buttons (music pause / next / stop, job cancel)
+  if (!b || b.closest(".pg-it, .pg-hist")) return; // the Progress list's own buttons (music pause / next / stop, job cancel)
   // are handled by progress.js: caught here they were sent as dashboard actions -> 400 "Bad Request" (11-09)
   e.preventDefault(); e.stopPropagation();
   if (b.dataset.ask) ask(b.dataset.ask);

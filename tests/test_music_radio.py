@@ -46,3 +46,19 @@ def test_music_volume_can_boost_past_100_and_mpv_levels_quiet_songs(monkeypatch)
     assert music.volume(to=140) == "Music volume 140%." and music.volume(to=999) == "Music volume 150%."
     argv = music.PLAYER._mpv("t", ["x"])
     assert "--volume-max=150" in argv and any("dynaudnorm" in a for a in argv)
+
+
+def test_finished_progress_items_can_be_removed_one_or_all(monkeypatch):
+    import time
+    from jarvis.core import store
+    now = time.time()
+    rows = [{"id": 1, "status": "done", "finished": now - 60, "title": "a"},
+            {"id": 2, "status": "done", "finished": now - 30, "title": "b"}]
+    monkeypatch.setattr(store, "jobs_list", lambda n, st: [r for r in rows if r["status"] in st])
+    kv = {}
+    monkeypatch.setattr(store, "kv_get", lambda k: kv.get(k))
+    monkeypatch.setattr(store, "kv_set", lambda k, v: kv.__setitem__(k, v))
+    progress.hide(1)
+    assert [i["job"] for i in progress._job_items(now)] == [2]
+    progress.hide()
+    assert progress._job_items(time.time() + 1) == []

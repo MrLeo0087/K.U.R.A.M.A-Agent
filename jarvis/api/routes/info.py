@@ -65,6 +65,17 @@ async def jobs(limit: int = Query(20, ge=1, le=200), status: str | None = Query(
     return {"jobs": [{k: r.get(k) for k in keys if k in r} for r in rows]}
 
 
+class ProgressHide(BaseModel):
+    job: int | None = None  # None = clear every finished item
+
+
+@router.post("/progress/hide", summary="Remove a finished item from the Progress section (no job = clear them all)")
+async def progress_hide(body: ProgressHide):
+    from jarvis.core import progress
+    await run_in_threadpool(progress.hide, body.job)
+    return {"ok": True}
+
+
 @router.get("/progress", summary="Everything running now (jobs, downloads, the coding agent's steps, music) for the Progress section")
 async def progress_items():
     from jarvis.core import progress
