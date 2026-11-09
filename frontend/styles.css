@@ -1662,6 +1662,7 @@ body.mini .pg-list { --pg-text: var(--m-text); --pg-sub: var(--m-dim); --pg-line
 .pg-bar { display: block; position: relative; height: 4px; margin: 7px 0 0; border-radius: 3px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
 .pg-bar::after { content: ""; position: absolute; inset: 0 auto 0 0; width: calc(var(--f) * 100%); border-radius: 3px;
   background: linear-gradient(90deg, var(--pg-acc), var(--pg-acc-2)); transition: width 0.8s var(--ease); }
+.pg-bar.seek { height: 8px; cursor: pointer; } /* the music bar: tap to jump there */
 .pg-bar.ind::after { width: 35%; animation: pg-slide 1.6s ease-in-out infinite; }
 @keyframes pg-slide { 0% { left: -35%; } 100% { left: 100%; } }
 @media (prefers-reduced-motion: reduce) { .pg-bar.ind::after { animation: none; width: 100%; opacity: 0.35; } }

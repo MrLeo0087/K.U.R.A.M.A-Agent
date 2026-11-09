@@ -15,6 +15,7 @@ const ICON = {
 };
 const PATH = {
   pause: '<path d="M9 5v14M15 5v14"/>', play: '<path d="M8 5l11 7-11 7z"/>', next: '<path d="M6 5l9 7-9 7zM18 5v14"/>',
+  prev: '<path d="M18 5l-9 7 9 7zM6 5v14"/>',
   stop: '<rect x="6" y="6" width="12" height="12" rx="2"/>', x: '<path d="M7 7l10 10M17 7L7 17"/>',
 };
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -30,7 +31,8 @@ function row(it) {
     : it.status === "paused" ? "Paused" : it.status === "queued" ? "Waiting" : it.status === "playing" ? "Playing" : pct || "Working";
   let acts = "";
   if (it.kind === "music") {
-    acts = (it.status === "paused" ? btn("m-resume", "Continue", PATH.play) : btn("m-pause", "Pause", PATH.pause))
+    acts = (it.has_prev ? btn("m-previous", "Previous song", PATH.prev) : "")
+      + (it.status === "paused" ? btn("m-resume", "Continue", PATH.play) : btn("m-pause", "Pause", PATH.pause))
       + btn("m-next", "Next song", PATH.next) + btn("m-stop", "Stop the music", PATH.stop);
   } else if (!ended && it.job) {
     if (it.kind === "long") acts += it.status === "paused" ? btn("resume", "Continue", PATH.play) : btn("pause", "Pause", PATH.pause);
@@ -42,7 +44,7 @@ function row(it) {
     <div class="pg-top"><span class="pg-ic">${svg(kindIcon(it))}</span>
       <b class="pg-t" title="${esc(it.title)}">${esc(it.title)}</b>
       <span class="pg-s">${esc(it.status === "running" && pct ? pct : state)}${it.when ? " · " + esc(it.when) : ""}</span>${acts}</div>
-    <i class="pg-bar${it.frac == null && !ended ? " ind" : ""}" style="--f:${ended ? 1 : it.frac ?? 0.3}"></i>
+    <i class="pg-bar${it.frac == null && !ended ? " ind" : ""}${it.kind === "music" && it.dur ? " seek" : ""}"${it.kind === "music" && it.dur ? ` data-dur="${it.dur}" title="Tap to jump there"` : ""} style="--f:${ended ? 1 : it.frac ?? 0.3}"></i>
     ${it.detail ? `<div class="pg-d" title="${esc(it.detail)}">${esc(it.detail)}${it.count ? " · " + esc(it.count) : ""}</div>` : ""}
     ${steps}</div>`;
 }
@@ -73,6 +75,13 @@ export function startProgress(api, box, { card = null, max = 20, onChange = null
     timer = setTimeout(poll, n ? 2000 : 6000);
   };
   box.addEventListener("click", async (e) => {
+    const bar = e.target.closest(".pg-bar.seek"); // the music bar: jump to where you tap
+    if (bar) {
+      const r = bar.getBoundingClientRect(), at = Math.round(((e.clientX - r.left) / r.width) * +bar.dataset.dur);
+      try { await api.musicControl("seek", String(Math.max(0, at))); } catch { /* the next poll shows the truth */ }
+      key = ""; poll();
+      return;
+    }
     const b = e.target.closest("[data-act]");
     if (!b) return;
     const it = b.closest(".pg-it"), act = b.dataset.act, job = +it.dataset.job;

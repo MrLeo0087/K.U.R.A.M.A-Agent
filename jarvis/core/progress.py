@@ -93,7 +93,8 @@ def _music() -> list[dict]:
              "status": "paused" if s.get("paused") else "playing",
              "detail": f"{mmss(s.get('pos') or 0)} / {mmss(dur)}" if dur else "", "frac": (s["pos"] / dur) if dur else None,
              "steps": [], "ts": 0.0, "output": "",
-             "count": f"{s.get('index')}/{s.get('count')}" if (s.get("count") or 0) > 1 else ""}]
+             "count": f"{s.get('index')}/{s.get('count')}" if (s.get("count") or 0) > 1 else "",
+             "dur": dur, "has_prev": bool(s.get("has_prev"))}]  # (the bar is tappable: jump there)
 
 
 def items() -> list[dict]:

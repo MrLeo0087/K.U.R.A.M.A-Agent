@@ -1490,3 +1490,10 @@ Phases (one at a time, owner tests after each):
       count (the result's toolUseResult.backgroundTaskId, the '<task-notification>' message). (3) That notice cut
       the answer at 300 characters -> the whole answer, like "finished". Tests: test_voice_windows (+1),
       test_telegram_solid (decoy case); suite passes.
+    - 11-09 music card, owner: "only 7 songs, no previous, can't jump in the song". Cause: the queue was filled
+      once (first song + up to 6 from a text search "songs like X") and never grew; the card had no previous
+      button and its bar was display only. Fix: next songs come from YouTube's own radio for the song (its RD mix,
+      yt-dlp, free; songs over 15 min left out), and when 2 songs are left the player tops the queue up from the
+      radio of the song playing (no repeats) -> it never runs out. The Progress music row shows ⏮ previous when
+      there is one, and tapping the bar jumps there (mpv seek). Tests: test_music_radio (3); suite passes;
+      scorecard 98% (#137 as before).

@@ -137,6 +137,25 @@ def expand(url: str) -> list[dict]:
              "duration": e.get("duration") or 0} for e in entries if e.get("id")][:200]
 
 
+def radio(vid: str, limit: int = 40) -> list[dict]:
+    """YouTube's own radio for a song (its 'Mix' playlist RD<id>: the songs YouTube itself plays after it), the song
+    itself left out. Free, no key (yt-dlp). The old 'songs like <name>' TEXT search gave random videos with those
+    words (11-08: ELO -> "Ilu Ilu"); this is the real recommendation."""
+    if not vid:
+        return []
+    try:
+        out = subprocess.run([_ytdlp(), "--flat-playlist", "-J", "--no-warnings", "--playlist-end", str(limit + 1),
+                              f"https://www.youtube.com/watch?v={vid}&list=RD{vid}"],
+                             capture_output=True, text=True, timeout=40).stdout
+        data = json.loads(out or "{}")
+        entries = (data.get("entries") if isinstance(data, dict) else None) or []
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return []
+    return [{"url": f"https://www.youtube.com/watch?v={e['id']}", "id": e["id"], "title": e.get("title") or "",
+             "duration": e.get("duration") or 0} for e in entries
+            if isinstance(e, dict) and e.get("id") and e["id"] != vid and not (e.get("duration") or 0) > 15 * 60][:limit]
+
+
 def _vid(url: str) -> str:
     m = re.search(r"(?:v=|youtu\.be/|shorts/)([\w-]{6,})", url)
     return m.group(1) if m else re.sub(r"\W+", "", url)[-16:]
@@ -167,6 +186,7 @@ class Player:
     def __init__(self) -> None:
         self.queue: list[dict] = []
         self.i = 0
+        self.topping = False  # a radio top-up is being fetched
         self.procs: list[subprocess.Popen] = []
         self.gen = 0  # bumps on every start/stop: an old watcher thread then does nothing
         self.lock = threading.RLock()
@@ -242,6 +262,7 @@ class Player:
             threading.Thread(target=self._watch, args=(gen, procs[-1], time.time()), name="music-watch", daemon=True).start()
             threading.Thread(target=self._settle_volume, args=(gen,), name="music-vol", daemon=True).start()
             self._prefetch()
+            self._top_up()
         return bool(procs)
 
     def _settle_volume(self, gen: int) -> None:
@@ -272,6 +293,28 @@ class Player:
                 self._play()
             else:
                 self.queue = []
+
+    def _top_up(self) -> None:
+        """Two songs from the end of the queue: more from YouTube's radio of the song playing, so the music never
+        stops after the first few (11-09: 'only 7 songs')."""
+        if self.topping or self.i + 2 < len(self.queue) or not self.queue:
+            return
+        cur = self.queue[self.i]
+        if cur.get("direct"):
+            return
+        self.topping = True
+
+        def run():
+            try:
+                more = radio(cur.get("id") or _vid(cur.get("url", "")))
+                with self.lock:
+                    have = {q.get("id") for q in self.queue}
+                    self.queue.extend([m for m in _distinct(more, skip=self.queue) if m["id"] not in have][:PICK * 3])
+            except Exception as e:  # never kill the player over a missing next song
+                log.warning("music top-up failed: %s", e)
+            finally:
+                self.topping = False
+        threading.Thread(target=run, name="music-topup", daemon=True).start()
 
     def _prefetch(self) -> None:
         """Download the next song while this one plays, so 'next' starts at once."""
@@ -364,9 +407,10 @@ def _queue_more(query: str, first: list[dict]) -> None:
     """A named song: after it, other songs like it (not 5 versions of the same one), added while it plays."""
     def run():
         asked = _key_words(query)
-        found = [s for s in search(f"songs like {query}") + search(f"{query} similar songs")
-                 if not asked or len(_key_words(s["title"]) & asked) / len(asked) < 0.7]  # not the same song again
-        more = _distinct(found, skip=first)[:PICK]
+        found = radio(first[0].get("id") or _vid(first[0].get("url", ""))) or \
+            search(f"songs like {query}") + search(f"{query} similar songs")  # YouTube's radio, else the old way
+        found = [s for s in found if not asked or len(_key_words(s["title"]) & asked) / len(asked) < 0.7]
+        more = _distinct(found, skip=first)[:PICK * 4]
         with PLAYER.lock:
             if PLAYER.queue and PLAYER.queue[0].get("url") == first[0].get("url"):  # still the same request
                 PLAYER.queue.extend(more)
