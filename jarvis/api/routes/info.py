@@ -560,7 +560,8 @@ async def music_control(body: MusicControl):
     from jarvis.core import music
     acts = {"pause": music.pause, "resume": music.resume, "next": music.next_track, "previous": music.prev_track,
             "stop": music.stop, "volume_up": lambda: music.volume(10), "volume_down": lambda: music.volume(-10),
-            "seek": lambda: music.seek(body.value)}
+            "seek": lambda: music.seek(body.value),
+            "volume": lambda: music.volume(to=int(float(body.value or 0)))}
     if body.action not in acts:
         return {"ok": False, "error": "unknown action"}
     said = await run_in_threadpool(acts[body.action])

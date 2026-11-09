@@ -231,7 +231,8 @@ class Player:
 
     def _mpv(self, title: str, src: list[str], extra: tuple = ()) -> list[str]:
         return ["mpv", "--no-video", "--idle=no", "--force-window=no", "--really-quiet", "--no-terminal", "--cache=yes",
-                "--cache-secs=30", "--audio-buffer=0.4",
+                "--cache-secs=30", "--audio-buffer=0.4", f"--volume-max={MAX_VOLUME}",
+                "--af=lavfi=[dynaudnorm=f=250:g=15:p=0.9]",  # quiet uploads as loud as the rest (YouTube levels)
                 f"--input-ipc-server={_sock()}", f"--volume={min(DUCK_VOLUME, self.volume) if _duck['on'] else self.volume}", f"--force-media-title={title or 'music'}",
                 *([f"--ao={os.environ['KURAMA_MUSIC_AO']}"] if os.environ.get("KURAMA_MUSIC_AO") else []),  # null = silent check
                 *extra, "--", *src]
@@ -589,11 +590,11 @@ def prev_track() -> str | None:
 
 
 def volume(step: int = 0, to: int | None = None) -> str | None:
-    """Music volume (mpv, 0-130): up / down by step or to a level. The laptop's own volume is not touched."""
+    """Music volume (mpv, 0-MAX_VOLUME, over 100 = louder than the file): up / down by step or to a level. The laptop's own volume is not touched."""
     if not running():
         return None
     new = to if to is not None else PLAYER.volume + step
-    new = max(0, min(130, int(new)))
+    new = max(0, min(MAX_VOLUME, int(new)))
     if new == PLAYER.volume and step:
         return f"The music is already at {'its loudest' if step > 0 else 'its quietest'} ({new}%)."
     PLAYER.volume = new
@@ -671,6 +672,7 @@ def _dur(secs: float) -> str:
 
 VOLUME_KEY = "music_volume"
 VOLUME_SETTLE_TRIES = 60  # x 0.5 s: a streamed song's mpv can take ~10 s to open its socket
+MAX_VOLUME = 150  # mpv can boost past 100 (11-09: songs sounded quieter than the laptop)
 DUCK_VOLUME = 25  # % while you speak to KURAMA or it answers, so it hears you over the music
 _duck = {"on": False, "timer": None}
 

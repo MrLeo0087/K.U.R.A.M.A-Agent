@@ -33,7 +33,8 @@ function row(it) {
   if (it.kind === "music") {
     acts = (it.has_prev ? btn("m-previous", "Previous song", PATH.prev) : "")
       + (it.status === "paused" ? btn("m-resume", "Continue", PATH.play) : btn("m-pause", "Pause", PATH.pause))
-      + btn("m-next", "Next song", PATH.next) + btn("m-stop", "Stop the music", PATH.stop);
+      + btn("m-next", "Next song", PATH.next) + btn("m-stop", "Stop the music", PATH.stop)
+      + `<input type="range" class="pg-vol" min="0" max="150" step="5" value="${+it.volume || 100}" title="Music volume ${+it.volume || 100}% (over 100 = boost)" aria-label="Music volume">`;
   } else if (!ended && it.job) {
     if (it.kind === "long") acts += it.status === "paused" ? btn("resume", "Continue", PATH.play) : btn("pause", "Pause", PATH.pause);
     acts += btn("cancel", "Cancel (click twice)", PATH.x, "x");
@@ -52,7 +53,7 @@ function row(it) {
 /** Draw and keep up to date. box: the list element; card: shown only while something runs (or null); onChange:
  *  called with the number of items (a count pill). */
 export function startProgress(api, box, { card = null, max = 20, onChange = null } = {}) {
-  let key = "", armed = "", timer = 0;
+  let key = "", armed = "", timer = 0, sliding = false;
   const poll = async () => {
     clearTimeout(timer);
     let n = 0;
@@ -61,7 +62,7 @@ export function startProgress(api, box, { card = null, max = 20, onChange = null
         const items = ((await api.progress()).items || []).slice(0, max);
         n = items.filter((x) => !["done", "failed", "cancelled", "stopped"].includes(x.status)).length;
         const k = JSON.stringify(items);
-        if (k !== key) {
+        if (k !== key && !sliding) { // (not while the volume slider is held: a redraw drops it)
           key = k;
           const live = items.filter((x) => !["done", "failed", "cancelled", "stopped"].includes(x.status));
           const past = items.filter((x) => ["done", "failed", "cancelled", "stopped"].includes(x.status));
@@ -74,6 +75,14 @@ export function startProgress(api, box, { card = null, max = 20, onChange = null
     }
     timer = setTimeout(poll, n ? 2000 : 6000);
   };
+  box.addEventListener("pointerdown", (e) => { if (e.target.matches(".pg-vol")) sliding = true; });
+  document.addEventListener("pointerup", () => { sliding = false; });
+  box.addEventListener("change", async (e) => { // the music volume slider (only on release: one request)
+    if (!e.target.matches(".pg-vol")) return;
+    sliding = false;
+    try { await api.musicControl("volume", e.target.value); } catch { /* the next poll shows the truth */ }
+    key = ""; poll();
+  });
   box.addEventListener("click", async (e) => {
     const bar = e.target.closest(".pg-bar.seek"); // the music bar: jump to where you tap
     if (bar) {
@@ -83,7 +92,7 @@ export function startProgress(api, box, { card = null, max = 20, onChange = null
       return;
     }
     const b = e.target.closest("[data-act]");
-    if (!b) return;
+    if (!b || e.target.matches(".pg-vol")) return;
     const it = b.closest(".pg-it"), act = b.dataset.act, job = +it.dataset.job;
     if (act === "cancel" && armed !== it.dataset.id) {
       armed = it.dataset.id; b.classList.add("armed");

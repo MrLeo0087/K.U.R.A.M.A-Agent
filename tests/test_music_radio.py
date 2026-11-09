@@ -36,3 +36,13 @@ def test_the_progress_item_offers_previous_and_a_jump_bar(monkeypatch):
                                                  "has_prev": True, "index": 2, "count": 9})
     it = progress._music()[0]
     assert it["dur"] == 200 and it["has_prev"] is True
+
+
+def test_music_volume_can_boost_past_100_and_mpv_levels_quiet_songs(monkeypatch):
+    monkeypatch.setattr(music, "running", lambda: True)
+    monkeypatch.setattr(music, "_send", lambda *a, **k: True)
+    monkeypatch.setattr(music.store, "kv_set", lambda *a: None)
+    monkeypatch.setattr(music.PLAYER, "_volume", 70)
+    assert music.volume(to=140) == "Music volume 140%." and music.volume(to=999) == "Music volume 150%."
+    argv = music.PLAYER._mpv("t", ["x"])
+    assert "--volume-max=150" in argv and any("dynaudnorm" in a for a in argv)

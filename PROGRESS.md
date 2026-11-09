@@ -1497,3 +1497,8 @@ Phases (one at a time, owner tests after each):
       radio of the song playing (no repeats) -> it never runs out. The Progress music row shows ⏮ previous when
       there is one, and tapping the bar jumps there (mpv seek). Tests: test_music_radio (3); suite passes;
       scorecard 98% (#137 as before).
+    - 11-09 music too quiet next to the laptop / YouTube in the browser. Cause: the saved music volume was 70% and
+      mpv capped at 100-130, with no level matching. Fix: mpv levels quiet uploads (dynaudnorm), the music volume goes
+      to 150% (a boost past the file), the saved level set back to 100, and the Progress music row has its own
+      volume slider (0-150, like YouTube's own, separate from the laptop volume). Tests: test_music_radio (+1),
+      test_music cap 150.
