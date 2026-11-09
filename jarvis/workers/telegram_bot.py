@@ -361,6 +361,11 @@ class TelegramBot(Worker):
 
     def handle(self, update: dict, watch: bool = True) -> None:
         self._note_group(update)  # the main loop too (only the busy-time loop noted groups: /topics never saw yours)
+        if update.get("callback_query"):  # a button under an alert ("❌ Close brave"): its command, as if typed
+            cq, data = update["callback_query"], self._tapped(update) or ""
+            if not data.startswith("/") or not cq.get("message"):
+                return
+            update = {"message": {**cq["message"], "text": data, "from": cq.get("from") or {}}}
         msg = self._own_message(update)
         if msg is None:
             return

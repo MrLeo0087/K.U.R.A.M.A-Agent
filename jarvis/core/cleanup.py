@@ -239,6 +239,40 @@ def storage() -> str:
             "More needs your password (run in a terminal):\n" + "\n".join(SUDO_TIPS))
 
 
+AUTO_CACHES = (".cache/pip", ".cache/uv", ".npm/_cacache", ".cache/yarn", ".cache/go-build", ".cache/thumbnails",
+               ".cache/mesa_shader_cache", ".cache/typescript", ".cache/node-gyp")  # cheap to rebuild (not ML models)
+
+
+def auto_storage() -> tuple[int, list[str]]:
+    """The disk is nearly full: what is safe without asking (plan 11-09 phase 3): caches that rebuild fast,
+    Trash items older than 7 days, KURAMA's own old logs / temp. Hugging Face / torch models are NOT touched
+    (gigabytes to download again): those are offered as a button. Returns (bytes freed, what)."""
+    freed, done = 0, []
+    for rel in AUTO_CACHES:
+        p = HOME / rel
+        if p.exists() and (n := _rm(p)):
+            freed += n
+            done.append(f"{rel.rsplit('/', 1)[-1]} {_fmt(n)}")
+    trash, week = HOME / ".local/share/Trash", time.time() - 7 * 86400
+    t = 0
+    for info in (trash / "info").glob("*.trashinfo") if (trash / "info").is_dir() else []:
+        try:
+            if info.stat().st_mtime < week:
+                t += _rm(trash / "files" / info.stem)
+                info.unlink()
+        except OSError:
+            pass
+    if t:
+        freed += t
+        done.append(f"Trash older than 7 days {_fmt(t)}")
+    try:
+        if (k := kurama()).startswith("Cleaned"):
+            done.append("KURAMA's old logs / temp")
+    except Exception as e:  # noqa: BLE001
+        log.info("kurama cleanup: %s", e)
+    return freed, done
+
+
 def kurama() -> str:
     from jarvis.core import ytdl
     freed, done = 0, []

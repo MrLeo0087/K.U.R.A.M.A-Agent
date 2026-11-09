@@ -29,7 +29,9 @@ def music(action: Literal["play", "url", "playlist", "local", "save", "playlists
     if action == "play":
         return m.play(query, shuffle)
     if action == "url":
-        url = query
+        url = query if query.strip().startswith("http") else ""  # 'this song' = the tab open in the browser
+        if not url and (tab := m._song_tab()):
+            return m.play_url(tab[0], shuffle, label=tab[1])
         if not url:
             from jarvis.core import links
             found = links.find_link()

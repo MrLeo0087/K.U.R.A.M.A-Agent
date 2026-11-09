@@ -120,7 +120,7 @@ def _music() -> list[dict]:
              "detail": f"{mmss(s.get('pos') or 0)} / {mmss(dur)}" if dur else "", "frac": (s["pos"] / dur) if dur else None,
              "steps": [], "ts": 0.0, "output": "",
              "count": f"{s.get('index')}/{s.get('count')}" if (s.get("count") or 0) > 1 else "",
-             "dur": dur, "has_prev": bool(s.get("has_prev")), "volume": s.get("volume")}]  # (the bar is tappable: jump there)
+             "dur": dur, "has_prev": bool(s.get("has_prev")), "volume": s.get("volume"), "fx": s.get("fx")}]  # (the bar is tappable: jump there)
 
 
 def items() -> list[dict]:

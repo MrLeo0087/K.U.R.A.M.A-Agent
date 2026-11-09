@@ -333,8 +333,8 @@ def send_long(text: str, chat_id: str | int | None = None, title: str = "reply",
 
 
 def telegram_send(text: str, chat_id: str | int | None = None, thread: int | None = None, keep: bool = False,
-                  ping: bool = False, silent: bool = False) -> bool:
-    """sendMessage to the configured chat (rate-limited). False when not configured or failed."""
+                  ping: bool = False, silent: bool = False, markup: dict | None = None) -> bool:
+    """sendMessage to the configured chat (rate-limited); markup = buttons under it. False when not configured or failed."""
     if not telegram_configured():
         return False
     now = time.monotonic()
@@ -346,7 +346,7 @@ def telegram_send(text: str, chat_id: str | int | None = None, thread: int | Non
             return False
         _tg_sent.append(now)
     return send_long(text, chat_id, title=text.split("\n", 1)[0][:40], thread=thread, keep=keep, ping=ping,
-                     silent=silent)
+                     silent=silent, markup=markup)
 
 
 def desktop_send(title: str, text: str, level: str = "info") -> bool:
@@ -474,7 +474,7 @@ def replied_source() -> str:
 
 
 def notify(title: str, text: str = "", level: str = "info", source: str = "", desktop: bool = True,
-           telegram: bool | None = None, save: bool = True) -> list[str]:
+           telegram: bool | None = None, save: bool = True, markup: dict | None = None) -> list[str]:
     """Fan out one alert. telegram=None decides by wants_phone(). Returns the channels it reached.
     A muted source (mute()) is only saved (channel 'muted'), never shown or sent."""
     level = level if level in LEVELS else "info"
@@ -501,10 +501,11 @@ def notify(title: str, text: str = "", level: str = "info", source: str = "", de
     if telegram and group is not None and (source in config.RING_SOURCES or level in ("warning", "error")):
         # must reach you: the private chat rings with its own sound; a group / topic follows the group's mute
         # setting (11-09: Claude Code's "finished" came late or silent from the topic, even with the 🔔 mention)
-        if telegram_send(body, keep=True):
+        if telegram_send(body, keep=True, **({"markup": markup} if markup else {})):  # (buttons only here: a tap answers from the chat)
             sent.append("telegram")
         telegram_send(body, group, thread, keep=True, silent=True)  # the copy filed in its section, no sound
-    elif telegram and telegram_send(body, group, thread, keep=True, ping=group is not None):
+    elif telegram and telegram_send(body, group, thread, keep=True, ping=group is not None,
+                                     **({"markup": markup} if markup else {})):
         sent.append("telegram")
     if save:
         try:

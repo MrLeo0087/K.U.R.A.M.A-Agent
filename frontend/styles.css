@@ -1665,6 +1665,14 @@ body.mini .pg-list { --pg-text: var(--m-text); --pg-sub: var(--m-dim); --pg-line
 .pg-bar.seek { height: 8px; cursor: pointer; }
 .pg-clear { float: right; font: inherit; font-size: 11px; background: none; border: 0; color: inherit; opacity: .7; cursor: pointer; }
 .pg-clear:hover { opacity: 1; text-decoration: underline; }
+.pg-fx { display: grid; gap: 4px; margin: 6px 2px 2px; font-size: 11px; }
+.pg-fx label { display: grid; grid-template-columns: 48px 1fr 40px; align-items: center; gap: 6px; }
+.pg-fx input { width: 100%; accent-color: currentColor; cursor: pointer; }
+.pg-fx output { text-align: right; opacity: .8; }
+.pg-fxp { display: flex; gap: 6px; flex-wrap: wrap; }
+.pg-fxp button { font: inherit; font-size: 11px; padding: 2px 8px; border-radius: 10px; border: 1px solid currentColor;
+  background: none; color: inherit; opacity: .8; cursor: pointer; }
+.pg-fxp button:hover, .pg-b.on { opacity: 1; }
 .pg-vol { width: 72px; margin-left: 6px; accent-color: currentColor; cursor: pointer; } /* the music volume */ /* the music bar: tap to jump there */
 .pg-bar.ind::after { width: 35%; animation: pg-slide 1.6s ease-in-out infinite; }
 @keyframes pg-slide { 0% { left: -35%; } 100% { left: 100%; } }

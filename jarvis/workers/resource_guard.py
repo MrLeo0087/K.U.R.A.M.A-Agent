@@ -35,6 +35,21 @@ def top_memory(n: int = 3) -> list[tuple[str, int, float]]:
     return sorted(procs, key=lambda x: -x[2])[:n]
 
 
+_NOT_APPS = ("python", "python3", "systemd", "Xorg", "gnome-shell", "pipewire", "pulseaudio", "dbus-daemon", "mpv",
+             "kworker", "snapd", "gsd-", "tracker-miner", "Xwayland", "WebKitWebProcess")
+
+
+def user_apps(n: int = 2) -> list[tuple[str, float]]:
+    """[(app, MB)] of the biggest apps you opened (only at alert time: PSS reads each process) (processes grouped by name; KURAMA and the desktop left out)."""
+    groups: dict[str, float] = {}
+    for p in psutil.process_iter(["name", "memory_info", "username"]):
+        mi, name = p.info.get("memory_info"), (p.info.get("name") or "").split("/")[0]
+        if mi and name and not name.startswith(_NOT_APPS) and p.info.get("username") == psutil.Process().username():
+            key = {"brave": "brave", "chrome": "chrome", "code": "code"}.get(name.split("-")[0].lower(), name)
+            groups[key] = groups.get(key, 0.0) + _pss(p, mi.rss) / MB  # (PSS: shared memory counted once)
+    return [(a, mb) for a, mb in sorted(groups.items(), key=lambda kv: -kv[1]) if mb >= 300][:n]
+
+
 def _pss(p, rss: int) -> int:
     """Proportional set size (Linux smaps_rollup); RSS when it can't be read."""
     try:
@@ -180,10 +195,30 @@ class ResourceGuard(Worker):
             say = lambda m: _SAY.get(m, m)  # noqa: E731 - the user hears "KURAMA core", never "jarvis_core"
             parts = [f"{say(m)} {checks(snap)[m][0]:.0f}{checks(snap)[m][2]} (limit {checks(snap)[m][1]:.0f})"
                      for m in fired]
-            tip = ""
+            tip, did, rows = "", "", []
             if any(m in ("ram", "swap", "jarvis_core") for m in fired):  # the fix, as a 0-token command (and "yes")
                 from jarvis.core import nextstep
-                tip = " " + nextstep.offer("clean my ram", "Say 'clean my RAM' (or yes) to free memory.")
+                apps = user_apps(2)
+                if apps:  # plan 11-09 phase 3: it acts: one tap closes the biggest app (like clicking X: it asks to save)
+                    tip = " " + nextstep.offer(f"close {apps[0][0]}", f"Say yes to close {apps[0][0]}"
+                                                                     f" ({apps[0][1] / 1024:.1f} GB), or tap a button.")
+                    rows = [[{"text": f"❌ Close {a} ({mb / 1024:.1f} GB)", "callback_data": f"/close {a}"[:64]}]
+                            for a, mb in apps]
+                else:
+                    tip = " " + nextstep.offer("clean my ram", "Say 'clean my RAM' (or yes) to free memory.")
+                rows.append([{"text": "🧹 Free RAM", "callback_data": "/freeram"}])
+            if any(m.startswith("disk") for m in fired):  # the safe part at once, the rest as buttons
+                from jarvis.core import cleanup
+                try:
+                    freed, done = cleanup.auto_storage()
+                except Exception as e:  # noqa: BLE001
+                    freed, done = 0, []
+                    self.log.warning("auto storage clean failed: %s", e)
+                did = (f" I freed {cleanup._fmt(freed)} by myself ({', '.join(done)})." if done
+                       else " Nothing safe was left to delete by myself.")
+                rows += [[{"text": "🧹 Clean ML caches too", "callback_data": "/clean storage"}],
+                         [{"text": "📊 What fills the disk", "callback_data": "/disk"}]]
             notify.notify("Resource alert: " + ", ".join(map(say, fired)),
-                          f"{'; '.join(parts)}. Top memory: {hogs}.{tip}".rstrip(), level="warning", source="resource_guard")
+                          f"{'; '.join(parts)}. Top memory: {hogs}.{did}{tip}".rstrip(), level="warning",
+                          source="resource_guard", markup={"inline_keyboard": rows} if rows else None)
         return fired

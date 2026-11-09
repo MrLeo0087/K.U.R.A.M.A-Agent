@@ -1504,3 +1504,15 @@ Phases (one at a time, owner tests after each):
       test_music cap 150.
     - 11-09 Progress: finished items stayed for 24 h with no way to remove them -> a ✕ on each finished item and
       "Clear all" on the Finished header (POST /api/v1/progress/hide; kept in kv progress_hidden). Test +1.
+    - 11-09 Phase 3 part 1 (laptop acts) + owner asks: (1) RAM full -> the alert carries buttons "❌ Close <app>
+      (size, PSS)" for the 2 biggest apps you opened + "🧹 Free RAM"; "yes" closes the biggest. Disk full -> the
+      safe part runs at once (pip / uv / npm / yarn / go / thumbnails / shader caches, Trash older than 7 days,
+      KURAMA's old logs) and the alert says what it freed; buttons "Clean ML caches too" (/clean storage) and "What
+      fills the disk" (/disk). Hugging Face / torch models are never auto-deleted. A tapped alert button in Telegram
+      runs its command (callback_query -> the command as if typed). New slash /close <app>, /disk.
+      (2) "play this song" with no title plays the YouTube video open in the browser (the extension's tab; that
+      video only, not the tab's playlist; similar songs follow) instead of a random search.
+      (3) Music sound panel (⚙ in the Progress music row): speed 0.5-1.5x (pitch kept), pitch -6..+6 semitones
+      (rubberband), reverb 0-100 (aecho), presets Normal / Slowed + reverb / Nightcore; live on the song and kept
+      for the next ones (kv music_fx). Tests: test_laptop_acts (4), test_music_radio (+2); suite passes;
+      scorecard 74% / 100% / 98% (#137 as before).

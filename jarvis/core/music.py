@@ -232,7 +232,7 @@ class Player:
     def _mpv(self, title: str, src: list[str], extra: tuple = ()) -> list[str]:
         return ["mpv", "--no-video", "--idle=no", "--force-window=no", "--really-quiet", "--no-terminal", "--cache=yes",
                 "--cache-secs=30", "--audio-buffer=0.4", f"--volume-max={MAX_VOLUME}",
-                "--af=lavfi=[dynaudnorm=f=250:g=15:p=0.9]",  # quiet uploads as loud as the rest (YouTube levels)
+                f"--af={fx_chain()}", f"--speed={fx()['speed']}",  # level matching + your speed / pitch / reverb
                 f"--input-ipc-server={_sock()}", f"--volume={min(DUCK_VOLUME, self.volume) if _duck['on'] else self.volume}", f"--force-media-title={title or 'music'}",
                 *([f"--ao={os.environ['KURAMA_MUSIC_AO']}"] if os.environ.get("KURAMA_MUSIC_AO") else []),  # null = silent check
                 *extra, "--", *src]
@@ -425,7 +425,10 @@ def _ok() -> str | None:
 
 def play(query: str, shuffle: bool = False) -> str:
     """A song / artist / mood. A saved playlist with that name wins ('play study')."""
-    q = (query or "").strip() or "relaxing music"
+    q = (query or "").strip()
+    if not _title_words(q) and (tab := _song_tab()):  # "play this song": the song open in the browser
+        return play_url(tab[0], shuffle, label=tab[1])
+    q = q or "relaxing music"
     if re.match(r"https?://", q):  # a link: play it (searching YouTube for a link's text finds nothing)
         return play_url(q, shuffle)
     if hit := find_playlist(q):
@@ -447,6 +450,31 @@ def play(query: str, shuffle: bool = False) -> str:
     wait = "" if _cached(songs[0]) else " It starts in a few seconds."
     more = " Similar songs come after it." if one_song else (f" (+{len(songs) - 1} more)" if len(songs) > 1 else "")
     return f"Playing {first}.{more}{wait} Say 'next', 'pause' or 'stop the music'."
+
+
+_POINTING = re.compile(r"\b(?:this|that|the|it|one|song|songs|music|video|track|here|now|please|current|currently|"
+                       r"open|opened|playing|play|on|in|my|browser|tab|page|screen|wala|yo|yaha|gaana|gana|geet)\b", re.I)
+
+
+def _title_words(q: str) -> str:
+    """What is left of a request once the pointing words go: '' for 'this song' / 'the one in my browser'."""
+    return re.sub(r"[^\w]+", " ", _POINTING.sub(" ", q or "")).strip()
+
+
+def _song_tab() -> tuple[str, str] | None:
+    """(url, title) of a YouTube / YouTube Music video or playlist open in the browser (the KURAMA extension)."""
+    try:
+        from jarvis.core import browsertab
+        tab = browsertab.get()
+    except Exception:  # noqa: BLE001
+        return None
+    if not tab or not re.search(r"(?:youtube\.com/(?:watch|shorts|playlist)|youtu\.be/|music\.youtube\.com)", tab[0]):
+        return None
+    url, title = tab
+    title = re.sub(r"^\(\d+\)\s*|\s*-\s*YouTube(?: Music)?$", "", title or "").strip()
+    if v := re.search(r"(?:[?&]v=|youtu\.be/|shorts/)([\w-]{6,})", url):  # THIS song (not the tab's playlist)
+        url = f"https://www.youtube.com/watch?v={v.group(1)}"
+    return url, title
 
 
 def play_url(url: str, shuffle: bool = False, label: str = "") -> str:
@@ -622,7 +650,7 @@ def state() -> dict | None:
     pos = _send("get_property", "time-pos", want=True)
     dur = _send("get_property", "duration", want=True) or cur.get("duration") or 0
     return {"title": cur.get("title") or "music", "pos": float(pos or 0), "duration": float(dur or 0),
-            "paused": bool(_send("get_property", "pause", want=True)), "volume": PLAYER.volume,
+            "paused": bool(_send("get_property", "pause", want=True)), "volume": PLAYER.volume, "fx": fx(),
             "has_next": PLAYER.i + 1 < len(PLAYER.queue), "has_prev": PLAYER.i > 0,
             "index": PLAYER.i + 1, "count": len(PLAYER.queue)}
 
@@ -647,6 +675,59 @@ def parse_time(spec: str) -> tuple[float, bool] | None:
             return None
         secs = total
     return (-secs if back else secs), rel
+
+
+# --- your sound: speed, pitch, reverb (the Progress music row's ⚙; kept for every next song) ---
+FX_KEY = "music_fx"
+FX_DEFAULT = {"speed": 1.0, "pitch": 0.0, "reverb": 0}
+FX_PRESETS = {"normal": FX_DEFAULT, "slowed_reverb": {"speed": 0.85, "pitch": -2.0, "reverb": 55},
+              "nightcore": {"speed": 1.2, "pitch": 3.0, "reverb": 0}}
+_fx: dict = {}
+
+
+def fx() -> dict:
+    if not _fx:
+        try:
+            _fx.update({**FX_DEFAULT, **json.loads(store.kv_get(FX_KEY) or "{}")})
+        except (ValueError, TypeError, Exception):  # noqa: BLE001 - a broken kv: the plain sound
+            _fx.update(FX_DEFAULT)
+    return dict(_fx)
+
+
+def fx_chain(f: dict | None = None) -> str:
+    """mpv's audio filters: level matching always, pitch (rubberband, semitones; the speed keeps its own pitch)
+    and reverb (two soft echoes, 0-100) when set."""
+    f = f or fx()
+    chain = ["lavfi=[dynaudnorm=f=250:g=15:p=0.9]"]  # quiet uploads as loud as the rest (YouTube levels)
+    if abs(float(f["pitch"])) >= 0.1:
+        chain.append(f"rubberband=pitch-scale={2 ** (float(f['pitch']) / 12):.4f}")
+    if (r := int(f["reverb"])) > 0:
+        k = r / 100
+        chain.append(f"lavfi=[aecho=0.8:{0.6 + 0.3 * k:.2f}:{40 + 40 * k:.0f}|{90 + 90 * k:.0f}:"
+                     f"{0.25 + 0.3 * k:.2f}|{0.15 + 0.25 * k:.2f}]")
+    return ",".join(chain)
+
+
+def set_fx(speed: float | None = None, pitch: float | None = None, reverb: int | None = None,
+           preset: str = "") -> dict:
+    """Change the sound (live on the song playing, and kept for the next ones). preset: normal / slowed_reverb /
+    nightcore."""
+    f = fx()
+    if preset:
+        f = dict(FX_PRESETS.get(preset, FX_DEFAULT))
+    if speed is not None:
+        f["speed"] = round(max(0.5, min(1.5, float(speed))), 2)
+    if pitch is not None:
+        f["pitch"] = round(max(-6.0, min(6.0, float(pitch))), 1)
+    if reverb is not None:
+        f["reverb"] = max(0, min(100, int(reverb)))
+    _fx.clear()
+    _fx.update(f)
+    store.kv_set(FX_KEY, json.dumps(f))
+    if running():
+        _send("set_property", "speed", f["speed"])
+        _send("set_property", "af", fx_chain(f))
+    return f
 
 
 def seek(spec: str) -> str | None:

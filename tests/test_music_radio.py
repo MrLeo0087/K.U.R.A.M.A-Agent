@@ -62,3 +62,31 @@ def test_finished_progress_items_can_be_removed_one_or_all(monkeypatch):
     assert [i["job"] for i in progress._job_items(now)] == [2]
     progress.hide()
     assert progress._job_items(time.time() + 1) == []
+
+
+def test_speed_pitch_reverb_change_the_song_playing_and_stay(monkeypatch):
+    sent, kv = [], {}
+    monkeypatch.setattr(music, "running", lambda: True)
+    monkeypatch.setattr(music, "_send", lambda *a, **k: sent.append(a) or True)
+    monkeypatch.setattr(music.store, "kv_set", lambda k, v: kv.__setitem__(k, v))
+    music._fx.clear()
+    monkeypatch.setattr(music.store, "kv_get", lambda k: kv.get(k))
+    f = music.set_fx(preset="slowed_reverb")
+    assert f == {"speed": 0.85, "pitch": -2.0, "reverb": 55}
+    assert ("set_property", "speed", 0.85) in sent and any("rubberband" in str(a) and "aecho" in str(a) for a in sent)
+    assert music.set_fx(speed=9)["speed"] == 1.5 and "--speed=1.5" in music.PLAYER._mpv("t", ["x"])
+    assert "rubberband" not in music.fx_chain(music.set_fx(preset="normal"))
+    music._fx.clear()
+
+
+def test_play_this_song_plays_the_youtube_tab_open_in_the_browser(monkeypatch):
+    from jarvis.core import browsertab
+    played = []
+    monkeypatch.setattr(browsertab, "get", lambda: ("https://www.youtube.com/watch?v=abc123XYZ&list=PL1&index=3",
+                                                  "(3) Perfect - Ed Sheeran - YouTube"))
+    monkeypatch.setattr(music, "play_url", lambda url, shuffle=False, label="": played.append((url, label)) or "ok")
+    for q in ("this song", "play this", "the song open in my browser", ""):
+        music.play(q)
+    assert played == [("https://www.youtube.com/watch?v=abc123XYZ", "Perfect - Ed Sheeran")] * 4
+    monkeypatch.setattr(music, "_ok", lambda: "no mpv")
+    assert music.play("perfect ed sheeran") == "no mpv"  # a title said: searched, not the tab

@@ -16,8 +16,18 @@ const ICON = {
 const PATH = {
   pause: '<path d="M9 5v14M15 5v14"/>', play: '<path d="M8 5l11 7-11 7z"/>', next: '<path d="M6 5l9 7-9 7zM18 5v14"/>',
   prev: '<path d="M18 5l-9 7 9 7zM6 5v14"/>',
+  fx: '<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>',
   stop: '<rect x="6" y="6" width="12" height="12" rx="2"/>', x: '<path d="M7 7l10 10M17 7L7 17"/>',
 };
+let fxOpen = false; // the music row's sound panel (speed / pitch / reverb) stays open across redraws
+const FX = [["speed", "Speed", 0.5, 1.5, 0.05, (v) => `${(+v).toFixed(2)}×`],
+  ["pitch", "Pitch", -6, 6, 0.5, (v) => `${+v > 0 ? "+" : ""}${+v}`],
+  ["reverb", "Reverb", 0, 100, 5, (v) => `${+v}%`]];
+const fxPanel = (f = {}) => `<div class="pg-fx">${FX.map(([k, label, lo, hi, step, show]) => {
+  const v = f[k] ?? (k === "speed" ? 1 : 0);
+  return `<label>${label}<input type="range" class="pg-fxr" data-k="${k}" min="${lo}" max="${hi}" step="${step}" value="${v}"><output>${show(v)}</output></label>`;
+}).join("")}<div class="pg-fxp">${[["normal", "Normal"], ["slowed_reverb", "Slowed + reverb"], ["nightcore", "Nightcore"]]
+  .map(([p, t]) => `<button type="button" data-act="m-preset" data-p="${p}">${t}</button>`).join("")}</div></div>`;
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const svg = (d) => `<svg viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
 const kindIcon = (it) => ICON[it.kind] || (/image|picture/i.test(it.title) ? ICON.image : /download|video/i.test(it.title) ? ICON.download
@@ -33,7 +43,8 @@ function row(it) {
   if (it.kind === "music") {
     acts = (it.has_prev ? btn("m-previous", "Previous song", PATH.prev) : "")
       + (it.status === "paused" ? btn("m-resume", "Continue", PATH.play) : btn("m-pause", "Pause", PATH.pause))
-      + btn("m-next", "Next song", PATH.next) + btn("m-stop", "Stop the music", PATH.stop)
+      + btn("m-next", "Next song", PATH.next) + btn("m-fx", "Sound: speed, pitch, reverb", PATH.fx, fxOpen ? "on" : "")
+      + btn("m-stop", "Stop the music", PATH.stop)
       + `<input type="range" class="pg-vol" min="0" max="150" step="5" value="${+it.volume || 100}" title="Music volume ${+it.volume || 100}% (over 100 = boost)" aria-label="Music volume">`;
   } else if (!ended && it.job) {
     if (it.kind === "long") acts += it.status === "paused" ? btn("resume", "Continue", PATH.play) : btn("pause", "Pause", PATH.pause);
@@ -48,6 +59,7 @@ function row(it) {
       <b class="pg-t" title="${esc(it.title)}">${esc(it.title)}</b>
       <span class="pg-s">${esc(it.status === "running" && pct ? pct : state)}${it.when ? " · " + esc(it.when) : ""}</span>${acts}</div>
     <i class="pg-bar${it.frac == null && !ended ? " ind" : ""}${it.kind === "music" && it.dur ? " seek" : ""}"${it.kind === "music" && it.dur ? ` data-dur="${it.dur}" title="Tap to jump there"` : ""} style="--f:${ended ? 1 : it.frac ?? 0.3}"></i>
+    ${it.kind === "music" && fxOpen ? fxPanel(it.fx) : ""}
     ${it.detail ? `<div class="pg-d" title="${esc(it.detail)}">${esc(it.detail)}${it.count ? " · " + esc(it.count) : ""}</div>` : ""}
     ${steps}</div>`;
 }
@@ -77,12 +89,20 @@ export function startProgress(api, box, { card = null, max = 20, onChange = null
     }
     timer = setTimeout(poll, n ? 2000 : 6000);
   };
-  box.addEventListener("pointerdown", (e) => { if (e.target.matches(".pg-vol")) sliding = true; });
+  box.addEventListener("pointerdown", (e) => { if (e.target.matches(".pg-vol, .pg-fxr")) sliding = true; });
+  box.addEventListener("input", (e) => { // show the value while sliding
+    if (!e.target.matches(".pg-fxr")) return;
+    const f = FX.find((x) => x[0] === e.target.dataset.k);
+    e.target.nextElementSibling.textContent = f[5](e.target.value);
+  });
   document.addEventListener("pointerup", () => { sliding = false; });
   box.addEventListener("change", async (e) => { // the music volume slider (only on release: one request)
-    if (!e.target.matches(".pg-vol")) return;
+    if (!e.target.matches(".pg-vol, .pg-fxr")) return;
     sliding = false;
-    try { await api.musicControl("volume", e.target.value); } catch { /* the next poll shows the truth */ }
+    try {
+      if (e.target.matches(".pg-fxr")) await api.musicControl("fx", JSON.stringify({ [e.target.dataset.k]: +e.target.value }));
+      else await api.musicControl("volume", e.target.value);
+    } catch { /* the next poll shows the truth */ }
     key = ""; poll();
   });
   box.addEventListener("click", async (e) => {
@@ -94,7 +114,13 @@ export function startProgress(api, box, { card = null, max = 20, onChange = null
       return;
     }
     const b = e.target.closest("[data-act]");
-    if (!b || e.target.matches(".pg-vol")) return;
+    if (!b || e.target.matches(".pg-vol, .pg-fxr")) return;
+    if (b.dataset.act === "m-fx") { fxOpen = !fxOpen; key = ""; poll(); return; }
+    if (b.dataset.act === "m-preset") {
+      try { await api.musicControl("fx", JSON.stringify({ preset: b.dataset.p })); } catch { /* next poll */ }
+      key = ""; poll();
+      return;
+    }
     if (b.dataset.act === "clear-all") {
       try { await api.progressHide(); } catch { /* the next poll shows the truth */ }
       key = ""; poll();
