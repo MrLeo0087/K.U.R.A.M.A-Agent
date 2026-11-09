@@ -65,6 +65,30 @@ async def jobs(limit: int = Query(20, ge=1, le=200), status: str | None = Query(
     return {"jobs": [{k: r.get(k) for k in keys if k in r} for r in rows]}
 
 
+class PhoneSend(BaseModel):
+    paths: list[str]
+
+
+@router.post("/phone/send", summary="Send files / folders to your Telegram (the Files app's 'Send to phone')")
+async def phone_send(body: PhoneSend):
+    import threading
+
+    from jarvis.core import notify
+    from jarvis.tools.general.send_file_telegram import send_file_telegram
+
+    def run(paths: list[str]) -> None:
+        for p in paths[:20]:
+            try:
+                out = send_file_telegram(p)
+            except Exception as e:  # noqa: BLE001
+                out = f"error: {e}"
+            name = p.rstrip("/").rsplit("/", 1)[-1]
+            notify.desktop_send("📱 Sent to phone" if not out.startswith("error") else "📱 Couldn't send",
+                                f"{name}: {out[:200]}")
+    threading.Thread(target=run, args=(list(body.paths),), name="phone-send", daemon=True).start()
+    return {"ok": True, "sending": len(body.paths)}
+
+
 class ProgressHide(BaseModel):
     job: int | None = None  # None = clear every finished item
 

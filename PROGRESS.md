@@ -1516,3 +1516,11 @@ Phases (one at a time, owner tests after each):
       (rubberband), reverb 0-100 (aecho), presets Normal / Slowed + reverb / Nightcore; live on the song and kept
       for the next ones (kv music_fx). Tests: test_laptop_acts (4), test_music_radio (+2); suite passes;
       scorecard 74% / 100% / 98% (#137 as before).
+    - 11-09 Phase 3 part 2: (1) "Send to phone": right-click files / folders in Files -> Scripts -> Send to phone
+      (scripts/install_send_to_phone.sh, installed) -> POST /api/v1/phone/send -> send_file_telegram for each
+      (folders as a zip, big ones as a link); a desktop note says sent / couldn't. (2) "done for today" (/doneday):
+      saves the browser tabs (extension), the VS Code project and the song, snapshots the project, stops the music,
+      sends a report to Telegram, then asks once "close Brave + VS Code and sleep?". "start my day" (/startday) opens
+      the tabs in Brave, the project in VS Code and the song again (core/day.py, tool my_day, meaning shortcuts
+      day_start / day_done; their examples also in the system group so a highlighted text doesn't turn "done for
+      today" into a selection request). Phone inbox skipped: already works (Downloads/Phone). Tests: test_my_day (3).
