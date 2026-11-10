@@ -121,9 +121,9 @@ def screen(addr: str = "") -> str:
     p = subprocess.Popen([exe, *target, "--max-size", "1280", "--stay-awake", "--window-title", "My phone"],
                          stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, start_new_session=True)
     try:
-        err = p.communicate(timeout=8)[1]  # still running after 8 s = the window is open
+        err = p.communicate(timeout=2.5)[1]  # still running after 2.5 s = it is opening (answer at once, not a job)
     except subprocess.TimeoutExpired:
-        return "📱 Your phone's screen is open in a window: click and type there. Close the window to stop."
+        return "📱 Your phone's screen is opening in a window (a few seconds): click and type there. Close it to stop."
     last = [ln for ln in (err or "").splitlines() if "ERROR" in ln][-1:] or ["it closed at once"]
     return (f"Couldn't open the phone's screen ({last[0][:160]}). Is Wireless debugging still ON (its port changes "
             f"when it is turned off and on)? Then: /phone screen <ip>:<port> with the address it shows now.")
