@@ -37,6 +37,7 @@ TOOL_INTENT = {
     "kill_app": "kill.app", "window": "window", "app_control": "ui.control",
     "send_message_telegram": "telegram.message", "send_file_telegram": "telegram.file",
     "find_and_send": "telegram.find_send", "send_last_result": "telegram.result",
+    "phone_link": "telegram.file",  # (11-10: files to the phone go over KDE Connect first; same job: deliver a file)
     "list_folder": "files.list", "find_files": "files.find", "make_folder": "files.mkdir",
     "organize_files": "files.organize", "tidy_downloads": "files.organize", "delete_to_trash": "files.delete",
     "music": "media.play", "media_control": "media.control", "youtube": "media.control",
