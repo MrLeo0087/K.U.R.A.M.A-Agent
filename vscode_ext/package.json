@@ -1,8 +1,8 @@
 {
   "name": "kurama-editor-link",
   "displayName": "KURAMA editor link",
-  "description": "Tells KURAMA (on this laptop only) which file is open and what is selected, lets it put code into the editor (Ctrl+Z undoes it) and, while the coding agent is on, tells it when a terminal command fails. Also: KURAMA Coder, a chat panel for KURAMA's coding agent in the side bar.",
-  "version": "1.9.2",
+  "description": "Tells KURAMA (on this laptop only) which file is open and what is selected, lets it put code into the editor (Ctrl+Z undoes it), tells the coding agent when a terminal command fails, and lets KURAMA reach Claude Code here.",
+  "version": "1.10.0",
   "publisher": "kurama",
   "license": "UNLICENSED",
   "engines": {
@@ -18,25 +18,5 @@
   "extensionKind": [
     "ui",
     "workspace"
-  ],
-  "contributes": {
-    "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "kurama",
-          "title": "KURAMA Coder",
-          "icon": "media/coder.svg"
-        }
-      ]
-    },
-    "views": {
-      "kurama": [
-        {
-          "type": "webview",
-          "id": "kurama.coder",
-          "name": "Coding agent"
-        }
-      ]
-    }
-  }
+  ]
 }

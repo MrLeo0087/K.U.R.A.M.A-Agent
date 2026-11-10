@@ -141,14 +141,16 @@ class Agent:
     def _mode(self) -> str:
         try:
             from jarvis import agents
-            return "coding" if agents.current() == "coding" else "general"
+            cur = agents.current()
+            return cur if cur in ("coding", "study") else "general"  # each mode: its own chat
         except Exception:  # noqa: BLE001
             return "general"
 
     def _chat_channel(self) -> str:
         """The stored chat this mode continues: 'web' for General, 'web:coding' for the coding agent."""
         ch = self.channel or ""
-        return f"{ch}:coding" if self._mode() == "coding" else ch
+        mode = self._mode()
+        return f"{ch}:{mode}" if mode != "general" else ch
 
     def _switch_chat(self) -> None:
         mode = self._mode()

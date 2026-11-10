@@ -288,7 +288,8 @@ function serve() {
 
 function activate(context) {
   serve();
-  require("./coder").register(context); // the KURAMA Coder chat panel (side bar)
+  // (the KURAMA Coder chat panel was removed 11-09: the owner uses Claude Code there; coding goes through KURAMA's
+  // own Coding mode. This extension only links the editor: open file, selection, terminal crashes, Claude Code.)
   watchTerminal(context);
   const sub = (d) => context.subscriptions.push(d);
   sub(vscode.window.onDidChangeActiveTextEditor(() => soon()));

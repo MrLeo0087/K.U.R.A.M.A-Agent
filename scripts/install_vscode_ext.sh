@@ -29,8 +29,8 @@ out.parent.mkdir(parents=True, exist_ok=True)
 with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
     z.writestr("[Content_Types].xml", types)
     z.writestr("extension.vsixmanifest", manifest)
-    for f in sorted(x for x in src.rglob("*") if x.is_file() and x.suffix in (".json", ".js", ".svg")):
-        z.write(f, f"extension/{f.relative_to(src).as_posix()}")  # every file of the extension (coder.js, media/)
+    for name in ("package.json", "extension.js"):  # only the extension itself (other files in the folder are not)
+        z.write(src / name, f"extension/{name}")
 print(f"built {out} ({ident} {pkg['version']})")
 PY
 code --install-extension "$OUT" --force

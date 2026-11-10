@@ -60,7 +60,7 @@ def test_every_agent_keeps_the_contract():
     assert "coding" in agents.AGENTS
     for name in agents.AGENTS:
         sp = agents.spec(name)
-        assert sp is not None and sp.name == name and sp.title and sp.groups
+        assert sp is not None and sp.name == name and sp.title  # (a mode may bring no tools: study)
         assert all(g in agents.groups() for g in sp.groups)
     assert agents._alias("coder") == "coding" and agents._alias("off") == "general"
     assert "jarvis.agents.coding.tools" in agents.tool_modules()

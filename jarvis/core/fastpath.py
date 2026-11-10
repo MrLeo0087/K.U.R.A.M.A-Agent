@@ -1840,20 +1840,24 @@ def _to_last_list(text: str, it: Intent | None) -> Intent | None:
     return it
 
 
+_MODE = r"(?P<m>coding|code|programming|study|studying|learning|reading)"
 _AGENT_ON = re.compile(r"(?:please\s+|kurama\W+)?(?:start|open|turn\s+on|switch\s+(?:on|to)|enable|activate|use|"
-                       r"go\s+to)\s+(?:the\s+)?(?:coding|code|programming)(?:\s+(?:agent|mode))?(?:\s+(?:on|now|please))*|"
-                       r"(?:coding|code)\s+(?:agent|mode)\s+on|/agent\s+(?:coding|code)", I)
+                       r"go\s+to|let'?s|i\s+want\s+to)\s+(?:the\s+)?" + _MODE + r"(?:\s+(?:agent|mode))?(?:\s+(?:on|now|please))*|"
+                       + _MODE.replace("?P<m>", "?P<m2>") + r"\s+(?:agent|mode)(?:\s+on)?|/agent\s+" + _MODE.replace("?P<m>", "?P<m3>")
+                       + r"|/" + _MODE.replace("?P<m>", "?P<m4>").replace("code|", ""), I)
 _AGENT_OFF = re.compile(r"(?:please\s+|kurama\W+)?(?:(?:stop|close|turn\s+off|exit|disable|leave|quit)\s+(?:the\s+)?"
-                        r"(?:coding|code|programming)(?:\s+(?:agent|mode))?|(?:switch|go)\s+(?:back\s+)?to\s+general"
-                        r"(?:\s+mode)?|general\s+mode|back\s+to\s+general|(?:coding|code)\s+(?:agent|mode)\s+off|"
-                        r"/agent\s+(?:general|off))", I)
+                        r"(?:coding|code|programming|study|studying|learning|reading)(?:\s+(?:agent|mode))?|"
+                        r"(?:switch|go)\s+(?:back\s+)?to\s+general(?:\s+mode)?|general\s+mode|"
+                        r"back\s+to\s+(?:general|normal)|(?:coding|code|study)\s+(?:agent|mode)\s+off|"
+                        r"/agent\s+(?:general|off)|/normal|/general)", I)
 
 
 def agent_intent(text: str) -> Intent | None:
     """Turning an agent on / off: a fixed command said as the whole request (0 tokens)."""
     t = " ".join((text or "").split()).strip(" .!?")
-    if _AGENT_ON.fullmatch(t):
-        return Intent("agent", "_agent", "self", {"name": "coding"})
+    if m := _AGENT_ON.fullmatch(t):
+        said = next(g for g in m.groups() if g).lower()
+        return Intent("agent", "_agent", "self", {"name": "coding" if said in ("coding", "code", "programming") else "study"})
     if _AGENT_OFF.fullmatch(t):
         return Intent("agent", "_agent", "self", {"name": "general"})
     if re.fullmatch(r"/agents?|which agent(?: is on)?|what agent(?: is (?:on|active))?", t, I):
@@ -2265,6 +2269,8 @@ def meaning_intent(text: str) -> Intent | None:
         it = Intent("askai", "ask_ai", "web", {"question": askai.question_of(raw), "site": askai.site_of(raw)},
                     known=raw)
         return it if meaning_ok(t, it) else None
+    if label == "clear_chat":  # typed 'clear' went to the AI (6k tokens, 11-09)
+        return None if extra else _ok(t, Intent("reset", "reset_kurama", "self", {"level": "chat"}))
     if label == "laptop_health":
         return None if extra else _ok(t, Intent("health", "laptop_health", "system", {}))
     if label in ("day_start", "day_done"):

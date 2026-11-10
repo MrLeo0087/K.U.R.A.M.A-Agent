@@ -1416,6 +1416,8 @@ MEANING_SHORTCUTS: dict[str, tuple[str, ...]] = {
                "send this to gemini", "ask gemini about the selected text", "ask chatgpt how to fix this",
                "ask it to explain simpler", "ask the ai about this", "ask claude why this fails", "ask claude about this",
                "ask gemini X", "ask chatgpt X"),
+    "clear_chat": ("clear", "clear the chat", "clear chat", "new chat", "start a new chat", "fresh chat",
+                   "forget this conversation", "clear this conversation"),
     "laptop_health": ("how is my laptop health", "check my battery health", "laptop health report",
                       "how healthy is my battery", "is my laptop healthy"),
     "day_start": ("start my day", "good morning let's start work", "open my work from yesterday",

@@ -1331,6 +1331,8 @@ body.minimal .to-minimal { display: none; }
 .agent-switch button[aria-checked="true"] { color: var(--text); background: rgba(255, 255, 255, 0.08); }
 .agent-switch[data-on="coding"] button[data-agent="coding"] { color: #1a0d02;
   background: linear-gradient(135deg, var(--accent), #ffb15c); box-shadow: 0 0 14px var(--accent-soft); }
+.agent-switch[data-on="study"] button[data-agent="study"] { color: #04121c;
+  background: linear-gradient(135deg, #6cc6ff, #9be7c4); box-shadow: 0 0 14px rgba(108, 198, 255, .35); }
 @media (max-width: 520px) { .agent-switch button span { display: none; } .agent-switch button { padding: 0 9px; } }
 
 /* the header buttons never disappear: when the panel is narrow they wrap onto a second line */

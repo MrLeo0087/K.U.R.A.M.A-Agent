@@ -1550,3 +1550,14 @@ Phases (one at a time, owner tests after each):
       Routing by meaning: a request addressed to a web AI ("ask <site> ...") is checked as "ask <site> X" (the
       question is free text); "how does chatgpt work" / "open gemini" / "ask claude code ..." are not sent.
       Tests: test_ask_ai (6).
+    - 11-10 Phase 6 (core + modes): (1) Study mode = a new agent (jarvis/agents/study: tutor prompt line, no tool
+      group taken from General, 0 RAM): "study mode" / "/study" / "lets study" on, "back to normal" / "/normal"
+      off (the on/off commands now cover coding + study), 45 min unused -> off (kept, not the plan's 10 min:
+      reading a page for 10 min without asking shouldn't drop the mode; noted). Its own chat window in the main
+      window and mini chat (📖 Study pill), its own conversation thread on the server (web:study). Core commands
+      still work inside a mode at 0 tokens. (2) The VS Code "KURAMA Coder" side-bar panel is removed (coder.js,
+      views); the extension (1.10.0, installed; Reload Window) only links the editor, terminal crashes and Claude
+      Code; the .vsix now packs only package.json + extension.js (it used to pack every .js/.json in the folder).
+      (3) typed "clear" / "new chat" = 0-token chat clear (went to the AI, 6k tokens). Plan item "~60 tools behind
+      ~10 general tools" NOT done: a big rewrite with risk to the scorecard; the router already sends 1-3 groups.
+      Tests: test_agent_modes (13).

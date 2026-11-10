@@ -137,13 +137,15 @@
           <span class="head-tools">
             <span id="chat-state" class="chat-state" role="status"><i></i><span>Connecting</span></span>
             <select id="agent-select" class="agent-select" aria-label="Agent" title="Agent">
-              <option value="general" title="General">💬</option><option value="coding" title="Coding agent">&lt;/&gt;</option>
+              <option value="general" title="General">💬</option><option value="coding" title="Coding agent">&lt;/&gt;</option><option value="study" title="Study mode">📖</option>
             </select>
             <div id="agent-switch" class="agent-switch" role="radiogroup" aria-label="Agent">
               <button type="button" role="radio" data-agent="general" aria-checked="true" title="General: KURAMA as usual">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg><span>General</span></button>
               <button type="button" role="radio" data-agent="coding" aria-checked="false" title="Coding agent: crash → fix, ChatGPT bridge, new projects, undo">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5M13.5 5l-3 14"/></svg><span>Coding</span></button>
+              <button type="button" role="radio" data-agent="study" aria-checked="false" title="Study mode: short, plain answers about what you read (explain, simpler, in Nepali, summarize, quiz)">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5C6.5 4 9.5 4 12 6c2.5-2 5.5-2 8-.5V19c-2.5-1.5-5.5-1.5-8 .5-2.5-2-5.5-2-8-.5z"/><path d="M12 6v13.5"/></svg><span>Study</span></button>
             </div>
             <button id="btn-find" class="icon-btn mini-off" type="button" aria-label="Find a tool (Ctrl+K)" title="Find a tool · Ctrl+K">
               <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>

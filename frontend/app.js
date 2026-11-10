@@ -987,10 +987,11 @@ function swapChat(from, to) {
   log.querySelectorAll("#welcome").forEach((n) => n.remove());
   log.querySelectorAll("button").forEach((b) => { if (b.closest(".confirm")) b.disabled = true; });
   if (!log.querySelector(".msg")) {
-    if (to !== "coding") log.append(welcome());
-    else { // the coding window says what it is and how to see everything it can do
+    if (to === "general") log.append(welcome());
+    else { // the coding / study window says what it is and how to use it
       const bb = new BotBubble();
-      bb.append('Coding agent chat. Tell me what to build ("create a portfolio website"), or say /code for everything I can do.');
+      bb.append(to === "coding" ? 'Coding agent chat. Tell me what to build ("create a portfolio website"), or say /code for everything I can do.'
+        : "Study mode chat. Select text anywhere and ask: explain this, simpler, in Nepali, summarize this page, quiz me. Say 'back to normal' to leave.");
       bb.finish();
     }
   }
@@ -1028,7 +1029,8 @@ function renderAgent(a) {
   renderProject(a);
   const before = agentName;
   agentName = a.name || "general";
-  if (agentSeen !== null && before !== agentName) swapChat(before === "coding" ? "coding" : "general", agentName === "coding" ? "coding" : "general");
+  const win = (n) => (["coding", "study"].includes(n) ? n : "general"); // each mode keeps its own chat window
+  if (agentSeen !== null && before !== agentName) swapChat(win(before), win(agentName));
   const sw = $("agent-switch");
   sw.dataset.on = agentName;
   $("agent-select").value = agentName;
@@ -1065,7 +1067,7 @@ $("agent-select").onchange = async (ev) => { // the mini chat's drop-down
   try {
     const r = await api.agent(name);
     renderAgent(r);
-    tip($("agent-select"), name === "coding" ? "Coding agent on" : "Back to General");
+    tip($("agent-select"), name === "coding" ? "Coding agent on" : name === "study" ? "Study mode on" : "Back to General");
   } catch (e) { ev.target.value = agentName; tip($("agent-select"), "Couldn't switch: " + e.message); }
 };
 for (const b of $("agent-switch").querySelectorAll("button")) {
@@ -1075,6 +1077,7 @@ for (const b of $("agent-switch").querySelectorAll("button")) {
       const r = await api.agent(b.dataset.agent);
       renderAgent(r);
       tip($("agent-switch"), b.dataset.agent === "coding" ? "Coding agent on: crashes in the VS Code terminal → I offer the fix."
+        : b.dataset.agent === "study" ? "Study mode on: select text and ask — explain, simpler, in Nepali, summarize, quiz."
         : "Back to General.");
     } catch (e) { tip($("agent-switch"), "Couldn't switch: " + e.message); }
   };
