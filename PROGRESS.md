@@ -1583,3 +1583,16 @@ Phases (one at a time, owner tests after each):
       engine is studymode.py.) Not done: voice speaking only 2 lines of a long answer. Tests: test_study_mode (13).
     - 11-10 owner: "I did not say to save note, why it saved" -> Study answers are no longer saved by themselves (no
       "📝 Saved" line); "save this" / "note this down" saves the last answer (and a short term to the glossary).
+    - 11-10 Phase 8 (coding agent). Measured first: 45 coding turns since 11-01, median 4,961 tokens per turn,
+      max 18k, 6 over 5k; most of it was the AI just picking the coding tool (~5k each: "2", "fine .. start build",
+      "make the Reserve button white"). Failure classes: (a) a bug told in words without a crash -> "I can't tell
+      which file"; (b) plain bug reports ("when i click a product it gets stuck, solve this") -> the AI first, then
+      22k tokens / 11 steps; (c) a whole new app built inside an unrelated open folder (vscode_ext); (d) a malformed
+      tool call made the fallback chain resend the whole prompt to every model (12.4k tokens for a 1k fix). Fixes:
+      coding mode takes changes and plain-words bug reports at 0 tokens (not questions, not core commands, not the
+      selection's); a described bug without a crash = a task in the project; a whole new app with a 4+ file project
+      open asks "here or new folder" (1-3 files = the owner's fresh folder, built in it as before); llm retries the
+      same model once after a malformed tool call. Eval: coder/evals/live.py now has 9 cases incl. the owner's
+      classes (stuck page, bug in words, pasted traceback, add a feature, rename); run: 9/9 right, tokens 0.9k-4.5k
+      each (median ~2k, target <= 6k; pasted traceback 12.4k -> 1.1k after the retry fix). `python -m
+      coder.evals.live <name>` runs one case. Tests: test_coding_agent_p8 (10).

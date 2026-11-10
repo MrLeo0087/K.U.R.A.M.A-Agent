@@ -1866,6 +1866,9 @@ def agent_intent(text: str) -> Intent | None:
     return None
 
 
+_BUG = re.compile(r"\b(?:doesn'?t|does\s+not|don'?t|do\s+not|not|isn'?t|won'?t|can'?t|cannot|never)\s+(?:work|working|"
+                  r"show|showing|load|loading|open|scroll|scrolling|run|running|respond|appear|display|start|move|click)"
+                  r"|\b(?:stuck|freezes|frozen|broken|crash(?:es|ed)?|bug|glitch|error)\b", re.I)
 _CODE_CHANGE = re.compile(r"^\W*(?:please\s+|can you\s+|could you\s+|now\s+|also\s+|and\s+)*(?:make|change|add|remove|"
                           r"delete|fix|move|put|use|set|improve|update|create|build|write|rename|replace|turn|increase|"
                           r"decrease|align|center|centre|show|hide|style|refactor|implement)\b", re.I)
@@ -1961,7 +1964,13 @@ def agent_coding_intent(text: str) -> Intent | None:
         # takes it directly, 0 tokens (it went through the AI first: ~6k tokens just to pick the tool, 11-07).
         # Not a vague 'update code', and not about the selected code (that is the editing assistant's).
         about_selection = re.search(r"\b(?:this|selected|selection|highlighted)\s+(?:code|line|function|part)\b", t, I)
-        if _CODE_CHANGE.match(t) and len(t.split()) >= 4 and not about_selection:
+        # ... and a bug report in plain words ('when i click on any product it stops scrolling, solve this'): the
+        # agent too, not the AI first (5.3k tokens to pick the tool, 11-06). Not a question ('what is a closure?'),
+        # not a core command (volume, music, open X), not about the highlighted code.
+        report = (len(t.split()) >= 5 and other < config.CODING_OTHER_MAX
+                  and not re.match(r"^\W*(?:what|why|how|which|who|when|where|is|are|can|could|does|do|should|explain|"
+                                   r"tell me|show me)\b", t, I)) or bool(_BUG.search(t))
+        if ((_CODE_CHANGE.match(t) and len(t.split()) >= 4) or report) and not about_selection:
             sel = semantic.best_of(t, "selection", config.SELECTION_EXAMPLES)
             if not sel or sel[1] < 0.8:
                 return act("project", request=t)
@@ -1975,7 +1984,9 @@ def agent_coding_intent(text: str) -> Intent | None:
     if label == "run" and not crash:  # 'run this project and tell me what it says': the agent runs it
         return act("run_task", request=f"Run the project and tell me in plain words what it does / prints: {t}")
     if label == "fix" and not crash:
-        return None  # nothing crashed: 'fix this' is about the selection / the AI
+        # nothing crashed: a bug told in words ('the signs don't show, only numbers') is a task in the project
+        # (11-06 it said "I can't tell which file this error comes from"); a bare 'fix this' is the selection's
+        return act("project", request=t) if len(t.split()) >= 5 else None
     site = (re.search(r"\b(chatgpt|gemini|claude)\b", t, I) or [None, ""])[1].lower()
     return act(label, request=t, **({"site": site} if label == "bridge" and site else {}))
 

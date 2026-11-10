@@ -24,6 +24,37 @@ WEB = {
 PY = {"main.py": 'from stats import mean\n\nprint("mean:", mean([3, 5, 8]))\n',
       "stats.py": "def mean(xs):\n    return sum(xs) / len(x)\n"}
 
+# 11-10: the owner's own failure classes from a week of traces (a bug told in plain words, a web page that gets stuck,
+# a feature added, a pasted traceback, a rename across files)
+SHOP = {
+    "index.html": '<!doctype html><html><head><link rel="stylesheet" href="shop.css"></head><body>'
+                  '<div class="grid"><div class="product" data-id="1">Shoes</div><div class="product" data-id="2">Bag'
+                  '</div></div><div id="modal" hidden><p id="detail"></p><button id="close">Close</button></div>'
+                  '<div style="height:2000px"></div><script src="shop.js"></script></body></html>\n',
+    "shop.css": ".product { padding: 20px; cursor: pointer; }\n#modal { position: fixed; top: 20%; }\n",
+    "shop.js": 'document.querySelectorAll(".product").forEach((p) => p.addEventListener("click", () => {\n'
+               '  document.getElementById("detail").textContent = p.textContent;\n'
+               '  document.getElementById("modal").hidden = false;\n'
+               '  document.body.style.overflow = "hidden";\n}));\n'
+               'document.getElementById("close").addEventListener("click", () => {\n'
+               '  document.getElementById("modal").hidden = true;\n});\n',
+}
+CALC = {"calc.py": 'display = ""\n\n\ndef press(key):\n    global display\n    if key == "=":\n'
+                   '        display = str(eval(display)) if display else ""\n        return display\n'
+                   '    if key.isdigit():\n        display += key\n    return display\n',
+        "settings.py": 'SETTINGS = {"name": "calc"}\n',
+        "app.py": 'from settings import SETTINGS\n\nprint("Welcome to", SETTINGS["title"])\n'}
+
+
+def _runs(root: Path, code: str, want: str) -> bool:
+    import subprocess
+    r = subprocess.run([sys.executable, "-c", code], cwd=root, capture_output=True, text=True, timeout=20)
+    return r.returncode == 0 and want in r.stdout
+
+
+TRACE = ('I get this error when I run app.py, fix it:\nTraceback (most recent call last):\n  File "app.py", line 3, in '
+         '<module>\n    print("Welcome to", SETTINGS["title"])\nKeyError: \'title\'')
+
 # (name, sample, the request, new project?, a check of the result, the token limit)
 CASES = [
     ("css change", "web", "make the choice buttons grey with rounded corners", False,
@@ -34,6 +65,20 @@ CASES = [
      lambda root: "len(xs)" in (root / "stats.py").read_text(), 11000),
     ("new tiny app", "none", "a simple calculator as a Python program in the terminal", True,
      lambda root: any(p.suffix == ".py" for p in root.rglob("*.py")), 5000),
+    ("stuck page", "shop", "when i click on any product the page stops scrolling and gets stuck .. solve this", False,
+     lambda root: re.search(r"overflow\s*=\s*[\"'](?:auto|visible|)[\"']|removeProperty\(\s*[\"']overflow",
+                            (root / "shop.js").read_text()) is not None, 8000),
+    ("bug in words", "calc", "the + and - signs are not shown, only numbers show, and when i want 9+8 it doesn't work. "
+     "fix it", False, lambda root: _runs(root, "import calc\nfor k in '9+8': calc.press(k)\nprint(calc.press('='))",
+                                         "17"), 8000),
+    ("pasted traceback", "calc", TRACE, False, lambda root: _runs(root, "import runpy; runpy.run_path('app.py')",
+                                                               "Welcome to"), 8000),
+    ("add a feature", "web", "add a reset button that sets both scores back to 0", False,
+     lambda root: re.search(r"reset", (root / "index.html").read_text(), re.I) is not None
+     and re.search(r"reset", (root / "app.js").read_text(), re.I) is not None, 8000),
+    ("rename", "py", "rename the function mean to average in all files", False,
+     lambda root: "def average" in (root / "stats.py").read_text()
+     and _runs(root, "import runpy; runpy.run_path('main.py')", "mean:"), 8000),
 ]
 
 
@@ -77,12 +122,15 @@ def main() -> int:
     except Exception:  # noqa: BLE001
         pass
     base = Path(tempfile.mkdtemp(prefix="coder-evals-"))
-    for name, files in (("web", WEB), ("py", PY)):
+    for name, files in (("web", WEB), ("py", PY), ("shop", SHOP), ("calc", CALC)):
         for rel, text in files.items():
             (base / name / rel).parent.mkdir(parents=True, exist_ok=True)
             (base / name / rel).write_text(text, encoding="utf-8")
     rows, ok_all = [], True
+    only = [a.lower() for a in sys.argv[1:]]  # 'python -m coder.evals.live traceback' = only the cases named so
     for name, sample, request, new_project, check, limit in CASES:
+        if only and not any(o in name for o in only):
+            continue
         t0 = time.time()
         try:
             root, tokens = run_case(base, name, sample, request, new_project)

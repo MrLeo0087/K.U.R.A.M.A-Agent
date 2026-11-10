@@ -470,10 +470,15 @@ def _settle(ticket: ratelimit.Ticket, reply: Reply | None, rate: tuple) -> None:
     ratelimit.settle(ticket, used)
 
 
+_TOOL_GLITCH = re.compile(r"Tool call validation failed|Failed to parse tool call arguments|tool_use_failed", re.I)
+
+
 def _complete(models, msgs, tools, purpose, max_tokens, temperature, extra, rate) -> Reply:
     last: Exception | None = None
     for _, model, retries in _plan(models):
-        for attempt in range(retries + 1):
+        glitch_retry = bool(tools)  # one more try on the SAME model after a malformed tool call (a sampling glitch:
+        attempt = 0                 # the next models got the whole prompt again, 12.4k tokens for one fix, 11-10)
+        while attempt <= retries:
             ticket = _acquire(model, rate)
             try:
                 msg = _bound(model, tools, max_tokens, temperature, extra).invoke(
@@ -481,7 +486,12 @@ def _complete(models, msgs, tools, purpose, max_tokens, temperature, extra, rate
             except Exception as e:
                 last = e
                 _settle(ticket, None, rate)
+                if glitch_retry and _status(e) == 400 and _TOOL_GLITCH.search(str(e)):
+                    glitch_retry = False
+                    log.info("%s made a malformed tool call: one more try", model)
+                    continue
                 if _on_error(e, model, attempt, retries):
+                    attempt += 1
                     continue
                 break
             reply = _reply(msg, model)

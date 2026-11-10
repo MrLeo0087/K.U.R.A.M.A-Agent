@@ -59,7 +59,8 @@ _ELSEWHERE = re.compile(r"\b(?:new|separate|another|own)\s+(?:folder|project|dir
                         r"\bin\s+(?:my\s+)?(?:projects|downloads|documents|desktop)\b", I)
 _NEW_APP = re.compile(r"\b(?:create|make|build|start|generate|set\s*up)\b.{0,40}\b(?:game|app|application|website|site|"
                       r"page|project|tool|bot|api|dashboard|clone)\b", I)
-BIG_PROJECT_FILES = 15  # an open project this big + a request for a whole new app: ask where (it may be unrelated)
+BIG_PROJECT_FILES = 15  # (kept for callers)
+ASK_FROM_FILES = 4  # an open project with this many files + a request for a whole new app: ask where
 
 
 def folder(request: str, answer: str = "") -> tuple[Path, str, str]:
@@ -79,7 +80,11 @@ def folder(request: str, answer: str = "") -> tuple[Path, str, str]:
     if answer == "here" or _HERE.search(request or ""):
         return here, "add", ""
     from coder.memory import repomap
-    if _NEW_APP.search(request or "") and len(repomap.files(here, BIG_PROJECT_FILES + 1)) > BIG_PROJECT_FILES:
+    # a whole new app while a real project is open: ask (11-07 "create whole e commerce website" was built inside
+    # vscode_ext, an unrelated 9-file project; it used to ask only from 16 files). A folder with 1-3 files is the
+    # owner's fresh folder for it (11-06: 'make a rock paper scissors game' there must go in it)
+    if _NEW_APP.search(request or "") and len(repomap.files(here, ASK_FROM_FILES)) >= ASK_FROM_FILES and not re.search(
+            r"\b(?:add|into|to\s+(?:this|my|the)|feature|page\s+to)\b", request or "", I):
         return here, "add", (f"Should I build it inside {here.name} (the project open in VS Code), or in a new folder "
                              "of its own? Say 'here' or 'new folder'.")
     return here, "add", ""
