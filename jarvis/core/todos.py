@@ -180,10 +180,26 @@ def by_id(todo_id: int) -> dict | None:
     return next((r for r in items() if r["id"] == int(todo_id)), None)
 
 
+def _goal_instead(ref: str | int, action: str) -> str | None:
+    """Not a to-do, but one of the long tasks (goals): do it there (11-10: 'remove drink water task' answered "there
+    is no such task" while it was a goal)."""
+    if str(ref).strip().isdigit():
+        return None
+    try:
+        from jarvis.core import goals
+        g = goals.find(str(ref))
+        if g is None or not set(re.findall(r"\w{3,}", str(ref).lower())) & set(re.findall(r"\w{3,}", g["name"].lower())):
+            return None
+        from jarvis.tools.general.goals import goals as goals_tool
+    except Exception:  # noqa: BLE001
+        return None
+    return goals_tool(action=action, goal=g["name"])
+
+
 def done(ref: str | int, r: dict | None = None) -> str:
     r = r or find(ref)
     if r is None:
-        return f"I couldn't find {ref!r} in your to-do list.\n" + show()
+        return _goal_instead(ref, "done") or f"I couldn't find {ref!r} in your to-do list.\n" + show()
     store.todo_update(r["id"], done_at=time.time())
     _unlink(r)
     left = len(store.todos_open())
@@ -193,7 +209,7 @@ def done(ref: str | int, r: dict | None = None) -> str:
 def remove(ref: str | int, r: dict | None = None) -> str:
     r = r or find(ref)
     if r is None:
-        return f"I couldn't find {ref!r} in your to-do list."
+        return _goal_instead(ref, "delete") or f"I couldn't find {ref!r} in your to-do list."
     store.todo_delete(r["id"])
     _unlink(r)
     return f"Deleted from your to-do list: {r['title']}."

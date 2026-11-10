@@ -24,7 +24,7 @@ FOLLOW_S = 30 * 60
 MAX_SEL = 6000
 # the site names as typed AND as speech-to-text writes them (11-10 voice: "chat LGBT", "Gemini" fine; also
 # "chat g p t", "jemini")
-_SITES = (r"gemini|jemini|gemni|bard|chat\s*g\.?\s*p\.?\s*t\.?|chat\s*gbt|chat\s*gtp|chat\s*lgbt|chat\s*gpd|chatgpt|"
+_SITES = (r"gemini|jemini|gemni|gmini|g\s?mini|jiminy|bard|chat\s*g\.?\s*p\.?\s*t\.?|chat\s*gbt|chat\s*gtp|chat\s*lgbt|chat\s*gpd|chatgpt|"
           r"gpt|open\s*ai|claude")
 _SITE_RE = re.compile(r"\b(" + _SITES + r")\b", re.I)
 # the request's own words that only say "ask <site>" (the rest is the question): "ask gemini ...", "ask this to the
@@ -42,7 +42,7 @@ def site_of(text: str) -> str:
     w = re.sub(r"[\s.]+", "", m.group(1).lower())
     if w.startswith("chat") or w in ("gpt", "openai"):
         return "chatgpt"
-    if w in ("bard", "jemini", "gemni"):
+    if w in ("bard", "jemini", "gemni", "gmini", "jiminy"):
         return "gemini"
     return w
 

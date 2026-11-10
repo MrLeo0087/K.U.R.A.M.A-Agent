@@ -1043,6 +1043,9 @@ class Agent:
             if record:
                 self.last = {"tools": [entry], "fastpath": res.intent.name, "t0": time.monotonic(),
                              "route": router.Route([res.intent.group], "fastpath", False, res.latency_ms)}
+                # a follow-up that goes to the AI ('remove that as well', 'and the other one') gets THIS turn's tools
+                # first (11-10: after removing a goal, 'remove that as well' searched the notes)
+                self._prev_groups = ([res.intent.group], time.time())
             else:
                 self.last.setdefault("tools", []).append(entry)
             if res.workspace:

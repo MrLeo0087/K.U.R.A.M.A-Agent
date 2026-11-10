@@ -1647,3 +1647,12 @@ Phases (one at a time, owner tests after each):
       request whole. Now a multi-sentence request that the fast path reads whole as a long-message tool
       (config.WHOLE_MESSAGE_TOOLS: goals, reminders, ask_ai, messages, video, find, study, phone) goes there. The
       exam countdown is set: 'Exam', ends Thu Dec 10, 07:00 / 11:00 / 15:00 / 20:00 daily ("Exam: N days left").
+    - 11-10 owner: "I cannot talk with it like a human". From the traces, by class: (1) list follow-ups: 'remove
+      first one' after the goals list went to the to-do list -> the goals list counts as the last list too; (2) an
+      item named on the wrong list: 'remove drink water task' (a goal) -> to-do remove / done of a goal's name acts
+      on the goal; (3) after a fast-path turn, an AI follow-up ('remove that as well') now gets that turn's tool area
+      first (it searched the notes); (4) 'ring my mobile' = KDE Connect (Find My Device only when not paired); (5) a
+      misheard 'Peer my phone' "sent your phone to Telegram": a Telegram message needs a message / telegram word, and
+      'peer my phone' = pair; (6) 'organize this folder' got a file -> 'this folder' is always a folder; (7) 'the
+      Gmini' (speech) = Gemini. Kept the short Nepali date (a deliberate earlier choice). Tests:
+      test_conversation_traces (7).

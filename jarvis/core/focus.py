@@ -118,7 +118,16 @@ def said_path() -> Path | None:
 
 
 def refer(text: str) -> Path | None:
-    """'this/it/here' -> current folder, 'previous folder' -> the one before, 'parent folder' -> one up; else None."""
+    """'this/it/here' -> current folder, 'previous folder' -> the one before, 'parent folder' -> one up; else None.
+    'this folder' is always a folder: a file found for it means the folder it is in (11-10: 'organize this folder'
+    got a screenshot file)."""
+    p = _refer(text)
+    if p is not None and p.is_file() and re.search(r"\b(?:folder|directory|dir)\b", text or "", re.I):
+        return p.parent
+    return p
+
+
+def _refer(text: str) -> Path | None:
     t = " ".join((text or "").lower().split()).strip(" .?")
     if not t or is_anaphora(t):
         if (pasted := said_path()) is not None:  # "/home/leo/Documents  organize this folder": that path

@@ -1426,7 +1426,7 @@ MEANING_SHORTCUTS: dict[str, tuple[str, ...]] = {
                  "save my work to github"),
     "phone_share": ("share this to my phone", "share this in mobile", "send this file to my phone",
                     "share this file with my phone", "send this to my mobile", "put this on my phone"),
-    "phone_pair": ("pair my phone", "connect my phone with kde connect", "pair kde connect", "link my phone over wifi"),
+    "phone_pair": ("pair my phone", "peer my phone", "pair my mobile", "connect my phone with kde connect", "pair kde connect", "link my phone over wifi"),
     "phone_close": ("close my phone", "stop showing my phone", "turn off the phone screen on the laptop",
                     "disconnect my phone", "close the phone window"),
     "phone_ring": ("ring my phone", "make my phone ring", "where is my phone ring it"),

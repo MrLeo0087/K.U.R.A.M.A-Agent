@@ -37,7 +37,7 @@ def organize_files(action: Literal["organize", "apply", "edit", "cancel", "undo"
     if pasted is not None and pasted.is_dir() and not str(folder or "").startswith("/"):
         d = pasted
     elif folder and focus.is_anaphora(folder):  # 'organize it / this folder': the Files app's folder, else the last one
-        d = focus.refer("this") or resolve_target("downloads")
+        d = focus.refer("this folder") or resolve_target("downloads")  # (a file found = its folder)
     else:
         d = resolve_target(folder or "downloads")
     if isinstance(d, str):

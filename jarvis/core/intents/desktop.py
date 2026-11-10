@@ -113,9 +113,12 @@ SWITCHES = [  # (intent name, tool, group, args, patterns); first full match win
         r"(?:the )?location (?:i |that i )?(?:shared?|sent) (?:in|on|via) (?:the )?telegram",
         r"(?:phone|mobile|मोबाइल|फोन) (?:kaha|kahan|कहाँ|कहां)(?: (?:cha|chha|xa|छ|hai|है))?")),
     ("find_phone", "find_my_phone", "system", {"phone": "android", "want": "open"}, _rx(
-        r"(?:find|locate|track|ring) (?:my |the )?(?:lost |missing )?(?:phone|mobile(?: phone)?|android|cell\s*phone)(?: now)?",
+        r"(?:find|locate|track) (?:my |the )?(?:lost |missing )?(?:phone|mobile(?: phone)?|android|cell\s*phone)(?: now)?",
         r"(?:open |launch )?(?:google )?find my (?:device|phone|mobile|android)",
         r"(?:phone|mobile|मोबाइल|फोन) (?:khoj|खोज)(?:\s\w+)?")),
+    ("phone", "phone_link", "telegram", {"action": "ring"}, _rx(  # over Wi-Fi (KDE Connect); not paired: Find My Device
+        r"(?:ring|buzz) (?:my |the )?(?:lost |missing )?(?:phone|mobile(?: phone)?|android|cell\s*phone)(?: now)?",
+        r"make (?:my |the )?(?:phone|mobile) ring")),
     ("mic", "mic_mute", "audio", {"action": "mute"}, _rx(
         r"(?:mute|turn off|switch off|disable) (?:the |my )?(?:mic|microphone)", r"(?:mic|microphone) (?:off|mute)",
         r"(?:mic|माइक) (?:band karo|band kar do|बंद करो|बन्द गर|बन्द गरिदेउ)")),

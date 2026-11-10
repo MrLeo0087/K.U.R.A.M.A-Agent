@@ -144,7 +144,12 @@ def pair() -> str:
 
 
 def ring() -> str:
-    return _send(["--ring"], "Ringing")
+    """Over Wi-Fi; when the phone isn't paired / reachable: Google Find My Device (it rings from anywhere)."""
+    out = _send(["--ring"], "Ringing")
+    if out.startswith("📱 Ringing"):
+        return out
+    from jarvis.tools.general.find_my_phone import find_my_phone
+    return f"{out.split(':')[0]}. " + find_my_phone(phone="android", want="open")
 
 
 def share_file(path: str) -> str:

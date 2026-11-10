@@ -1822,11 +1822,29 @@ def match(text: str) -> Intent | None:
 _LIST_WORD = re.compile(r"\b(?:to-?do|todo|task|list|links?|link\s+store|read(?:ing)?\s+(?:later|list)|bookmarks?|notes?)\b", I)
 
 
+def _other_list(it: Intent | None) -> Intent | None:
+    """'remove drink water task' names an item that is NOT on the to-do list but is one of the long tasks (goals):
+    that one (11-10: the AI said "there is no Drink water task", 3.5k tokens)."""
+    if it is None or it.tool != "todo" or str(it.args.get("action")) not in ("delete", "remove", "done"):
+        return it
+    name = str(it.args.get("item") or "").strip()
+    if not name or name.isdigit():
+        return it
+    from jarvis.core import goals, todos
+    try:
+        if todos.find(name) or (g := goals.find(name)) is None or not name:
+            return it
+    except Exception:  # noqa: BLE001
+        return it
+    return Intent("goals", "goals", "schedule", {"action": "done" if it.args["action"] == "done" else "delete",
+                                                 "goal": g["name"]})
+
+
 def _to_last_list(text: str, it: Intent | None) -> Intent | None:
     """'remove second' / 'open 2' that names no list: the item of the numbered list KURAMA showed last (links, read
     later, to-do), not always the to-do list (d31dfcbc: right after the link list it deleted to-do item 2)."""
     if it is None or it.tool not in ("todo", "read_later", "saved_links") or _LIST_WORD.search(text):
-        return it
+        return _other_list(it)
     from jarvis.core import workmem
     last = workmem.last_list()
     n = it.args.get("item") or it.args.get("n") or it.args.get("name")
@@ -1841,6 +1859,12 @@ def _to_last_list(text: str, it: Intent | None) -> Intent | None:
         return Intent("readlater", "read_later", "links", {"action": "remove" if act == "delete" else act, "n": n})
     if last == "todo":
         return Intent("todo", "todo", "todo", {"action": "delete" if act == "remove" else act, "item": str(n)})
+    if last == "goals":  # 'show my goals' -> 'remove first one' (11-10: it went to the to-do list)
+        from jarvis.core import goals
+        active = [g for g in goals.all_goals() if g["status"] != "done"]
+        if 1 <= n <= len(active):
+            return Intent("goals", "goals", "schedule", {"action": "done" if act == "done" else "delete",
+                                                         "goal": active[n - 1]["name"]})
     return it
 
 
@@ -2302,6 +2326,8 @@ def meaning_intent(text: str) -> Intent | None:
         it = Intent("mkdir", "make_folder", "files", {"path": str(here / (nm.group("n").strip() if nm else "New folder"))},
                     known=raw[m.start():m.end()].strip() if said != raw else "")
         return it if meaning_ok(t, it) else None
+    if label == "tg_message" and not re.search(r"\b(?:telegram|message|msg|text|tell|send|write|ping|notify)\b", raw, I):
+        return None  # ('Peer My Phone' = pair my phone, misheard: it "sent your phone to Telegram", 11-10)
     if label == "tg_message":  # "send hello to telegram", "message me on telegram saying I'm late": the message
         if (cmd := _command_named(raw)) is not None:  # "send morning brief to telegram": KURAMA's brief, not the
             return Intent("tgcmd", "_tgcmd", "telegram", {"cmd": cmd}, known=cmd)  # words (11-04, sent the words)
