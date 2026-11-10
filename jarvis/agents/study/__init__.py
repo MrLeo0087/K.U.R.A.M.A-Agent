@@ -23,6 +23,8 @@ EXAMPLES: dict[str, tuple[str, ...]] = {
     "more": ("more", "tell me more", "explain in detail", "give me the long version", "more detail"),
     "translate": ("translate this", "translate this to english", "what does this say in english"),
     "write": ("write a paragraph about this", "write a short essay from this page", "write notes on this topic"),
+    "save": ("save this", "save this to my notes", "note this down", "save it", "keep this answer",
+             "add this to my notes"),
     "notes": ("show my study notes", "my notes today", "what did i study today"),
     "glossary": ("show my glossary", "words i asked about", "my glossary"),
 }
@@ -34,5 +36,6 @@ SPEC = AgentSpec(
             "text or the page, use the tool `study` (it has the page's context)."),
     aliases=("study", "studying", "learn", "learning", "reading", "read"),
     welcome=lambda: ("Study mode on. Select text anywhere and ask: 'explain this', 'simpler', 'in nepali', "
-                     "'summarize this page', 'quiz me'. Say 'back to normal' to leave."),
+                     "'summarize this page', 'quiz me'; 'save this' keeps an answer in your notes. Say 'back to "
+                     "normal' to leave."),
 )

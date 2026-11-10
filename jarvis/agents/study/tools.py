@@ -10,9 +10,10 @@ from jarvis.core.registry import tool
       description="Study mode: answer about the highlighted text in its page's context (explain, meaning here, "
                   "simpler, nepali, hindi, summary of the selection, page_summary, quiz, more = the long version of "
                   "the last answer, translate, write = a paragraph / essay from the page, ask = any other question "
-                  "about it); notes = today's saved notes; glossary = the terms asked so far.")
+                  "about it); save = put the last answer in the notes (only when asked); notes = today's saved "
+                  "notes; glossary = the saved terms.")
 def study(task: Literal["explain", "meaning", "simpler", "nepali", "hindi", "summary", "page_summary", "quiz", "more",
-                        "translate", "write", "ask", "notes", "glossary"] = "explain", request: str = "") -> str:
+                        "translate", "write", "ask", "save", "notes", "glossary"] = "explain", request: str = "") -> str:
     """Study helper.
 
     Args:

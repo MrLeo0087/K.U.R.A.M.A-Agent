@@ -1581,3 +1581,5 @@ Phases (one at a time, owner tests after each):
       chat (up to 3500 chars, not moved to the workspace). Live check: "chain rule" meaning 2.2 s, Nepali answer
       used the thread. (I overwrote core/study.py = the timetable/quiz module by mistake and restored it; the new
       engine is studymode.py.) Not done: voice speaking only 2 lines of a long answer. Tests: test_study_mode (13).
+    - 11-10 owner: "I did not say to save note, why it saved" -> Study answers are no longer saved by themselves (no
+      "📝 Saved" line); "save this" / "note this down" saves the last answer (and a short term to the glossary).

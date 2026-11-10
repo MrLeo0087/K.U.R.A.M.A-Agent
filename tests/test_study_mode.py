@@ -28,10 +28,11 @@ def study(monkeypatch, tmp_path):
     return calls
 
 
-def test_an_answer_carries_the_page_context_and_is_saved(study, tmp_path):
+def test_an_answer_carries_the_page_context_and_is_saved_only_when_asked(study, tmp_path):
     out = studymode.answer("meaning")
     prompt = study[-1][1]
-    assert "chain rule" in out and "Saved to your notes" in out
+    assert "chain rule" in out and "Saved" not in out and not list(tmp_path.glob("notes/*/*.md"))  # (11-10: not asked)
+    assert "Saved to your notes" in studymode.answer("save")
     for part in ("Page: Backpropagation", "summary of the page", "Section: How it works", "layer by layer",
                  'Selected text:\n"""\nchain rule'):
         assert part in prompt, part
@@ -72,7 +73,7 @@ def test_study_requests_by_meaning(monkeypatch):
     monkeypatch.setattr(studymode, "context", lambda: dict(CTX))
     semantic._tables.clear()
     try:
-        for text, task in (("explain this", "explain"), ("what does this mean", "meaning"), ("simpler", "simpler"),
+        for text, task in (("save this", "save"), ("explain this", "explain"), ("what does this mean", "meaning"), ("simpler", "simpler"),
                            ("in nepali", "nepali"), ("summarize this page", "page_summary"), ("quiz me", "quiz"),
                            ("tell me more", "more"), ("how does this relate to backprop", "ask")):
             it = fastpath.match(text)

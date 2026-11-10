@@ -4,8 +4,9 @@ Context (0 tokens): the highlighted text + its paragraph + the heading above it 
 extension 1.5), a PDF from its file (pdftotext, offline), any other app's highlight (X primary selection).
 The page is summarized ONCE (~1.5k tokens, cached by URL) so every answer knows what the page is about.
 One call per answer (smart tier; Gemini when Groq is used up, llm.py's chain). Short by default; "more" = the long
-version of the last answer. Every answer is saved to notes (data/study/notes/<day>/<document>.md, offline) and short
-terms go to the glossary (data/study/glossary.md). One thread per document: follow-ups ("simpler", "in nepali",
+version of the last answer. Nothing is saved unless you say so (owner 11-10: "I did not say to save"): "save this"
+puts the last answer in your notes (data/study/notes/<day>/<document>.md, offline), and a short term also in the
+glossary (data/study/glossary.md). One thread per document: follow-ups ("simpler", "in nepali",
 "more") know the last answers about that page.
 """
 from __future__ import annotations
@@ -20,7 +21,8 @@ from pathlib import Path
 from jarvis.core import config
 
 TASKS = ("explain", "meaning", "simpler", "nepali", "hindi", "summary", "page_summary", "quiz", "more", "ask",
-         "translate", "write")
+         "translate", "write", "save")
+_last: dict = {}  # the last answer (context, task, request, answer): what "save this" saves
 ROOT = config.DATA_DIR / "study"
 SUMMARY_TOKENS = 450
 _threads: dict[str, list[tuple[str, str]]] = {}  # document -> [(question, answer)] (last 4, memory)
@@ -172,8 +174,20 @@ def _save(c: dict, task: str, request: str, answer: str) -> Path | None:
         return None
 
 
+def save_last() -> str:
+    """'save this': the last study answer into today's notes (and a short term into the glossary)."""
+    if not _last:
+        return "Nothing to save yet: ask me about something first, then say 'save this'."
+    f = _save(_last["c"], _last["task"], _last["request"], _last["answer"])
+    if f is None:
+        return "error: I couldn't write the notes file."
+    return f"📝 Saved to your notes: {f} (say 'show my notes' to see today's)."
+
+
 def answer(task: str = "explain", request: str = "") -> str:
     """One study answer about the highlighted text (or the page)."""
+    if task == "save":
+        return save_last()
     task = task if task in TASKS else "ask"
     c = context()
     key = doc_key(c)
@@ -202,15 +216,16 @@ def answer(task: str = "explain", request: str = "") -> str:
         return "error: the AI gave an empty answer. Try again."
     _threads.setdefault(key, []).append((request or task, out))
     _threads[key] = _threads[key][-4:]
-    saved = _save(c, task, request, out)
-    return out + (f"\n\n📝 Saved to your notes ({saved.parent.name}/{saved.name})." if saved and task != "more" else "")
+    _last.clear()
+    _last.update(c=c, task=task, request=request, answer=out)
+    return out
 
 
 def notes_today() -> str:
     d = ROOT / "notes" / time.strftime("%Y-%m-%d")
     files = sorted(d.glob("*.md")) if d.is_dir() else []
     if not files:
-        return "No study notes today yet: in Study mode, every answer is saved here by itself."
+        return "No study notes today yet: after an answer you like, say 'save this'."
     return "📝 Today's notes:\n" + "\n".join(f"• {f.stem} ({f.read_text(errors='replace').count('## ')} answers) — {f}"
                                            for f in files)
 
@@ -218,7 +233,7 @@ def notes_today() -> str:
 def glossary(n: int = 15) -> str:
     g = ROOT / "glossary.md"
     if not g.exists():
-        return "Your glossary is empty: ask 'what does this mean' about a word in Study mode and it fills itself."
+        return "Your glossary is empty: ask 'what does this mean' about a word, then say 'save this'."
     rows = [r for r in g.read_text(errors="replace").splitlines() if r.startswith("- ")]
     return f"📖 Your glossary ({len(rows)} terms, newest last):\n" + "\n".join(rows[-n:]) + f"\n\nFile: {g}"
 
