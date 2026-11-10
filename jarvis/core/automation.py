@@ -233,13 +233,18 @@ def sort_plan(folder: Path | None = None) -> list[tuple[Path, Path | None]]:
 def sort_preview() -> str:
     plan = sort_plan()
     if not plan:
-        return "Downloads is already tidy."
-    by: dict[str, int] = {}
-    for _, dest in plan:
-        k = dest.name if dest else "duplicates to Trash"
-        by[k] = by.get(k, 0) + 1
-    return f"I'd move {sum(by.values())} files: " + ", ".join(f"{k} {v}" for k, v in by.items()) + \
-        ". Say 'sort my downloads' to do it."
+        return "Your Downloads folder is already tidy: every file is in its folder (Documents, Images, Videos ...)."
+    by: dict[str, list[str]] = {}
+    for f, dest in plan:
+        by.setdefault(dest.relative_to(Path.home() / "Downloads").as_posix() if dest else "Trash (exact duplicates)",
+                      []).append(f.name)
+    lines = [f"🗂 Tidy Downloads = put the loose files in Downloads into folders by type. Nothing moved yet. "
+             f"I would move {len(plan)} file(s):"]
+    for where, names in by.items():
+        shown = ", ".join(names[:3]) + (f" +{len(names) - 3} more" if len(names) > 3 else "")
+        lines.append(f"• {shown} → {where if where.startswith('Trash') else 'Downloads/' + where}")
+    lines.append("Say 'sort my downloads' to do it now, or 'tidy my downloads every day' to let it happen nightly.")
+    return "\n".join(lines)
 
 
 def sort_run() -> str:

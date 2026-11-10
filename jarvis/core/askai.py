@@ -22,19 +22,29 @@ NAMES = {"gemini": "Gemini", "chatgpt": "ChatGPT", "claude": "Claude"}
 DEFAULT_KEY, LAST_KEY = "askai_default", "askai_last"
 FOLLOW_S = 30 * 60
 MAX_SEL = 6000
-_SITE_RE = re.compile(r"\b(gemini|bard|chat\s*gpt|chatgpt|gpt|open\s*ai|claude)\b", re.I)
-# the request's own words that only say "ask <site>" (the rest is the question)
-_LEAD = re.compile(r"^\s*(?:(?:hey|ok|please|can\s+you|could\s+you)\s+)*(?:go\s+and\s+)?(?:ask|send\s+(?:this|it|that)\s+to)"
-                   r"\s+(?:the\s+)?(?:gemini|bard|chat\s*gpt|chatgpt|gpt|open\s*ai|claude|ai|it)\b[\s,:-]*(?:and\s+ask\s+)?",
-                   re.I)
+# the site names as typed AND as speech-to-text writes them (11-10 voice: "chat LGBT", "Gemini" fine; also
+# "chat g p t", "jemini")
+_SITES = (r"gemini|jemini|gemni|bard|chat\s*g\.?\s*p\.?\s*t\.?|chat\s*gbt|chat\s*gtp|chat\s*lgbt|chat\s*gpd|chatgpt|"
+          r"gpt|open\s*ai|claude")
+_SITE_RE = re.compile(r"\b(" + _SITES + r")\b", re.I)
+# the request's own words that only say "ask <site>" (the rest is the question): "ask gemini ...", "ask this to the
+# gemini that ...", "can you ask to the chat gpt what ...", "send this to chatgpt"
+_LEAD = re.compile(r"^\s*(?:(?:hey|ok|okay|please|so|now|can\s+you|could\s+you|will\s+you|kurama)[\s,]+)*(?:go\s+and\s+)?"
+                   r"(?:ask|send|give|paste|put)\s+(?:(?:this|it|that|these|this\s+\w+)\s+)?(?:to|with|on|in|into)?\s*"
+                   r"(?:the\s+)?(?:" + _SITES + r"|ai|it)\b[\s,:.-]*(?:(?:and\s+)?(?:ask|tell)\s+(?:it\s+|him\s+)?)?"
+                   r"(?:that|whether|if|about|to)?\b[\s,:-]*", re.I)
 
 
 def site_of(text: str) -> str:
     m = _SITE_RE.search(text or "")
     if not m:
         return ""
-    w = re.sub(r"\s+", "", m.group(1).lower())
-    return {"bard": "gemini", "gpt": "chatgpt", "openai": "chatgpt"}.get(w, w)
+    w = re.sub(r"[\s.]+", "", m.group(1).lower())
+    if w.startswith("chat") or w in ("gpt", "openai"):
+        return "chatgpt"
+    if w in ("bard", "jemini", "gemni"):
+        return "gemini"
+    return w
 
 
 def default_site() -> str:

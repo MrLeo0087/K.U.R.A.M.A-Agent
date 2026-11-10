@@ -329,7 +329,8 @@ DIRECT_REPLY_ANSWERS = ("expenses", "contacts", "schedules", "stopwatch", "lapto
                         "backup", "find_files", "recall", "remember", "laptop_doctor", "convert_file",
                         "folder_lock", "do_not_disturb", "night_light", "set_theme", "focus_mode", "cleanup",
                         "location_history", "find_my_phone", "remote_desktop", "token_usage", "daily_digest",
-                        "list_folder")  # (11-06 the AI re-wrote a listing with folders that do not exist)
+                        "list_folder", "ask_ai")  # (11-10 the AI answered the question itself after sending
+#                        it to ChatGPT; 11-06 the AI re-wrote a listing with folders that do not exist)
 DIRECT_REPLY_TOOLS.update({k: "said" for k in DIRECT_REPLY_SINGLE + DIRECT_REPLY_ANSWERS})
 DIRECT_REPLY_MAX_WORDS = 14
 DIRECT_REPLY_STEPS = {"window": ("focus", "list"), "app_control": ("task", "enable"), "saved_links": ("list", "get"),

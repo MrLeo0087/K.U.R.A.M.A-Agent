@@ -1561,3 +1561,10 @@ Phases (one at a time, owner tests after each):
       (3) typed "clear" / "new chat" = 0-token chat clear (went to the AI, 6k tokens). Plan item "~60 tools behind
       ~10 general tools" NOT done: a big rewrite with risk to the scorecard; the router already sends 1-3 groups.
       Tests: test_agent_modes (13).
+    - 11-10 owner's test of phase 5: (1) voice "Can you ask this to the Gemini that what is ...", "Ask to the chat
+      LGBT that ..." were answered by KURAMA (text_assist explain), not sent: the addressing words only knew "ask
+      <site>" -> now "ask / send / give (this) (to) (the) <site> (that / to / about)", and speech-to-text spellings
+      of the sites (chat LGBT / GBT / G P T, jemini). (2) "ask to the chat GPT what is propagation" went to the AI,
+      which sent it AND answered itself -> the fast path catches it, and ask_ai is a direct-reply tool (its sentence
+      ends the turn). (3) /tidy's "I'd move 5 files: Images 4, Audio 1" was unclear -> it says what tidy means and
+      lists the files with where each goes. Tests: test_ask_ai (+5).

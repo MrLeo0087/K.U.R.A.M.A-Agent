@@ -73,7 +73,11 @@ def test_routing_by_meaning(monkeypatch):
     try:
         for text, site in (("ask gemini why this works", "gemini"), ("ask chatgpt how to fix this error", "chatgpt"),
                            ("ask claude to explain this function in nepali", "claude"),
-                           ("ask gemini what is backpropagation", "gemini")):
+                           ("ask gemini what is backpropagation", "gemini"),
+                           # 11-10 voice traces (they were answered by KURAMA, not sent)
+                           ("Can you ask this to the Gemini that what is meaning of this sentence?", "gemini"),
+                           ("Ask to the chat LGBT that what is the meaning of this sentence.", "chatgpt"),
+                           ("Can you ask to the chat GPT what is propagation?", "chatgpt")):
             it = fastpath.match(text)
             assert it is not None and it.tool == "ask_ai" and it.args["site"] == site, text
         for text in ("how does chatgpt work", "open gemini", "go to claude code"):
@@ -88,3 +92,17 @@ def test_a_question_of_its_own_does_not_carry_an_old_highlight(env, monkeypatch)
     _ctx(monkeypatch, selection="https://www.facebook.com/reel/1")
     askai.ask("ask gemini what is backpropagation")
     assert bridge.take_prompt(opened[0].split("#kurama=")[1]) == "What is backpropagation"
+
+
+def test_sending_it_is_the_whole_answer():
+    """11-10: the AI sent the question to ChatGPT and then answered it itself; the tool's sentence ends the turn."""
+    assert config.DIRECT_REPLY_TOOLS.get("ask_ai") == "said"
+
+
+def test_tidy_preview_says_what_tidy_means(monkeypatch, tmp_path):
+    from jarvis.core import automation
+    monkeypatch.setattr(automation.Path, "home", lambda: tmp_path)
+    (tmp_path / "Downloads").mkdir()
+    monkeypatch.setattr(automation, "sort_plan", lambda folder=None: [(tmp_path / "Downloads/a.png", tmp_path / "Downloads/Images")])
+    out = automation.sort_preview()
+    assert out.startswith("🗂 Tidy Downloads = put the loose files") and "a.png → Downloads/Images" in out
