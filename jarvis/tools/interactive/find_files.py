@@ -210,6 +210,12 @@ def find_files(query: str, path: str = "", kind: Literal["any", "name", "folder"
                     found, fuzzy = hit, f" (closest matches to {query!r})"
                     break
         partial = f" (timed out after {TIMEOUT}s; partial, narrow the path)" if late else ""
+        if not found and kind == "any" and not (path or "").strip() and len(query.split()) >= 2:
+            # no file NAMED like that: maybe it's a document ABOUT it ('my notes on backpropagation', 11-10)
+            from jarvis.core import contentindex
+            got = contentindex.answer(query)
+            if "Found by what's inside" in str(got):
+                return got
         if not found:
             where = "anywhere on your laptop" if len(bases) > 1 else f"under {base}"
             return f"No {what} named like {query!r} {where}. Try a different spelling or part of the name."

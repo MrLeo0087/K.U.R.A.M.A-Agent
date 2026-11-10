@@ -1596,3 +1596,23 @@ Phases (one at a time, owner tests after each):
       classes (stuck page, bug in words, pasted traceback, add a feature, rename); run: 9/9 right, tokens 0.9k-4.5k
       each (median ~2k, target <= 6k; pasted traceback 12.4k -> 1.1k after the retry fix). `python -m
       coder.evals.live <name>` runs one case. Tests: test_coding_agent_p8 (10).
+    - 11-10 Phase 9 (helpers; the Kaggle / Colab watcher already existed): (1) Find by content: core/contentindex.py,
+      SQLite FTS5 of PDFs (pdftotext), Word / PowerPoint (their XML), notebooks, .md / .txt in Downloads, Documents,
+      Desktop and the /media disks (venvs, .git, caches skipped); first pass 1,096 documents in 26 s; refreshed daily
+      by the timemachine worker; words + type ("pdf") + time ("last week") from the request; copies shown once;
+      "find my notes on X" with no file NAMED like that falls back to it. Tool find_by_content, /find. (2) YouTube in
+      2 minutes: subtitles via yt-dlp (no video download) -> one fast call -> main points + "jump to" timestamps,
+      cached; live: 3Blue1Brown ch.1 in 7.9 s. Tool youtube_summary, /ytsum, "summarize this youtube video". (3)
+      GitHub in one line (core/gitquick.py): push = message from the diff + ONE yes + commit + push (a .env / key
+      file stops it); new project = ~/projects/<name> with uv + git (+ a private GitHub repo when GITHUB_TOKEN is in
+      .env; not set now) opened in VS Code; ci = last Actions run. /push, /newproject, /ci, "push my work". (4)
+      Explainer videos (core/explainer.py; owner: "how transformers work" videos from my script and voiceover):
+      topic -> AI script + scenes; script -> scenes keeping the exact words; a voiceover file -> Whisper timings ->
+      each scene shown while it is said; slides with points appearing one by one, progress bar, burned captions;
+      16:9 or 9:16. Live: 6-scene 50 s 1080p video in 37 s; a 22 s reel from a voice file in 8.5 s. "make a video /
+      reel about X" now makes the explainer (the folder slideshow stays). /makevideo, /reel (a file path = the
+      voiceover, a long text = the script). (5) Phone: core/phonelink.py: GSConnect (installed; phone not paired
+      yet) ring / send file / link / text over Wi-Fi; scrcpy screen (not installed: needs sudo apt install scrcpy
+      adb, said with the steps). /phone, /ring, "show my phone". (6) Slash: short commands for all of these plus
+      /ask /gemini /chatgpt /claudeai /study /normal /glossary; an unknown /word suggests the near ones; the
+      Telegram "/" menu puts the useful ones in its 100. Tests: test_helpers_p9 (19).

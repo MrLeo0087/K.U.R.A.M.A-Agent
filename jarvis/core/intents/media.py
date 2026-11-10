@@ -129,8 +129,8 @@ _NOT_A_SONG = re.compile(r"\b(?:it|this|that|these|those|video|videos|youtube|mo
 def video_make_intent(t: str) -> Intent | None:
     """'make a short video about the Himalayas' / 'make a reel about tea' / 'make a video with this script: ...' /
     'make a slideshow from ~/Pictures/trip' / '/video <topic>' -> make_video."""
-    if m := re.fullmatch(r"/(?:makevideo|reel)(?:\s+(?P<a>.+))?", t, I | re.S):
-        return Intent("makevideo", "make_video", "image", {"topic": (m.group("a") or "").strip(), "vertical": t.lower().startswith("/reel")})
+    if re.fullmatch(r"/(?:makevideo|reel|explainer|edu)(?:\s+.+)?", t, I | re.S):
+        return None  # the slash commands (core/slash.py: the explainer video)
     if not re.search(r"\b(?:make|create|generate|produce)\b", t, I) or not re.search(r"\b(?:video|reel|reels|short|shorts|slideshow|slide\s+show)\b", t, I):
         return None
     if re.search(r"\b(?:download|record|screen\s+record|camera|youtube\s+video\s+of|convert)\b", t, I):
@@ -139,10 +139,11 @@ def video_make_intent(t: str) -> Intent | None:
     if m := re.search(r"\b(?:slide\s*show|video)\s+(?:from|of|with)\s+(?:the\s+|my\s+)?(?:pictures|photos|images)\s+(?:in|from|of)\s+(?P<f>.+)$"
                       r"|\bslide\s*show\s+(?:from|of)\s+(?P<g>.+)$", t, I):
         return Intent("makevideo", "make_video", "image", {"folder": (m.group("f") or m.group("g")).strip(" ."), "vertical": vertical})
+    fmt = "reel" if vertical else "youtube"  # (11-10: topic / script videos are explainers: slides + voice + captions)
     if m := re.search(r"\b(?:script|narration|story)\s*[:\-]\s*(?P<s>.+)$", t, I | re.S):
-        return Intent("makevideo", "make_video", "image", {"script": m.group("s").strip(), "vertical": vertical})
+        return Intent("makevideo", "explainer_video", "image", {"script": m.group("s").strip(), "format": fmt})
     if m := re.search(r"\b(?:video|reel|short|shorts)\s+(?:about|on|of|explaining|showing|for)\s+(?P<t>.{3,})$", t, I):
-        return Intent("makevideo", "make_video", "image", {"topic": m.group("t").strip(" ."), "vertical": vertical})
+        return Intent("makevideo", "explainer_video", "image", {"topic": m.group("t").strip(" ."), "format": fmt})
     return None
 
 

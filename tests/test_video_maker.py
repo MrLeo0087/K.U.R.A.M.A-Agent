@@ -30,8 +30,10 @@ def test_script_plan_and_render_mocked(monkeypatch, tmp_path):
 
 def test_routes():
     m = fastpath.match
-    assert m("make a short video about the Himalayas").args == {"topic": "the Himalayas", "vertical": False}
-    assert m("make a reel about Nepali tea").args["vertical"] is True
+    # 11-10: a topic / script video is an explainer (slides + voice + captions); a folder is still a slideshow
+    it = m("make a short video about the Himalayas")
+    assert (it.tool, it.args) == ("explainer_video", {"topic": "the Himalayas", "format": "youtube"})
+    assert m("make a reel about Nepali tea").args["format"] == "reel"
     assert m("make a slideshow from ~/Pictures/trip").args["folder"] == "~/Pictures/trip"
-    assert m("/reel momo").args == {"topic": "momo", "vertical": True}
+    assert m("/reel momo").args == {"format": "reel", "topic": "momo"}
     assert m("make a video call") is None and m("download this video").tool == "video_download"

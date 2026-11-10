@@ -83,6 +83,13 @@ COMMANDS: tuple[Cmd, ...] = (
         "what would move, /tidy run does it, /tidy auto_on = every night", "Laptop", "[run|auto_on|auto_off]",
         tool=("tidy_downloads", "automation", {"action": "preview"}, "action")),
     Cmd("health", "laptop health: battery health, disk trend", "Laptop", tool=("laptop_health", "system", {}, "")),
+    Cmd("find", "find a document by what is inside: /find pdf about attention last week", "Laptop", "<words>",
+        tool=("find_by_content", "filesearch", {}, "query"), aliases=("findin", "content")),
+    Cmd("phone", "your Android phone: /phone screen | ring | status | send_file <path> | send_link <url>",
+        "Phone & safety", "[screen|ring|status|send_file|send_link|send_text] [value]",
+        tool=("phone_link", "telegram", {"action": "status"}, "value"),
+        actions=("screen", "ring", "status", "send_file", "send_link", "send_text")),
+    Cmd("ring", "ring your phone (Wi-Fi, KDE Connect)", "Phone & safety", tool=("phone_link", "telegram", {"action": "ring"}, "")),
     Cmd("close", "close an app's windows (like clicking X: it asks to save)", "Laptop", "<app>",
         tool=("close_app", "apps", {}, "name")),
     Cmd("disk", "what fills the disk (biggest folders, ML caches, old venvs, duplicates)", "Laptop", "[folder]",
@@ -137,6 +144,25 @@ COMMANDS: tuple[Cmd, ...] = (
     Cmd("explain", "explain the highlighted code / text", "Code", phrase="explain this"),
     Cmd("format", "format the file open in VS Code", "Code", phrase="format this file"),
     Cmd("check", "lint the file open in VS Code", "Code", phrase="check this file", aliases=("lint",)),
+    Cmd("push", "commit all changes of the open project (good message, asks once) and push to GitHub", "Code",
+        "[folder]", tool=("github_quick", "git", {"action": "push"}, "folder")),
+    Cmd("newproject", "new project in ~/projects: uv + git (+ GitHub repo with GITHUB_TOKEN), opened in VS Code",
+        "Code", "<name>", tool=("github_quick", "git", {"action": "new_project"}, "name")),
+    Cmd("ci", "did the last GitHub Actions build pass?", "Code", "[folder]",
+        tool=("github_quick", "git", {"action": "ci"}, "folder"), aliases=("build",)),
+    Cmd("ask", "ask Gemini (your default) about the selection / a question; /gemini /chatgpt /claudeai for one",
+        "Web & text", "<question>", tool=("ask_ai", "web", {}, "question")),
+    Cmd("gemini", "ask Gemini (pasted and sent in Brave, 0 tokens)", "Web & text", "<question>",
+        tool=("ask_ai", "web", {"site": "gemini"}, "question")),
+    Cmd("chatgpt", "ask ChatGPT (pasted and sent in Brave, 0 tokens)", "Web & text", "<question>",
+        tool=("ask_ai", "web", {"site": "chatgpt"}, "question"), aliases=("gpt",)),
+    Cmd("claudeai", "ask Claude on claude.ai (pasted and sent in Brave)", "Web & text", "<question>",
+        tool=("ask_ai", "web", {"site": "claude"}, "question")),
+    Cmd("study", "Study mode on (explain / simpler / nepali / summarize / quiz about what you select)", "KURAMA",
+        phrase="study mode"),
+    Cmd("normal", "back to General mode (leave Study / Coding mode)", "KURAMA", phrase="back to normal",
+        aliases=("general",)),
+    Cmd("glossary", "the words you saved in Study mode", "Day", tool=("study", "study_mode", {"task": "glossary"}, "")),
     Cmd("code", "the coding agent: /code alone lists everything; /code <what to build>", "Code",
         "[learn|fix|tests|pass|preview|check|look|review|commit|diffs|reject|undo|continue|claude|tokens|yes|no] <text>",
         tool=("coding", "coding_agent", {"action": "help"}, "request"),
@@ -168,8 +194,13 @@ COMMANDS: tuple[Cmd, ...] = (
         aliases=("flowchart",)),
     Cmd("callgraph", "who calls whom in the open Python file", "Code", tool=("make_diagram", "image", {"kind": "code"}, "target")),
     Cmd("audio", "MP3 of the highlighted text / a link / a file", "Media", "[link|file|text]", aliases=("mp3",)),
-    Cmd("makevideo", "short narrated video about a topic", "Media", "<topic>", aliases=()),
-    Cmd("reel", "vertical short video (reel)", "Media", "<topic>"),
+    Cmd("makevideo", "explainer video (16:9): a topic, your script, or your voiceover file", "Media",
+        "<topic | script | voice.mp3>", tool=("explainer_video", "image", {"format": "youtube"}, "topic"),
+        aliases=("explainer", "edu")),
+    Cmd("reel", "explainer reel (9:16) for Instagram / Shorts: a topic, your script, or your voiceover file", "Media",
+        "<topic | script | voice.mp3>", tool=("explainer_video", "image", {"format": "reel"}, "topic")),
+    Cmd("ytsum", "a YouTube video in 2 minutes (the one open in the browser, or a link)", "Media", "[link]",
+        tool=("youtube_summary", "browser", {}, "url"), aliases=("ytsummary", "summarizevideo")),
     Cmd("download", "download a video / audio", "Media", "<link>", phrase="download this video|download {a}",
         aliases=("dl",)),
     # --- web & text ---
@@ -230,7 +261,7 @@ def lookup(text: str) -> tuple[Cmd | None, str, str]:
 # Everything else runs on the laptop alone (files, apps, sound, screen, git, notes, money, timers...). Reading each
 # tool's source for network calls was wrong both ways (tools hand their work to core modules), so this is a list.
 ONLINE_TOOLS = frozenset({
-    "ask_knowledge", "code_to_file", "coding", "dictate", "download_file", "find_my_phone", "fix_error",
+    "ask_ai", "ask_knowledge", "code_to_file", "coding", "dictate", "explainer_video", "github_quick", "youtube_summary", "download_file", "find_my_phone", "fix_error",
     "generate_image", "install_app", "kaggle_train", "lecture", "live_search", "location_history", "make_audio",
     "make_tool", "make_video", "music", "open_url", "page_summary", "python_env", "quiz", "read_text", "read_webpage",
     "remote_desktop", "review_code", "send_file_telegram", "send_last_result", "send_message_telegram", "text_assist",
@@ -368,6 +399,27 @@ def catalog() -> list[dict]:
                                                         if t.name not in {c.tool[0] for c in COMMANDS if c.tool}])]
 
 
+# Telegram shows at most 100 commands in its "/" menu: these come first, the rest in their order
+TG_FIRST = ("list", "status", "screenshot", "lockscreen", "claude", "battery", "find", "phone", "ring", "push", "ask",
+            "gemini", "chatgpt", "ytsum", "reel", "makevideo", "startday", "doneday", "health", "disk", "tidy",
+            "close", "where", "camera", "music", "play", "next", "pause", "stopmusic", "remind", "timer", "todo",
+            "weather", "news", "study", "normal", "brief", "spent", "money")
+
+
 def telegram_menu(limit: int = 100) -> list[tuple[str, str]]:
     """(command, description) pairs for Telegram's setMyCommands (lowercase, <= 32 chars, <= 256 desc)."""
-    return [(c.name, c.desc[:60]) for c in COMMANDS][:limit]
+    first = [c for n in TG_FIRST if (c := _BY_NAME.get(n)) is not None and c.name == n]
+    rest = [c for c in COMMANDS if c not in first]
+    return [(c.name, c.desc[:60]) for c in (first + rest)][:limit]
+
+
+def suggest(typed: str, n: int = 6) -> list[str]:
+    """'/vid' -> ['/video', '/makevideo', ...]: commands that start with, contain or sound like what was typed."""
+    typed = typed.lower().lstrip("/")
+    names = [*(c.name for c in COMMANDS), *(t for t in tool_cmds())]
+    starts = [x for x in names if x.startswith(typed)]
+    inside = [x for x in names if typed in x and x not in starts]
+    close = [x for x in difflib.get_close_matches(typed, names, n=n, cutoff=0.6) if x not in starts + inside]
+    desc = [c.name for c in COMMANDS if len(typed) >= 3 and typed in c.desc.lower()
+            and c.name not in starts + inside + close]  # '/youtube' -> the commands about YouTube
+    return [f"/{x}" for x in (starts + inside + close + desc)][:n]

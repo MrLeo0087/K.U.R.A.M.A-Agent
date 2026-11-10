@@ -913,8 +913,10 @@ def slash_intent(t: str) -> Intent | None:
     from jarvis.core import slash
     cmd, arg, typed = slash.lookup(t)
     if cmd is None:
-        if typed and not arg and len(typed) <= 15:
-            return Intent("say", "_say", "self", {"en": f"I don't know /{typed}. Type /list to see every command."})
+        if typed and len(typed) <= 15:
+            near = slash.suggest(typed)
+            return Intent("say", "_say", "self", {"en": (f"I don't know /{typed}. Did you mean: {', '.join(near)}? "
+                                                         if near else f"I don't know /{typed}. ") + "Type /list for all."})
         return None
     if cmd.name == "clear" and (tc := slash.tool_call(cmd, arg)) and tc[0] != "_cmd":  # /clear ram|storage|kurama
         return Intent("slash", tc[0], tc[1], tc[2], cmd.name)
@@ -1230,9 +1232,10 @@ def everyday_intent(t: str) -> Intent | None:
         return Intent("kaggle", "kaggle_train", "watch", {"action": "setup"})
     if ai := assist_intent(t):
         return ai
-    if _RW_VERB.search(t) and _RW_OBJ.search(t) and not _RW_NOT.search(t) and len(t.split()) <= 22:
+    video = re.search(r"\b(?:youtube|video|videos)\b", t, I)  # 'summarize this youtube video': not a text rewrite
+    if _RW_VERB.search(t) and _RW_OBJ.search(t) and not _RW_NOT.search(t) and len(t.split()) <= 22 and not video:
         return Intent("assist", "text_assist", "clipboard", {"action": "improve", "request": t})
-    if m := _REWRITE.match(t):
+    if (m := _REWRITE.match(t)) and not video:
         ins = re.sub(r"\s+(?:this|it|that|the\s+selected\s+text|the\s+selection|selected\s+text|selection)\b", "",
                      m.group(0), count=1, flags=I).strip(" .!")
         return Intent("assist", "text_assist", "clipboard", {"action": "improve", "request": ins})
@@ -1895,6 +1898,11 @@ def study_intent(text: str) -> Intent | None:
     from jarvis.core import semantic
     if not semantic.ready():
         return None
+    if meaning_intent(t) is not None:  # one of KURAMA's own actions ('push my work', 'summarize this youtube video')
+        return None
+    if re.search(r"\b(?:rewrite|re-write|improve|revise|rephrase|paraphrase|proofread|polish|correct|edit)\b|"
+                 r"\bfix\s+(?:the\s+)?(?:grammar|spelling)", t, I):  # 'rewrite this formally': the editing
+        return None  # assistant (changes shown, 'replace it?'), not a study answer
     best = semantic.best_of(t, "study_mode", EXAMPLES)
     if best is None:
         return None
@@ -1904,7 +1912,9 @@ def study_intent(text: str) -> Intent | None:
         # a question of its own about what is highlighted ('why is the gradient negative here?'): the study answer
         # (one call with the page's context) instead of the general AI (2 calls, no page context)
         from jarvis.core import studymode
-        if len(t.split()) >= 4 and other < config.STUDY_OTHER_MAX and studymode.context()["text"]:
+        about_it = re.search(r"\b(?:this|that|it|here|these|those|above|selected|highlighted|paragraph|sentence|"
+                             r"word|line|page|text)\b", t, I)  # a question about the highlight, not a new request
+        if len(t.split()) >= 4 and about_it and other < config.STUDY_OTHER_MAX and studymode.context()["text"]:
             agents.touch()
             return Intent("study", "study", "study_mode", {"task": "ask", "request": t})
         return None
@@ -2314,6 +2324,20 @@ def meaning_intent(text: str) -> Intent | None:
         return it if meaning_ok(t, it) else None
     if label == "clear_chat":  # typed 'clear' went to the AI (6k tokens, 11-09)
         return None if extra else _ok(t, Intent("reset", "reset_kurama", "self", {"level": "chat"}))
+    if label in ("yt_summary", "git_push", "phone_screen", "phone_ring"):
+        one = {"yt_summary": ("ytsum", "youtube_summary", "browser", {}), "git_push": ("push", "github_quick", "git", {"action": "push"}),
+               "phone_screen": ("phone", "phone_link", "telegram", {"action": "screen"}),
+               "phone_ring": ("phone", "phone_link", "telegram", {"action": "ring"})}[label]
+        return None if extra else _ok(t, Intent(*one))
+    if label == "explainer":  # the topic is free text: what follows 'about / on / explaining'
+        m = re.search(r"\b(?:about|on|explaining|for|of)\s+(.+)$", raw, I)
+        topic = (m.group(1) if m else raw).strip(" .")
+        fmt = "reel" if re.search(r"\b(?:reels?|shorts?|vertical|instagram|tiktok)\b", raw, I) else "youtube"
+        it = Intent("video", "explainer_video", "image", {"topic": topic, "format": fmt}, known=raw)
+        return it if meaning_ok(t, it) else None
+    if label == "find_content":  # the topic is free text: the index reads it (0 tokens)
+        it = Intent("findc", "find_by_content", "filesearch", {"query": raw}, known=raw)
+        return it if meaning_ok(t, it) else None
     if label == "laptop_health":
         return None if extra else _ok(t, Intent("health", "laptop_health", "system", {}))
     if label in ("day_start", "day_done"):
