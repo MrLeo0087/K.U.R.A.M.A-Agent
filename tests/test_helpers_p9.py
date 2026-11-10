@@ -154,3 +154,19 @@ def test_nothing_of_the_phone_link_stays_running(monkeypatch):
     assert any(a[-1] == "kill-server" for a in ran) and any("quit" in a for a in ran)
     src = (Path(phonelink.__file__)).read_text()
     assert 'kill-server >/dev/null 2>&1; exit $code' in src  # the screen window takes adb's server with it
+
+
+def test_wireless_debugging_off_is_said_plainly_and_a_connection_moves_to_port_5555(monkeypatch):
+    from jarvis.core import store
+    monkeypatch.setattr(phonelink, "_scrcpy", lambda: "/snap/bin/scrcpy")
+    monkeypatch.setattr(phonelink, "_version", lambda exe: (5, 0))
+    monkeypatch.setattr(store, "kv_get", lambda k: "1.2.3.4:32935")
+    monkeypatch.setattr(store, "kv_set", lambda k, v: None)
+    monkeypatch.setattr(phonelink, "find_port", lambda addr: "")
+    assert "Wireless debugging is OFF" in phonelink.screen()
+    calls = []
+    monkeypatch.setattr(phonelink.subprocess, "run", lambda argv, **k: calls.append(argv) or type("R", (), {"stdout": "connected"})())
+    monkeypatch.setattr(phonelink, "_open", lambda host, port, t=0.4: True)
+    monkeypatch.setattr(phonelink.time if hasattr(phonelink, "time") else __import__("time"), "sleep", lambda s: None)
+    assert phonelink._to_fixed("1.2.3.4:41234") == "1.2.3.4:5555"
+    assert any("tcpip" in a for a in calls)

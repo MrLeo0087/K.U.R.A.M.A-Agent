@@ -174,22 +174,55 @@ def _open(host: str, port: int, t: float = 0.4) -> bool:
         s.close()
 
 
+FIXED_PORT = 5555  # classic adb-over-Wi-Fi: set once from a working connection, it stays until the phone restarts
+
+
+def _connect(adb: str, target: str) -> bool:
+    try:
+        out = subprocess.run([adb, "connect", target], capture_output=True, text=True, timeout=10).stdout
+    except (OSError, subprocess.SubprocessError):
+        return False
+    ok = out.startswith(("connected", "already connected"))
+    if not ok:
+        subprocess.run([adb, "disconnect", target], capture_output=True, timeout=10)  # no 'offline' leftovers
+    return ok
+
+
+def _to_fixed(addr: str) -> str:
+    """Switch a working connection to the fixed port 5555 (adb tcpip): it then stays reachable even when Wireless
+    debugging turns itself off, until the phone restarts. The old address when it doesn't work."""
+    host, _, port = addr.rpartition(":")
+    if port == str(FIXED_PORT):
+        return addr
+    import time
+    adb = "/snap/bin/scrcpy.adb" if Path("/snap/bin/scrcpy.adb").exists() else _adb()
+    try:
+        subprocess.run([adb, "-s", addr, "tcpip", str(FIXED_PORT)], capture_output=True, text=True, timeout=15)
+    except (OSError, subprocess.SubprocessError):
+        return addr
+    for _ in range(8):
+        time.sleep(1)
+        if _open(host, FIXED_PORT) and _connect(adb, f"{host}:{FIXED_PORT}"):
+            return f"{host}:{FIXED_PORT}"
+    return addr if _connect(adb, addr) else addr
+
+
 def find_port(addr: str) -> str:
-    """The phone's Wireless-debugging address now: the saved one if it still answers, else its new port (it changes
-    every time Wireless debugging is turned off and on; 30000-49999, scanned in ~10 s) checked with adb."""
+    """The phone's adb address that answers NOW ('' = none): the fixed port 5555 first (set after a connection,
+    survives Wireless debugging's port changes), then the saved one, then Wireless debugging's new port (it changes
+    every time it is turned off / on: 30000-49999 scanned, each open port checked with adb)."""
     import concurrent.futures as cf
     host, _, port = addr.rpartition(":")
-    if not host or (port.isdigit() and _open(host, int(port))):
-        return addr
-    with cf.ThreadPoolExecutor(300) as ex:
-        ports = [p for p, ok in zip(range(30000, 50000), ex.map(lambda p: _open(host, p), range(30000, 50000))) if ok]
+    if not host:
+        return ""
     adb = "/snap/bin/scrcpy.adb" if Path("/snap/bin/scrcpy.adb").exists() else _adb()
+    for p in dict.fromkeys([FIXED_PORT, int(port) if port.isdigit() else FIXED_PORT]):
+        if _open(host, p) and _connect(adb, f"{host}:{p}"):
+            return f"{host}:{p}"
+    with cf.ThreadPoolExecutor(400) as ex:
+        ports = [p for p, ok in zip(range(30000, 50000), ex.map(lambda p: _open(host, p, 0.3), range(30000, 50000))) if ok]
     for p in ports:
-        try:
-            out = subprocess.run([adb, "connect", f"{host}:{p}"], capture_output=True, text=True, timeout=10).stdout
-        except (OSError, subprocess.SubprocessError):
-            continue
-        if out.startswith(("connected", "already connected")):
+        if _connect(adb, f"{host}:{p}"):
             return f"{host}:{p}"
     return ""
 
@@ -205,7 +238,13 @@ def screen(addr: str = "") -> str:
     from jarvis.core import store
     addr = addr.strip() or (store.kv_get(ADB_KEY) or "")
     if addr:
-        addr = find_port(addr) or addr  # Wireless debugging's port changes when it is turned off / on: found again
+        found = find_port(addr)  # the fixed port / the saved one / Wireless debugging's new port
+        if not found:
+            return ("📱 Your phone doesn't answer: Wireless debugging is OFF on it (Samsung turns it off after a Wi-Fi "
+                    "change or a restart). On the phone: Settings → Developer options → Wireless debugging → ON, then "
+                    "say 'show my phone' again. After that first connection I switch the phone to a fixed port, so it "
+                    "keeps working until the phone restarts.")
+        addr = _to_fixed(found)  # port 5555 from now on: no hunting for Wireless debugging's new port next time
         store.kv_set(ADB_KEY, addr)
         target = [f"--tcpip={addr}"]  # scrcpy connects over Wi-Fi itself (its own adb)
     else:
@@ -215,7 +254,8 @@ def screen(addr: str = "") -> str:
     args = [exe, *target, "--max-size", "1280", "--max-fps", "30", "--stay-awake",  # (30 fps: half the laptop CPU
             "--window-title", "My phone"]  # of 60, still smooth for reading / typing)
     # when the window closes, the adb background server goes too: nothing of the phone link stays in RAM
-    p = subprocess.Popen(["sh", "-c", '"$@"; code=$?; ' + f'"{_adb_for(exe)}" kill-server >/dev/null 2>&1; exit $code',
+    adb = _adb_for(exe)
+    p = subprocess.Popen(["sh", "-c", '"$@"; code=$?; ' + f'"{adb}" kill-server >/dev/null 2>&1; exit $code',
                           "scrcpy", *args],
                          stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, start_new_session=True, env=env)
     try:
