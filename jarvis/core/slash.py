@@ -79,7 +79,7 @@ COMMANDS: tuple[Cmd, ...] = (
         tool=("my_day", "system", {"action": "done"}, "")),
     Cmd("oldinstallers", "move installers not used for a month (Downloads) to the Trash (asks)", "Laptop",
         tool=("tidy_downloads", "automation", {"action": "installers"}, "")),
-    Cmd("tidy", "put the loose files in Downloads into folders by type (Images, Documents, Videos...): /tidy shows "
+    Cmd("tidy", "sort the files lying directly in Downloads into folders by type (Images, Documents, Videos...): /tidy shows "
         "what would move, /tidy run does it, /tidy auto_on = every night", "Laptop", "[run|auto_on|auto_off]",
         tool=("tidy_downloads", "automation", {"action": "preview"}, "action")),
     Cmd("health", "laptop health: battery health, disk trend", "Laptop", tool=("laptop_health", "system", {}, "")),

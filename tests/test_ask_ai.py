@@ -105,4 +105,4 @@ def test_tidy_preview_says_what_tidy_means(monkeypatch, tmp_path):
     (tmp_path / "Downloads").mkdir()
     monkeypatch.setattr(automation, "sort_plan", lambda folder=None: [(tmp_path / "Downloads/a.png", tmp_path / "Downloads/Images")])
     out = automation.sort_preview()
-    assert out.startswith("🗂 Tidy Downloads = put the loose files") and "a.png → Downloads/Images" in out
+    assert out.startswith("🗂 Tidy Downloads = the files lying directly in Downloads") and "a.png → Downloads/Images" in out

@@ -238,7 +238,8 @@ def sort_preview() -> str:
     for f, dest in plan:
         by.setdefault(dest.relative_to(Path.home() / "Downloads").as_posix() if dest else "Trash (exact duplicates)",
                       []).append(f.name)
-    lines = [f"🗂 Tidy Downloads = put the loose files in Downloads into folders by type. Nothing moved yet. "
+    lines = [f"🗂 Tidy Downloads = the files lying directly in Downloads (not inside a folder) go into folders by "
+             f"type: pictures to Images, PDFs to Documents, videos to Videos. Folders there are not touched. Nothing moved yet. "
              f"I would move {len(plan)} file(s):"]
     for where, names in by.items():
         shown = ", ".join(names[:3]) + (f" +{len(names) - 3} more" if len(names) > 3 else "")
