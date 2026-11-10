@@ -54,7 +54,7 @@ def test_sort_downloads_preview_run_and_duplicates(tmp_path, monkeypatch):
     monkeypatch.setattr(au.Path, "home", lambda: tmp_path)
     trashed = []
     monkeypatch.setattr(au.subprocess, "run", lambda args, **k: trashed.append(args[-1]))
-    assert "I'd move 6 files" in registry.call("tidy_downloads", {}).output
+    assert "I would move 6 file(s)" in registry.call("tidy_downloads", {}).output
     assert "said no" in safety.execute("tidy_downloads", {"action": "run"}, confirm=lambda p: False).output
     out = safety.execute("tidy_downloads", {"action": "run"}, confirm=lambda p: True).output
     assert out == "Sorted 5 files into folders and moved 1 duplicate(s) to the Trash."
