@@ -118,8 +118,10 @@ def screen(addr: str = "") -> str:
         target = [f"--tcpip={addr}"]  # scrcpy connects over Wi-Fi itself (its own adb)
     else:
         target = []  # a phone on the USB cable
+    import os
+    env = {**os.environ, "SNAP_LAUNCHER_NOTICE_ENABLED": "false"}  # the snap's "unofficial build" notice, every run
     p = subprocess.Popen([exe, *target, "--max-size", "1280", "--stay-awake", "--window-title", "My phone"],
-                         stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, start_new_session=True)
+                         stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, start_new_session=True, env=env)
     try:
         err = p.communicate(timeout=2.5)[1]  # still running after 2.5 s = it is opening (answer at once, not a job)
     except subprocess.TimeoutExpired:
