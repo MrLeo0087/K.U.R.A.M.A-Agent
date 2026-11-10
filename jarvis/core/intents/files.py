@@ -175,7 +175,7 @@ _FIND_SEND = re.compile(r"^(?P<find>.+?)\s+(?:and|then)\s+(?:also\s+)?(?:send|sh
 _FILEISH = re.compile(r"\b[\w-]+\.[a-z0-9]{1,5}\b|\b(?:file|image|photo|picture|pic|folder|document|pdf|video|zip)\b", re.I)
 
 
-def findfile_intent(t: str) -> Intent | None:
+def _findfile_intent(t: str) -> Intent | None:
     if (fs := _FIND_SEND.match(t)) and _FILEISH.search(fs.group("find")) and (found := findfile_intent(fs.group("find"))) is not None:
         # 'look for naruto.jpg image in my laptop and send me': find it everywhere AND send it (the send tool searches)
         name = re.sub(r"\s+(?:image|picture|photo|file|document|video)$", "", found.args["query"], flags=re.I)
@@ -224,7 +224,7 @@ def _focus_intent(said: str = "this") -> Intent | None:
     return Intent("sendfile", "send_file_telegram", "telegram", {"path": fp}, fp.rstrip("/").rsplit("/", 1)[-1])
 
 
-def sendfile_intent(t: str) -> Intent | None:
+def _sendfile_intent(t: str) -> Intent | None:
     if re.match(r"^\s*(?:(?:ok|okay|now|please)\s+)*(?:send|share|forward)\s+(?:me\s+)?(?:this|that|the|it|my)?\s*"
                 r"(?:photo|picture|image|pic|wallpaper|(?:pie\s+|bar\s+|line\s+)?(?:chart|graph|plot)|diagram)"  # a chart is a picture
                 r"(?:\s+(?:you\s+)?(?:made|generated|created|drew|drawn))?" + _TGDEST +
@@ -315,3 +315,29 @@ CLOSE = _rx(r"(?P<verb>close|quit|exit) (?:the |my )?(?P<target>.+?)(?: (?:app|a
 
 _BAD_TARGET = re.compile(r"(?:\band\b|\bthen\b|,|\bnew\b|\btab\b|\bfile\b(?! manager)|\bfolder\b|\bdoor\b|\btests?\b|"
                          r"\bcommand\b|\bscript\b|^(?:a|an|it|this|that)\b)", I)
+
+
+_TO_PHONE = re.compile(r"\b(?:to|in|on|into|onto)\s+(?:my\s+|the\s+)?(?:phone|mobile|android|samsung)\b", re.I)  # the
+#  destination ('send me the phone folder' = the folder named Phone, by Telegram)
+
+
+def _phone_first(t: str, it: Intent | None) -> Intent | None:
+    """Owner 11-10: 'share this file' / 'send X to my phone': over Wi-Fi with KDE Connect (large files; Telegram only
+    when the phone isn't reachable or the send fails, phonelink decides). 'telegram' said = Telegram."""
+    if it is None or it.tool != "send_file_telegram" or re.search(r"\btelegram\b", t, re.I):
+        return it  # 'telegram' said: Telegram (big folders as a link, as before)
+    if not (_TO_PHONE.search(t) or re.match(r"\W*(?:please\s+|can\s+you\s+)?share\b", t, re.I)):
+        return it  # 'share this file' / '... to my phone': KDE Connect first, Telegram only if that fails
+    from jarvis.core import phonelink
+    if not phonelink.GSC.exists():
+        return it
+    return Intent("phone", "phone_link", "telegram", {"action": "send_file", "value": it.args.get("path") or "this"},
+                  it.label)
+
+
+def findfile_intent(t: str) -> Intent | None:
+    return _phone_first(t, _findfile_intent(t))
+
+
+def sendfile_intent(t: str) -> Intent | None:
+    return _phone_first(t, _sendfile_intent(t))

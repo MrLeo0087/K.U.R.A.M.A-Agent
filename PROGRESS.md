@@ -1628,3 +1628,11 @@ Phases (one at a time, owner tests after each):
       any app; Ctrl+C copies are not it) picks the browser / VS Code candidate it equals, or is another app's
       highlight; without it the newest timestamp. Used by Ask Gemini and Study mode. A new highlight = a new
       question, not a follow-up. Tests: test_ask_ai (+2), test_helpers_p9 (+2).
+    - 11-10 owner: "remove show my phone, keep KDE Connect for sharing large files". The screen feature (scrcpy, adb,
+      port hunting) is removed from KURAMA (phonelink rewritten: share / ring / link / text / pair / close /
+      status). Sharing: "share this (file / folder)" or "... to my phone" = KDE Connect over Wi-Fi (folders zipped),
+      Telegram only when the phone isn't reachable or the Wi-Fi send fails; "telegram" said = Telegram (big folders
+      as a link, as before); the Files app's "Send to phone" = the same. Pairing never arrived: KDE's own
+      kdeconnectd (package kdeconnect, autostarted, ~10 menu apps) ran next to GSConnect on port 1716 and caught the
+      phone, while GSConnect was off; "pair my phone" now stops kdeconnectd, turns GSConnect on and sends the request;
+      ufw is active (KDE Connect ports 1714-1764 must be allowed: said with the command). Tests updated.

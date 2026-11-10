@@ -69,7 +69,7 @@ class PhoneSend(BaseModel):
     paths: list[str]
 
 
-@router.post("/phone/send", summary="Send files / folders to your Telegram (the Files app's 'Send to phone')")
+@router.post("/phone/send", summary="Files / folders to your phone (the Files app's 'Send to phone'): over Wi-Fi with KDE Connect, Telegram when the phone isn't reachable")
 async def phone_send(body: PhoneSend):
     import threading
 
@@ -79,7 +79,8 @@ async def phone_send(body: PhoneSend):
     def run(paths: list[str]) -> None:
         for p in paths[:20]:
             try:
-                out = send_file_telegram(p)
+                from jarvis.core import phonelink
+                out = phonelink.share_file(p) if phonelink.GSC.exists() else send_file_telegram(p)
             except Exception as e:  # noqa: BLE001
                 out = f"error: {e}"
             name = p.rstrip("/").rsplit("/", 1)[-1]

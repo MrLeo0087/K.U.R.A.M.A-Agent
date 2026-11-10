@@ -88,18 +88,11 @@ def test_the_explainer_tool_reads_a_voice_file_or_a_long_script(tmp_path, monkey
 
 
 # --- phone -----------------------------------------------------------------------------------------------------------
-def test_the_phone_link_says_what_is_missing(monkeypatch):
-    monkeypatch.setattr(phonelink, "devices", lambda: [])
-    monkeypatch.setattr(phonelink.shutil, "which", lambda x: None)
-    assert "KDE Connect" in phonelink.ring() or "GSConnect" in phonelink.ring()
-    monkeypatch.setattr(phonelink, "_scrcpy", lambda: "")
-    assert "sudo snap install scrcpy" in phonelink.screen()
-
-
 # --- slash commands --------------------------------------------------------------------------------------------------
 @pytest.mark.parametrize("text,tool", [("/find attention pdf", "find_by_content"), ("/ytsum", "youtube_summary"),
                                        ("/push", "github_quick"), ("/newproject demo", "github_quick"),
                                        ("/reel how ai works", "explainer_video"), ("/phone ring", "phone_link"),
+                                       ("/phone pair", "phone_link"),
                                        ("/gpt what is a tensor", "ask_ai"), ("/glossary", "study")])
 def test_every_new_helper_has_a_short_command(text, tool):
     it = fastpath.slash_intent(text)
@@ -123,8 +116,8 @@ def test_plain_words_reach_the_new_helpers(monkeypatch):
     monkeypatch.setattr(agents, "current", lambda: "general")
     semantic._tables.clear()
     try:
-        for text, tool in (("push my work", "github_quick"), ("show my phone", "phone_link"),
-                           ("open my phone", "phone_link"), ("close my phone", "phone_link"),
+        for text, tool in (("push my work", "github_quick"), ("share this to my phone", "phone_link"),
+                           ("share this in mobile", "phone_link"), ("close my phone", "phone_link"),
                            ("summarize this youtube video", "youtube_summary"),
                            ("make a reel about how ai works", "explainer_video"),
                            ("find the pdf about attention i downloaded last week", "find_by_content")):
@@ -134,39 +127,42 @@ def test_plain_words_reach_the_new_helpers(monkeypatch):
         semantic._tables.clear()
 
 
-def test_the_phone_port_is_found_again_after_it_changed(monkeypatch):
-    """Wireless debugging gets a new port each time it is turned on: 'show my phone' finds it by itself."""
-    monkeypatch.setattr(phonelink, "_open", lambda host, port, t=0.4: port == 41234)
-    monkeypatch.setattr(phonelink.subprocess, "run", lambda argv, **k: type("R", (), {
-        "stdout": "connected to 1.2.3.4:41234" if argv[-1].endswith(":41234") else "failed"})())
-    assert phonelink.find_port("1.2.3.4:32935") == "1.2.3.4:41234"
+def test_a_file_goes_over_wifi_and_by_telegram_only_when_the_phone_is_away(tmp_path, monkeypatch):
+    """Owner 11-10: 'share this in mobile' = KDE Connect (large files); the screen feature is gone."""
+    from jarvis.tools.general import send_file_telegram as sft
+    f = tmp_path / "big.mp4"
+    f.write_bytes(b"0" * 1000)
+    sent = []
+    monkeypatch.setattr(phonelink, "reachable", lambda: True)
+    monkeypatch.setattr(phonelink, "_send", lambda action, what: sent.append(action) or "📱 Sent big.mp4 over Wi-Fi")
+    assert phonelink.share_file(str(f)).startswith("📱 Sent") and sent[0][0] == "--share-file"
+    monkeypatch.setattr(phonelink, "reachable", lambda: False)
+    monkeypatch.setattr(sft, "send_file_telegram", lambda p: "Sent by Telegram")
+    assert "Telegram" in phonelink.share_file(str(f))
+    assert not hasattr(phonelink, "screen")
 
 
-def test_nothing_of_the_phone_link_stays_running(monkeypatch):
-    """Owner 11-10: not a byte of RAM when not used: the window takes adb with it; 'close my phone' stops all."""
-    ran = []
-    monkeypatch.setattr(phonelink.subprocess, "run", lambda argv, **k: ran.append(argv) or type("R", (), {"returncode": 0})())
-    monkeypatch.setattr(phonelink.shutil, "which", lambda x: f"/usr/bin/{x}")
-    monkeypatch.setattr(phonelink, "_adb", lambda: "/usr/bin/adb")
-    monkeypatch.setattr(phonelink.Path, "exists", lambda self: True)
-    out = phonelink.close()
-    assert "nothing of it runs now" in out
-    assert any(a[-1] == "kill-server" for a in ran) and any("quit" in a for a in ran)
-    src = (Path(phonelink.__file__)).read_text()
-    assert 'kill-server >/dev/null 2>&1; exit $code' in src  # the screen window takes adb's server with it
+def test_pairing_stops_the_duplicate_kde_program_and_says_the_firewall_step(monkeypatch):
+    killed = []
+    monkeypatch.setattr(phonelink.GSC.__class__, "exists", lambda self: True)
+    monkeypatch.setattr(phonelink, "gsc_on", lambda wait_s=8.0: None)
+    monkeypatch.setattr(phonelink, "devices", lambda: [])
+    monkeypatch.setattr(phonelink.subprocess, "run", lambda argv, **k: killed.append(argv) or type("R", (), {
+        "stdout": "3375\n" if argv[0] == "pgrep" else "", "returncode": 0})())
+    out = phonelink.pair()
+    assert "sudo ufw allow 1714:1764/udp" in out and "sudo apt remove kdeconnect" in out
+    assert ["kill", "3375"] in killed
 
 
-def test_wireless_debugging_off_is_said_plainly_and_a_connection_moves_to_port_5555(monkeypatch):
-    from jarvis.core import store
-    monkeypatch.setattr(phonelink, "_scrcpy", lambda: "/snap/bin/scrcpy")
-    monkeypatch.setattr(phonelink, "_version", lambda exe: (5, 0))
-    monkeypatch.setattr(store, "kv_get", lambda k: "1.2.3.4:32935")
-    monkeypatch.setattr(store, "kv_set", lambda k, v: None)
-    monkeypatch.setattr(phonelink, "find_port", lambda addr: "")
-    assert "Wireless debugging is OFF" in phonelink.screen()
-    calls = []
-    monkeypatch.setattr(phonelink.subprocess, "run", lambda argv, **k: calls.append(argv) or type("R", (), {"stdout": "connected"})())
-    monkeypatch.setattr(phonelink, "_open", lambda host, port, t=0.4: True)
-    monkeypatch.setattr(phonelink.time if hasattr(phonelink, "time") else __import__("time"), "sleep", lambda s: None)
-    assert phonelink._to_fixed("1.2.3.4:41234") == "1.2.3.4:5555"
-    assert any("tcpip" in a for a in calls)
+
+def test_share_means_kde_first_and_telegram_when_said(monkeypatch):
+    """Owner 11-10: 'share this file' = KDE Connect (Telegram if it fails); 'telegram' said = Telegram."""
+    from jarvis.core import focus
+    from jarvis.core.intents import files
+    monkeypatch.setattr(focus, "refer", lambda said="this": Path("/tmp/x.pdf"))
+    monkeypatch.setattr(files, "_sendfile_intent", lambda t: fastpath.Intent("sendfile", "send_file_telegram", "telegram",
+                                                                            {"path": "/tmp/x.pdf"}, "x.pdf"))
+    assert files.sendfile_intent("share this file").tool == "phone_link"
+    assert files.sendfile_intent("share this to my phone").tool == "phone_link"
+    assert files.sendfile_intent("share this on telegram").tool == "send_file_telegram"
+    assert files.sendfile_intent("send this folder to telegram").tool == "send_file_telegram"

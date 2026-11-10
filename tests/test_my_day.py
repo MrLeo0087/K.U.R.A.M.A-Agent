@@ -43,6 +43,8 @@ def test_send_to_phone_sends_each_selected_path(monkeypatch):
     from jarvis.tools.general import send_file_telegram as sft
     got = []
     monkeypatch.setattr(sft, "send_file_telegram", lambda p: got.append(p) or "Sent")
+    from jarvis.core import phonelink  # (KDE Connect first when installed, Telegram otherwise: both just send)
+    monkeypatch.setattr(phonelink, "share_file", lambda p: got.append(p) or "Sent")
     monkeypatch.setattr(notify, "desktop_send", lambda *a, **k: True)
     import threading
     monkeypatch.setattr(threading, "Thread", lambda target, args=(), **k: type("T", (), {"start": lambda s: target(*args)})())

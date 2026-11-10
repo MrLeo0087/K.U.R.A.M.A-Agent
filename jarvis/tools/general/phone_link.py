@@ -1,5 +1,5 @@
-"""phone_link: your Android phone from the laptop: its screen in a window (scrcpy), ring it, send it a file / link /
-text over Wi-Fi (GSConnect + KDE Connect), what is set up (safe, 0 tokens)."""
+"""phone_link: your Android phone over Wi-Fi with KDE Connect: share a file (any size; Telegram when the phone isn't
+reachable), ring it, send a link / text, pair it, close the link, status (safe, 0 tokens)."""
 from __future__ import annotations
 
 from typing import Literal
@@ -8,32 +8,35 @@ from jarvis.core.registry import tool
 
 
 @tool(group="telegram", safety="safe",
-      description="The Android phone from the laptop: screen = show / control the phone's screen in a window; close "
-                  "= stop it all (nothing left running); pair = pair the phone's KDE Connect app over Wi-Fi; ring; "
-                  "send_file / send_link / send_text over Wi-Fi (not Telegram); status = what is set up and how.")
-def phone_link(action: Literal["screen", "close", "pair", "ring", "send_file", "send_link", "send_text", "status"] = "status",
+      description="The Android phone over Wi-Fi (KDE Connect): send_file = share a file / folder to the phone (big "
+                  "files fast; Telegram if the phone isn't reachable); ring; send_link / send_text; pair = pair the "
+                  "phone's KDE Connect app; close = stop the link; status.")
+def phone_link(action: Literal["send_file", "ring", "send_link", "send_text", "pair", "close", "status"] = "status",
                value: str = "") -> str:
     """Phone link.
 
     Args:
         action: What to do.
-        value: The file path / link / text to send; for screen an adb Wi-Fi address (ip:port), else empty.
+        value: The file path (or 'this' = the file selected in the Files app / the last one used), link or text.
     """
     from jarvis.core import phonelink as p
-    if action == "screen":
-        return p.screen(value)
     if action == "close":
         return p.close()
     if action == "pair":
         return p.pair()
     if action == "ring":
         return p.ring()
-    if action in ("send_file", "send_link", "send_text") and not value.strip():
-        return "What should I send to the phone?"
+    if action == "status":
+        return p.status()
     if action == "send_file":
-        return p.share_file(value)
-    if action == "send_link":
-        return p.share_link(value)
-    if action == "send_text":
-        return p.share_text(value)
-    return p.status()
+        v = value.strip().strip("\"'")
+        if not v or v.lower() in ("this", "it", "that", "this file", "the file", "this folder"):
+            from jarvis.core import focus
+            ref = focus.refer("this")
+            if ref is None:
+                return "Which file? Select it in the Files app (or say its name), then 'share this to my phone'."
+            v = str(ref)
+        return p.share_file(v)
+    if not value.strip():
+        return "What should I send to the phone?"
+    return p.share_link(value) if action == "send_link" else p.share_text(value)

@@ -1,28 +1,30 @@
-"""Your Android phone from the laptop (plan 11-09 phase 9), free, local Wi-Fi / USB, 0 tokens:
+"""Your Android phone and the laptop over Wi-Fi with KDE Connect (owner 11-10: "keep KDE Connect for sharing large
+files"; the screen-mirroring feature was removed). Free, local network, 0 tokens:
 
-- "show my phone": the phone's screen in a window you can click and type in (scrcpy over adb, USB or Wi-Fi).
-- "ring my phone", "send this file / link / text to my phone" over Wi-Fi (GSConnect on the laptop + the KDE Connect
-  app on the phone; already installed here, the phone just has to be paired once).
-Nothing runs while you don't use it (owner 11-10: "not a single byte of RAM when not using"): the screen window takes
-adb's background server with it when it closes; GSConnect is turned on for a Wi-Fi action and off 10 minutes later;
-"close my phone" stops everything at once.
-What is missing is said with the exact steps (installing needs your password, so KURAMA never does it itself).
+- "share this to my phone": the file goes over Wi-Fi (fast, any size; a folder as a zip); Telegram only when the
+  phone isn't reachable.
+- "ring my phone", send a link / text, "pair my phone".
+The laptop side is GSConnect (the GNOME version of KDE Connect); the phone runs the KDE Connect app.
+Nothing runs while you don't use it (owner 11-10: "not a single byte of RAM when not using"): GSConnect is turned on
+for a phone action and off GSC_IDLE_S later; "close my phone" stops it at once.
 """
 from __future__ import annotations
 
 import shutil
 import subprocess
+import threading
+import time
 from pathlib import Path
 
-GSC = Path.home() / ".local/share/gnome-shell/extensions/gsconnect@andyholmes.github.io/service/daemon.js"
-ADB_KEY = "phone_adb_addr"
+EXT = "gsconnect@andyholmes.github.io"
+GSC = Path.home() / ".local/share/gnome-shell/extensions" / EXT / "service/daemon.js"
+GSC_IDLE_S = 600
+_gsc_timer: list = [None]
 
-SETUP_GSC = ("To pair your phone over Wi-Fi (once): install 'KDE Connect' from the Play Store, open it on the same "
-             "Wi-Fi as the laptop, tap this laptop's name and Pair, then accept on the laptop (top bar → GSConnect).")
-SETUP_SCRCPY = ("To see and control the phone's screen: 1) in a terminal: sudo snap install scrcpy  2) on the "
-                "phone: Settings → About phone → tap 'Build number' 7 times, then Developer options → USB debugging "
-                "ON (and 'Wireless debugging' for Wi-Fi)  3) plug in the USB cable once and allow the laptop. Then say "
-                "'show my phone'. For Wi-Fi: say 'phone wifi <ip>:<port>' with the address Wireless debugging shows.")
+SETUP_GSC = ("To pair your phone over Wi-Fi (once): open the KDE Connect app on the phone (same Wi-Fi as the laptop) "
+             "and say 'pair my phone'; then tap Accept on the phone.")
+FIREWALL = ("the laptop's firewall must let KDE Connect in — run once: sudo ufw allow 1714:1764/udp && "
+            "sudo ufw allow 1714:1764/tcp")
 
 
 def _gsc(*args: str, timeout: float = 15) -> subprocess.CompletedProcess | None:
@@ -51,107 +53,14 @@ def _phone() -> dict | None:
     return next((d for d in ds if d["connected"]), ds[0] if ds else None)
 
 
-def _send(action: list[str], what: str) -> str:
-    if not GSC.exists():
-        return "GSConnect isn't installed on the laptop (GNOME extension 'GSConnect'). " + SETUP_GSC
-    gsc_on()  # (off while not used: turned on for this, off again 10 min later)
-    p = _phone()
-    if p is None:
-        return "Your phone isn't paired yet. " + SETUP_GSC
-    if not p["connected"]:
-        return f"{p['name']} is paired but not reachable now: is it on the same Wi-Fi with KDE Connect running?"
-    r = _gsc("-d", p["id"], *action)
-    if r is None or r.returncode != 0:
-        return f"error: GSConnect didn't send it ({(r.stderr if r else '').strip()[:120]})."
-    return f"📱 {what} → {p['name']}."
-
-
-def pair() -> str:
-    """'pair my phone': the Wi-Fi link on for 10 minutes and a pair request sent to the phone (accept it there).
-    (11-10: the phone's own request reached nothing: the link is off while unused, and the firewall blocks it.)"""
-    import time
-    if not GSC.exists():
-        return "GSConnect isn't installed on the laptop (GNOME extension 'GSConnect')."
-    gsc_on()
-    found = None
-    for _ in range(20):  # the phone with KDE Connect open shows up within a few seconds
-        found = next((d for d in devices() if d["connected"]), None)
-        if found:
-            break
-        time.sleep(0.5)
-    if found is None:
-        return ("📱 The Wi-Fi link is on (10 min), but your phone isn't visible. Check: 1) the phone is on the SAME "
-                "Wi-Fi and the KDE Connect app is open; 2) the laptop's firewall lets KDE Connect in — run once: "
-                "sudo ufw allow 1714:1764/udp && sudo ufw allow 1714:1764/tcp — then say 'pair my phone' again.")
-    if found["paired"]:
-        return f"📱 {found['name']} is already paired: 'ring my phone', 'send this to my phone' work."
-    _gsc("-d", found["id"], "--pair")
-    return (f"📱 Pair request sent to {found['name']}: tap ACCEPT on the phone now (or, if it asks on the laptop, "
-            f"accept the notification at the top of the screen). The link stays on for 10 minutes.")
-
-
-def ring() -> str:
-    return _send(["--ring"], "Ringing")
-
-
-def share_file(path: str) -> str:
-    f = Path(path).expanduser()
-    if not f.exists():
-        return f"error: {f} doesn't exist"
-    return _send(["--share-file", str(f)], f"Sent {f.name} over Wi-Fi")
-
-
-def share_link(url: str) -> str:
-    return _send(["--share-link", url], "Opened the link on the phone")
-
-
-def share_text(text: str) -> str:
-    return _send(["--share-text", text], "Sent the text (it's on the phone's clipboard)")
-
-
-def _adb() -> str:
-    return shutil.which("adb") or ""
-
-
-def _scrcpy() -> str:
-    """The newest scrcpy on the laptop (the snap one first: Ubuntu's apt scrcpy 1.25 can't read Android 14+ phones)."""
-    for c in ("/snap/bin/scrcpy", shutil.which("scrcpy") or ""):
-        if c and Path(c).exists():
-            return c
-    return ""
-
-
-def _adb_for(exe: str) -> str:
-    """The adb that scrcpy itself uses (the snap has its own)."""
-    return "/snap/bin/scrcpy.adb" if exe.startswith("/snap/") and Path("/snap/bin/scrcpy.adb").exists() else (_adb() or "adb")
-
-
-def close() -> str:
-    """'close my phone': the screen window, adb's background server and the Wi-Fi link stop (0 RAM left)."""
-    stopped = []
-    for adb in {a for a in ("/snap/bin/scrcpy.adb", _adb()) if a and Path(a).exists()}:
-        if subprocess.run([adb, "kill-server"], capture_output=True, timeout=10).returncode == 0:
-            stopped.append("screen")
-    if gsc_off():
-        stopped.append("Wi-Fi link")
-    return ("📱 Phone link closed" + (f" ({', '.join(dict.fromkeys(stopped))})" if stopped else "")
-            + ": nothing of it runs now.")
-
-
-# GSConnect (the Wi-Fi link: ring / send files) runs only while used: on for a phone action, off GSC_IDLE_S later
-EXT = "gsconnect@andyholmes.github.io"
-GSC_IDLE_S = 600
-_gsc_timer: list = [None]
-
-
-def gsc_on() -> None:
-    import threading
-    import time
+# --- on only while used ----------------------------------------------------------------------------------------
+def gsc_on(wait_s: float = 8.0) -> None:
+    """GSConnect on (it is off while unused), the phone given a few seconds to reconnect; off again GSC_IDLE_S
+    after the last use."""
     if shutil.which("gnome-extensions"):
         subprocess.run(["gnome-extensions", "enable", EXT], capture_output=True, timeout=10)
-        for _ in range(20):  # the phone reconnects to the laptop within a few seconds
-            if any(d["connected"] for d in devices()):
-                break
+        t0 = time.monotonic()
+        while time.monotonic() - t0 < wait_s and not any(d["connected"] for d in devices()):
             time.sleep(0.5)
     if _gsc_timer[0] is not None:
         _gsc_timer[0].cancel()
@@ -172,133 +81,102 @@ def gsc_off() -> bool:
     return ok
 
 
-def _version(exe: str) -> tuple[int, int]:
-    import re
-    meta = Path("/snap/scrcpy/current/meta/snap.yaml")
-    if exe.startswith("/snap/") and meta.exists():  # (running the snap's launcher pops notice windows, even for
-        out = "scrcpy " + next((ln.split(":", 1)[1].strip() for ln in meta.read_text().splitlines()  # --version)
-                                if ln.startswith("version:")), "0.0")
-        m = re.search(r"scrcpy (\d+)\.(\d+)", out)
-        return (int(m.group(1)), int(m.group(2))) if m else (0, 0)
+def close() -> str:
+    """'close my phone': the Wi-Fi link stops (0 RAM left)."""
+    gsc_off()
+    return "📱 Phone link closed: nothing of it runs now."
+
+
+def _kde_conflict() -> str:
+    """KDE's own kdeconnectd running next to GSConnect: both answer the phone (port 1716) and pairing goes nowhere."""
     try:
-        out = subprocess.run([exe, "--version"], capture_output=True, text=True, timeout=10).stdout
+        r = subprocess.run(["pgrep", "-f", "libexec/kdeconnectd"], capture_output=True, text=True, timeout=5)
     except (OSError, subprocess.SubprocessError):
-        return (0, 0)
-    m = re.search(r"scrcpy (\d+)\.(\d+)", out)
-    return (int(m.group(1)), int(m.group(2))) if m else (0, 0)
-
-
-def _open(host: str, port: int, t: float = 0.4) -> bool:
-    import socket
-    s = socket.socket()
-    s.settimeout(t)
-    try:
-        return s.connect_ex((host, port)) == 0
-    finally:
-        s.close()
-
-
-FIXED_PORT = 5555  # classic adb-over-Wi-Fi: set once from a working connection, it stays until the phone restarts
-
-
-def _connect(adb: str, target: str) -> bool:
-    try:
-        out = subprocess.run([adb, "connect", target], capture_output=True, text=True, timeout=10).stdout
-    except (OSError, subprocess.SubprocessError):
-        return False
-    ok = out.startswith(("connected", "already connected"))
-    if not ok:
-        subprocess.run([adb, "disconnect", target], capture_output=True, timeout=10)  # no 'offline' leftovers
-    return ok
-
-
-def _to_fixed(addr: str) -> str:
-    """Switch a working connection to the fixed port 5555 (adb tcpip): it then stays reachable even when Wireless
-    debugging turns itself off, until the phone restarts. The old address when it doesn't work."""
-    host, _, port = addr.rpartition(":")
-    if port == str(FIXED_PORT):
-        return addr
-    import time
-    adb = "/snap/bin/scrcpy.adb" if Path("/snap/bin/scrcpy.adb").exists() else _adb()
-    try:
-        subprocess.run([adb, "-s", addr, "tcpip", str(FIXED_PORT)], capture_output=True, text=True, timeout=15)
-    except (OSError, subprocess.SubprocessError):
-        return addr
-    for _ in range(8):
-        time.sleep(1)
-        if _open(host, FIXED_PORT) and _connect(adb, f"{host}:{FIXED_PORT}"):
-            return f"{host}:{FIXED_PORT}"
-    return addr if _connect(adb, addr) else addr
-
-
-def find_port(addr: str) -> str:
-    """The phone's adb address that answers NOW ('' = none): the fixed port 5555 first (set after a connection,
-    survives Wireless debugging's port changes), then the saved one, then Wireless debugging's new port (it changes
-    every time it is turned off / on: 30000-49999 scanned, each open port checked with adb)."""
-    import concurrent.futures as cf
-    host, _, port = addr.rpartition(":")
-    if not host:
         return ""
-    adb = "/snap/bin/scrcpy.adb" if Path("/snap/bin/scrcpy.adb").exists() else _adb()
-    for p in dict.fromkeys([FIXED_PORT, int(port) if port.isdigit() else FIXED_PORT]):
-        if _open(host, p) and _connect(adb, f"{host}:{p}"):
-            return f"{host}:{p}"
-    with cf.ThreadPoolExecutor(400) as ex:
-        ports = [p for p, ok in zip(range(30000, 50000), ex.map(lambda p: _open(host, p, 0.3), range(30000, 50000))) if ok]
-    for p in ports:
-        if _connect(adb, f"{host}:{p}"):
-            return f"{host}:{p}"
-    return ""
+    if not r.stdout.strip():
+        return ""
+    for pid in r.stdout.split():
+        subprocess.run(["kill", pid], capture_output=True, timeout=5)  # stopped now (it comes back after a login)
+    return ("(I stopped KDE's own KDE Connect program: it ran next to GSConnect and caught your phone's requests. "
+            "To remove it for good, with its extra menu apps: sudo apt remove kdeconnect)")
 
 
-def screen(addr: str = "") -> str:
-    """The phone's screen in a window (scrcpy), over Wi-Fi when its wireless-debugging address is known."""
-    exe = _scrcpy()
-    if not exe:
-        return "scrcpy isn't installed yet. " + SETUP_SCRCPY
-    if _version(exe) < (2, 0):
-        return ("Your scrcpy is too old for this phone (Ubuntu's apt version is 1.25; Android 14+ needs 2.0+). Run: "
-                "sudo apt remove scrcpy && sudo snap install scrcpy — then say 'show my phone' again.")
-    from jarvis.core import store
-    addr = addr.strip() or (store.kv_get(ADB_KEY) or "")
-    if addr:
-        found = find_port(addr)  # the fixed port / the saved one / Wireless debugging's new port
-        if not found:
-            return ("📱 Your phone doesn't answer: Wireless debugging is OFF on it (Samsung turns it off after a Wi-Fi "
-                    "change or a restart). On the phone: Settings → Developer options → Wireless debugging → ON, then "
-                    "say 'show my phone' again. After that first connection I switch the phone to a fixed port, so it "
-                    "keeps working until the phone restarts.")
-        addr = _to_fixed(found)  # port 5555 from now on: no hunting for Wireless debugging's new port next time
-        store.kv_set(ADB_KEY, addr)
-        target = [f"--tcpip={addr}"]  # scrcpy connects over Wi-Fi itself (its own adb)
-    else:
-        target = []  # a phone on the USB cable
-    import os
-    env = {**os.environ, "SNAP_LAUNCHER_NOTICE_ENABLED": "false"}  # the snap's "unofficial build" notice, every run
-    args = [exe, *target, "--max-size", "1280", "--max-fps", "30", "--stay-awake",  # (30 fps: half the laptop CPU
-            "--window-title", "My phone"]  # of 60, still smooth for reading / typing)
-    # when the window closes, the adb background server goes too: nothing of the phone link stays in RAM
-    adb = _adb_for(exe)
-    p = subprocess.Popen(["sh", "-c", '"$@"; code=$?; ' + f'"{adb}" kill-server >/dev/null 2>&1; exit $code',
-                          "scrcpy", *args],
-                         stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, start_new_session=True, env=env)
-    try:
-        err = p.communicate(timeout=2.5)[1]  # still running after 2.5 s = it is opening (answer at once, not a job)
-    except subprocess.TimeoutExpired:
-        return "📱 Your phone's screen is opening in a window (a few seconds): click and type there. Close it to stop."
-    last = [ln for ln in (err or "").splitlines() if "ERROR" in ln][-1:] or ["it closed at once"]
-    return (f"Couldn't open the phone's screen ({last[0][:160]}). Is Wireless debugging still ON (its port changes "
-            f"when it is turned off and on)? Then: /phone screen <ip>:<port> with the address it shows now.")
+# --- actions -----------------------------------------------------------------------------------------------------
+def reachable() -> bool:
+    if not GSC.exists():
+        return False
+    gsc_on()
+    p = _phone()
+    return bool(p and p["connected"])
+
+
+def _send(action: list[str], what: str) -> str:
+    if not GSC.exists():
+        return "GSConnect isn't installed on the laptop (GNOME extension 'GSConnect')."
+    gsc_on()
+    p = _phone()
+    if p is None:
+        return "Your phone isn't paired yet. " + SETUP_GSC
+    if not p["connected"]:
+        return f"{p['name']} is paired but not reachable now: is it on the same Wi-Fi with KDE Connect running?"
+    r = _gsc("-d", p["id"], *action)
+    if r is None or r.returncode != 0:
+        return f"error: KDE Connect didn't send it ({(r.stderr if r else '').strip()[:120]})."
+    return f"📱 {what} → {p['name']}."
+
+
+def pair() -> str:
+    """'pair my phone': the Wi-Fi link on, KDE's duplicate program stopped, a pair request sent (accept on the phone)."""
+    if not GSC.exists():
+        return "GSConnect isn't installed on the laptop (GNOME extension 'GSConnect')."
+    note = _kde_conflict()
+    gsc_on(wait_s=10)
+    found = next((d for d in devices() if d["connected"]), None)
+    if found is None:
+        return ("📱 The Wi-Fi link is on, but your phone isn't visible. Check: 1) the phone is on the SAME Wi-Fi and "
+                f"the KDE Connect app is open (pull down to refresh its list); 2) {FIREWALL}. Then say 'pair my phone' "
+                f"again. {note}").strip()
+    if found["paired"]:
+        return f"📱 {found['name']} is already paired: 'share this to my phone', 'ring my phone' work. {note}".strip()
+    _gsc("-d", found["id"], "--pair")
+    return (f"📱 Pair request sent to {found['name']}: tap ACCEPT on the phone now (if the laptop asks instead, accept "
+            f"the notification at the top of the screen). {note}").strip()
+
+
+def ring() -> str:
+    return _send(["--ring"], "Ringing")
+
+
+def share_file(path: str) -> str:
+    """A file (or a folder, zipped) to the phone over Wi-Fi; Telegram when the phone isn't reachable."""
+    f = Path(path).expanduser()
+    if not f.exists():
+        return f"error: {f} doesn't exist"
+    if not reachable():
+        from jarvis.tools.general.send_file_telegram import send_file_telegram
+        return "📱 Your phone isn't on the Wi-Fi link right now, so it went by Telegram: " + send_file_telegram(str(f))
+    if f.is_dir():
+        from jarvis.tools.general.send_file_telegram import zip_dir
+        f = zip_dir(f)
+    out = _send(["--share-file", str(f)], f"Sent {f.name} over Wi-Fi ({f.stat().st_size / 1e6:.1f} MB)")
+    if not out.startswith("📱 Sent"):  # the Wi-Fi send failed: Telegram, so it still arrives
+        from jarvis.tools.general.send_file_telegram import send_file_telegram
+        return f"📱 Wi-Fi didn't work ({out[:80]}), so it went by Telegram: " + send_file_telegram(path)
+    return out
+
+
+def share_link(url: str) -> str:
+    return _send(["--share-link", url], "Opened the link on the phone")
+
+
+def share_text(text: str) -> str:
+    return _send(["--share-text", text], "Sent the text (it's on the phone's clipboard)")
 
 
 def status() -> str:
-    lines = []
     p = _phone() if GSC.exists() else None
-    lines.append(f"Wi-Fi link (GSConnect): {'installed' if GSC.exists() else 'not installed'}; phone: "
-                 + (f"{p['name']} ({'connected' if p['connected'] else 'paired, not reachable now'})" if p else "not paired"))
-    lines.append(f"Screen (scrcpy): {'ready' if _scrcpy() else 'not installed'}")
+    lines = [f"Wi-Fi link (KDE Connect): {'installed' if GSC.exists() else 'not installed'}; phone: "
+             + (f"{p['name']} ({'connected' if p['connected'] else 'paired, not reachable now'})" if p else "not paired")]
     if not p:
         lines.append(SETUP_GSC)
-    if not _scrcpy():
-        lines.append(SETUP_SCRCPY)
     return "\n".join(lines)
