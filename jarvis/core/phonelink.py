@@ -95,6 +95,12 @@ def _scrcpy() -> str:
 
 def _version(exe: str) -> tuple[int, int]:
     import re
+    meta = Path("/snap/scrcpy/current/meta/snap.yaml")
+    if exe.startswith("/snap/") and meta.exists():  # (running the snap's launcher pops notice windows, even for
+        out = "scrcpy " + next((ln.split(":", 1)[1].strip() for ln in meta.read_text().splitlines()  # --version)
+                                if ln.startswith("version:")), "0.0")
+        m = re.search(r"scrcpy (\d+)\.(\d+)", out)
+        return (int(m.group(1)), int(m.group(2))) if m else (0, 0)
     try:
         out = subprocess.run([exe, "--version"], capture_output=True, text=True, timeout=10).stdout
     except (OSError, subprocess.SubprocessError):
