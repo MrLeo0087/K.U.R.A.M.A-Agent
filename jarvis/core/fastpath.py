@@ -2324,11 +2324,12 @@ def meaning_intent(text: str) -> Intent | None:
         return it if meaning_ok(t, it) else None
     if label == "clear_chat":  # typed 'clear' went to the AI (6k tokens, 11-09)
         return None if extra else _ok(t, Intent("reset", "reset_kurama", "self", {"level": "chat"}))
-    if label in ("yt_summary", "git_push", "phone_screen", "phone_ring", "phone_close"):
+    if label in ("yt_summary", "git_push", "phone_screen", "phone_ring", "phone_close", "phone_pair"):
         one = {"yt_summary": ("ytsum", "youtube_summary", "browser", {}), "git_push": ("push", "github_quick", "git", {"action": "push"}),
                "phone_screen": ("phone", "phone_link", "telegram", {"action": "screen"}),
                "phone_ring": ("phone", "phone_link", "telegram", {"action": "ring"}),
-               "phone_close": ("phone", "phone_link", "telegram", {"action": "close"})}[label]
+               "phone_close": ("phone", "phone_link", "telegram", {"action": "close"}),
+               "phone_pair": ("phone", "phone_link", "telegram", {"action": "pair"})}[label]
         return None if extra else _ok(t, Intent(*one))
     if label == "explainer":  # the topic is free text: what follows 'about / on / explaining'
         m = re.search(r"\b(?:about|on|explaining|for|of)\s+(.+)$", raw, I)

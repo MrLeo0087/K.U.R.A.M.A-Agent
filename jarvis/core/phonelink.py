@@ -66,6 +66,30 @@ def _send(action: list[str], what: str) -> str:
     return f"📱 {what} → {p['name']}."
 
 
+def pair() -> str:
+    """'pair my phone': the Wi-Fi link on for 10 minutes and a pair request sent to the phone (accept it there).
+    (11-10: the phone's own request reached nothing: the link is off while unused, and the firewall blocks it.)"""
+    import time
+    if not GSC.exists():
+        return "GSConnect isn't installed on the laptop (GNOME extension 'GSConnect')."
+    gsc_on()
+    found = None
+    for _ in range(20):  # the phone with KDE Connect open shows up within a few seconds
+        found = next((d for d in devices() if d["connected"]), None)
+        if found:
+            break
+        time.sleep(0.5)
+    if found is None:
+        return ("📱 The Wi-Fi link is on (10 min), but your phone isn't visible. Check: 1) the phone is on the SAME "
+                "Wi-Fi and the KDE Connect app is open; 2) the laptop's firewall lets KDE Connect in — run once: "
+                "sudo ufw allow 1714:1764/udp && sudo ufw allow 1714:1764/tcp — then say 'pair my phone' again.")
+    if found["paired"]:
+        return f"📱 {found['name']} is already paired: 'ring my phone', 'send this to my phone' work."
+    _gsc("-d", found["id"], "--pair")
+    return (f"📱 Pair request sent to {found['name']}: tap ACCEPT on the phone now (or, if it asks on the laptop, "
+            f"accept the notification at the top of the screen). The link stays on for 10 minutes.")
+
+
 def ring() -> str:
     return _send(["--ring"], "Ringing")
 
