@@ -124,6 +124,7 @@ def test_plain_words_reach_the_new_helpers(monkeypatch):
     semantic._tables.clear()
     try:
         for text, tool in (("push my work", "github_quick"), ("show my phone", "phone_link"),
+                           ("open my phone", "phone_link"), ("close my phone", "phone_link"),
                            ("summarize this youtube video", "youtube_summary"),
                            ("make a reel about how ai works", "explainer_video"),
                            ("find the pdf about attention i downloaded last week", "find_by_content")):
@@ -139,3 +140,17 @@ def test_the_phone_port_is_found_again_after_it_changed(monkeypatch):
     monkeypatch.setattr(phonelink.subprocess, "run", lambda argv, **k: type("R", (), {
         "stdout": "connected to 1.2.3.4:41234" if argv[-1].endswith(":41234") else "failed"})())
     assert phonelink.find_port("1.2.3.4:32935") == "1.2.3.4:41234"
+
+
+def test_nothing_of_the_phone_link_stays_running(monkeypatch):
+    """Owner 11-10: not a byte of RAM when not used: the window takes adb with it; 'close my phone' stops all."""
+    ran = []
+    monkeypatch.setattr(phonelink.subprocess, "run", lambda argv, **k: ran.append(argv) or type("R", (), {"returncode": 0})())
+    monkeypatch.setattr(phonelink.shutil, "which", lambda x: f"/usr/bin/{x}")
+    monkeypatch.setattr(phonelink, "_adb", lambda: "/usr/bin/adb")
+    monkeypatch.setattr(phonelink.Path, "exists", lambda self: True)
+    out = phonelink.close()
+    assert "nothing of it runs now" in out
+    assert any(a[-1] == "kill-server" for a in ran) and any("quit" in a for a in ran)
+    src = (Path(phonelink.__file__)).read_text()
+    assert 'kill-server >/dev/null 2>&1; exit $code' in src  # the screen window takes adb's server with it

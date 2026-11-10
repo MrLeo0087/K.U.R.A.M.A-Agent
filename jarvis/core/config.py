@@ -1426,6 +1426,8 @@ MEANING_SHORTCUTS: dict[str, tuple[str, ...]] = {
                  "save my work to github"),
     "phone_screen": ("show my phone", "show my phone screen", "control my phone from the laptop", "mirror my phone",
                      "open my phone on the laptop"),
+    "phone_close": ("close my phone", "stop showing my phone", "turn off the phone screen on the laptop",
+                    "disconnect my phone", "close the phone window"),
     "phone_ring": ("ring my phone", "make my phone ring", "where is my phone ring it"),
     "explainer": ("make an explainer video about how transformers work", "make a reel about how ai works",
                   "make a video explaining neural networks", "create an educational video on backpropagation",

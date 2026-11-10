@@ -3,6 +3,9 @@
 - "show my phone": the phone's screen in a window you can click and type in (scrcpy over adb, USB or Wi-Fi).
 - "ring my phone", "send this file / link / text to my phone" over Wi-Fi (GSConnect on the laptop + the KDE Connect
   app on the phone; already installed here, the phone just has to be paired once).
+Nothing runs while you don't use it (owner 11-10: "not a single byte of RAM when not using"): the screen window takes
+adb's background server with it when it closes; GSConnect is turned on for a Wi-Fi action and off 10 minutes later;
+"close my phone" stops everything at once.
 What is missing is said with the exact steps (installing needs your password, so KURAMA never does it itself).
 """
 from __future__ import annotations
@@ -51,6 +54,7 @@ def _phone() -> dict | None:
 def _send(action: list[str], what: str) -> str:
     if not GSC.exists():
         return "GSConnect isn't installed on the laptop (GNOME extension 'GSConnect'). " + SETUP_GSC
+    gsc_on()  # (off while not used: turned on for this, off again 10 min later)
     p = _phone()
     if p is None:
         return "Your phone isn't paired yet. " + SETUP_GSC
@@ -91,6 +95,57 @@ def _scrcpy() -> str:
         if c and Path(c).exists():
             return c
     return ""
+
+
+def _adb_for(exe: str) -> str:
+    """The adb that scrcpy itself uses (the snap has its own)."""
+    return "/snap/bin/scrcpy.adb" if exe.startswith("/snap/") and Path("/snap/bin/scrcpy.adb").exists() else (_adb() or "adb")
+
+
+def close() -> str:
+    """'close my phone': the screen window, adb's background server and the Wi-Fi link stop (0 RAM left)."""
+    stopped = []
+    for adb in {a for a in ("/snap/bin/scrcpy.adb", _adb()) if a and Path(a).exists()}:
+        if subprocess.run([adb, "kill-server"], capture_output=True, timeout=10).returncode == 0:
+            stopped.append("screen")
+    if gsc_off():
+        stopped.append("Wi-Fi link")
+    return ("📱 Phone link closed" + (f" ({', '.join(dict.fromkeys(stopped))})" if stopped else "")
+            + ": nothing of it runs now.")
+
+
+# GSConnect (the Wi-Fi link: ring / send files) runs only while used: on for a phone action, off GSC_IDLE_S later
+EXT = "gsconnect@andyholmes.github.io"
+GSC_IDLE_S = 600
+_gsc_timer: list = [None]
+
+
+def gsc_on() -> None:
+    import threading
+    import time
+    if shutil.which("gnome-extensions"):
+        subprocess.run(["gnome-extensions", "enable", EXT], capture_output=True, timeout=10)
+        for _ in range(20):  # the phone reconnects to the laptop within a few seconds
+            if any(d["connected"] for d in devices()):
+                break
+            time.sleep(0.5)
+    if _gsc_timer[0] is not None:
+        _gsc_timer[0].cancel()
+    _gsc_timer[0] = threading.Timer(GSC_IDLE_S, gsc_off)
+    _gsc_timer[0].daemon = True
+    _gsc_timer[0].start()
+
+
+def gsc_off() -> bool:
+    """The extension off AND its background service told to quit (disabling alone left it running, 26 MB)."""
+    if not shutil.which("gnome-extensions"):
+        return False
+    ok = subprocess.run(["gnome-extensions", "disable", EXT], capture_output=True, timeout=10).returncode == 0
+    if shutil.which("gdbus"):
+        subprocess.run(["gdbus", "call", "--session", "--dest", "org.gnome.Shell.Extensions.GSConnect", "--object-path",
+                        "/org/gnome/Shell/Extensions/GSConnect", "--method", "org.gtk.Actions.Activate", "quit", "[]",
+                        "{}"], capture_output=True, timeout=10)
+    return ok
 
 
 def _version(exe: str) -> tuple[int, int]:
@@ -157,8 +212,11 @@ def screen(addr: str = "") -> str:
         target = []  # a phone on the USB cable
     import os
     env = {**os.environ, "SNAP_LAUNCHER_NOTICE_ENABLED": "false"}  # the snap's "unofficial build" notice, every run
-    p = subprocess.Popen([exe, *target, "--max-size", "1280", "--max-fps", "30", "--stay-awake",  # (30 fps: half
-                          "--window-title", "My phone"],  # the laptop CPU of 60, still smooth for reading / typing)
+    args = [exe, *target, "--max-size", "1280", "--max-fps", "30", "--stay-awake",  # (30 fps: half the laptop CPU
+            "--window-title", "My phone"]  # of 60, still smooth for reading / typing)
+    # when the window closes, the adb background server goes too: nothing of the phone link stays in RAM
+    p = subprocess.Popen(["sh", "-c", '"$@"; code=$?; ' + f'"{_adb_for(exe)}" kill-server >/dev/null 2>&1; exit $code',
+                          "scrcpy", *args],
                          stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, start_new_session=True, env=env)
     try:
         err = p.communicate(timeout=2.5)[1]  # still running after 2.5 s = it is opening (answer at once, not a job)

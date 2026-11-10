@@ -88,7 +88,7 @@ COMMANDS: tuple[Cmd, ...] = (
     Cmd("phone", "your Android phone: /phone screen | ring | status | send_file <path> | send_link <url>",
         "Phone & safety", "[screen|ring|status|send_file|send_link|send_text] [value]",
         tool=("phone_link", "telegram", {"action": "status"}, "value"),
-        actions=("screen", "ring", "status", "send_file", "send_link", "send_text")),
+        actions=("screen", "close", "ring", "status", "send_file", "send_link", "send_text")),
     Cmd("ring", "ring your phone (Wi-Fi, KDE Connect)", "Phone & safety", tool=("phone_link", "telegram", {"action": "ring"}, "")),
     Cmd("close", "close an app's windows (like clicking X: it asks to save)", "Laptop", "<app>",
         tool=("close_app", "apps", {}, "name")),

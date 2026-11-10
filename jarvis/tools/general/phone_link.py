@@ -8,9 +8,10 @@ from jarvis.core.registry import tool
 
 
 @tool(group="telegram", safety="safe",
-      description="The Android phone from the laptop: screen = show / control the phone's screen in a window; ring; "
+      description="The Android phone from the laptop: screen = show / control the phone's screen in a window; close "
+                  "= stop it all (nothing left running); ring; "
                   "send_file / send_link / send_text over Wi-Fi (not Telegram); status = what is set up and how.")
-def phone_link(action: Literal["screen", "ring", "send_file", "send_link", "send_text", "status"] = "status",
+def phone_link(action: Literal["screen", "close", "ring", "send_file", "send_link", "send_text", "status"] = "status",
                value: str = "") -> str:
     """Phone link.
 
@@ -21,6 +22,8 @@ def phone_link(action: Literal["screen", "ring", "send_file", "send_link", "send
     from jarvis.core import phonelink as p
     if action == "screen":
         return p.screen(value)
+    if action == "close":
+        return p.close()
     if action == "ring":
         return p.ring()
     if action in ("send_file", "send_link", "send_text") and not value.strip():

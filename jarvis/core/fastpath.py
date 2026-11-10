@@ -2324,10 +2324,11 @@ def meaning_intent(text: str) -> Intent | None:
         return it if meaning_ok(t, it) else None
     if label == "clear_chat":  # typed 'clear' went to the AI (6k tokens, 11-09)
         return None if extra else _ok(t, Intent("reset", "reset_kurama", "self", {"level": "chat"}))
-    if label in ("yt_summary", "git_push", "phone_screen", "phone_ring"):
+    if label in ("yt_summary", "git_push", "phone_screen", "phone_ring", "phone_close"):
         one = {"yt_summary": ("ytsum", "youtube_summary", "browser", {}), "git_push": ("push", "github_quick", "git", {"action": "push"}),
                "phone_screen": ("phone", "phone_link", "telegram", {"action": "screen"}),
-               "phone_ring": ("phone", "phone_link", "telegram", {"action": "ring"})}[label]
+               "phone_ring": ("phone", "phone_link", "telegram", {"action": "ring"}),
+               "phone_close": ("phone", "phone_link", "telegram", {"action": "close"})}[label]
         return None if extra else _ok(t, Intent(*one))
     if label == "explainer":  # the topic is free text: what follows 'about / on / explaining'
         m = re.search(r"\b(?:about|on|explaining|for|of)\s+(.+)$", raw, I)
@@ -2770,9 +2771,14 @@ def _match(text: str) -> Intent | None:
     return fresh_intent(t)
 
 
+_MY_PHONE = re.compile(r"(?:my\s+|the\s+)?(?:phone|mobile|android|samsung)(?:\s+(?:screen|window))?", I)
+
+
 def _close_intent(target: str) -> Intent | None:
     if not target or len(target.split()) > 4 or _BAD_TARGET.search(target):
         return None
+    if _MY_PHONE.fullmatch(target.strip(" ?.!")):  # 'close my phone': the phone link, not an app named like it
+        return Intent("phone", "phone_link", "telegram", {"action": "close"}, target)
     from jarvis.tools.general import _apps
 
     entry, score = _apps.find_app(target)
@@ -2811,6 +2817,8 @@ _GENERIC_APP = re.compile(r"(?:an?\s+|the\s+|some\s+|any\s+|my\s+)?(?:app|apps|a
 def _open_intent(target: str, verb: str) -> Intent | None:
     if not target or len(target.split()) > 4 or _BAD_TARGET.search(target):
         return None
+    if _MY_PHONE.fullmatch(target.strip(" ?.!")):  # 'open my phone': its screen on the laptop (not KDE Connect)
+        return Intent("phone", "phone_link", "telegram", {"action": "screen"}, target)
     if _GENERIC_APP.fullmatch(target.strip(" ?.!")):  # 'can you open app?' opened KDE Connect (11-05)
         return Intent("say", "_say", "apps", {"en": "Which app should I open? Say e.g. 'open VS Code' or 'open Brave'."})
     from jarvis.tools.general import _apps, open_url  # lazy: desktop index only when needed
