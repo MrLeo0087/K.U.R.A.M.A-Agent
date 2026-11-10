@@ -131,3 +131,11 @@ def test_plain_words_reach_the_new_helpers(monkeypatch):
             assert it is not None and it.tool == tool, text
     finally:
         semantic._tables.clear()
+
+
+def test_the_phone_port_is_found_again_after_it_changed(monkeypatch):
+    """Wireless debugging gets a new port each time it is turned on: 'show my phone' finds it by itself."""
+    monkeypatch.setattr(phonelink, "_open", lambda host, port, t=0.4: port == 41234)
+    monkeypatch.setattr(phonelink.subprocess, "run", lambda argv, **k: type("R", (), {
+        "stdout": "connected to 1.2.3.4:41234" if argv[-1].endswith(":41234") else "failed"})())
+    assert phonelink.find_port("1.2.3.4:32935") == "1.2.3.4:41234"

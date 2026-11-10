@@ -109,6 +109,36 @@ def _version(exe: str) -> tuple[int, int]:
     return (int(m.group(1)), int(m.group(2))) if m else (0, 0)
 
 
+def _open(host: str, port: int, t: float = 0.4) -> bool:
+    import socket
+    s = socket.socket()
+    s.settimeout(t)
+    try:
+        return s.connect_ex((host, port)) == 0
+    finally:
+        s.close()
+
+
+def find_port(addr: str) -> str:
+    """The phone's Wireless-debugging address now: the saved one if it still answers, else its new port (it changes
+    every time Wireless debugging is turned off and on; 30000-49999, scanned in ~10 s) checked with adb."""
+    import concurrent.futures as cf
+    host, _, port = addr.rpartition(":")
+    if not host or (port.isdigit() and _open(host, int(port))):
+        return addr
+    with cf.ThreadPoolExecutor(300) as ex:
+        ports = [p for p, ok in zip(range(30000, 50000), ex.map(lambda p: _open(host, p), range(30000, 50000))) if ok]
+    adb = "/snap/bin/scrcpy.adb" if Path("/snap/bin/scrcpy.adb").exists() else _adb()
+    for p in ports:
+        try:
+            out = subprocess.run([adb, "connect", f"{host}:{p}"], capture_output=True, text=True, timeout=10).stdout
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if out.startswith(("connected", "already connected")):
+            return f"{host}:{p}"
+    return ""
+
+
 def screen(addr: str = "") -> str:
     """The phone's screen in a window (scrcpy), over Wi-Fi when its wireless-debugging address is known."""
     exe = _scrcpy()
@@ -120,13 +150,15 @@ def screen(addr: str = "") -> str:
     from jarvis.core import store
     addr = addr.strip() or (store.kv_get(ADB_KEY) or "")
     if addr:
+        addr = find_port(addr) or addr  # Wireless debugging's port changes when it is turned off / on: found again
         store.kv_set(ADB_KEY, addr)
         target = [f"--tcpip={addr}"]  # scrcpy connects over Wi-Fi itself (its own adb)
     else:
         target = []  # a phone on the USB cable
     import os
     env = {**os.environ, "SNAP_LAUNCHER_NOTICE_ENABLED": "false"}  # the snap's "unofficial build" notice, every run
-    p = subprocess.Popen([exe, *target, "--max-size", "1280", "--stay-awake", "--window-title", "My phone"],
+    p = subprocess.Popen([exe, *target, "--max-size", "1280", "--max-fps", "30", "--stay-awake",  # (30 fps: half
+                          "--window-title", "My phone"],  # the laptop CPU of 60, still smooth for reading / typing)
                          stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, start_new_session=True, env=env)
     try:
         err = p.communicate(timeout=2.5)[1]  # still running after 2.5 s = it is opening (answer at once, not a job)
