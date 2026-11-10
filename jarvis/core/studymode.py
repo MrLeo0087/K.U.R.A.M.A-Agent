@@ -81,23 +81,22 @@ def context() -> dict:
     from jarvis.core import browsertab
     from jarvis.core import context as ctx
     c = {"text": "", "paragraph": "", "heading": "", "title": "", "url": "", "page": "", "source": ""}
-    sel = browsertab.selection_context()
-    if browsertab.selection().strip():
+    s = ctx.latest_selection()  # the text highlighted LAST, wherever (not an older selection still in VS Code)
+    if s["source"] == "browser":
+        sel = browsertab.selection_context()
         c.update({k: sel.get(k) or "" for k in ("text", "paragraph", "heading", "title", "url", "page")},
                  source="browser")
-    else:
-        s = ctx.snapshot()
-        if s.get("file") is not None and s.get("selection"):
-            f = Path(s["file"])
-            c.update(text=s["selection"], title=f.name, url=str(f), source="editor")
-            try:
-                c["page"] = f.read_text(errors="replace")[:15000]
-            except OSError:
-                pass
-        elif (p := ctx._primary().strip()) and len(p) < 20000:
-            c.update(text=p, source="screen")
-            if s.get("tab"):
-                c["url"], c["title"] = s["tab"]
+    elif s["source"] == "editor":
+        f = Path(s["file"])
+        c.update(text=s["text"], title=f.name, url=str(f), source="editor")
+        try:
+            c["page"] = f.read_text(errors="replace")[:15000]
+        except OSError:
+            pass
+    elif s["source"] == "screen":
+        c.update(text=s["text"], source="screen")
+        if (tab := browsertab.get(600)) is not None:
+            c["url"], c["title"] = tab
     if not c["page"] and re.search(r"\.pdf(?:$|[?#])", c["url"], re.I):
         c["page"] = _pdf_text(c["url"])
     c["text"] = c["text"][:6000]

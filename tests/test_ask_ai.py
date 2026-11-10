@@ -106,3 +106,39 @@ def test_tidy_preview_says_what_tidy_means(monkeypatch, tmp_path):
     monkeypatch.setattr(automation, "sort_plan", lambda folder=None: [(tmp_path / "Downloads/a.png", tmp_path / "Downloads/Images")])
     out = automation.sort_preview()
     assert out.startswith("🗂 Tidy Downloads = the files lying directly in Downloads") and "a.png → Downloads/Images" in out
+
+
+def _sel_env(monkeypatch, primary, browser=("", 0.0), editor=("", 0.0)):
+    import time
+    from jarvis.core import browsertab, context, editor as ed
+    now = time.time()
+    monkeypatch.setattr(context, "_primary", lambda: primary)
+    monkeypatch.setattr(browsertab, "selection_context", lambda: {"text": browser[0], "ts": now - browser[1],
+                                                                  "url": "https://x", "title": "Page"})
+    monkeypatch.setattr(ed, "states", lambda: [{"selection": editor[0], "file": "/p/a.py", "ts": now - editor[1],
+                                                "root": "/p"}] if editor[0] else [])
+
+
+def test_the_newest_highlight_wins_not_the_code_still_selected_in_vs_code(monkeypatch):
+    """11-10: 'ask Gemini to explain this sentence in Nepali' sent the code still selected in VS Code."""
+    from jarvis.core import context
+    _sel_env(monkeypatch, "Self-attention relates positions.", browser=("Self-attention relates positions.", 5),
+             editor=("def f(x): return x", 60))
+    assert context.latest_selection()["source"] == "browser"
+    _sel_env(monkeypatch, "def f(x): return x", browser=("old sentence", 5), editor=("def f(x): return x", 60))
+    assert context.latest_selection()["source"] == "editor"  # PRIMARY = the newest highlight, whatever the times
+    _sel_env(monkeypatch, "text in a PDF viewer", browser=("old sentence", 5))
+    assert context.latest_selection() | {} and context.latest_selection()["source"] == "screen"
+    _sel_env(monkeypatch, "", browser=("newer", 5), editor=("older code", 50))
+    assert context.latest_selection()["text"] == "newer"
+
+
+def test_a_new_highlight_starts_a_new_question_not_a_follow_up(env, monkeypatch):
+    _, opened = env
+    _ctx(monkeypatch, selection="def f(x): return x", lang="py")
+    askai.ask("ask gemini to explain the code")  # 'the code' = the highlight (11-10: it sent no code)
+    assert "def f(x)" in bridge.take_prompt(opened[0].split("#kurama=")[1])
+    _ctx(monkeypatch, selection="Self-attention relates positions.")
+    askai.ask("ask gemini to explain this sentence in nepali")
+    assert not opened[1].endswith("&same=1")  # a new highlight: a new question with it
+    assert "Self-attention" in bridge.take_prompt(opened[1].split("#kurama=")[1])

@@ -87,24 +87,25 @@ def _around(file: Path, sel: str, lines: tuple[int, int] | None, pad: int = 8) -
 
 
 def context() -> dict:
-    """{'selection', 'where', 'around', 'lang'}: what is selected and where (VS Code file / browser page / any app)."""
+    """{'selection', 'where', 'around', 'lang'}: the text highlighted LAST (VS Code / browser / any app) and where."""
     from jarvis.core import context as ctx
-    s = ctx.snapshot()
+    from jarvis.tools.interactive import _secrets
+    s = ctx.latest_selection()
     out = {"selection": "", "where": "", "around": "", "lang": ""}
-    if s.get("file") is not None and s.get("selection"):
+    if s["source"] == "editor":
         f = Path(s["file"])
-        out.update(selection=s["selection"], lang=f.suffix.lstrip("."),
+        if _secrets.private(s["text"], f):
+            return out  # .env / keys: never in a prompt
+        out.update(selection=s["text"], lang=f.suffix.lstrip("."),
                    where=f"the file `{f.name}`" + (f" (lines {s['lines'][0]}-{s['lines'][1]})" if s.get("lines") else "")
                    + (f" in the project `{Path(s['root']).name}`" if s.get("root") else ""))
-        if len(s["selection"]) < 3000:
-            out["around"] = _around(f, s["selection"], s.get("lines"))
-    elif s.get("page_selection"):
-        url, title = s.get("tab") or ("", "")
-        out.update(selection=s["page_selection"], where=f'the web page "{title}" ({url})' if url else "a web page")
-    elif not s.get("private"):
-        sel = ctx._primary().strip()  # any other app (a PDF viewer, a terminal): the highlighted text
-        if sel and len(sel) < 20000:
-            out["selection"] = sel
+        if len(s["text"]) < 3000:
+            out["around"] = _around(f, s["text"], s.get("lines"))
+    elif s["source"] == "browser":
+        url, title = s.get("url") or "", s.get("title") or ""
+        out.update(selection=s["text"], where=f'the web page "{title}" ({url})' if url else "a web page")
+    elif s["source"] == "screen" and not _secrets.private(s["text"]):
+        out["selection"] = s["text"]
     out["selection"] = out["selection"][:MAX_SEL]
     return out
 
@@ -129,7 +130,9 @@ def ask(text: str, site: str = "") -> str:
     s = site_of(site) or site_of(text)
     c = context()
     q = question_of(text)
-    if q and not re.search(r"\b(?:this|that|it|these|those|here|above|selected|selection|highlighted)\b", q, re.I):
+    if q and not re.search(r"\b(?:this|that|it|these|those|here|above|selected|selection|highlighted|the\s+(?:code|"
+                           r"sentence|paragraph|text|function|line|lines|word|words|error|snippet|passage|class|method|"
+                           r"definition|part|bit|term|phrase|query|output))\b", q, re.I):
         c["selection"] = ""  # 'ask gemini what is backpropagation': a question of its own, not about an old highlight
     last = json.loads(store.kv_get(LAST_KEY) or "{}")
     follow = (time.time() - float(last.get("t") or 0) < FOLLOW_S

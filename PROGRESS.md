@@ -1616,3 +1616,15 @@ Phases (one at a time, owner tests after each):
       adb, said with the steps). /phone, /ring, "show my phone". (6) Slash: short commands for all of these plus
       /ask /gemini /chatgpt /claudeai /study /normal /glossary; an unknown /word suggests the near ones; the
       Telegram "/" menu puts the useful ones in its 100. Tests: test_helpers_p9 (19).
+    - 11-10 phone link without RAM when unused: the screen window takes adb's server with it when it closes,
+      GSConnect is turned on only for a Wi-Fi action and off 10 min later (disable + quit its service: it kept
+      26 MB), "close my phone" stops all; "open / close my phone" = the phone link (were open_app / close_app
+      'phone'); the Wireless-debugging port is found again by itself (scan + adb connect, ~6 s); 30 fps cap
+      (measured ~14% of one core, ~150 MB while open).
+    - 11-10 ask Gemini traces: (1) "Ask Gemini to explain the code" sent no code: only this / that / it / selected
+      counted as pointing at the highlight -> 'the code / sentence / paragraph / function / error ...' too. (2) "explain
+      this sentence in Nepali" sent the follow-up about the CODE: the code still selected in VS Code won over the new
+      sentence. -> context.latest_selection(): the newest highlight wins: X11 PRIMARY (always the latest highlight in
+      any app; Ctrl+C copies are not it) picks the browser / VS Code candidate it equals, or is another app's
+      highlight; without it the newest timestamp. Used by Ask Gemini and Study mode. A new highlight = a new
+      question, not a follow-up. Tests: test_ask_ai (+2), test_helpers_p9 (+2).

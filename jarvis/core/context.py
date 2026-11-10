@@ -125,3 +125,38 @@ def _tab_line() -> str:
 
 def editor_open() -> bool:
     return snapshot()["file"] is not None
+
+
+def _norm(t: str) -> str:
+    return " ".join((t or "").split())
+
+
+def latest_selection() -> dict:
+    """The text the owner highlighted LAST, wherever it is (11-10: 'ask Gemini to explain this sentence' sent the code
+    still selected in VS Code, and 'explain the code' sent nothing). Candidates: the browser highlight (extension,
+    with its time), each VS Code window's selection (with its time), and X11's PRIMARY selection, which is always the
+    newest highlight in ANY app (VS Code and Brave set it too; Ctrl+C copies are NOT it). PRIMARY decides: the
+    candidate it equals wins; a PRIMARY that matches none is a highlight in another app (a PDF viewer, a terminal).
+    Without PRIMARY, the newest timestamp wins. Returns {'text', 'source': browser|editor|screen|'', 'ts', ...}."""
+    import time
+    from jarvis.core import browsertab, config, editor
+    now = time.time()
+    cands = []
+    sel = browsertab.selection_context()
+    if sel.get("text", "").strip() and now - float(sel.get("ts") or 0) <= config.SELECTION_MEMORY_S:
+        cands.append({**sel, "source": "browser", "ts": float(sel.get("ts") or 0)})
+    try:
+        for st in editor.states():
+            if (st.get("selection") or "").strip() and st.get("file") and now - float(st.get("ts") or 0) <= config.SELECTION_MEMORY_S:
+                cands.append({"text": st["selection"], "source": "editor", "ts": float(st.get("ts") or 0),
+                              "file": st["file"], "root": st.get("root") or "", "lines": _lines(st)})
+    except Exception:  # noqa: BLE001 - the editor link is a bonus
+        pass
+    prim = _primary().strip()
+    if prim and len(prim) < 20000:
+        p = _norm(prim)
+        hit = [c for c in cands if _norm(c["text"]) == p] or [c for c in cands if p and p in _norm(c["text"])]
+        if hit:
+            return max(hit, key=lambda c: c["ts"])
+        return {"text": prim, "source": "screen", "ts": now}
+    return max(cands, key=lambda c: c["ts"]) if cands else {"text": "", "source": "", "ts": 0.0}
