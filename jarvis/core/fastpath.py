@@ -1794,7 +1794,8 @@ def match(text: str) -> Intent | None:
     if (win := _window_first(text)) is not None:  # 'restore vs code' was read as a question about the open file
         return win
     it = app_name_intent(text) or style_intent(text) or new_project_intent(text) or ranked_files_intent(text) \
-        or agent_intent(text) or agent_coding_intent(text) or link_play_intent(text) or clean_intent(text) \
+        or agent_intent(text) or agent_coding_intent(text) or study_intent(text) or link_play_intent(text) \
+        or clean_intent(text) \
         or shutdown_later_intent(text) or to_file_intent(text) or askai_intent(text) or selection_intent(text) \
         or _code_not_file(_match(text)) or daily_intent(text)
     if it is not None and it.tool == "read_later" and semantic_ensure():  # "add a job for later: write a poem" is
@@ -1877,6 +1878,37 @@ def _coder_asked() -> bool:
         return loop.waiting() is not None
     except Exception:  # noqa: BLE001
         return False
+
+
+def study_intent(text: str) -> Intent | None:
+    """While Study mode is on, its requests by MEANING (agents.study.EXAMPLES, 0 tokens): 'explain this', 'simpler',
+    'in nepali', 'summarize this page', 'quiz me', 'more'. Off: nothing here runs. A request closer to anything
+    else (volume, music, open YouTube) keeps its own route; a longer request with its own words is the 'ask' task."""
+    from jarvis import agents
+    t = " ".join((text or "").split()).strip(" .!?")
+    if not t or t.startswith("/") or agents.current() != "study":
+        return None
+    from jarvis.agents.study import EXAMPLES
+    from jarvis.core import semantic
+    if not semantic.ready():
+        return None
+    best = semantic.best_of(t, "study_mode", EXAMPLES)
+    if best is None:
+        return None
+    task, score = best
+    other = next((s for g, s in semantic.scores(t) if g not in (semantic.CHAT, "clipboard", "study")), 0.0)
+    if score < config.STUDY_MIN or score < other - config.SELECTION_MARGIN:
+        # a question of its own about what is highlighted ('why is the gradient negative here?'): the study answer
+        # (one call with the page's context) instead of the general AI (2 calls, no page context)
+        from jarvis.core import studymode
+        if len(t.split()) >= 4 and other < config.STUDY_OTHER_MAX and studymode.context()["text"]:
+            agents.touch()
+            return Intent("study", "study", "study_mode", {"task": "ask", "request": t})
+        return None
+    agents.touch()
+    short = len(t.split()) <= 7
+    return Intent("study", "study", "study_mode", {"task": task if short or task in ("write", "translate") else "ask",
+                                                   "request": "" if short else t})
 
 
 def agent_coding_intent(text: str) -> Intent | None:

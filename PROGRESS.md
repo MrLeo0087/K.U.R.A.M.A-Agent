@@ -1568,3 +1568,16 @@ Phases (one at a time, owner tests after each):
       which sent it AND answered itself -> the fast path catches it, and ask_ai is a direct-reply tool (its sentence
       ends the turn). (3) /tidy's "I'd move 5 files: Images 4, Audio 1" was unclear -> it says what tidy means and
       lists the files with where each goes. Tests: test_ask_ai (+5).
+    - 11-10 Phase 7 (Study mode): core/studymode.py + the study tool (group study_mode, only while Study mode is
+      on). Context at 0 tokens: the browser extension (1.5) sends the highlight's paragraph, the heading above it
+      and, once per page, its main text; a PDF link is read with pdftotext; VS Code: the file; any other app: the X
+      highlight. The page is summarized ONCE (fast tier, ~450 tokens out, cached by URL); each answer = one smart
+      call with page summary + section + paragraph + selection + task (+ the last 2 answers on that page for
+      simpler / nepali / more). Tasks: explain, meaning here, simpler, nepali, hindi, summary, page summary, quiz,
+      more (long version), translate, write, ask (any question about the highlight). Requests by meaning (agents.
+      study.EXAMPLES, 0 tokens; a 4+ word question about the highlight = ask); core commands still win. Notes:
+      data/study/notes/<day>/<page>.md (every answer + the highlight), glossary: data/study/glossary.md (short
+      terms asked with meaning / explain); "show my notes", "show my glossary". Answers stay whole in the study
+      chat (up to 3500 chars, not moved to the workspace). Live check: "chain rule" meaning 2.2 s, Nepali answer
+      used the thread. (I overwrote core/study.py = the timetable/quiz module by mistake and restored it; the new
+      engine is studymode.py.) Not done: voice speaking only 2 lines of a long answer. Tests: test_study_mode (13).

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "KURAMA tab link",
-  "version": "1.4",
+  "version": "1.5",
   "description": "Tells KURAMA (on this laptop only) which tab is open and what text you highlight; pastes your question (ask Gemini / ChatGPT / Claude) into the chat and sends it.",
   "permissions": [
     "tabs"

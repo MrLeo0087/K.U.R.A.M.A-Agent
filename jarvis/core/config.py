@@ -1568,6 +1568,9 @@ LONG_JOB_AUTO_RESUME = os.getenv("JARVIS_LONG_JOB_AUTO_RESUME", "1").lower() not
 
 # --- agents (jarvis/agents): off until the owner turns one on ---
 AGENT_MARKER = Path(os.getenv("KURAMA_AGENT_MARKER", str(Path.home() / ".local" / "share" / "kurama" / "agent")))
+STUDY_OTHER_MAX = 0.80  # ... and a question about the highlight goes to it unless another area means it this much
+STUDY_CHAT_MAX_CHARS = 3500  # Study mode answers up to this stay whole in its chat (longer ones: the workspace)
+STUDY_MIN = 0.78  # Study mode takes a request when its meaning is this close to one of its tasks
 AGENT_IDLE_OFF_S = float(os.getenv("KURAMA_AGENT_IDLE_MIN", "45")) * 60  # an agent unused this long turns itself off
 AGENT_PENDING_TTL_S = 900  # a shown change waits this long for its yes
 AGENT_FAILURE_MAX_AGE_S = 1800  # "fix it" means a crash from the last 30 min
@@ -1583,7 +1586,7 @@ AGENT_PIP_TIMEOUT_S = 600
 AGENT_FIRST_RUN_S = 8  # a first run still going after this long is a server that started fine
 AGENT_MIN = 0.80  # meaning closeness for a coding-agent request (0-token routing while the agent is on)
 AGENT_TOOL_MODULES: tuple[str, ...] = ()  # extra agent tool modules; jarvis/agents/<name>/tools.py is found by itself
-AGENT_GROUPS = ("coding_agent",)  # (+ every agent SPEC.groups, see agents.groups()) never routed to by the router; the active agent offers its own
+AGENT_GROUPS = ("coding_agent", "study_mode")  # (+ every agent SPEC.groups, see agents.groups()) never routed to by the router; the active agent offers its own
 AGENT_ASK_ABOVE_TOKENS = int(os.getenv('KURAMA_AGENT_ASK_TOKENS', '4000'))  # bigger agent jobs ask first (owner)
 AGENT_PROJECT_TOKENS_PER_FILE = 700  # rough output per code file of a new project
 EDITOR_EXT_MIN = 4  # the VS Code extension version that reports terminal crashes

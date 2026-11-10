@@ -471,7 +471,8 @@ async def context_selection(request: Request):
     from jarvis.core import browsertab
     d = await request.json()
     browsertab.put_selection(str(d.get("text") or ""), str(d.get("url") or ""), str(d.get("title") or ""),
-                             editable=d.get("editable") is True)
+                             editable=d.get("editable") is True, paragraph=str(d.get("paragraph") or ""),
+                             heading=str(d.get("heading") or ""), page=str(d.get("page") or ""))
     return {"ok": True}
 
 

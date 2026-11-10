@@ -131,11 +131,19 @@ def short_line(text: str, lang: str = "en") -> str:
 SURFACE = ""  # where the running turn was asked: "vscode" = the KURAMA Coder panel (it has no workspace: whole answers)
 
 
+def _study_mode() -> bool:
+    try:
+        from jarvis import agents
+        return agents.current() == "study"
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def to_workspace(title: str, text: str, lang: str = "en") -> tuple[str, Path | None]:
     """(chat line, saved file) for a long answer; the text itself and None when it is short or saving failed.
     Asked from VS Code's KURAMA Coder panel: always the whole text (VS Code has no KURAMA workspace)."""
-    if not too_long(text) or SURFACE == "vscode":
-        return text, None
+    if not too_long(text) or SURFACE == "vscode" or (_study_mode() and len(text) <= config.STUDY_CHAT_MAX_CHARS):
+        return text, None  # (Study mode: its own chat is where the answer is read; only a very long one moves)
     path = publish(title or "Answer", text, folder="answers")
     return (short_line(text, lang), path) if path else (text, None)
 

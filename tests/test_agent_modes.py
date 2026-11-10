@@ -30,7 +30,7 @@ def test_mode_commands(text, name):
 
 def test_study_mode_has_its_own_chat_and_prompt(kv):
     assert "Study mode on" in agents.switch("study") and agents.current() == "study"
-    assert "tutor" in agents.prompt_line() and agents.spec().groups == ()  # no tool group taken from General
+    assert "tutor" in agents.prompt_line() and agents.spec().groups == ("study_mode",)  # its own tool only
     from jarvis.core.agent import Agent
     a = Agent.__new__(Agent)
     a.channel = "web"

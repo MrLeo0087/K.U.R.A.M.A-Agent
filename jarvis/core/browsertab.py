@@ -63,12 +63,23 @@ def get(max_age_s: float | None = None) -> tuple[str, str] | None:
 
 
 # the text highlighted on a page (browser_ext/selection.js), in memory only (private text is never written to disk)
-_SEL: dict = {"text": "", "url": "", "title": "", "ts": 0.0, "editable": False}
+_SEL: dict = {"text": "", "url": "", "title": "", "ts": 0.0, "editable": False, "paragraph": "", "heading": ""}
+_PAGES: dict[str, str] = {}  # url -> the page's main text (extension 1.5, once per page; memory only, last few)
 
 
-def put_selection(text: str, url: str = "", title: str = "", editable: bool = False) -> None:
+def put_selection(text: str, url: str = "", title: str = "", editable: bool = False, paragraph: str = "",
+                  heading: str = "", page: str = "") -> None:
     _SEL.update(text=(text or "")[:8000], url=(url or "")[:2000], title=(title or "").strip()[:300], ts=time.time(),
-                editable=bool(editable))
+                editable=bool(editable), paragraph=(paragraph or "")[:1500], heading=(heading or "")[:200])
+    if page.strip() and url:
+        _PAGES[url[:2000]] = page[:15000]
+        while len(_PAGES) > 6:
+            _PAGES.pop(next(iter(_PAGES)))
+
+
+def selection_context() -> dict:
+    """The highlight with its paragraph, heading, page title / URL and the page's text (Study mode)."""
+    return {**_SEL, "page": _PAGES.get(_SEL.get("url") or "", "")}
 
 
 def linked() -> bool:
