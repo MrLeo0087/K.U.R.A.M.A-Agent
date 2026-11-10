@@ -92,7 +92,8 @@ def test_the_phone_link_says_what_is_missing(monkeypatch):
     monkeypatch.setattr(phonelink, "devices", lambda: [])
     monkeypatch.setattr(phonelink.shutil, "which", lambda x: None)
     assert "KDE Connect" in phonelink.ring() or "GSConnect" in phonelink.ring()
-    assert "sudo apt install scrcpy adb" in phonelink.screen()
+    monkeypatch.setattr(phonelink, "_scrcpy", lambda: "")
+    assert "sudo snap install scrcpy" in phonelink.screen()
 
 
 # --- slash commands --------------------------------------------------------------------------------------------------

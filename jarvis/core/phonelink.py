@@ -16,7 +16,7 @@ ADB_KEY = "phone_adb_addr"
 
 SETUP_GSC = ("To pair your phone over Wi-Fi (once): install 'KDE Connect' from the Play Store, open it on the same "
              "Wi-Fi as the laptop, tap this laptop's name and Pair, then accept on the laptop (top bar → GSConnect).")
-SETUP_SCRCPY = ("To see and control the phone's screen: 1) in a terminal: sudo apt install scrcpy adb  2) on the "
+SETUP_SCRCPY = ("To see and control the phone's screen: 1) in a terminal: sudo snap install scrcpy  2) on the "
                 "phone: Settings → About phone → tap 'Build number' 7 times, then Developer options → USB debugging "
                 "ON (and 'Wireless debugging' for Wi-Fi)  3) plug in the USB cable once and allow the laptop. Then say "
                 "'show my phone'. For Wi-Fi: say 'phone wifi <ip>:<port>' with the address Wireless debugging shows.")
@@ -85,24 +85,48 @@ def _adb() -> str:
     return shutil.which("adb") or ""
 
 
+def _scrcpy() -> str:
+    """The newest scrcpy on the laptop (the snap one first: Ubuntu's apt scrcpy 1.25 can't read Android 14+ phones)."""
+    for c in ("/snap/bin/scrcpy", shutil.which("scrcpy") or ""):
+        if c and Path(c).exists():
+            return c
+    return ""
+
+
+def _version(exe: str) -> tuple[int, int]:
+    import re
+    try:
+        out = subprocess.run([exe, "--version"], capture_output=True, text=True, timeout=10).stdout
+    except (OSError, subprocess.SubprocessError):
+        return (0, 0)
+    m = re.search(r"scrcpy (\d+)\.(\d+)", out)
+    return (int(m.group(1)), int(m.group(2))) if m else (0, 0)
+
+
 def screen(addr: str = "") -> str:
-    """The phone's screen in a window (scrcpy)."""
-    if not shutil.which("scrcpy") or not _adb():
-        return "scrcpy / adb aren't installed yet. " + SETUP_SCRCPY
+    """The phone's screen in a window (scrcpy), over Wi-Fi when its wireless-debugging address is known."""
+    exe = _scrcpy()
+    if not exe:
+        return "scrcpy isn't installed yet. " + SETUP_SCRCPY
+    if _version(exe) < (2, 0):
+        return ("Your scrcpy is too old for this phone (Ubuntu's apt version is 1.25; Android 14+ needs 2.0+). Run: "
+                "sudo apt remove scrcpy && sudo snap install scrcpy — then say 'show my phone' again.")
     from jarvis.core import store
     addr = addr.strip() or (store.kv_get(ADB_KEY) or "")
     if addr:
-        subprocess.run([_adb(), "connect", addr], capture_output=True, text=True, timeout=15)
         store.kv_set(ADB_KEY, addr)
-    devs = [ln.split("\t")[0] for ln in subprocess.run([_adb(), "devices"], capture_output=True, text=True,
-                                                       timeout=15).stdout.splitlines()[1:] if "\tdevice" in ln]
-    if not devs:
-        return ("No phone found by adb: plug in the USB cable (allow the laptop on the phone), or turn on Wireless "
-                "debugging and say 'phone wifi <ip>:<port>'.")
-    subprocess.Popen(["scrcpy", "-s", devs[0], "--max-size", "1280", "--video-bit-rate", "4M", "--stay-awake",
-                      "--window-title", "My phone"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                     start_new_session=True)
-    return "📱 Your phone's screen is opening in a window: click and type there. Close the window to stop."
+        target = [f"--tcpip={addr}"]  # scrcpy connects over Wi-Fi itself (its own adb)
+    else:
+        target = []  # a phone on the USB cable
+    p = subprocess.Popen([exe, *target, "--max-size", "1280", "--stay-awake", "--window-title", "My phone"],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, start_new_session=True)
+    try:
+        err = p.communicate(timeout=8)[1]  # still running after 8 s = the window is open
+    except subprocess.TimeoutExpired:
+        return "📱 Your phone's screen is open in a window: click and type there. Close the window to stop."
+    last = [ln for ln in (err or "").splitlines() if "ERROR" in ln][-1:] or ["it closed at once"]
+    return (f"Couldn't open the phone's screen ({last[0][:160]}). Is Wireless debugging still ON (its port changes "
+            f"when it is turned off and on)? Then: /phone screen <ip>:<port> with the address it shows now.")
 
 
 def status() -> str:
@@ -110,9 +134,9 @@ def status() -> str:
     p = _phone() if GSC.exists() else None
     lines.append(f"Wi-Fi link (GSConnect): {'installed' if GSC.exists() else 'not installed'}; phone: "
                  + (f"{p['name']} ({'connected' if p['connected'] else 'paired, not reachable now'})" if p else "not paired"))
-    lines.append(f"Screen (scrcpy): {'ready' if shutil.which('scrcpy') and _adb() else 'not installed'}")
+    lines.append(f"Screen (scrcpy): {'ready' if _scrcpy() else 'not installed'}")
     if not p:
         lines.append(SETUP_GSC)
-    if not (shutil.which("scrcpy") and _adb()):
+    if not _scrcpy():
         lines.append(SETUP_SCRCPY)
     return "\n".join(lines)
