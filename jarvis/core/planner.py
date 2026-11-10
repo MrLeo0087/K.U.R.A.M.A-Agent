@@ -187,9 +187,15 @@ _PATH_TAIL = re.compile(r"^(?:(?:and|then)\s+)?(?:(?:in|inside|into)\s+)?(?:the\
                         r"(?:folder|directory|dir|subfolder|फोल्डर)\s*[.?!]*$", re.I)
 
 
+_NOT_A_TASK = re.compile(r"^\W*(?:(?:no|nope|nah|wait|stop)\W+)*(?:(?:do\s+not|don'?t|never|not)\s+(?:use|send|do|open|"
+                         r"play)|no\W*$|nope\W*$|not\s+(?:that|this|telegram|there))\b", re.I)
+
+
 def split_clauses(text: str) -> list[str]:
     out: list[str] = []
     for c in (c.strip() for c in _SEP.split(text) if c and c.strip()):
+        if _NOT_A_TASK.match(c) and len(c.split()) <= 8:  # 'do not use Telegram' is how to do the other part, not
+            continue  # a task of its own (11-10: it SENT a Telegram message 'do not use telegram')
         if out and _PATH_TAIL.match(c) and not router.looks_like_command(c):  # "list files in this folder" is a task
             out[-1] = f"{out[-1]} then {c}"
         else:

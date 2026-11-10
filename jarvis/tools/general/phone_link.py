@@ -36,6 +36,13 @@ def phone_link(action: Literal["send_file", "ring", "send_link", "send_text", "p
             if ref is None:
                 return "Which file? Select it in the Files app (or say its name), then 'share this to my phone'."
             v = str(ref)
+        from pathlib import Path
+        if not Path(v).expanduser().exists():  # a name ('the phone folder', 'report.pdf'): find it
+            from jarvis.core.paths import smart_path
+            found = smart_path(v)
+            if found is None:
+                return f"I couldn't find '{v}'. Say its full name, or select it in the Files app and say 'share this'."
+            v = str(found)
         return p.share_file(v)
     if not value.strip():
         return "What should I send to the phone?"

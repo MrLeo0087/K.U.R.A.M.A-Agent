@@ -317,22 +317,43 @@ _BAD_TARGET = re.compile(r"(?:\band\b|\bthen\b|,|\bnew\b|\btab\b|\bfile\b(?! man
                          r"\bcommand\b|\bscript\b|^(?:a|an|it|this|that)\b)", I)
 
 
-_TO_PHONE = re.compile(r"\b(?:to|in|on|into|onto)\s+(?:my\s+|the\s+)?(?:phone|mobile|android|samsung)\b", re.I)  # the
+_TO_PHONE = re.compile(r"\b(?:to|in|on|into|onto|at)\s+(?:my\s+|the\s+)?(?:phone|mobile|android|samsung|galaxy)\b", re.I)  # the
 #  destination ('send me the phone folder' = the folder named Phone, by Telegram)
 
 
 def _phone_first(t: str, it: Intent | None) -> Intent | None:
-    """Owner 11-10: 'share this file' / 'send X to my phone': over Wi-Fi with KDE Connect (large files; Telegram only
-    when the phone isn't reachable or the send fails, phonelink decides). 'telegram' said = Telegram."""
-    if it is None or it.tool != "send_file_telegram" or re.search(r"\btelegram\b", t, re.I):
+    """Owner 11-10: sending a file / photo / video ('share this', 'send this photo to my phone', 'send me X') goes over
+    Wi-Fi with KDE Connect; Telegram only when 'telegram' is said, or the phone isn't reachable / the Wi-Fi send
+    fails (phonelink decides)."""
+    if it is None or it.tool not in ("send_file_telegram", "send_last_result") or re.search(r"\btelegram\b", t, re.I):
         return it  # 'telegram' said: Telegram (big folders as a link, as before)
-    if not (_TO_PHONE.search(t) or re.match(r"\W*(?:please\s+|can\s+you\s+)?share\b", t, re.I)):
-        return it  # 'share this file' / '... to my phone': KDE Connect first, Telegram only if that fails
+    # owner 11-10: "it should not use Telegram until I say Telegram": every other send of a file / photo / video
+    # goes to the phone over Wi-Fi first (phonelink falls back to Telegram only when the phone isn't reachable)
     from jarvis.core import phonelink
     if not phonelink.GSC.exists():
         return it
-    return Intent("phone", "phone_link", "telegram", {"action": "send_file", "value": it.args.get("path") or "this"},
-                  it.label)
+    path = it.args.get("path") or ""
+    if it.tool == "send_last_result":  # 'send this photo / image to my phone' (11-10: it went to Telegram)
+        path = _media_this(it.args.get("kind") or "image") or ""
+        if not path:
+            return Intent("say", "_say", "telegram", {"en": "Which picture? Select it in the Files app (or say its "
+                                                            "name), then 'send this to my phone'."})
+    return Intent("phone", "phone_link", "telegram", {"action": "send_file", "value": path or "this"}, it.label)
+
+
+_MEDIA = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".heic", ".bmp", ".mp4", ".mkv", ".mov", ".webm", ".avi"}
+
+
+def _media_this(kind: str) -> str:
+    """'this photo / image / video': the one selected in the Files app (or the file in use), else the newest picture
+    or video KURAMA made (a screenshot, a generated image)."""
+    from jarvis.core import focus
+    ref = focus.refer("this")
+    if ref is not None and ref.is_file() and ref.suffix.lower() in _MEDIA:
+        return str(ref)
+    from jarvis.tools.general.send_last_result import _newest
+    p = _newest(kind if kind in ("image", "any") else "image")
+    return str(p) if p else ""
 
 
 def findfile_intent(t: str) -> Intent | None:

@@ -1585,6 +1585,9 @@ LONG_JOB_AUTO_RESUME = os.getenv("JARVIS_LONG_JOB_AUTO_RESUME", "1").lower() not
 
 # --- agents (jarvis/agents): off until the owner turns one on ---
 AGENT_MARKER = Path(os.getenv("KURAMA_AGENT_MARKER", str(Path.home() / ".local" / "share" / "kurama" / "agent")))
+# tools whose fast-path rule reads a long, several-sentence request whole (a countdown with its times, a message)
+WHOLE_MESSAGE_TOOLS = frozenset({"goals", "add_reminder", "ask_ai", "send_message_telegram", "explainer_video",
+                                 "find_by_content", "study", "phone_link"})
 CODING_OTHER_MAX = 0.78  # coding mode takes a plain-words change / bug report unless another area means it this much
 STUDY_OTHER_MAX = 0.80  # ... and a question about the highlight goes to it unless another area means it this much
 STUDY_CHAT_MAX_CHARS = 3500  # Study mode answers up to this stay whole in its chat (longer ones: the workspace)

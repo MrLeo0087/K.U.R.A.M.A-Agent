@@ -1024,9 +1024,18 @@ class Agent:
     # --- zero-token fast path ---
     def _fast(self, user_text: str, lang: str | None, mode: str, record: bool = True) -> Any:
         """fastpath.try_answer for a single-intent request (None -> normal LLM path)."""
-        if not config.FASTPATH or (record and self.use_planner and planner.is_multi(user_text)
-                                   and not planner.one_tool(user_text)):
+        if not config.FASTPATH:
             return None
+        if record and self.use_planner and planner.is_multi(user_text) and not planner.one_tool(user_text):
+            # several sentences: still ONE request when the fast path reads it whole as a tool made for long natural
+            # messages (11-10: "my exam is 30 days later. Can you remind me every day 4 times ..." went to the AI,
+            # which listed the reminders instead of making the countdown)
+            try:
+                whole = fastpath.match(user_text)
+            except Exception:  # noqa: BLE001
+                whole = None
+            if whole is None or whole.tool not in config.WHOLE_MESSAGE_TOOLS:
+                return None
         res = fastpath.try_answer(user_text, lang=lang, confirm=self.confirm or safety.get_confirm(mode), mode=mode,
                                   ctx={"channel": getattr(self, "channel", "") or ""})
         if res is not None:

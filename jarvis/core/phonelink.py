@@ -156,7 +156,11 @@ def share_file(path: str) -> str:
         from jarvis.tools.general.send_file_telegram import send_file_telegram
         return "📱 Your phone isn't on the Wi-Fi link right now, so it went by Telegram: " + send_file_telegram(str(f))
     if f.is_dir():
-        from jarvis.tools.general.send_file_telegram import zip_dir
+        from jarvis.tools.general.send_file_telegram import folder_mb, too_broad, zip_dir
+        if (why := too_broad(f)) is not None:
+            return why
+        if (mb := folder_mb(f)) > 4000:
+            return f"{f.name} is {mb / 1024:.1f} GB: too big to zip and send. Pick the files or a smaller folder."
         f = zip_dir(f)
     out = _send(["--share-file", str(f)], f"Sent {f.name} over Wi-Fi ({f.stat().st_size / 1e6:.1f} MB)")
     if not out.startswith("📱 Sent"):  # the Wi-Fi send failed: Telegram, so it still arrives

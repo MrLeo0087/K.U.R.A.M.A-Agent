@@ -2308,6 +2308,10 @@ def meaning_intent(text: str) -> Intent | None:
         msg = tg_message_text(raw)
         if msg is None:
             return None
+        from jarvis.core.intents import files as _files
+        if _files._TO_PHONE.search(raw) and not re.search(r"\btelegram\b", raw, I):  # '... to my phone': Wi-Fi
+            it = Intent("phone", "phone_link", "telegram", {"action": "send_text", "value": msg}, known=msg)
+            return it if meaning_ok(t, it) else None
         it = Intent("tgmsg", "send_message_telegram", "telegram", {"text": msg}, known=msg)
         return it if meaning_ok(t, it) else None
     if label in ("settings_list", "setting_undo", "settings_reset", "setting_change", "explain_last", "help_me",

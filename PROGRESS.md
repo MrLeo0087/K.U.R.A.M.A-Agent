@@ -1636,3 +1636,14 @@ Phases (one at a time, owner tests after each):
       kdeconnectd (package kdeconnect, autostarted, ~10 menu apps) ran next to GSConnect on port 1716 and caught the
       phone, while GSConnect was off; "pair my phone" now stops kdeconnectd, turns GSConnect on and sends the request;
       ufw is active (KDE Connect ports 1714-1764 must be allowed: said with the command). Tests updated.
+    - 11-10 owner: "it should not use Telegram until I say Telegram". Every file / photo / image / video send without
+      the word "telegram" goes over KDE Connect (Telegram only if the phone isn't reachable or the Wi-Fi send
+      fails): "send this image in my phone" used send_last_result -> Telegram; now 'this photo / video' = the one
+      selected in Files (or the newest picture KURAMA made) over Wi-Fi; a name ('the phone folder') is found first;
+      whole home folders / disks refused, folders over 4 GB too. "send hello to my phone" = KDE text. The planner
+      no longer turns "do not use Telegram" into a task (it SENT that as a Telegram message).
+    - 11-10 "my exam is exact 30 days later. Can you remind me every day 4 times ..." went to the AI (it listed the
+      reminders): two sentences = 'multi', so the fast path was skipped although its goals rule reads such a
+      request whole. Now a multi-sentence request that the fast path reads whole as a long-message tool
+      (config.WHOLE_MESSAGE_TOOLS: goals, reminders, ask_ai, messages, video, find, study, phone) goes there. The
+      exam countdown is set: 'Exam', ends Thu Dec 10, 07:00 / 11:00 / 15:00 / 20:00 daily ("Exam: N days left").

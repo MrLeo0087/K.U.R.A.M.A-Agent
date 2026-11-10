@@ -9,7 +9,9 @@ def test_intents_separate_from_telegram():
     assert fastpath.match("send this folder to my phone over wifi").tool == "wifi_share"
     assert fastpath.match("share report.pdf via wifi").args == {"action": "share", "path": "report.pdf"}
     assert fastpath.match("stop wifi share").args["action"] == "stop"
-    assert fastpath.match("send me the phone folder").tool == "send_file_telegram"
+    it = fastpath.match("send me the phone folder")  # (11-10: Telegram only when said; KDE Connect first)
+    assert it.tool in ("phone_link", "send_file_telegram") and "phone" in str(it.args).lower()
+    assert fastpath.match("send me the phone folder on telegram").tool == "send_file_telegram"
 
 
 def test_server_token_and_traversal(tmp_path, monkeypatch):

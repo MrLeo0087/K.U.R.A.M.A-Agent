@@ -166,3 +166,35 @@ def test_share_means_kde_first_and_telegram_when_said(monkeypatch):
     assert files.sendfile_intent("share this to my phone").tool == "phone_link"
     assert files.sendfile_intent("share this on telegram").tool == "send_file_telegram"
     assert files.sendfile_intent("send this folder to telegram").tool == "send_file_telegram"
+
+
+
+def test_telegram_only_when_said(monkeypatch):
+    """11-10 traces: 'send this image in my phone' / 'send this photo to my phone' went to Telegram."""
+    from jarvis.core.intents import files
+    monkeypatch.setattr(files, "_media_this", lambda kind: "/tmp/pic.png")
+    for text in ("Send this image in my phone.", "share this image"):
+        it = files.sendfile_intent(text)
+        assert it is not None and it.tool == "phone_link" and it.args["value"] == "/tmp/pic.png", text
+    assert files.sendfile_intent("send this photo to telegram").tool == "send_last_result"
+    from jarvis.core import planner
+    assert planner.split_clauses("No, no, do not use Telegram. Send in my phone.") == ["Send in my phone."]
+
+
+def test_a_long_two_sentence_countdown_request_is_read_whole(monkeypatch):
+    """11-10: 'my exam is exact 30 days later. Can you remind me every day 4 times ...' went to the AI (it listed
+    the reminders): several sentences, but one request the fast path reads whole."""
+    from jarvis.core import agent as ag
+    from jarvis.core import planner
+    monkeypatch.setattr(config, "FASTPATH", True)
+    t = ("Actually, my exam is exact 30 days later. Can you remind me every day 4 times that your exam is scheduled "
+         "in 30 days, 29 days, this type of.")
+    it = fastpath.match(t)
+    assert it.tool == "goals" and it.args["action"] == "add" and it.args["name"] == "exam"
+    assert planner.is_multi(t) and "goals" in config.WHOLE_MESSAGE_TOOLS
+    called = []
+    monkeypatch.setattr(fastpath, "try_answer", lambda *a, **k: called.append(a[0]) or None)
+    a = ag.Agent.__new__(ag.Agent)
+    a.use_planner, a.confirm = True, None
+    a._fast(t, "en", "voice")
+    assert called == [t]
